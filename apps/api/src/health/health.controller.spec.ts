@@ -1,11 +1,15 @@
 import { Test } from '@nestjs/testing';
 
 import { AppConfigService } from '../config/app-config.module';
+import { LMS_PORT } from '../moodle/lms.port';
+import { MockLmsService } from '../moodle/mock/mock-lms.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { HealthController } from './health.controller';
 
 describe('HealthController', () => {
-  async function build(options: { values?: Record<string, unknown>; dbFails?: boolean } = {}) {
+  async function build(
+    options: { values?: Record<string, unknown>; dbFails?: boolean; lmsDown?: boolean } = {},
+  ) {
     const values: Record<string, unknown> = {
       NODE_ENV: 'test',
       DEFAULT_LOCALE: 'ar',
@@ -24,11 +28,16 @@ describe('HealthController', () => {
         : jest.fn().mockResolvedValue([{ '1': 1 }]),
     };
 
+    const lms = options.lmsDown
+      ? { checkHealth: () => Promise.resolve({ reachable: false, failureCode: 'UNREACHABLE' }) }
+      : new MockLmsService();
+
     const moduleRef = await Test.createTestingModule({
       controllers: [HealthController],
       providers: [
         { provide: AppConfigService, useValue: { get: (key: string) => values[key] } },
         { provide: PrismaService, useValue: prisma },
+        { provide: LMS_PORT, useValue: lms },
       ],
     }).compile();
 
@@ -46,7 +55,29 @@ describe('HealthController', () => {
       numberFormat: 'western',
       moodleMode: 'mock',
       database: 'up',
+      lms: 'up',
+      lmsSiteName: 'Tamkeen Mock LMS',
     });
+  });
+
+  it('reaches the LMS through the shared port, not a concrete class', async () => {
+    /* Phase 0 "done when": the mock LMS is callable through the shared
+       contract. This controller injects LMS_PORT and never names an
+       implementation, so the same call works against a real Moodle in Phase 2. */
+    const controller = await build();
+
+    expect((await controller.check()).lms).toBe('up');
+  });
+
+  it('stays ok when the LMS is down — the catalogue is cached in our database', async () => {
+    const controller = await build({ lmsDown: true });
+    const result = await controller.check();
+
+    /* An unreachable LMS affects course entry only; failing the liveness probe
+       over it would take the whole app out for a dependency it can survive. */
+    expect(result.status).toBe('ok');
+    expect(result.lms).toBe('down');
+    expect(result.lmsSiteName).toBeUndefined();
   });
 
   it('reports degraded rather than throwing when the database is unreachable', async () => {

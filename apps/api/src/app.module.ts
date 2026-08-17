@@ -10,6 +10,7 @@ import { SessionGuard } from './auth/session.guard';
 import { AppConfigModule, AppConfigService } from './config/app-config.module';
 import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
+import { MoodleModule } from './moodle/moodle.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -45,6 +46,7 @@ import { PrismaModule } from './prisma/prisma.module';
         skipIf: () => !config.get('RATE_LIMIT_ENABLED'),
       }),
     }),
+    MoodleModule,
     AuthModule,
     HealthModule,
   ],

@@ -1,7 +1,8 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Inject } from '@nestjs/common';
 
 import { Public } from '../auth/auth.decorators';
 import { AppConfigService } from '../config/app-config.module';
+import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface HealthResponse {
@@ -12,6 +13,8 @@ export interface HealthResponse {
   numberFormat: string;
   moodleMode: string;
   database: 'up' | 'down';
+  lms: 'up' | 'down';
+  lmsSiteName?: string;
 }
 
 @Controller('health')
@@ -19,6 +22,9 @@ export class HealthController {
   constructor(
     private readonly config: AppConfigService,
     private readonly prisma: PrismaService,
+    /* Injected as LMS_PORT, not as a concrete class — this controller does not
+       know whether it is talking to the mock or a real Moodle. */
+    @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
 
   /**
@@ -32,9 +38,12 @@ export class HealthController {
   @Public()
   @Get()
   async check(): Promise<HealthResponse> {
-    const database = await this.checkDatabase();
+    const [database, lmsHealth] = await Promise.all([this.checkDatabase(), this.lms.checkHealth()]);
 
     return {
+      /* The LMS being down does not make the app unhealthy — the catalogue is
+         cached in our own database and only course entry is affected. It is
+         reported so an operator can see it, not to fail the liveness probe. */
       status: database === 'up' ? 'ok' : 'degraded',
       service: 'tamkeen-api',
       environment: this.config.get('NODE_ENV'),
@@ -42,6 +51,8 @@ export class HealthController {
       numberFormat: this.config.get('NUMBER_FORMAT'),
       moodleMode: this.config.get('MOODLE_MODE'),
       database,
+      lms: lmsHealth.reachable ? 'up' : 'down',
+      ...(lmsHealth.siteName ? { lmsSiteName: lmsHealth.siteName } : {}),
     };
   }
 
