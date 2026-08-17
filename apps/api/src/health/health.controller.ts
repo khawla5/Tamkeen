@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 
+import { Public } from '../auth/auth.decorators';
 import { AppConfigService } from '../config/app-config.module';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -24,7 +25,11 @@ export class HealthController {
    * Liveness plus a read-out of the cross-cutting config, so a reviewer can
    * confirm the Arabic-first defaults and the Moodle mode without shelling into
    * a container. Deliberately exposes no secrets and no connection strings.
+   *
+   * Public because a liveness probe cannot hold a session — which is also why it
+   * must never grow to return anything an anonymous caller should not see.
    */
+  @Public()
   @Get()
   async check(): Promise<HealthResponse> {
     const database = await this.checkDatabase();

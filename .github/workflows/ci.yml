@@ -75,5 +75,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
+      - name: Unit tests
         run: npm test
+
+      # Integration tests hit the real PostgreSQL service container above.
+      - name: Integration tests (API)
+        run: npm run test:e2e --workspace @tamkeen/api

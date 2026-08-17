@@ -62,6 +62,19 @@ describe('Arabic message catalog', () => {
     expect(wordless.map((leaf) => leaf.path)).toEqual([]);
   });
 
+  it('contains no hardcoded digits — numbers must come from the formatting layer', () => {
+    /*
+     * Regression guard. The password hint originally read "١٢ حرفًا على الأقل",
+     * hardcoding Arabic-Indic digits into a catalog string while D-018 sets
+     * Western digits as the default — so the app contradicted its own locale
+     * setting, and the digit switch could never reach that number. Digits belong
+     * in an ICU placeholder, formatted by the shared layer.
+     */
+    const withDigits = leaves.filter((leaf) => /[0-9٠-٩]/.test(withoutPlaceholders(leaf.value)));
+
+    expect(withDigits.map((leaf) => `${leaf.path}: ${leaf.value}`)).toEqual([]);
+  });
+
   it('has balanced ICU placeholder braces', () => {
     const unbalanced = leaves.filter((leaf) => {
       const opens = (leaf.value.match(/\{/g) ?? []).length;

@@ -62,9 +62,10 @@ model User {
   moodleUserId Int? @unique @map("moodle_user_id")
 
   /// Brute-force lockout state (§2 security baseline). Per-account, in the
-  /// database so a lockout survives a restart. Per-IP throttling is separate
-  /// and lives in Redis, deliberately ephemeral so request IPs are not
-  /// accumulated at rest.
+  /// database so a lockout survives a restart and is correct regardless of how
+  /// many API instances are running. Per-IP throttling is separate and is held
+  /// outside the database (in-process for now, a shared store once the
+  /// deployment scales — D-028), so request IPs are not accumulated at rest.
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime? @map("locked_until")
   lastLoginAt         DateTime? @map("last_login_at")
@@ -73,11 +74,48 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   authTokens    AuthToken[]
+  sessions      Session[]
   notifications Notification[]
   auditEvents   AuditLog[]     @relation("AuditActor")
 
   @@index([role])
   @@map("users")
+}
+
+/// Server-side sessions (D-028).
+///
+/// Opaque random tokens, not JWTs, so a session can be revoked the instant an
+/// account is suspended — a stateless token would stay valid until it expired.
+/// Only the token's hash is stored, on the same reasoning as AuthToken: a
+/// database leak must not yield usable sessions.
+///
+/// Kept in Postgres rather than Redis so signing in does not depend on a second
+/// datastore being healthy, and so Phase 5 can show an administrator the active
+/// sessions for an account.
+model Session {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String @unique @map("token_hash")
+
+  expiresAt      DateTime  @map("expires_at")
+  /// Set on sign-out or administrative revocation; the row is kept so the
+  /// session's existence stays visible to an audit.
+  revokedAt      DateTime? @map("revoked_at")
+  lastSeenAt     DateTime  @default(now()) @map("last_seen_at")
+
+  /// Coarse client context, for an administrator spotting a session they do not
+  /// recognise. No fingerprinting beyond what a server log would already hold.
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 enum AuthTokenType {
