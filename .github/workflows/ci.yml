@@ -1,6 +1,5 @@
-# Save this file at: .github/workflows/ci.yml
-# Runs lint + typecheck + tests on every PR and push. Adjust the package
-# manager / script names to match what Phase 0 sets up.
+# Quality gates for every PR (CLAUDE.md §2B / D-014): lint + typecheck + tests.
+# A PR must be green before review. No failing or skipped tests.
 
 name: CI
 
@@ -10,9 +9,18 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://user:password@localhost:5432/tamkeen_test?schema=public
+      REDIS_URL: redis://localhost:6379
 
     services:
       postgres:
@@ -21,7 +29,7 @@ jobs:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
           POSTGRES_DB: tamkeen_test
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U user"
           --health-interval 10s
@@ -29,7 +37,7 @@ jobs:
           --health-retries 5
       redis:
         image: redis:7
-        ports: ["6379:6379"]
+        ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -42,16 +50,17 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          # cache: 'pnpm'   # uncomment if using pnpm
-
-      # - name: Install pnpm
-      #   uses: pnpm/action-setup@v4
-      #   with:
-      #     version: 9
+          node-version-file: .nvmrc
+          cache: npm
 
       - name: Install dependencies
-        run: npm ci   # or: pnpm install --frozen-lockfile
+        run: npm ci
+
+      - name: Build shared types
+        run: npm run build:types
+
+      - name: Format check
+        run: npm run format:check
 
       - name: Lint
         run: npm run lint
@@ -60,10 +69,4 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        env:
-          DATABASE_URL: postgresql://user:password@localhost:5432/tamkeen_test?schema=public
-          REDIS_URL: redis://localhost:6379
         run: npm test
-
-  # NOTE: This workflow never deploys and never pushes to main.
-  # Merges to main happen only via reviewed pull requests, approved by a human.

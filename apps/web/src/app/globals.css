@@ -1,0 +1,36 @@
+@import 'tailwindcss';
+
+/*
+ * Brand design tokens — CLAUDE.md §3 / D-009.
+ * These seven values are the whole palette. Never hardcode a hex in a
+ * component; add a token here instead. Gold is reserved for the
+ * recommended-path highlight and achievement accents — keep it scarce.
+ */
+@theme {
+  --color-navy: #222e42;
+  --color-navy-soft: #2e3a50;
+  --color-gold: #a8863c;
+  --color-gold-light: #c9a85c;
+  --color-cream: #f4f3f1;
+  --color-surface: #ffffff;
+  --color-muted: #5e6b85;
+
+  --font-sans: var(--font-arabic), system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-cream);
+    color: var(--color-navy);
+  }
+
+  /* Visible focus everywhere — WCAG 2.1 AA (§2B DoD 5). */
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}
