@@ -5,6 +5,11 @@
 
 ---
 
+## D-019 — Auth is email/password only (no AD/LDAP); Moodle target = latest 4.5.x LTS
+**Decision:** (a) The ministry does not require AD/LDAP integration; the system uses **email/password authentication only** (app is the identity owner, provisioning Moodle accounts behind the scenes). The AD/LDAP hardening path in D-004 is dropped unless the ministry later requests it. (b) Deploy the **latest Moodle 4.5.x LTS** patch (from github.com/moodle/moodle, newest `v4.5.x` tag / download.moodle.org). Requires PHP ≥ 8.1 (8.3 supported), sodium extension, `max_input_vars ≥ 5000`.
+**Why:** (a) User confirmed email login is the intended, sole mechanism — removes the biggest Phase 2 auth unknown. (b) 4.5 is the current LTS with security support to 4 Oct 2027; the next LTS (5.3) isn't out yet, so 4.5.x is the stable choice for a government system. General bug-fix support for 4.5.x ended Oct 2025, so always run the newest 4.5 patch for security.
+**Rejected:** AD/LDAP/OAuth2 SSO (not wanted); Moodle 5.x non-LTS (shorter support, less stable for gov); pinning an old 4.5.x patch (misses security fixes).
+
 ## D-018 — Digits/dates default with a single locale switch
 **Decision:** Default to Western Arabic numerals (0-9) and Arabic date presentation (Hijri optional), routed through one locale/formatting layer so Arabic-Indic numerals (٠-٩) can be switched on without touching feature code. Same choice applied to UI, certificates, CV, and all PDFs.
 **Why:** Arabic-Indic vs Western digits is a real, visible choice; centralizing it prevents inconsistent mixes across the app and PDFs.
@@ -83,6 +88,7 @@
 **Rejected (for now):** Webhooks/events first (more moving parts before the core loop is proven).
 
 ## D-004 — MVP auth = token-mapped handoff; SSO/OAuth2 = hardening target
+> **Update (D-019):** the AD/LDAP option is dropped — auth is email/password only. OAuth2 remains only an optional internal convenience for the Moodle handoff, not a ministry SSO requirement.
 **Decision:** App is the identity owner (email/password). Create a Moodle user per registrant (`moodle_user_id`), use token-mapped auto-login/handoff for course entry in MVP. Move to OAuth2 IdP (or AD/LDAP if the ministry has it) during hardening.
 **Why:** Get a working single-login experience fast; defer the heavier SSO build until the flow is proven. AD/LDAP existence must be confirmed early as it reshapes auth.
 **Rejected:** Building full OAuth2 SSO up front (slower MVP); two separate logins (bad UX).

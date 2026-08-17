@@ -259,7 +259,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 ### 5.3 Authentication / SSO
 - Your app is the identity owner (email/password). On registration, create the Moodle counterpart and store `moodle_user_id`.
 - **MVP:** token-mapped **auto-login / session handoff** so the user never sees a second login when entering a course.
-- **Hardening target:** stand the app up as an **OAuth2 identity provider** and configure Moodle's OAuth2 auth plugin against it — real SSO. **If the ministry has AD/LDAP, point both systems at it instead** (confirm this early — it reshapes auth).
+- **Auth is email/password only — no AD/LDAP, no external SSO** (LOCKED, D-019). The app is the sole identity owner and provisions Moodle accounts behind the scenes. The optional hardening target is app-as-OAuth2-IdP purely to smooth the Moodle handoff if ever needed; it is NOT a ministry SSO requirement.
 
 ### 5.4 Course delivery model
 - **MVP:** **handoff** to a heavily Arabic/RTL-themed Moodle (strong RTL support), app remains the hub.
@@ -313,7 +313,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 
 **Phase 2 — Moodle integration proper.**
 *Goal:* replace the mock with a real Moodle and prove the learning loop.
-*Deliverables:* **spike first** — prove *enroll a user via API → they complete a course in Moodle → backend detects completion + grade*. Then: Moodle web services enabled + least-privilege integration token; **user provisioning** (`core_user_create_users`, store `moodle_user_id`); **catalog sync** from Moodle (`core_course_get_courses`) into the cached `courses` table with product metadata (path membership, `riasec_letter` via paths); **enrollment on path confirm** (`enrol_manual_enrol_users`); **scheduled completion-sync job** reading completion + grades, writing `completions` keyed by `(user, moodle_course_id)`, evaluating the **product pass threshold**, **idempotently** honoring existing completions (no re-take); **transactional email notifications** (course passed); **auth/SSO** so users never see a second login (MVP token-mapped handoff; confirm AD/LDAP situation); **Course view/player** (handoff to Arabic/RTL-themed Moodle).
+*Deliverables:* **spike first** — prove *enroll a user via API → they complete a course in Moodle → backend detects completion + grade*. Then: Moodle web services enabled + least-privilege integration token; **user provisioning** (`core_user_create_users`, store `moodle_user_id`); **catalog sync** from Moodle (`core_course_get_courses`) into the cached `courses` table with product metadata (path membership, `riasec_letter` via paths); **enrollment on path confirm** (`enrol_manual_enrol_users`); **scheduled completion-sync job** reading completion + grades, writing `completions` keyed by `(user, moodle_course_id)`, evaluating the **product pass threshold**, **idempotently** honoring existing completions (no re-take); **transactional email notifications** (course passed); **seamless Moodle login** so users never see a second login (token-mapped handoff; email/password only, no AD/LDAP per D-019); **Course view/player** (handoff to Arabic/RTL-themed Moodle).
 *Done when:* a real user can, from the app, enter a real Moodle course, take its quiz, and have the app reflect completion + pass/fail automatically and idempotently (re-running the sync never double-processes).
 
 **Phase 3 — Certificates + CV.**

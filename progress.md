@@ -10,9 +10,7 @@
 - **Last completed task:** None yet — project just scaffolded with context files.
 - **Next task:** Begin Phase 0: scaffold the monorepo (Next.js `apps/web`, NestJS `apps/api`, `packages/types`) with Arabic-first RTL + i18n, define the color design tokens, set up auth/user model scaffolding + email verification, the mocked Moodle service, and CI. (Stack is locked — see D-013.)
 - **Active branch:** none yet (work on `phase-0-foundations` when Phase 0 begins).
-- **Open blockers / questions for the human:**
-  - Confirm whether the ministry has AD/LDAP that auth must integrate with (reshapes Phase 2 auth).
-  - Confirm the exact Moodle 4.5.x patch version to be deployed (must be ≥ 4.5.3 for CVE-2025-32044).
+- **Open blockers / questions for the human:** none blocking. (Resolved: auth is email/password only — no AD/LDAP integration, per user; Moodle target is the latest 4.5.x LTS tag from github.com/moodle/moodle — security-supported to Oct 2027.)
 
 ---
 
@@ -39,6 +37,12 @@
 ---
 
 ## Log (newest first)
+
+### [DATE] — Two open questions resolved (D-019)
+- Auth: **email/password only, no AD/LDAP** (user confirmed). Updated CLAUDE.md §2/§5 and Phase 2; annotated D-004.
+- Moodle: **latest 4.5.x LTS** (github.com/moodle/moodle newest `v4.5.x` tag; supported to Oct 2027; PHP ≥ 8.1 + sodium + max_input_vars ≥ 5000). Recorded as D-019.
+- No open blockers remain for Phase 0 or Phase 2 auth. Application code still not started.
+- **Next:** run the Phase 0 kickoff prompt.
 
 ### [DATE] — Deep audit: filled 14 gaps
 - Attempted to read the repo `AbdullahDamati/tamkeen` — returns 404 (private or not yet created); could not inspect current contents. Treating these files as the repo foundation. If the agent needs the real repo state, it must be made accessible.
