@@ -1,0 +1,125 @@
+{
+  "app": {
+    "name": "منصة التدريب والتطوير المهني",
+    "description": "منصة داخلية للتدريب وتطوير المسار المهني لموظفي الوزارة"
+  },
+  "a11y": {
+    "skipToContent": "تجاوز إلى المحتوى الرئيسي",
+    "primaryNav": "التنقل الرئيسي"
+  },
+  "nav": {
+    "dashboard": "الرئيسية",
+    "courses": "الدورات",
+    "myPath": "مساري",
+    "certificates": "شهاداتي",
+    "cv": "السيرة الذاتية",
+    "profile": "الملف الشخصي"
+  },
+  "actions": {
+    "retry": "إعادة المحاولة",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد",
+    "save": "حفظ",
+    "back": "السابق",
+    "next": "التالي"
+  },
+  "states": {
+    "loading": "جارٍ التحميل…",
+    "loadingLabel": "جارٍ تحميل المحتوى",
+    "emptyTitle": "لا يوجد محتوى بعد",
+    "emptyBody": "لم يُضف أي عنصر إلى هذه القائمة حتى الآن.",
+    "errorTitle": "تعذّر تحميل البيانات",
+    "errorBody": "حدث خطأ أثناء جلب المحتوى. يمكنك إعادة المحاولة."
+  },
+  "auth": {
+    "registerTitle": "إنشاء حساب",
+    "registerSubtitle": "التسجيل متاح لموظفي الوزارة فقط.",
+    "signInTitle": "تسجيل الدخول",
+    "signInSubtitle": "أدخل بريدك الإلكتروني وكلمة المرور.",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "confirmPassword": "تأكيد كلمة المرور",
+    "fullName": "الاسم الكامل",
+    "employeeId": "الرقم الوظيفي",
+    "department": "الإدارة",
+    "passwordHint": "{min} حرفًا على الأقل.",
+    "submitRegister": "إنشاء الحساب",
+    "submitSignIn": "تسجيل الدخول",
+    "forgotPasswordLink": "نسيت كلمة المرور؟",
+    "haveAccount": "لديك حساب بالفعل؟",
+    "signInLink": "تسجيل الدخول",
+    "noAccount": "ليس لديك حساب؟",
+    "registerLink": "إنشاء حساب",
+    "submitting": "جارٍ الإرسال…",
+
+    "registerSentTitle": "تحقّق من بريدك الإلكتروني",
+    "registerSentBody": "إذا كان بريدك مؤهلًا، فقد أرسلنا رسالة تأكيد. افتح الرابط في الرسالة لتفعيل حسابك.",
+
+    "verifyTitle": "تأكيد البريد الإلكتروني",
+    "verifyPending": "جارٍ تأكيد بريدك الإلكتروني…",
+    "verifySuccessTitle": "تم تأكيد بريدك الإلكتروني",
+    "verifySuccessBody": "يمكنك الآن تسجيل الدخول إلى حسابك.",
+    "verifyFailedTitle": "تعذّر تأكيد البريد الإلكتروني",
+    "verifyFailedBody": "الرابط غير صالح أو منتهي الصلاحية. يمكنك طلب رابط جديد.",
+    "verifyMissingToken": "الرابط غير مكتمل. افتح الرابط كما ورد في الرسالة.",
+    "resendVerification": "إرسال رابط جديد",
+    "resendSent": "إذا كان الحساب بحاجة إلى تأكيد، فقد أُرسل رابط جديد.",
+
+    "forgotTitle": "إعادة تعيين كلمة المرور",
+    "forgotSubtitle": "أدخل بريدك الإلكتروني وسنرسل لك رابطًا لإعادة التعيين.",
+    "forgotSubmit": "إرسال الرابط",
+    "forgotSentTitle": "تحقّق من بريدك الإلكتروني",
+    "forgotSentBody": "إذا كان هناك حساب مرتبط بهذا البريد، فقد أرسلنا رابطًا لإعادة تعيين كلمة المرور.",
+
+    "resetTitle": "كلمة مرور جديدة",
+    "resetSubtitle": "اختر كلمة مرور جديدة لحسابك.",
+    "newPassword": "كلمة المرور الجديدة",
+    "resetSubmit": "حفظ كلمة المرور",
+    "resetSuccessTitle": "تم تحديث كلمة المرور",
+    "resetSuccessBody": "يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.",
+
+    "errors": {
+      "EMAIL_INVALID": "أدخل بريدًا إلكترونيًا صحيحًا.",
+      "EMAIL_DOMAIN_NOT_ALLOWED": "هذا البريد غير مسجّل ضمن نطاقات الوزارة.",
+      "EMPLOYEE_ID_INVALID": "الرقم الوظيفي غير صحيح.",
+      "EMPLOYEE_ID_REQUIRED": "الرقم الوظيفي مطلوب.",
+      "FULL_NAME_REQUIRED": "الاسم الكامل مطلوب.",
+      "DEPARTMENT_REQUIRED": "الإدارة مطلوبة.",
+      "PASSWORD_REQUIRED": "كلمة المرور مطلوبة.",
+      "PASSWORD_TOO_SHORT": "كلمة المرور قصيرة جدًا.",
+      "PASSWORD_TOO_LONG": "كلمة المرور طويلة جدًا.",
+      "PASSWORDS_DO_NOT_MATCH": "كلمتا المرور غير متطابقتين.",
+      "INVALID_CREDENTIALS": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+      "EMAIL_NOT_VERIFIED": "لم يتم تأكيد بريدك الإلكتروني بعد.",
+      "ACCOUNT_LOCKED": "تم إيقاف الحساب مؤقتًا بعد محاولات متعددة. أعد المحاولة لاحقًا.",
+      "SELF_REGISTRATION_DISABLED": "التسجيل الذاتي غير متاح. تواصل مع مسؤول النظام.",
+      "TOKEN_INVALID": "الرابط غير صالح أو منتهي الصلاحية.",
+      "TOKEN_REQUIRED": "الرابط غير مكتمل.",
+      "AUTH_REQUIRED": "يجب تسجيل الدخول للمتابعة.",
+      "CSRF_TOKEN_INVALID": "انتهت صلاحية الجلسة. أعد المحاولة.",
+      "ThrottlerException: Too Many Requests": "محاولات كثيرة جدًا. انتظر قليلًا ثم أعد المحاولة.",
+      "NETWORK_ERROR": "تعذّر الاتصال بالخدمة. تحقّق من الشبكة ثم أعد المحاولة.",
+      "UNKNOWN_ERROR": "حدث خطأ غير متوقع. أعد المحاولة."
+    }
+  },
+  "foundations": {
+    "title": "الأساسات",
+    "intro": "هذه صفحة مؤقتة للمرحلة صفر تعرض هيكل الواجهة وحالات البيانات الثلاث. ستُستبدل بلوحة المعلومات في المرحلة الأولى.",
+    "statesHeading": "حالات البيانات",
+    "statesBody": "كل عرض بيانات في النظام يجب أن يوفّر الحالات الثلاث: التحميل، والفراغ، والخطأ.",
+    "loadingLabel": "حالة التحميل",
+    "emptyLabel": "حالة الفراغ",
+    "errorLabel": "حالة الخطأ",
+    "formatHeading": "التنسيق العربي",
+    "formatBody": "كل الأرقام والتواريخ تمرّ عبر طبقة تنسيق واحدة.",
+    "sampleCourses": "عدد الدورات: {count}",
+    "sampleCounter": "اخترت {selected} من {min}–{max}",
+    "sampleGrade": "الدرجة: {grade}",
+    "sampleDate": "تاريخ الإصدار: {date}",
+    "buttonsHeading": "الأزرار",
+    "primaryAction": "الإجراء الرئيسي",
+    "achievementAction": "إجراء الإنجاز",
+    "outlineAction": "إجراء ثانوي",
+    "emptyActionExample": "إضافة عنصر"
+  }
+}

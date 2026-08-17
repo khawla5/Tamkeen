@@ -1,6 +1,6 @@
-# Save this file at: .github/workflows/ci.yml
-# Runs lint + typecheck + tests on every PR and push. Adjust the package
-# manager / script names to match what Phase 0 sets up.
+# Quality gates for every PR (CLAUDE.md §2B / D-014): format, lint, typecheck,
+# unit tests, API integration tests, and a browser end-to-end pass.
+# A PR must be green before review. No failing or skipped tests.
 
 name: CI
 
@@ -10,9 +10,23 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://user:password@localhost:5432/tamkeen_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      # Mailpit, so the e2e suite can read the verification email the way a user
+      # would. There is no test-only endpoint that hands out tokens.
+      SMTP_HOST: localhost
+      SMTP_PORT: 1025
+      MAILPIT_URL: http://localhost:8025
 
     services:
       postgres:
@@ -21,7 +35,7 @@ jobs:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
           POSTGRES_DB: tamkeen_test
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U user"
           --health-interval 10s
@@ -29,12 +43,15 @@ jobs:
           --health-retries 5
       redis:
         image: redis:7
-        ports: ["6379:6379"]
+        ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      mailpit:
+        image: axllent/mailpit:latest
+        ports: ['1025:1025', '8025:8025']
 
     steps:
       - uses: actions/checkout@v4
@@ -42,16 +59,24 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          # cache: 'pnpm'   # uncomment if using pnpm
-
-      # - name: Install pnpm
-      #   uses: pnpm/action-setup@v4
-      #   with:
-      #     version: 9
+          node-version-file: .nvmrc
+          cache: npm
 
       - name: Install dependencies
-        run: npm ci   # or: pnpm install --frozen-lockfile
+        run: npm ci
+
+      - name: Build shared types
+        run: npm run build:types
+
+      # The Prisma client is generated, not committed. Needed before typecheck.
+      - name: Generate Prisma client
+        run: npm run db:generate --workspace @tamkeen/api
+
+      - name: Apply migrations
+        run: npm run db:deploy --workspace @tamkeen/api
+
+      - name: Format check
+        run: npm run format:check
 
       - name: Lint
         run: npm run lint
@@ -59,11 +84,30 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
-        env:
-          DATABASE_URL: postgresql://user:password@localhost:5432/tamkeen_test?schema=public
-          REDIS_URL: redis://localhost:6379
+      - name: Unit tests
         run: npm test
 
-  # NOTE: This workflow never deploys and never pushes to main.
-  # Merges to main happen only via reviewed pull requests, approved by a human.
+      # Integration tests hit the real PostgreSQL service container above.
+      - name: Integration tests (API)
+        run: npm run test:e2e --workspace @tamkeen/api
+
+      # ── Browser end-to-end ───────────────────────────────────────────────────
+      # Playwright starts the *built* api and web from its webServer config, so
+      # both must be built first.
+      - name: Build apps
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: End-to-end tests (browser)
+        run: npm run test:e2e --workspace @tamkeen/web
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7

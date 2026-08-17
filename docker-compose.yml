@@ -1,0 +1,51 @@
+# Local development dependencies only. Not a deployment artefact —
+# environments and secrets management are Phase 7.
+#
+#   npm run db:up     start postgres + redis + mailpit
+#   npm run db:down   stop them
+#
+# Mailpit catches every transactional email in development so verification and
+# password-reset links are readable without real SMTP credentials.
+# Web UI: http://localhost:8025
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: tamkeen-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: tamkeen
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U user -d tamkeen']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: tamkeen-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: tamkeen-mailpit
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # Web UI
+
+volumes:
+  postgres-data:

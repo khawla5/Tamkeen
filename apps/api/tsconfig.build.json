@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  /*
+   * The production build compiles `src` only. Without this, tsc sees test files
+   * too, infers a common rootDir of the package root, and emits `dist/src/main.js`
+   * instead of `dist/main.js` — silently breaking the start script.
+   */
+  "exclude": ["node_modules", "dist", "generated", "test", "**/*.spec.ts", "prisma.config.ts"]
+}

@@ -1,0 +1,44 @@
+{
+  "name": "tamkeen",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Ministry Internal Training & Career Development Platform (Arabic-first)",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:types": "npm run build --workspace @tamkeen/types",
+    "build": "npm run build:types && npm run build --workspace @tamkeen/api && npm run build --workspace @tamkeen/web",
+    "dev": "concurrently --names \"api,web\" --prefix-colors \"blue,magenta\" \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev --workspace @tamkeen/api",
+    "dev:web": "npm run dev --workspace @tamkeen/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run build:types && npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "test:e2e": "npm run test:e2e --workspace @tamkeen/api",
+    "test:e2e:web": "npm run test:e2e --workspace @tamkeen/web",
+    "e2e": "npm run db:up && npm run build && npm run test:e2e:web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.26",
+    "sharp": "^0.35.3",
+    "next": {
+      "postcss": "^8.5.26",
+      "sharp": "^0.35.3"
+    }
+  }
+}
