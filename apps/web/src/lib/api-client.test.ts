@@ -147,4 +147,36 @@ describe('api-client', () => {
       code: 'UNKNOWN_ERROR',
     });
   });
+
+  describe('empty-response normalisation', () => {
+    it('turns Nest’s empty object into null, so callers can test for it', async () => {
+      /* A controller returning `null` — "not assessed yet", "no path yet" —
+         serialises as `{}`. Without this, every caller would have to remember to
+         check `Object.keys(...).length`, and one of them would not. */
+      fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
+
+      const loaded: ApiClientModule = await import('./api-client');
+      await expect(loaded.assessmentApi.result()).resolves.toBeNull();
+    });
+
+    it('leaves an empty array as an empty array', async () => {
+      /*
+       * Regression guard. `Object.keys([])` is also empty, so the rule above
+       * once converted an empty *list* to null — and a view whose emptiness
+       * check reads `data?.length === 0` then never showed its empty state,
+       * rendering a heading above nothing. Caught by the catalogue e2e.
+       */
+      fetchMock.mockResolvedValueOnce(jsonResponse(200, []));
+
+      const loaded: ApiClientModule = await import('./api-client');
+      await expect(loaded.coursesApi.list()).resolves.toEqual([]);
+    });
+
+    it('leaves a populated object alone', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(200, { state: 'PRE_ASSESSMENT' }));
+
+      const loaded: ApiClientModule = await import('./api-client');
+      await expect(loaded.dashboardApi.get()).resolves.toEqual({ state: 'PRE_ASSESSMENT' });
+    });
+  });
 });

@@ -15,6 +15,9 @@ import { PASSWORD_MIN_LENGTH } from '@/lib/auth-constants';
 
 function ResetPassword() {
   const t = useTranslations('auth');
+  /* Error codes live in one app-wide catalogue, not under 'auth' — the same
+     codes are raised by every module (D-024). */
+  const tErrors = useTranslations('errors');
   const translateError = useErrorMessage();
   const token = useSearchParams().get('token');
 
@@ -36,7 +39,7 @@ function ResetPassword() {
     }
 
     if (!token) {
-      setFormError(t('errors.TOKEN_REQUIRED'));
+      setFormError(tErrors('TOKEN_REQUIRED'));
       return;
     }
 
@@ -85,7 +88,7 @@ function ResetPassword() {
           id="confirmPassword"
           label={t('confirmPassword')}
           required
-          error={fieldError ? t(`errors.${fieldError}`) : undefined}
+          error={fieldError ? tErrors(fieldError) : undefined}
         >
           {(props) => (
             <Input

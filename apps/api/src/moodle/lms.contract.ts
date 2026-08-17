@@ -81,6 +81,21 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
         expect(upper.lmsUserId).toBe(lower.lmsUserId);
       });
 
+      it('gives the same account the same id across restarts', async () => {
+        /*
+         * A real LMS account keeps its id forever, and our `moodle_user_id`
+         * column is unique — so an adapter whose ids depend on process state
+         * hands a later user an id an existing row already holds. That is not
+         * hypothetical: the mock's incrementing counter did exactly this, and
+         * enrolment died on the constraint.
+         */
+        const first = await lms.provisionUser(input);
+        const fresh = createPort();
+        const second = await fresh.provisionUser(input);
+
+        expect(second.lmsUserId).toBe(first.lmsUserId);
+      });
+
       it('gives distinct users distinct ids', async () => {
         const first = await lms.provisionUser(input);
         const second = await lms.provisionUser({

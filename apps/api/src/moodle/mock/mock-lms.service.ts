@@ -34,10 +34,36 @@ export class MockLmsService implements LmsPort {
   private readonly users = new Map<LmsUserId, LmsUserRef>();
   private readonly enrolments = new Set<string>();
   private readonly progress = new Map<string, LmsCourseProgress>();
-  private nextUserId = 5001;
 
   private key(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
     return `${lmsUserId}:${lmsCourseId}`;
+  }
+
+  /**
+   * A stable LMS id for an email address.
+   *
+   * This replaced an incrementing counter, and the reason is a defect the
+   * end-to-end run surfaced. The counter restarted at 5001 with every API
+   * process, but `users.moodle_user_id` in our database does not — so after a
+   * restart the mock handed a *different* user the id an existing row already
+   * held, and enrolment died on the unique constraint that exists precisely to
+   * stop two users sharing one LMS account.
+   *
+   * A real Moodle gives an account the same id forever. Deriving the id from the
+   * email reproduces that invariant, so the mock now fails in the same places
+   * the real adapter would rather than in one of its own. FNV-1a: not a security
+   * hash, just a well-spread deterministic one.
+   */
+  private idFor(email: string): LmsUserId {
+    let hash = 0x811c9dc5;
+
+    for (let index = 0; index < email.length; index += 1) {
+      hash ^= email.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+
+    /* Offset so ids never collide with the small numbers used in fixtures. */
+    return 5001 + (hash % 1_000_000);
   }
 
   checkHealth(): Promise<LmsHealth> {
@@ -59,8 +85,7 @@ export class MockLmsService implements LmsPort {
       }
     }
 
-    const reference: LmsUserRef = { lmsUserId: this.nextUserId, email };
-    this.nextUserId += 1;
+    const reference: LmsUserRef = { lmsUserId: this.idFor(email), email };
     this.users.set(reference.lmsUserId, reference);
 
     return Promise.resolve(reference);
@@ -193,7 +218,6 @@ export class MockLmsService implements LmsPort {
     this.users.clear();
     this.enrolments.clear();
     this.progress.clear();
-    this.nextUserId = 5001;
     this.logger.debug('Mock LMS state reset');
   }
 }

@@ -13,7 +13,10 @@ import { ApiError, NetworkError } from '@/lib/api-client';
  * "INVALID_CREDENTIALS" is a bug, not an error message.
  */
 export function useErrorMessage(): (error: unknown) => string {
-  const t = useTranslations('auth.errors');
+  /* One catalogue for the whole app, not one per feature. The codes come from a
+     single API vocabulary, so splitting them by namespace would mean deciding
+     where each new code "belongs" and getting it wrong on a shared one. */
+  const t = useTranslations('errors');
 
   return (error: unknown): string => {
     const code =
