@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
+import { NextIntlClientProvider } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 
-import { DEFAULT_LOCALE } from '@tamkeen/types';
+import { HTML_DIR, HTML_LANG, getFormatContext } from '@/i18n/config';
+import { FormatProvider } from '@/i18n/format-provider';
 
 import './globals.css';
 
@@ -27,15 +30,24 @@ const arabic = localFont({
   fallback: ['system-ui', 'sans-serif'],
 });
 
-export const metadata: Metadata = {
-  title: 'منصة التدريب والتطوير المهني',
-  description: 'منصة داخلية للتدريب وتطوير المسار المهني لموظفي الوزارة',
-};
+/* Even the document title comes from the catalog — no hardcoded UI strings. */
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('app');
+
+  return {
+    title: t('name'),
+    description: t('description'),
+  };
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang={DEFAULT_LOCALE} dir="rtl" className={arabic.variable}>
-      <body className="min-h-dvh font-sans antialiased">{children}</body>
+    <html lang={HTML_LANG} dir={HTML_DIR} className={arabic.variable}>
+      <body className="min-h-dvh font-sans antialiased">
+        <NextIntlClientProvider>
+          <FormatProvider context={getFormatContext()}>{children}</FormatProvider>
+        </NextIntlClientProvider>
+      </body>
     </html>
   );
 }

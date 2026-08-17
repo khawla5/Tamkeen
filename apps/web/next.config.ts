@@ -2,8 +2,11 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { NextConfig } from 'next';
+import createNextIntlPlugin from 'next-intl/plugin';
 
 const monorepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -16,4 +19,4 @@ const nextConfig: NextConfig = {
   typedRoutes: false,
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);
