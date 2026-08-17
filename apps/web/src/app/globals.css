@@ -1,10 +1,20 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 /*
- * Brand design tokens — CLAUDE.md §3 / D-009.
- * These seven values are the whole palette. Never hardcode a hex in a
- * component; add a token here instead. Gold is reserved for the
- * recommended-path highlight and achievement accents — keep it scarce.
+ * ── Brand palette ────────────────────────────────────────────────────────────
+ * CLAUDE.md §3 / D-009. These seven values are the entire brand palette.
+ * Never hardcode a hex in a component; add or reuse a token here.
+ *
+ * Gold is reserved for the recommended-path highlight and achievement accents.
+ * Keep it scarce — if gold appears everywhere it stops meaning "recommended".
+ *
+ * ACCESSIBILITY CONSTRAINT (measured, see src/lib/contrast.test.ts):
+ *   --color-gold on white is 3.42:1 and on navy 3.99:1 — below the 4.5:1 AA
+ *   floor for body text. Gold is therefore valid ONLY for borders, focus rings,
+ *   icons, and large/bold text (>=24px, or >=18.66px bold), where 3:1 applies.
+ *   For a gold *fill* behind body-size text use --color-gold-light with navy
+ *   text (6.01:1). The contrast test enforces this; it is not a style opinion.
  */
 @theme {
   --color-navy: #222e42;
@@ -15,22 +25,129 @@
   --color-surface: #ffffff;
   --color-muted: #5e6b85;
 
+  /*
+   * Functional status colours — deliberately NOT part of the brand palette.
+   * Mandatory error/success states (§2B DoD 4) need a signal colour, and the
+   * brand seven contain none. Kept separate so they cannot be mistaken for
+   * brand accents and so gold stays scarce. Both clear 4.5:1 in either
+   * direction on white and cream (D-025).
+   */
+  --color-danger: #a32015;
+  --color-success: #1e6f4e;
+
   --font-sans: var(--font-arabic), system-ui, sans-serif;
+
+  --radius-card: 0.75rem;
+}
+
+/*
+ * ── Semantic roles ───────────────────────────────────────────────────────────
+ * shadcn/ui components are written against semantic names. Defining them in
+ * terms of the brand tokens means the palette stays the single source of truth:
+ * changing --color-navy changes every surface that derives from it.
+ */
+:root {
+  --background: var(--color-cream);
+  --foreground: var(--color-navy);
+
+  --card: var(--color-surface);
+  --card-foreground: var(--color-navy);
+
+  /* Primary action: navy on white text = 13.66:1. */
+  --primary: var(--color-navy);
+  --primary-foreground: var(--color-surface);
+
+  --secondary: var(--color-navy-soft);
+  --secondary-foreground: var(--color-surface);
+
+  /* Achievement / recommended fill: navy on light gold = 6.01:1. */
+  --accent: var(--color-gold-light);
+  --accent-foreground: var(--color-navy);
+
+  --muted-surface: var(--color-cream);
+  --muted-foreground: var(--color-muted);
+
+  --destructive: var(--color-danger);
+  --destructive-foreground: var(--color-surface);
+
+  --border: color-mix(in srgb, var(--color-muted) 28%, transparent);
+  --input: color-mix(in srgb, var(--color-muted) 40%, transparent);
+
+  /* Gold focus ring: 3.42:1 on white, clearing the 3:1 non-text threshold. */
+  --ring: var(--color-gold);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 }
 
 @layer base {
+  * {
+    border-color: var(--border);
+  }
+
   html {
     color-scheme: light;
+    /* Arabic diacritics and taller glyphs need a little more breathing room. */
+    line-height: 1.7;
   }
 
   body {
-    background-color: var(--color-cream);
-    color: var(--color-navy);
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
   }
 
-  /* Visible focus everywhere — WCAG 2.1 AA (§2B DoD 5). */
+  /*
+   * Visible focus on every interactive element — WCAG 2.1 AA 2.4.7 (§2B DoD 5).
+   * `:focus-visible` rather than `:focus` so pointer users don't see rings, but
+   * keyboard users always do.
+   */
   :focus-visible {
-    outline: 2px solid var(--color-gold);
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Respect users who ask for less motion (WCAG 2.3.3). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Visually hidden but available to screen readers (skip links, live regions). */
+  .sr-only-focusable:not(:focus):not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
 }
