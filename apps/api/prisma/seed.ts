@@ -4,12 +4,17 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { config as loadEnv } from 'dotenv';
 
 import { hashPassword } from '../src/common/password';
+import { MockLmsService } from '../src/moodle/mock/mock-lms.service';
+import { seedProductData } from '../src/seed-data/seed-runner';
+import type { LmsPort } from '../src/moodle/lms.port';
 import { PrismaClient, UserRole, UserStatus } from '../generated/prisma';
 
 loadEnv({ path: ['../../.env', '.env'], quiet: true });
 
 /**
- * Seeds the one account the system cannot bootstrap without: a super-admin.
+ * Seeds the one account the system cannot bootstrap without: a super-admin,
+ * then the Phase 1 product data — the assessment bank, the course catalogue
+ * mirrored from the LMS, the paths and their membership.
  *
  * Two properties matter more than convenience here.
  *
@@ -62,7 +67,25 @@ function resolveConfig(): SeedConfig {
   };
 }
 
-async function main(): Promise<void> {
+/**
+ * The LMS the catalogue is seeded from.
+ *
+ * Resolved the same way `MoodleModule` resolves it, and refusing `real` for the
+ * same reason the module does: the Phase 2 adapter is a stub, and seeding
+ * against it would produce an empty catalogue that looks like a successful run.
+ */
+function resolveLms(): LmsPort {
+  if ((process.env.MOODLE_MODE ?? 'mock') === 'real') {
+    throw new Error(
+      'MOODLE_MODE=real: catalogue seeding needs the Phase 2 Moodle adapter, which is not implemented. ' +
+        'Seed with MOODLE_MODE=mock, or wait for the Phase 2 catalogue sync.',
+    );
+  }
+
+  return new MockLmsService();
+}
+
+async function seedSuperAdmin(): Promise<void> {
   const config = resolveConfig();
 
   const existing = await prisma.user.findUnique({
@@ -114,6 +137,17 @@ async function main(): Promise<void> {
     console.log('  └─────────────────────────────────────────────────────────────');
     console.log('');
   }
+}
+
+async function main(): Promise<void> {
+  await seedSuperAdmin();
+
+  const counts = await seedProductData(prisma, resolveLms());
+
+  console.log(
+    `Seeded ${counts.questions} questions (${counts.options} options), ` +
+      `${counts.courses} courses, ${counts.paths} paths, ${counts.pathCourses} memberships.`,
+  );
 }
 
 main()

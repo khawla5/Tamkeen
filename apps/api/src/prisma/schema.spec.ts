@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { USER_ROLES } from '@tamkeen/types';
+import {
+  COURSE_STATUSES,
+  RIASEC_LETTERS,
+  USER_PATH_COURSE_STATUSES,
+  USER_PATH_STATUSES,
+  USER_ROLES,
+} from '@tamkeen/types';
 
 /**
  * Guards the Prisma schema against drift from the shared types and from the
@@ -118,26 +124,153 @@ describe('Prisma schema', () => {
   });
 
   describe('scope discipline', () => {
-    it('contains no product tables — those belong to later phases', () => {
-      /* Phase 0 is foundations. Guessing the assessment or path schema now would
-         bake in assumptions that Phase 1 has not yet examined. */
-      const productModels = [
-        'Assessment',
-        'AssessmentQuestion',
-        'Path',
-        'Course',
-        'PathCourse',
-        'UserPath',
-        'Completion',
-        'Certificate',
-        'CvProfile',
-      ];
+    it('contains no tables belonging to later phases', () => {
+      /*
+       * Phase 1 added the assessment, paths and courses. Completions,
+       * certificates and the CV still belong to Phases 2 and 3 — guessing their
+       * shape now would bake in assumptions those phases have not yet examined.
+       */
+      const laterPhaseModels = ['Completion', 'Certificate', 'CvProfile', 'Enrollment'];
 
-      const premature = productModels.filter((model) =>
+      const premature = laterPhaseModels.filter((model) =>
         new RegExp(`model\\s+${model}\\s*\\{`).test(SCHEMA),
       );
 
       expect(premature).toEqual([]);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Phase 1
+  // ───────────────────────────────────────────────────────────────────────────
+
+  it('keeps RiasecDimension in lockstep with RIASEC_LETTERS in @tamkeen/types', () => {
+    /* Canonical order matters as well as membership: it is the tie-break for
+       ranking (D-031), so a reordered enum would quietly change results. */
+    expect(enumValues('RiasecDimension')).toEqual([...RIASEC_LETTERS]);
+  });
+
+  it('keeps CourseStatus in lockstep with COURSE_STATUSES in @tamkeen/types', () => {
+    expect(enumValues('CourseStatus')).toEqual([...COURSE_STATUSES]);
+  });
+
+  it('keeps the user-path status enums in lockstep with the shared types', () => {
+    expect(enumValues('UserPathStatus')).toEqual([...USER_PATH_STATUSES]);
+    expect(enumValues('UserPathCourseStatus')).toEqual([...USER_PATH_COURSE_STATUSES]);
+  });
+
+  describe('AssessmentOptionWeight', () => {
+    const weight = modelBody('AssessmentOptionWeight');
+
+    it('stores the dimension as an enum, not free text or JSON (§6)', () => {
+      /* A mistyped letter in a JSON blob contributes nothing and fails silently,
+         producing a subtly wrong Holland Code that nothing surfaces. An enum
+         column makes the database reject it. */
+      expect(weight).toMatch(/dimension\s+RiasecDimension/);
+      expect(weight).not.toMatch(/Json/);
+    });
+
+    it('allows one weight per option per dimension', () => {
+      /* Two rows for the same pair would double that dimension's contribution. */
+      expect(weight).toMatch(/@@unique\(\[optionId, dimension\]\)/);
+    });
+  });
+
+  describe('AssessmentResult', () => {
+    const result = modelBody('AssessmentResult');
+
+    it('stores all six dimension scores, not just the code (§3A)', () => {
+      for (const column of ['scoreR', 'scoreI', 'scoreA', 'scoreS', 'scoreE', 'scoreC']) {
+        expect(result).toMatch(new RegExp(`${column}\\s+Int`));
+      }
+    });
+
+    it('stores the derived Holland Code and the attainable maximum', () => {
+      /* maxScore travels with the result so a historical profile can still be
+         shown as a percentage after the question bank changes size. */
+      expect(result).toMatch(/code\s+String/);
+      expect(result).toMatch(/maxScore\s+Int/);
+    });
+
+    it('records which assessment version produced it', () => {
+      expect(result).toMatch(/assessmentVersion\s+Int/);
+    });
+  });
+
+  describe('AssessmentResponse', () => {
+    const response = modelBody('AssessmentResponse');
+
+    it('allows one answer per question per attempt', () => {
+      expect(response).toMatch(/@@unique\(\[resultId, questionId\]\)/);
+    });
+
+    it('refuses to let bank edits delete the answers people gave', () => {
+      /* Restrict, not Cascade: editing a question in Phase 5 must not silently
+         remove historical responses and change past results. Deleting the
+         *result* may cascade — that removes an attempt as a whole, which is
+         coherent — so only the bank relations are asserted here. */
+      expect(response).toMatch(/question\s+AssessmentQuestion[^\n]*onDelete:\s*Restrict/);
+      expect(response).toMatch(/option\s+AssessmentOption[^\n]*onDelete:\s*Restrict/);
+    });
+  });
+
+  describe('Path', () => {
+    const path = modelBody('Path');
+
+    it('is tagged with exactly one primary RIASEC letter (§3A)', () => {
+      /* Singular and required — the gold rule has nothing to match on if a path
+         can carry several letters or none. */
+      expect(path).toMatch(/riasecLetter\s+RiasecDimension\s/);
+      expect(path).not.toMatch(/riasecLetters?\s+RiasecDimension\[\]/);
+      expect(path).not.toMatch(/riasecLetter\s+RiasecDimension\?/);
+    });
+  });
+
+  describe('Course', () => {
+    const course = modelBody('Course');
+
+    it('bridges to Moodle by id only, and uniquely (§1)', () => {
+      expect(course).toMatch(/moodleCourseId\s+Int\s+@unique/);
+    });
+
+    it('carries our own status, distinct from the LMS’s visibility', () => {
+      expect(course).toMatch(/status\s+CourseStatus/);
+    });
+  });
+
+  describe('UserPath', () => {
+    const userPath = modelBody('UserPath');
+
+    it('makes "one path per user" a database constraint, not a convention (D-002)', () => {
+      /*
+       * The whole product rests on this. A unique index means a second path
+       * cannot be inserted even by a bug or two concurrent confirm requests —
+       * application-level checks alone lose that race.
+       */
+      expect(userPath).toMatch(/userId\s+String\s+@unique/);
+    });
+
+    it('records when the path was confirmed, which is what locks it', () => {
+      expect(userPath).toMatch(/confirmedAt\s+DateTime\?/);
+    });
+
+    it('will not let a path in use be deleted out from under a learner', () => {
+      expect(userPath).toMatch(/path\s+Path[^\n]*onDelete:\s*Restrict/);
+    });
+  });
+
+  describe('UserPathCourse', () => {
+    const chosen = modelBody('UserPathCourse');
+
+    it('selects a course at most once within a path', () => {
+      expect(chosen).toMatch(/@@unique\(\[userPathId, courseId\]\)/);
+    });
+
+    it('mirrors a raw grade, never a pass/fail verdict (D-007)', () => {
+      /* The pass threshold is a product setting; storing a verdict here would
+         freeze a policy decision into a row. */
+      expect(chosen).toMatch(/gradePercent\s+Int\?/);
+      expect(chosen).not.toMatch(/\bpassed\b/);
     });
   });
 });
