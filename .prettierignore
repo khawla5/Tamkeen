@@ -12,3 +12,7 @@ progress.md
 decisions.md
 README.md
 PHASE_0_checklist.md
+
+# Playwright artefacts
+test-results/
+playwright-report/

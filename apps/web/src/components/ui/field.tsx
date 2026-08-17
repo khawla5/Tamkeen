@@ -33,14 +33,24 @@ export function Field({ id, label, error, hint, required = false, children }: Fi
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-foreground">
-        {label}
+      {/*
+        The required marker is a SIBLING of the label, not a child of it.
+        Nested inside, its text becomes part of the label — an e2e test caught
+        the accessible name coming through as "كلمة المرور*", which a screen
+        reader reads out as a spurious "star". `aria-hidden` on the span does not
+        prevent that, because the label's text content is what gets used.
+        The requirement itself is conveyed by the input's `required` attribute.
+      */}
+      <div className="flex items-center gap-1">
+        <label htmlFor={id} className="text-sm font-medium text-foreground">
+          {label}
+        </label>
         {required ? (
-          <span aria-hidden="true" className="ms-1 text-destructive">
+          <span aria-hidden="true" className="text-destructive">
             *
           </span>
         ) : null}
-      </label>
+      </div>
 
       {children({
         id,

@@ -74,6 +74,44 @@ describe('Field', () => {
     expect(screen.getByLabelText(/البريد/)).toBeRequired();
   });
 
+  it('keeps the required asterisk out of the accessible name', () => {
+    /*
+     * Regression test. The marker was originally nested inside the <label>, so
+     * the accessible name became "البريد*" and a screen reader announced a
+     * spurious "star". An exact-match query is the assertion: it only passes if
+     * the label text is the label and nothing else. `required` already conveys
+     * the requirement.
+     */
+    render(
+      <Field id="email" label="البريد" required>
+        {(props) => <Input {...props} />}
+      </Field>,
+    );
+
+    expect(screen.getByLabelText('البريد', { exact: true })).toBeRequired();
+  });
+
+  it('disambiguates fields whose labels share a suffix', () => {
+    /* "كلمة المرور" and "تأكيد كلمة المرور" must be separately addressable —
+       an exact query for the shorter one must not match the longer. */
+    render(
+      <>
+        <Field id="password" label="كلمة المرور" required>
+          {(props) => <Input {...props} />}
+        </Field>
+        <Field id="confirmPassword" label="تأكيد كلمة المرور" required>
+          {(props) => <Input {...props} />}
+        </Field>
+      </>,
+    );
+
+    expect(screen.getByLabelText('كلمة المرور', { exact: true })).toHaveAttribute('id', 'password');
+    expect(screen.getByLabelText('تأكيد كلمة المرور', { exact: true })).toHaveAttribute(
+      'id',
+      'confirmPassword',
+    );
+  });
+
   it('exposes both hint and error together when both are present', () => {
     render(
       <Field id="password" label="كلمة المرور" hint="12 حرفًا" error="قصيرة جدًا">

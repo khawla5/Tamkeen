@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 
 /**
  * Single-column, centred frame for the authentication pages (§4.1).
@@ -23,10 +23,13 @@ export function AuthCard({
     <main className="flex min-h-dvh items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>
-            {/* One h1 per page, and it is the page's purpose. */}
-            <span className="sr-only">{title}</span>
-          </CardTitle>
+          {/*
+            Exactly one heading, and it is an h1 because it names the page's
+            purpose. An earlier version also wrapped the title in CardTitle,
+            which produced a duplicate h2 with the same text — an e2e test caught
+            two headings resolving for one name, meaning a screen reader
+            announced the page title twice.
+          */}
           <h1 className="text-xl font-semibold text-foreground">{title}</h1>
           {subtitle ? <CardDescription>{subtitle}</CardDescription> : null}
         </CardHeader>

@@ -23,7 +23,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:up": "docker compose up -d",
-    "db:down": "docker compose down"
+    "db:down": "docker compose down",
+    "test:e2e": "npm run test:e2e --workspace @tamkeen/api",
+    "test:e2e:web": "npm run test:e2e --workspace @tamkeen/web",
+    "e2e": "npm run db:up && npm run build && npm run test:e2e:web"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
