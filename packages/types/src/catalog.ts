@@ -55,15 +55,21 @@ export interface CourseSummary {
  * than merely intended.
  */
 export const COURSE_ACTIONS = [
-  /** Not assessed / no path yet — browsing is allowed, acting is not (§4.6). */
+  /** No path yet, or the course is not part of the user's path — browsing is
+   *  allowed, acting is not (§4.6). */
   'NONE',
-  /** Course is in the user's path-in-progress selection; still building. */
+  /** In the user's path and selectable: they are still building, or they have
+   *  confirmed but are under the maximum (§4.9's quiet add). */
   'ADD_TO_PATH',
+  /** Already selected, but the path has not been confirmed — nothing to start
+   *  yet, so the only thing to offer is a way back to the build page. */
+  'IN_PATH',
   /** In the confirmed path, not yet complete. */
   'START_COURSE',
   /** Passed. */
   'COMPLETED',
-  /** In the catalogue but not addable — wrong path, or no longer offered. */
+  /** In the user's path but not addable — no longer offered, or already at the
+   *  maximum of ten. */
   'UNAVAILABLE',
 ] as const;
 

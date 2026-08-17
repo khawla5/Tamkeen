@@ -23,6 +23,16 @@ export const AuditAction = {
 
   // Authorization
   AUTHZ_DENIED: 'AUTHZ_DENIED',
+
+  // Assessment and path (Phase 1)
+  ASSESSMENT_SUBMITTED: 'ASSESSMENT_SUBMITTED',
+  /** A path entered the BUILDING state, or the user switched which one. */
+  PATH_SELECTED: 'PATH_SELECTED',
+  PATH_COURSES_UPDATED: 'PATH_COURSES_UPDATED',
+  /** The hard commitment gate (§2). Auditable by name in CLAUDE.md. */
+  PATH_CONFIRMED: 'PATH_CONFIRMED',
+  /** LMS enrolment requested for a confirmed path's courses. */
+  PATH_ENROLMENT_REQUESTED: 'PATH_ENROLMENT_REQUESTED',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];
@@ -46,6 +56,21 @@ export const AuditReason = {
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
   TOKEN_ALREADY_USED: 'TOKEN_ALREADY_USED',
   INSUFFICIENT_ROLE: 'INSUFFICIENT_ROLE',
+
+  /* Phase 1 — rejected submissions. These match SCORING_ERROR exactly, so
+     `reason: error.code` typechecks without a cast; a test asserts they stay
+     in step. */
+  ASSESSMENT_INCOMPLETE: 'ASSESSMENT_INCOMPLETE',
+  ASSESSMENT_UNKNOWN_QUESTION: 'ASSESSMENT_UNKNOWN_QUESTION',
+  ASSESSMENT_UNKNOWN_OPTION: 'ASSESSMENT_UNKNOWN_OPTION',
+  ASSESSMENT_DUPLICATE_ANSWER: 'ASSESSMENT_DUPLICATE_ANSWER',
+
+  // Phase 1 — path building and commitment
+  PATH_ALREADY_CONFIRMED: 'PATH_ALREADY_CONFIRMED',
+  PATH_NOT_SELECTED: 'PATH_NOT_SELECTED',
+  COURSE_COUNT_OUT_OF_RANGE: 'COURSE_COUNT_OUT_OF_RANGE',
+  COURSE_NOT_IN_PATH: 'COURSE_NOT_IN_PATH',
+  COURSE_NOT_AVAILABLE: 'COURSE_NOT_AVAILABLE',
 } as const;
 
 export type AuditReasonCode = (typeof AuditReason)[keyof typeof AuditReason];
