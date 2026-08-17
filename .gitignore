@@ -20,6 +20,8 @@ coverage/
 # Prisma
 prisma/*.db
 prisma/migrations/dev.db*
+# Generated Prisma client — regenerated from schema.prisma on every install.
+apps/api/generated/
 
 # Logs
 *.log

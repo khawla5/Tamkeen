@@ -1,34 +1,53 @@
 import { Controller, Get } from '@nestjs/common';
 
 import { AppConfigService } from '../config/app-config.module';
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface HealthResponse {
-  status: 'ok';
+  status: 'ok' | 'degraded';
   service: 'tamkeen-api';
   environment: string;
   locale: string;
   numberFormat: string;
   moodleMode: string;
+  database: 'up' | 'down';
 }
 
 @Controller('health')
 export class HealthController {
-  constructor(private readonly config: AppConfigService) {}
+  constructor(
+    private readonly config: AppConfigService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /**
-   * Liveness + a read-out of the cross-cutting config choices, so a reviewer
-   * can confirm the Arabic-first defaults and the Moodle mode without shelling
-   * into the container. Deliberately exposes no secrets.
+   * Liveness plus a read-out of the cross-cutting config, so a reviewer can
+   * confirm the Arabic-first defaults and the Moodle mode without shelling into
+   * a container. Deliberately exposes no secrets and no connection strings.
    */
   @Get()
-  check(): HealthResponse {
+  async check(): Promise<HealthResponse> {
+    const database = await this.checkDatabase();
+
     return {
-      status: 'ok',
+      status: database === 'up' ? 'ok' : 'degraded',
       service: 'tamkeen-api',
       environment: this.config.get('NODE_ENV'),
       locale: this.config.get('DEFAULT_LOCALE'),
       numberFormat: this.config.get('NUMBER_FORMAT'),
       moodleMode: this.config.get('MOODLE_MODE'),
+      database,
     };
+  }
+
+  private async checkDatabase(): Promise<'up' | 'down'> {
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      return 'up';
+    } catch {
+      /* Swallow the driver error on purpose: it can contain the host, port and
+         user from the connection string, which must not reach an HTTP response. */
+      return 'down';
+    }
   }
 }

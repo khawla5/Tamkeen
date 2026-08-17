@@ -1,0 +1,181 @@
+// Foundation schema — Phase 0 only.
+//
+// Deliberately limited to what authentication, RBAC, auditing and in-app
+// notifications need. The product tables (assessment, paths, courses,
+// path_courses, user_paths, completions, certificates, cv_profiles) arrive in
+// their own phases per CLAUDE.md §6; adding them now would be guesswork against
+// requirements that later phases will sharpen.
+//
+// Conventions: models are PascalCase in Prisma and snake_case in Postgres via
+// @@map/@map. Primary keys are UUIDs rather than sequential integers so record
+// identifiers cannot be enumerated or their volume inferred.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+// Prisma 7 no longer accepts `url` here. The migration/CLI connection lives in
+// prisma.config.ts, and the runtime client connects through the pg driver
+// adapter in src/prisma/prisma.service.ts (D-026).
+datasource db {
+  provider = "postgresql"
+}
+
+/// The three portals of the system (CLAUDE.md §1). Kept in lockstep with
+/// USER_ROLES in @tamkeen/types — a test asserts the two never diverge.
+enum UserRole {
+  EMPLOYEE
+  ENTITY
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  /// Normal, may sign in.
+  ACTIVE
+  /// Administratively disabled. Retained for audit integrity, cannot sign in.
+  SUSPENDED
+}
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+
+  email        String @unique
+  passwordHash String @map("password_hash")
+
+  fullName   String @map("full_name")
+  /// Ministry employee number. Unique, and one half of the restricted
+  /// registration gate (D-017).
+  employeeId String @unique @map("employee_id")
+  department String
+
+  role   UserRole   @default(EMPLOYEE)
+  status UserStatus @default(ACTIVE)
+
+  /// Null until the user follows the verification link. Stored as a timestamp
+  /// rather than a boolean so "when" is auditable, not just "whether".
+  emailVerifiedAt DateTime? @map("email_verified_at")
+
+  /// The only bridge to Moodle for identity (CLAUDE.md §1). Nullable because
+  /// provisioning happens in Phase 2; unique so two users can never be mapped
+  /// onto the same Moodle account.
+  moodleUserId Int? @unique @map("moodle_user_id")
+
+  /// Brute-force lockout state (§2 security baseline). Per-account, in the
+  /// database so a lockout survives a restart. Per-IP throttling is separate
+  /// and lives in Redis, deliberately ephemeral so request IPs are not
+  /// accumulated at rest.
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  lastLoginAt         DateTime? @map("last_login_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  authTokens    AuthToken[]
+  notifications Notification[]
+  auditEvents   AuditLog[]     @relation("AuditActor")
+
+  @@index([role])
+  @@map("users")
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+/// Single-use, expiring tokens for email verification and password reset.
+///
+/// Only a HASH of the token is stored, never the token itself: a database leak
+/// must not hand an attacker working verification or reset links. The raw value
+/// exists only in the email that was sent.
+model AuthToken {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      AuthTokenType
+  tokenHash String        @unique @map("token_hash")
+
+  expiresAt DateTime  @map("expires_at")
+  /// Set the moment the token is redeemed, making reuse detectable.
+  consumedAt DateTime? @map("consumed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}
+
+enum AuditOutcome {
+  SUCCESS
+  FAILURE
+}
+
+/// Who did what, when (§2 security baseline).
+///
+/// PII discipline: this table records actor and target *identifiers*, never
+/// names, emails or free-text about people. `ipAddress` is the one exception and
+/// is retained deliberately — without it a brute-force or credential-stuffing
+/// investigation is impossible — so it is in scope for the Phase 6 retention
+/// policy rather than kept indefinitely by default.
+model AuditLog {
+  id BigInt @id @default(autoincrement())
+
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  /// Stable string code, e.g. AUTH_LOGIN_SUCCEEDED, PATH_CONFIRMED,
+  /// CERTIFICATE_ISSUED. A string rather than an enum so appending a new action
+  /// in a later phase does not require a schema migration.
+  action  String
+  outcome AuditOutcome
+
+  /// Null for anonymous or system-originated events, e.g. a sign-in attempt
+  /// against an address that does not exist.
+  actorUserId String? @map("actor_user_id") @db.Uuid
+  actor       User?   @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  ipAddress String? @map("ip_address")
+
+  /// What was acted upon, as a type + id pair so any future entity can be
+  /// referenced without a column per relation.
+  targetType String? @map("target_type")
+  targetId   String? @map("target_id")
+
+  /// Structured, non-PII detail only (e.g. { "reason": "ACCOUNT_LOCKED" }).
+  metadata Json?
+
+  @@index([occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([action, occurredAt])
+  @@map("audit_log")
+}
+
+/// In-app notifications, kept minimal by §2: a light indicator when a
+/// certificate is issued. Nothing more — no marketing, no engagement nagging.
+enum NotificationType {
+  CERTIFICATE_ISSUED
+}
+
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type NotificationType
+
+  /// Identifier of the thing the notification points at (a certificate id in
+  /// Phase 3). No copy is stored: the Arabic text is rendered from the message
+  /// catalogue at read time, so wording changes do not require a data migration.
+  relatedId String? @map("related_id")
+
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}

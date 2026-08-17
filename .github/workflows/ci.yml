@@ -59,6 +59,13 @@ jobs:
       - name: Build shared types
         run: npm run build:types
 
+      # The Prisma client is generated, not committed. Needed before typecheck.
+      - name: Generate Prisma client
+        run: npm run db:generate --workspace @tamkeen/api
+
+      - name: Apply migrations
+        run: npm run db:deploy --workspace @tamkeen/api
+
       - name: Format check
         run: npm run format:check
 
