@@ -27,7 +27,12 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-cream/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" className="text-lg font-bold text-navy">
+        {/*
+          Not "/" — that path is the authenticated dashboard
+          (`app/(portal)/page.tsx`). This page lives at `/landing` precisely
+          so the two never collide.
+        */}
+        <Link href="/landing" className="text-lg font-bold text-navy">
           {tLanding('brand')}
         </Link>
 

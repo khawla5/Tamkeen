@@ -11,11 +11,16 @@ import { StepsSection } from '@/components/landing/steps-section';
 import { TrustSection } from '@/components/landing/trust-section';
 
 /**
- * Public marketing/landing page — deliberately outside the `(portal)` route
- * group, so it renders without `PortalProvider`'s session load (D-037) and
- * remains reachable by a signed-out visitor. Out of scope by design: no
- * auth, assessment, or application functionality lives here — every action
- * on this page is a link to `/login` or `/register`, both already built.
+ * Public marketing/landing page, at `/landing` — deliberately NOT at `/`,
+ * and deliberately outside the `(portal)` route group.
+ *
+ * `app/(portal)/page.tsx` (the authenticated dashboard) already owns `/`;
+ * route groups don't add a path segment, so a page placed at bare
+ * `app/page.tsx` collides with it on the same URL. Putting the marketing
+ * page here avoids that collision entirely, rather than moving the
+ * already-built, already-tested dashboard route — which the landing-page
+ * brief explicitly puts out of scope ("no auth/assessment/application
+ * functionality").
  *
  * A client component, not a server one: nothing here needs server-side data,
  * and `StepsSection` already needs the client-only `useFormat` (D-018's

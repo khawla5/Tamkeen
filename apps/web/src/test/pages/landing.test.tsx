@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import LandingPage from '@/app/page';
+import LandingPage from '@/app/landing/page';
 import { renderWithProviders } from '@/test/render';
 
 /**
