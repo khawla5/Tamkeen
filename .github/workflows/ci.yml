@@ -75,6 +75,12 @@ jobs:
       - name: Apply migrations
         run: npm run db:deploy --workspace @tamkeen/api
 
+      # From Phase 1 the product tests need real content — the assessment bank,
+      # the paths and the catalogue — so an empty database is not a valid
+      # starting state. The seed is idempotent, so this is safe to re-run.
+      - name: Seed reference data
+        run: npm run db:seed --workspace @tamkeen/api
+
       - name: Format check
         run: npm run format:check
 

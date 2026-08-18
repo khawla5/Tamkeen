@@ -2,8 +2,13 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
+import { AssessmentModule } from './assessment/assessment.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { CoursesModule } from './courses/courses.module';
+import { EnrollmentModule } from './enrollment/enrollment.module';
+import { JourneyModule } from './journey/journey.module';
+import { PathsModule } from './paths/paths.module';
 import { CsrfGuard } from './auth/csrf.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { SessionGuard } from './auth/session.guard';
@@ -49,6 +54,14 @@ import { PrismaModule } from './prisma/prisma.module';
     MoodleModule,
     AuthModule,
     HealthModule,
+    /* Phase 1. JourneyModule is read-only shared state and is imported by the
+       four below rather than depended on between them, which is what keeps
+       assessment ↔ dashboard from becoming a cycle. */
+    JourneyModule,
+    AssessmentModule,
+    PathsModule,
+    CoursesModule,
+    EnrollmentModule,
   ],
   providers: [
     /*

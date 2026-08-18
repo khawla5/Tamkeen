@@ -1,7 +1,6 @@
-import { randomBytes } from 'node:crypto';
-
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+import { PASSWORD, RUN_ID, accountFor, signedInEmployee } from './account';
 import { assertMailpitReachable, tokenFromEmail } from './mailpit';
 
 /**
@@ -26,18 +25,6 @@ function alertWithText(page: Page, text: string): Locator {
  * there is no test-only endpoint to shortcut through. That is deliberate: a test
  * that bypasses the email has not proved the loop closes.
  */
-const RUN_ID = randomBytes(4).toString('hex');
-const PASSWORD = 'a-sufficiently-long-password';
-
-function accountFor(label: string) {
-  return {
-    email: `pw-${RUN_ID}-${label}@ministry.gov.example`,
-    employeeId: `PW-${RUN_ID}-${label}`.slice(0, 20),
-    fullName: 'أحمد الموظف',
-    department: 'تقنية المعلومات',
-  };
-}
-
 test.beforeAll(async () => {
   await assertMailpitReachable();
 });
@@ -195,10 +182,25 @@ test.describe('Arabic-first shell', () => {
     }
   });
 
+  test('an unauthenticated visitor is sent to sign in, not left on an error', async ({ page }) => {
+    /* From Phase 1 the portal is behind a session. The API is fail-closed and
+       answers 401; the redirect is what turns that into something a user can
+       act on rather than a permanent error state. */
+    await page.goto('/');
+
+    await expect(page).toHaveURL(/\/login$/);
+  });
+});
+
+/**
+ * The shell's accessibility properties, verified where the shell now lives:
+ * inside an authenticated session.
+ */
+test.describe('Authenticated shell', () => {
   test('the skip link is the first thing a keyboard user reaches', async ({ page }) => {
     /* WCAG 2.4.1 bypass blocks. Verified by keyboard, because a skip link that
        exists in the DOM but cannot be focused is not a skip link. */
-    await page.goto('/');
+    await signedInEmployee(page, 'skip');
     await page.keyboard.press('Tab');
 
     const focused = page.locator(':focus');
@@ -207,20 +209,24 @@ test.describe('Arabic-first shell', () => {
   });
 
   test('the active navigation item is marked for assistive technology', async ({ page }) => {
-    await page.goto('/');
+    await signedInEmployee(page, 'navmark');
 
-    await expect(page.getByRole('link', { name: 'الرئيسية' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    await expect(
+      page.getByRole('navigation', { name: 'التنقل الرئيسي' }).getByRole('link', {
+        name: 'الرئيسية',
+      }),
+    ).toHaveAttribute('aria-current', 'page');
   });
 
   test('numbers use Western Arabic digits by default (D-018)', async ({ page }) => {
-    await page.goto('/');
+    await signedInEmployee(page, 'digits');
 
-    /* The formatting sample on the Phase 0 page. */
-    const sample = page.getByText(/عدد الدورات:/);
-    await expect(sample).toContainText('1,248');
-    await expect(sample).not.toContainText('١٬٢٤٨');
+    /* The catalogue's result count is the first Phase 1 number a signed-in user
+       meets; the Phase 0 sample page it used to assert against is gone. */
+    await page.goto('/courses');
+
+    const count = page.getByText(/دورة$/).first();
+    await expect(count).toContainText('47');
+    await expect(count).not.toContainText('٤٧');
   });
 });

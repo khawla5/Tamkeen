@@ -1,10 +1,10 @@
-// Foundation schema — Phase 0 only.
+// Schema through Phase 1.
 //
-// Deliberately limited to what authentication, RBAC, auditing and in-app
-// notifications need. The product tables (assessment, paths, courses,
-// path_courses, user_paths, completions, certificates, cv_profiles) arrive in
-// their own phases per CLAUDE.md §6; adding them now would be guesswork against
-// requirements that later phases will sharpen.
+// Phase 0 added the foundation (users, auth_tokens, sessions, audit_log,
+// notifications). Phase 1 adds the assessment, paths, courses and the user's
+// single chosen path. Still absent, deliberately, are the tables their own
+// phases will sharpen: `completions` and `certificates` (Phase 2/3) and
+// `cv_profiles` (Phase 3).
 //
 // Conventions: models are PascalCase in Prisma and snake_case in Postgres via
 // @@map/@map. Primary keys are UUIDs rather than sequential integers so record
@@ -78,6 +78,11 @@ model User {
   notifications Notification[]
   auditEvents   AuditLog[]     @relation("AuditActor")
 
+  /// Every attempt, newest wins. Retakes append rather than overwrite (D-033).
+  assessmentResults AssessmentResult[]
+  /// At most one — the relation is singular because `UserPath.userId` is unique.
+  userPath          UserPath?
+
   @@index([role])
   @@map("users")
 }
@@ -100,11 +105,11 @@ model Session {
 
   tokenHash String @unique @map("token_hash")
 
-  expiresAt      DateTime  @map("expires_at")
+  expiresAt  DateTime  @map("expires_at")
   /// Set on sign-out or administrative revocation; the row is kept so the
   /// session's existence stays visible to an audit.
-  revokedAt      DateTime? @map("revoked_at")
-  lastSeenAt     DateTime  @default(now()) @map("last_seen_at")
+  revokedAt  DateTime? @map("revoked_at")
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at")
 
   /// Coarse client context, for an administrator spotting a session they do not
   /// recognise. No fingerprinting beyond what a server log would already hold.
@@ -137,7 +142,7 @@ model AuthToken {
   type      AuthTokenType
   tokenHash String        @unique @map("token_hash")
 
-  expiresAt DateTime  @map("expires_at")
+  expiresAt  DateTime  @map("expires_at")
   /// Set the moment the token is redeemed, making reuse detectable.
   consumedAt DateTime? @map("consumed_at")
 
@@ -216,4 +221,332 @@ model Notification {
 
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 1 — assessment, paths, courses, and the user's one path
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The six Holland dimensions (CLAUDE.md §3A). Kept in lockstep with
+/// RIASEC_LETTERS in @tamkeen/types — a test asserts the two never diverge.
+enum RiasecDimension {
+  R
+  I
+  A
+  S
+  E
+  C
+}
+
+/// A course's lifecycle in *our* catalogue — not the LMS's `visible` flag.
+///
+/// HIDDEN_BUT_COMPLETABLE is the rule from §2/D-015 that stops content being
+/// pulled out from under a learner: a course inside someone's confirmed path may
+/// leave the catalogue for new selections while enrolled users finish it.
+enum CourseStatus {
+  AVAILABLE
+  HIDDEN_BUT_COMPLETABLE
+  RETIRED
+}
+
+/// BUILDING is a distinct state from ACTIVE because selecting courses is
+/// reversible and confirming is not. Collapsing them would make the hard
+/// commitment gate (D-002) a UI convention rather than a data fact.
+enum UserPathStatus {
+  BUILDING
+  ACTIVE
+  COMPLETED
+}
+
+enum UserPathCourseStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// The assessment itself. One exists in Phase 1; Phase 5 may version it.
+model Assessment {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Stable identifier for seeding and idempotent re-seeding.
+  key         String  @unique
+  /// Bumped when the bank is edited. Results record the version they were
+  /// scored against, so an old result stays interpretable after an edit.
+  version     Int     @default(1)
+  title       String
+  description String
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  questions AssessmentQuestion[]
+  results   AssessmentResult[]
+
+  @@map("assessments")
+}
+
+model AssessmentQuestion {
+  id String @id @default(uuid()) @db.Uuid
+
+  assessmentId String     @map("assessment_id") @db.Uuid
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  /// Stable across wording edits, so revising a question does not orphan the
+  /// responses that reference it.
+  key          String
+  displayOrder Int    @map("display_order")
+  text         String
+
+  options   AssessmentOption[]
+  responses AssessmentResponse[]
+
+  @@unique([assessmentId, key])
+  @@index([assessmentId, displayOrder])
+  @@map("assessment_questions")
+}
+
+model AssessmentOption {
+  id String @id @default(uuid()) @db.Uuid
+
+  questionId String             @map("question_id") @db.Uuid
+  question   AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  key          String
+  displayOrder Int    @map("display_order")
+  label        String
+
+  weights   AssessmentOptionWeight[]
+  responses AssessmentResponse[]
+
+  @@unique([questionId, key])
+  @@index([questionId, displayOrder])
+  @@map("assessment_options")
+}
+
+/// What one option contributes to one dimension (§6: "store the dimension
+/// weighting per option").
+///
+/// A table with an enum column rather than a JSON blob on the option. The
+/// difference matters: a mistyped letter in JSON contributes nothing and fails
+/// silently, producing a subtly wrong Holland Code that no error surfaces. Here
+/// the database rejects it, and Phase 5's weight editor gets referential
+/// integrity without writing validation for it.
+model AssessmentOptionWeight {
+  id String @id @default(uuid()) @db.Uuid
+
+  optionId String           @map("option_id") @db.Uuid
+  option   AssessmentOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  dimension RiasecDimension
+  points    Int
+
+  @@unique([optionId, dimension])
+  @@map("assessment_option_weights")
+}
+
+/// One completed attempt: all six scores plus the derived code (§3A, §6).
+///
+/// Storing only the top three would lose the ranking that orders gold
+/// recommendations and the profile needed to re-explain the result later.
+model AssessmentResult {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  assessmentId      String     @map("assessment_id") @db.Uuid
+  assessment        Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  assessmentVersion Int        @map("assessment_version")
+
+  /// All six, as columns rather than JSON so they stay typed and queryable for
+  /// the Phase 5 oversight dashboards.
+  scoreR Int @map("score_r")
+  scoreI Int @map("score_i")
+  scoreA Int @map("score_a")
+  scoreS Int @map("score_s")
+  scoreE Int @map("score_e")
+  scoreC Int @map("score_c")
+
+  /// The maximum a single dimension could attain in the version scored. Stored
+  /// so a historical result can still be shown as a percentage after the bank
+  /// changes size.
+  maxScore Int    @map("max_score")
+  /// The derived Holland Code, e.g. "SIA".
+  code     String @db.VarChar(3)
+
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  responses AssessmentResponse[]
+
+  /// Retakes append (D-033), so "the user's result" is the newest row.
+  @@index([userId, completedAt])
+  @@map("assessment_results")
+}
+
+model AssessmentResponse {
+  id String @id @default(uuid()) @db.Uuid
+
+  resultId String           @map("result_id") @db.Uuid
+  result   AssessmentResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  questionId String             @map("question_id") @db.Uuid
+  /// Restrict, not Cascade: editing the bank in Phase 5 must not silently
+  /// delete the answers people already gave.
+  question   AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  optionId String           @map("option_id") @db.Uuid
+  option   AssessmentOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  /// One answer per question per attempt — the database half of the rule the
+  /// scoring engine also enforces.
+  @@unique([resultId, questionId])
+  @@map("assessment_responses")
+}
+
+/// A career path, tagged with exactly one primary RIASEC letter (§3A).
+model Path {
+  id String @id @default(uuid()) @db.Uuid
+
+  key         String @unique
+  name        String
+  description String
+
+  /// Drives the gold recommendation: a path is gold when this letter is in the
+  /// user's top-three Holland Code.
+  riasecLetter RiasecDimension @map("riasec_letter")
+
+  typicalDurationMinutes Int? @map("typical_duration_minutes")
+
+  /// Curated ordering *within* a recommendation group. Recommendation rank
+  /// always outranks it.
+  displayOrder Int     @map("display_order")
+  isActive     Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  pathCourses PathCourse[]
+  userPaths   UserPath[]
+
+  @@index([riasecLetter])
+  @@map("paths")
+}
+
+/// A thin mirror of an LMS course, plus the product metadata we layer on top
+/// (§6). Content lives in the LMS and is never authored twice.
+model Course {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The only bridge to the LMS for courses (§1). Unique so two rows can never
+  /// mirror the same LMS course.
+  moodleCourseId Int @unique @map("moodle_course_id")
+
+  /// Cached from the LMS by the catalogue sync.
+  title           String
+  summary         String
+  durationMinutes Int?   @map("duration_minutes")
+
+  /// Ours, not the LMS's.
+  status CourseStatus @default(AVAILABLE)
+
+  /// Product metadata the LMS has no first-class field for, authored on our
+  /// side and edited by entities in Phase 4. Deliberately not added to the LMS
+  /// port: inventing a Moodle field for them would make the Phase 2 adapter
+  /// responsible for data Moodle does not model.
+  objectives    String[]
+  prerequisites String?
+
+  lastSyncedAt DateTime? @map("last_synced_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  pathCourses     PathCourse[]
+  userPathCourses UserPathCourse[]
+
+  @@index([status])
+  @@map("courses")
+}
+
+/// Paths ↔ courses. A course may belong to several paths (D-003), which is why
+/// this is a join table rather than a `pathId` on `courses`.
+model PathCourse {
+  id String @id @default(uuid()) @db.Uuid
+
+  pathId String @map("path_id") @db.Uuid
+  path   Path   @relation(fields: [pathId], references: [id], onDelete: Cascade)
+
+  courseId String @map("course_id") @db.Uuid
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  displayOrder Int @map("display_order")
+
+  @@unique([pathId, courseId])
+  @@index([pathId, displayOrder])
+  @@map("path_courses")
+}
+
+/// The user's single chosen path (D-002).
+///
+/// `userId` is **unique**, so "one path per user" is a database constraint
+/// rather than an application convention — a second path cannot be inserted even
+/// by a bug or a concurrent request. Changing which path is being built before
+/// confirmation updates this row; after confirmation nothing may change it.
+model UserPath {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  pathId String @map("path_id") @db.Uuid
+  path   Path   @relation(fields: [pathId], references: [id], onDelete: Restrict)
+
+  status UserPathStatus @default(BUILDING)
+
+  /// Set once, at the hard commitment gate. Its presence is what locks the path
+  /// and the assessment result (D-015).
+  confirmedAt DateTime? @map("confirmed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  courses UserPathCourse[]
+
+  @@map("user_paths")
+}
+
+/// The 5-10 courses the user selected, and their per-course state.
+model UserPathCourse {
+  id String @id @default(uuid()) @db.Uuid
+
+  userPathId String   @map("user_path_id") @db.Uuid
+  userPath   UserPath @relation(fields: [userPathId], references: [id], onDelete: Cascade)
+
+  courseId String @map("course_id") @db.Uuid
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  displayOrder Int                  @map("display_order")
+  status       UserPathCourseStatus @default(NOT_STARTED)
+
+  /// Raw grade mirrored from the LMS, 0-100. Never a pass/fail verdict — the
+  /// threshold is a product setting (D-007) and issuing anything from it is
+  /// Phase 3.
+  gradePercent Int? @map("grade_percent")
+
+  /// When the LMS enrolment was requested. A dedicated `enrollments` table is
+  /// optional per §6; it earns its place in Phase 2, when sync debugging needs
+  /// more than a timestamp.
+  enrolledAt  DateTime? @map("enrolled_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// Keyed on the course, so a course reachable through more than one route is
+  /// never selected twice within a path.
+  @@unique([userPathId, courseId])
+  @@index([userPathId, displayOrder])
+  @@map("user_path_courses")
 }

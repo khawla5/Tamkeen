@@ -18,6 +18,10 @@
        decorators + emitDecoratorMetadata need the classic transform. */
     "isolatedModules": false
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"],
+  /* `prisma` is included so the seed script is typechecked. It now creates the
+     catalogue and the question bank rather than one admin row, and an untyped
+     seed for a government system is a real gap. tsconfig.build.json excludes it
+     again so the emitted layout stays dist/main.js. */
+  "include": ["src/**/*.ts", "test/**/*.ts", "prisma/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -1,3 +1,5 @@
+import type { DashboardState } from '@tamkeen/types';
+
 /**
  * Navigation descriptors.
  *
@@ -42,3 +44,24 @@ export const STEADY_STATE_NAV: readonly NavItem[] = [
   { key: 'cv', href: '/cv', icon: 'cv' },
   { key: 'profile', href: '/profile', icon: 'profile' },
 ];
+
+/**
+ * The navigation a user actually sees, given where they are (§4.2).
+ *
+ * Two rules are at work. §4.2 states the first outright: before the assessment
+ * the nav is Dashboard, Courses and Profile only — My Path is not a destination
+ * when there is no path.
+ *
+ * The second is ours: **Certificates and CV are omitted entirely until Phase 3
+ * builds them.** A nav item leading to a 404, or to a page explaining that the
+ * feature does not exist, is worse than its absence — it advertises something
+ * the product cannot do and costs the user a click to find out.
+ */
+export function navForState(state: DashboardState): readonly NavItem[] {
+  const keys: string[] =
+    state === 'ACTIVE_PATH'
+      ? ['dashboard', 'courses', 'myPath', 'profile']
+      : ['dashboard', 'courses', 'profile'];
+
+  return STEADY_STATE_NAV.filter((item) => keys.includes(item.key));
+}

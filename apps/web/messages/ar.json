@@ -31,6 +31,194 @@
     "errorTitle": "تعذّر تحميل البيانات",
     "errorBody": "حدث خطأ أثناء جلب المحتوى. يمكنك إعادة المحاولة."
   },
+  "portal": {
+    "loadingLabel": "جارٍ تحضير حسابك"
+  },
+
+  "riasec": {
+    "R": {
+      "name": "الواقعي",
+      "summary": "تميل إلى العمل العملي والميداني، وتفضّل المهام التي تظهر نتيجتها على أرض الواقع."
+    },
+    "I": {
+      "name": "البحثي",
+      "summary": "تميل إلى التحليل والبحث، وتستمتع بفهم أسباب المشكلات قبل حلّها."
+    },
+    "A": {
+      "name": "الفني",
+      "summary": "تميل إلى الابتكار والتعبير، وتفضّل العمل الذي يترك مساحة لأسلوبك الخاص."
+    },
+    "S": {
+      "name": "الاجتماعي",
+      "summary": "تميل إلى العمل مع الناس ومساعدتهم، وتجد رضاك في التدريب والخدمة."
+    },
+    "E": {
+      "name": "المبادِر",
+      "summary": "تميل إلى القيادة والمبادرة، وتستمتع بإقناع الآخرين وتحمّل المسؤولية."
+    },
+    "C": {
+      "name": "التنظيمي",
+      "summary": "تميل إلى الترتيب والدقة، وتفضّل العمل وفق إجراءات واضحة ومحددة."
+    }
+  },
+
+  "dashboard": {
+    "title": "الرئيسية",
+    "greeting": "أهلًا، {name}",
+    "preAssessmentTitle": "ابدأ بتقييم ميولك المهنية",
+    "preAssessmentBody": "تقييم قصير من ثلاثين عبارة يستغرق بضع دقائق، ويحدّد ميولك المهنية ليقترح عليك المسارات الأقرب إليك.",
+    "startAssessment": "ابدأ التقييم",
+    "assessedTitle": "اختر مسارك",
+    "assessedBody": "ظهرت نتيجتك: {code}. اطّلع على المسارات المقترحة واختر واحدًا لتبدأ.",
+    "choosePath": "اختر مسارك",
+    "activeTitle": "تابع من حيث توقفت",
+    "activeNextCourse": "الدورة التالية: {title}",
+    "activeAllDone": "أكملت جميع دورات مسارك.",
+    "continueCourse": "ابدأ الدورة",
+    "progressLabel": "تقدّمك في المسار",
+    "progressValue": "{completed} من {total} دورات مكتملة",
+    "tileMyPath": "مساري",
+    "tileCourses": "الدورات",
+    "viewMyPath": "عرض مساري"
+  },
+
+  "assessment": {
+    "title": "التقييم",
+    "intro": "اختر مدى انطباق كل عبارة عليك. لا توجد إجابة صحيحة وأخرى خاطئة.",
+    "start": "ابدأ",
+    "progressLabel": "تقدّم التقييم",
+    "step": "السؤال {current} من {total}",
+    "answerLegend": "اختر مدى انطباق العبارة",
+    "next": "التالي",
+    "back": "السابق",
+    "submit": "إنهاء التقييم",
+    "submitting": "جارٍ احتساب نتيجتك…",
+    "unanswered": "اختر إجابة للمتابعة.",
+    "retakeTitle": "إعادة التقييم",
+    "retakeBody": "ستحلّ النتيجة الجديدة محلّ النتيجة السابقة في التوصيات.",
+    "emptyTitle": "التقييم غير متاح حاليًا",
+    "emptyBody": "لم تُضف أسئلة التقييم بعد. تواصل مع مسؤول النظام."
+  },
+
+  "results": {
+    "title": "نتيجتك والمسارات",
+    "codeHeading": "ميولك المهنية",
+    "codeIntro": "يجمع ملفك بين ثلاثة ميول رئيسية، مرتّبة من الأقوى:",
+    "codeOutro": "المسارات الموصى بها معلّمة أدناه لأن مجالها يطابق أحد هذه الميول، والاختيار يبقى لك في جميع الأحوال.",
+    "profileHeading": "ترتيب الميول الستة",
+    "profileValue": "{percent}",
+    "retake": "إعادة التقييم",
+    "recommendedHeading": "مسارات موصى بها لك",
+    "otherHeading": "مسارات أخرى",
+    "recommendedBadge": "موصى به",
+    "pathCourses": "{count} دورة متاحة",
+    "pathDuration": "المدة التقريبية: {hours} ساعة",
+    "openPath": "استعرض المسار",
+    "emptyTitle": "لا توجد مسارات متاحة",
+    "emptyBody": "لم تُنشر أي مسارات بعد. تواصل مع مسؤول النظام.",
+    "noResultTitle": "لم تُكمل التقييم بعد",
+    "noResultBody": "أكمل التقييم أولًا لتظهر لك المسارات الموصى بها.",
+    "goToAssessment": "ابدأ التقييم"
+  },
+
+  "pathBuild": {
+    "title": "تفاصيل المسار",
+    "coursesHeading": "اختر دوراتك",
+    "coursesBody": "اختر ما بين {min} و{max} دورات من هذا المسار.",
+    "counter": "اخترت {selected} من {min}–{max}",
+    "counterLabel": "عدد الدورات المختارة",
+    "add": "أضف",
+    "remove": "إزالة",
+    "added": "مضافة",
+    "unavailable": "غير متاحة للإضافة",
+    "unavailableHint": "لم تعد هذه الدورة معروضة للاختيارات الجديدة.",
+    "duration": "{hours} ساعة",
+    "confirm": "تأكيد المسار",
+    "confirming": "جارٍ تأكيد المسار…",
+    "needMore": "اختر {count} دورات إضافية على الأقل لتتمكن من التأكيد.",
+    "atMaximum": "بلغت الحد الأقصى للدورات.",
+    "dialogTitle": "تأكيد اختيار المسار",
+    "dialogBody": "عند التأكيد يُقفَل مسارك ومجموعة دوراتك. لا يمكنك تغيير المسار بعد ذلك، ولا إعادة التقييم.",
+    "dialogPath": "المسار: {name}",
+    "dialogCourses": "عدد الدورات: {count}",
+    "dialogConfirm": "نعم، أكّد المسار",
+    "dialogCancel": "رجوع",
+    "lockedTitle": "مسارك مؤكَّد",
+    "lockedBody": "لقد أكّدت مسارك بالفعل، ولا يمكن تغييره.",
+    "goToMyPath": "الذهاب إلى مساري",
+    "emptyTitle": "لا توجد دورات في هذا المسار",
+    "emptyBody": "لم تُضف دورات إلى هذا المسار بعد."
+  },
+
+  "courses": {
+    "title": "الدورات",
+    "searchLabel": "ابحث في الدورات",
+    "searchPlaceholder": "اسم الدورة أو وصفها",
+    "pathLabel": "المسار",
+    "allPaths": "جميع المسارات",
+    "durationLabel": "المدة القصوى",
+    "anyDuration": "أي مدة",
+    "durationOption": "{hours} ساعة أو أقل",
+    "resultCount": "{count} دورة",
+    "duration": "{hours} ساعة",
+    "emptyTitle": "لا توجد دورات مطابقة",
+    "emptyBody": "جرّب تعديل البحث أو إزالة عوامل التصفية.",
+    "clearFilters": "إزالة عوامل التصفية"
+  },
+
+  "courseDetail": {
+    "title": "صفحة الدورة",
+    "objectives": "أهداف الدورة",
+    "prerequisites": "المتطلبات السابقة",
+    "paths": "ضمن المسارات",
+    "duration": "المدة التقريبية: {hours} ساعة",
+    "certificate": "يمنح إتمام هذه الدورة شهادة إتمام.",
+    "actionAdd": "أضف إلى مساري",
+    "actionInPath": "ضمن مسارك",
+    "actionStart": "ابدأ الدورة",
+    "actionCompleted": "مكتملة",
+    "actionUnavailable": "غير متاحة للإضافة",
+    "adding": "جارٍ الإضافة…",
+    "backToCourses": "عودة إلى الدورات"
+  },
+
+  "myPath": {
+    "title": "مساري",
+    "progressLabel": "تقدّمك في المسار",
+    "progressValue": "{completed} من {total} دورات مكتملة",
+    "coursesHeading": "دورات مسارك",
+    "statusNotStarted": "لم تبدأ",
+    "statusInProgress": "قيد التنفيذ",
+    "statusCompleted": "مكتملة",
+    "nextUp": "التالية",
+    "grade": "الدرجة: {grade}",
+    "start": "ابدأ الدورة",
+    "continue": "تابع الدورة",
+    "certificateHeading": "شهادة المسار",
+    "certificateLocked": "تُفتح شهادة المسار بعد إكمال جميع دوراتك.",
+    "certificateReady": "أكملت جميع الدورات. ستصدر شهادة المسار قريبًا.",
+    "addMore": "إضافة دورة أخرى",
+    "buildingTitle": "لم تؤكّد مسارك بعد",
+    "buildingBody": "أكمل اختيار دوراتك وأكّد المسار لتبدأ.",
+    "goToBuild": "متابعة اختيار الدورات",
+    "emptyTitle": "لم تختر مسارًا بعد",
+    "emptyBody": "اختر مسارك من صفحة النتائج لتظهر دوراتك هنا.",
+    "goToResults": "اختر مسارك"
+  },
+
+  "profile": {
+    "title": "الملف الشخصي",
+    "personalHeading": "بياناتك",
+    "fullName": "الاسم الكامل",
+    "email": "البريد الإلكتروني",
+    "role": "الصلاحية",
+    "roleEmployee": "موظف",
+    "roleEntity": "جهة",
+    "roleAdmin": "مسؤول النظام",
+    "signOut": "تسجيل الخروج",
+    "signingOut": "جارٍ تسجيل الخروج…"
+  },
+
   "auth": {
     "registerTitle": "إنشاء حساب",
     "registerSubtitle": "التسجيل متاح لموظفي الوزارة فقط.",
@@ -76,50 +264,51 @@
     "newPassword": "كلمة المرور الجديدة",
     "resetSubmit": "حفظ كلمة المرور",
     "resetSuccessTitle": "تم تحديث كلمة المرور",
-    "resetSuccessBody": "يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.",
-
-    "errors": {
-      "EMAIL_INVALID": "أدخل بريدًا إلكترونيًا صحيحًا.",
-      "EMAIL_DOMAIN_NOT_ALLOWED": "هذا البريد غير مسجّل ضمن نطاقات الوزارة.",
-      "EMPLOYEE_ID_INVALID": "الرقم الوظيفي غير صحيح.",
-      "EMPLOYEE_ID_REQUIRED": "الرقم الوظيفي مطلوب.",
-      "FULL_NAME_REQUIRED": "الاسم الكامل مطلوب.",
-      "DEPARTMENT_REQUIRED": "الإدارة مطلوبة.",
-      "PASSWORD_REQUIRED": "كلمة المرور مطلوبة.",
-      "PASSWORD_TOO_SHORT": "كلمة المرور قصيرة جدًا.",
-      "PASSWORD_TOO_LONG": "كلمة المرور طويلة جدًا.",
-      "PASSWORDS_DO_NOT_MATCH": "كلمتا المرور غير متطابقتين.",
-      "INVALID_CREDENTIALS": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
-      "EMAIL_NOT_VERIFIED": "لم يتم تأكيد بريدك الإلكتروني بعد.",
-      "ACCOUNT_LOCKED": "تم إيقاف الحساب مؤقتًا بعد محاولات متعددة. أعد المحاولة لاحقًا.",
-      "SELF_REGISTRATION_DISABLED": "التسجيل الذاتي غير متاح. تواصل مع مسؤول النظام.",
-      "TOKEN_INVALID": "الرابط غير صالح أو منتهي الصلاحية.",
-      "TOKEN_REQUIRED": "الرابط غير مكتمل.",
-      "AUTH_REQUIRED": "يجب تسجيل الدخول للمتابعة.",
-      "CSRF_TOKEN_INVALID": "انتهت صلاحية الجلسة. أعد المحاولة.",
-      "ThrottlerException: Too Many Requests": "محاولات كثيرة جدًا. انتظر قليلًا ثم أعد المحاولة.",
-      "NETWORK_ERROR": "تعذّر الاتصال بالخدمة. تحقّق من الشبكة ثم أعد المحاولة.",
-      "UNKNOWN_ERROR": "حدث خطأ غير متوقع. أعد المحاولة."
-    }
+    "resetSuccessBody": "يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة."
   },
-  "foundations": {
-    "title": "الأساسات",
-    "intro": "هذه صفحة مؤقتة للمرحلة صفر تعرض هيكل الواجهة وحالات البيانات الثلاث. ستُستبدل بلوحة المعلومات في المرحلة الأولى.",
-    "statesHeading": "حالات البيانات",
-    "statesBody": "كل عرض بيانات في النظام يجب أن يوفّر الحالات الثلاث: التحميل، والفراغ، والخطأ.",
-    "loadingLabel": "حالة التحميل",
-    "emptyLabel": "حالة الفراغ",
-    "errorLabel": "حالة الخطأ",
-    "formatHeading": "التنسيق العربي",
-    "formatBody": "كل الأرقام والتواريخ تمرّ عبر طبقة تنسيق واحدة.",
-    "sampleCourses": "عدد الدورات: {count}",
-    "sampleCounter": "اخترت {selected} من {min}–{max}",
-    "sampleGrade": "الدرجة: {grade}",
-    "sampleDate": "تاريخ الإصدار: {date}",
-    "buttonsHeading": "الأزرار",
-    "primaryAction": "الإجراء الرئيسي",
-    "achievementAction": "إجراء الإنجاز",
-    "outlineAction": "إجراء ثانوي",
-    "emptyActionExample": "إضافة عنصر"
+
+  "errors": {
+    "EMAIL_INVALID": "أدخل بريدًا إلكترونيًا صحيحًا.",
+    "EMAIL_DOMAIN_NOT_ALLOWED": "هذا البريد غير مسجّل ضمن نطاقات الوزارة.",
+    "EMPLOYEE_ID_INVALID": "الرقم الوظيفي غير صحيح.",
+    "EMPLOYEE_ID_REQUIRED": "الرقم الوظيفي مطلوب.",
+    "FULL_NAME_REQUIRED": "الاسم الكامل مطلوب.",
+    "DEPARTMENT_REQUIRED": "الإدارة مطلوبة.",
+    "PASSWORD_REQUIRED": "كلمة المرور مطلوبة.",
+    "PASSWORD_TOO_SHORT": "كلمة المرور قصيرة جدًا.",
+    "PASSWORD_TOO_LONG": "كلمة المرور طويلة جدًا.",
+    "PASSWORDS_DO_NOT_MATCH": "كلمتا المرور غير متطابقتين.",
+    "INVALID_CREDENTIALS": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    "EMAIL_NOT_VERIFIED": "لم يتم تأكيد بريدك الإلكتروني بعد.",
+    "ACCOUNT_LOCKED": "تم إيقاف الحساب مؤقتًا بعد محاولات متعددة. أعد المحاولة لاحقًا.",
+    "SELF_REGISTRATION_DISABLED": "التسجيل الذاتي غير متاح. تواصل مع مسؤول النظام.",
+    "TOKEN_INVALID": "الرابط غير صالح أو منتهي الصلاحية.",
+    "TOKEN_REQUIRED": "الرابط غير مكتمل.",
+    "AUTH_REQUIRED": "يجب تسجيل الدخول للمتابعة.",
+    "CSRF_TOKEN_INVALID": "انتهت صلاحية الجلسة. أعد المحاولة.",
+
+    "ASSESSMENT_NOT_FOUND": "التقييم غير متاح حاليًا.",
+    "ASSESSMENT_INCOMPLETE": "أجب عن جميع الأسئلة قبل الإنهاء.",
+    "ASSESSMENT_UNKNOWN_QUESTION": "تعذّر احتساب النتيجة. أعد تحميل الصفحة وحاول مجددًا.",
+    "ASSESSMENT_UNKNOWN_OPTION": "تعذّر احتساب النتيجة. أعد تحميل الصفحة وحاول مجددًا.",
+    "ASSESSMENT_DUPLICATE_ANSWER": "تعذّر احتساب النتيجة. أعد تحميل الصفحة وحاول مجددًا.",
+    "ASSESSMENT_ANSWER_INVALID": "تعذّر إرسال إجاباتك. أعد تحميل الصفحة وحاول مجددًا.",
+    "ASSESSMENT_TOO_MANY_ANSWERS": "تعذّر إرسال إجاباتك. أعد تحميل الصفحة وحاول مجددًا.",
+    "ASSESSMENT_LOCKED": "لا يمكن إعادة التقييم بعد تأكيد المسار.",
+
+    "PATH_NOT_FOUND": "المسار غير موجود.",
+    "PATH_NOT_SELECTED": "اختر مسارًا أولًا.",
+    "PATH_ALREADY_CONFIRMED": "لقد أكّدت مسارك بالفعل، ولا يمكن تغييره.",
+    "COURSE_NOT_FOUND": "الدورة غير موجودة.",
+    "COURSE_NOT_IN_PATH": "هذه الدورة لا تنتمي إلى مسارك.",
+    "COURSE_NOT_AVAILABLE": "لم تعد هذه الدورة متاحة للإضافة.",
+    "COURSE_COUNT_OUT_OF_RANGE": "عدد الدورات المختارة خارج الحد المسموح.",
+    "COURSE_DUPLICATED": "لا يمكن اختيار الدورة نفسها مرتين.",
+    "SEARCH_TOO_LONG": "نص البحث طويل جدًا.",
+    "DURATION_INVALID": "قيمة المدة غير صحيحة.",
+
+    "ThrottlerException: Too Many Requests": "محاولات كثيرة جدًا. انتظر قليلًا ثم أعد المحاولة.",
+    "NETWORK_ERROR": "تعذّر الاتصال بالخدمة. تحقّق من الشبكة ثم أعد المحاولة.",
+    "UNKNOWN_ERROR": "حدث خطأ غير متوقع. أعد المحاولة."
   }
 }

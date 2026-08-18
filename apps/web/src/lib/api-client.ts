@@ -15,6 +15,18 @@
  * via the message catalogue (D-024), so no user-facing text lives here.
  */
 
+import type {
+  AssessmentResultView,
+  AssessmentSubmission,
+  AssessmentView,
+  CourseDetail,
+  CourseSummary,
+  DashboardView,
+  MyPathView,
+  PathDetail,
+  PathRecommendations,
+} from '@tamkeen/types';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -134,12 +146,37 @@ async function request<T>(path: string, method: string, body?: unknown): Promise
     return undefined as T;
   }
 
-  return (await response.json()) as T;
+  const parsed: unknown = await response.json();
+
+  /*
+   * Nest serialises a `null` return as an empty object, so "not assessed yet"
+   * and "no path yet" arrive as `{}` rather than `null`. Normalising here means
+   * every caller can test for null instead of each one remembering to check
+   * `Object.keys(...).length` — which is the sort of thing exactly one caller
+   * forgets.
+   *
+   * **Arrays are excluded deliberately.** `Object.keys([])` is also empty, so
+   * without this guard an empty *list* would become `null` — and a view whose
+   * `isEmpty` check reads `data?.length === 0` would then never show its empty
+   * state, rendering a heading above nothing instead. That is precisely the bug
+   * the catalogue e2e caught.
+   */
+  if (
+    parsed !== null &&
+    typeof parsed === 'object' &&
+    !Array.isArray(parsed) &&
+    Object.keys(parsed).length === 0
+  ) {
+    return null as T;
+  }
+
+  return parsed as T;
 }
 
 export const api = {
   get: <T>(path: string) => request<T>(path, 'GET'),
   post: <T>(path: string, body?: unknown) => request<T>(path, 'POST', body),
+  put: <T>(path: string, body?: unknown) => request<T>(path, 'PUT', body),
 };
 
 export interface CurrentUser {
@@ -175,4 +212,61 @@ export const authApi = {
 
   resetPassword: (token: string, password: string) =>
     api.post<{ status: string }>('/api/auth/reset-password', { token, password }),
+};
+
+/**
+ * Phase 1 endpoints.
+ *
+ * Every response type comes from `@tamkeen/types`, the same declarations the API
+ * returns, so a contract change is a compile error on both sides rather than a
+ * runtime surprise on one.
+ */
+export const assessmentApi = {
+  get: () => api.get<AssessmentView>('/api/assessment'),
+  result: () => api.get<AssessmentResultView | null>('/api/assessment/result'),
+  submit: (submission: AssessmentSubmission) =>
+    api.post<AssessmentResultView>('/api/assessment/submit', submission),
+};
+
+export const pathsApi = {
+  list: () => api.get<PathRecommendations>('/api/paths'),
+  detail: (pathId: string) => api.get<PathDetail>(`/api/paths/${pathId}`),
+};
+
+export interface CourseFilters {
+  q?: string;
+  pathId?: string;
+  maxDurationMinutes?: number;
+}
+
+export const coursesApi = {
+  list: (filters: CourseFilters = {}) => {
+    const query = new URLSearchParams();
+
+    /* Only send filters that are actually set: the API rejects unknown and
+       malformed parameters, so an empty `q=` would be a 400 rather than "no
+       filter". */
+    if (filters.q) query.set('q', filters.q);
+    if (filters.pathId) query.set('pathId', filters.pathId);
+    if (filters.maxDurationMinutes) {
+      query.set('maxDurationMinutes', String(filters.maxDurationMinutes));
+    }
+
+    const suffix = query.toString();
+    return api.get<CourseSummary[]>(`/api/courses${suffix ? `?${suffix}` : ''}`);
+  },
+  detail: (courseId: string) => api.get<CourseDetail>(`/api/courses/${courseId}`),
+};
+
+export const myPathApi = {
+  get: () => api.get<MyPathView | null>('/api/my-path'),
+  selectPath: (pathId: string) => api.post<void>('/api/my-path/select', { pathId }),
+  setCourses: (courseIds: string[]) =>
+    api.put<{ selectedCourseIds: string[] }>('/api/my-path/courses', { courseIds }),
+  addCourse: (courseId: string) => api.post<void>('/api/my-path/courses', { courseId }),
+  confirm: () => api.post<MyPathView>('/api/my-path/confirm'),
+};
+
+export const dashboardApi = {
+  get: () => api.get<DashboardView>('/api/dashboard'),
 };
