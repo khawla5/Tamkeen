@@ -6,18 +6,26 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 0 — Foundations — **COMPLETE, awaiting human review of the PR.**
-- **Last completed task:** All seven Phase 0 steps (0.1–0.7). Checkpoints A–G reviewed and approved by the user. PR opened from `phase-0-foundations` → `main`; **not merged** (human review gate, D-008).
-- **Next task:** After the Phase 0 PR is merged, begin **Phase 1 — Assessment (RIASEC) + path core**. First step: author the ~20–30 RIASEC questions with each option's per-dimension weighting (CLAUDE.md §3A), then the scoring engine (per-dimension tally → ranked profile → top-three Holland Code) with the explicit tie / clear-top-three / gold-ranking test cases §2B demands.
-- **Active branch:** `phase-0-foundations` (7 commits, based on `main` @ 6442ed4).
+- **Current phase:** Phase 1 — Assessment (RIASEC) + path core — **COMPLETE, user approved the test, awaiting human review of the PR.**
+- **Last completed task:** All of Phase 1. Checkpoints A–C reviewed and approved by the user, plus a hands-on run of the built app. PR opened from `phase-1-assessment-core` → `main`; **not merged** (human review gate, D-008).
+- **Next task:** After the Phase 1 PR is merged, begin **Phase 2 — Moodle integration**. First step is the **spike**, before any other Phase 2 work: prove *enrol a user via API → they complete a course in Moodle → the backend detects completion + grade*. Then swap `MOODLE_MODE=real` and run `describeLmsContract` against `MoodleHttpService`; if it passes, no caller changes (D-030).
+- **Active branch:** `phase-1-assessment-core` (5 commits, based on `main` @ b478327).
 - **Open blockers / questions for the human:**
-  1. **CI has never executed.** The workflow is complete and every gate it runs passes locally, but it has not run on GitHub. It will run for the first time on this PR — confirm it is green before merging.
-  2. **GitHub CLI is not installed on the dev machine**, so the PR could not be opened from the terminal. The branch is pushed; see the log entry below for the compare URL and the PR body.
-  3. **Ministry values still placeholders** (not blocking, needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format (currently a permissive regex). See "Deferred / owed" below.
+  1. **CI has run exactly once** (the Phase 0 PR). Every gate passes locally; confirm this PR is green before merging.
+  2. **GitHub CLI is still not installed on the dev machine**, so the PR could not be opened from the terminal. The branch is pushed; see the log entry below for the compare URL and the PR body.
+  3. **The Arabic question wording is a reviewed first draft** (D-032). Question keys are stable, so revisions need no migration — hand over edits whenever the ministry has them.
+  4. **Ministry values still placeholders** (not blocking, needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format (currently a permissive regex).
 
 ---
 
 ## Deferred / owed (carried into later phases)
+- **Profile is read-only.** §4.12 also lists change-password, email re-verification and a language switch. None is a Phase 1 deliverable; the page exists because §4.2 puts Profile in the pre-assessment nav and that link must lead somewhere real. **Phase 5/6** owns the rest.
+- **Certificates and CV are absent from the navigation** until **Phase 3** builds them (D-037). Deliberate: a nav item leading nowhere advertises what the product cannot do.
+- **A confirmed path can exist without its LMS enrolments.** Enrolment is best-effort after the commitment is recorded and is audited on failure; **Phase 2's sync job** owns reconciliation (D-036).
+- **My Path reads live LMS progress but never persists it.** Writing `completions` is **Phase 2's** job; two writers on those rows would be a race (D-036).
+- **`courseUrl` points at the mock (`localhost:8080`) and does not resolve.** Expected until **Phase 2** stands up Moodle and the seamless handoff.
+- **`user_path_courses.enrolledAt` stands in for the optional `enrollments` table** (§6). It earns its own table in **Phase 2**, when sync debugging needs more than a timestamp.
+- **The balance rule must survive Phase 5's assessment editor.** `isBalancedBank` fails CI if an edit unbalances the bank; **Phase 5** must either keep it balanced or move ranking to normalised percentages (D-032).
 - **Rate limiting is in-process** — per-instance counters, so horizontal scaling multiplies the effective limit. **Phase 7** must swap in a shared store when deployment topology is decided. Per-account lockout is in the database and unaffected. (D-028)
 - **`postcss` / `sharp` are pinned via npm `overrides`** to clear 3 high CVEs while holding Next 15. Each Next upgrade must re-check the pins. **Phase 6** dependency review owns this, and should consider dropping the `sharp` pin by disabling `next/image` optimisation entirely. (D-022)
 - **Narrow-viewport layout not visually verified.** The `md:` breakpoint logic exists; the browser resize did not take effect during the Checkpoint C review, so no claim is made. **Phase 6** accessibility/responsive pass.
@@ -46,10 +54,46 @@
 - **Restricted (ministry-scoped) registration, not open sign-up (D-017).**
 - **Digits/dates: Western Arabic numerals default + single locale switch (D-018).**
 - **Security/privacy baseline:** audit log, rate-limiting/lockout, PII minimization + retention (see CLAUDE.md §2).
+- **Ties break on canonical R-I-A-S-E-C order (D-031)** — the ordering is total, so a Holland Code is reproducible.
+- **The question bank is 30 Likert items, 0-4, balanced by construction and enforced in CI (D-032).**
+- **Assessment retakes append; results are never overwritten (D-033).**
+- **RIASEC ranking + the gold rule live in `packages/types`; the tally and the weights never leave the server (D-034).**
+- **Schema constraints carry the product rules — unique `user_paths.user_id`, weights as an enum table, `Restrict` from responses to the bank (D-035).**
+- **LMS provisioning is lazy at confirm; enrolment is best-effort after the commitment is recorded; live progress is read, never persisted (D-036).**
+- **Authenticated pages sit behind one `PortalProvider`; Certificates/CV stay out of the nav until Phase 3 builds them (D-037).**
 
 ---
 
 ## Log (newest first)
+
+### 2026-08-18 — Phase 1 complete; PR opened for review
+
+Branch `phase-1-assessment-core`, 5 commits on `main` @ b478327. **Not merged.**
+
+**Test totals:** 355 unit (38 `packages/types`, 189 api, 128 web) · 90 API integration against real PostgreSQL · 14 browser e2e in Chromium. **459 total.** format / lint / typecheck / build clean.
+
+**1.1 Scoring engine + shared contracts** — ranking, tie-breaking, code derivation and the gold sort live in `packages/types` so web and api cannot disagree about what "gold" means (D-034); the **tally** stays server-side because it needs the weights. Ties break on canonical R-I-A-S-E-C (D-031) — without a total order the same answers could yield a different recommendation on a different day. 55 tests covering ties, a clear top-three, and gold matching + ranking, as §2B demands.
+
+**1.2 Question bank** — 30 Arabic Likert items, five per dimension, weights 0-4, **balanced by construction** and asserted (D-032): ranking compares raw scores across dimensions, so an unbalanced bank would produce a code reflecting its own shape rather than the user's interests. Seeded data, not components, with stable keys so wording revisions need no migration. Items are interleaved so no two consecutive statements share a dimension.
+
+**1.3 Schema, migration, seed** — one migration adding assessment/paths/courses tables. Constraints carry the rules (D-035): `user_paths.user_id` is unique so single-path survives concurrent confirms; option weights are a table with an enum column, because a mistyped letter in JSON fails *silently* into a wrong Holland Code; responses reference the bank with `Restrict` so Phase 5 edits cannot rewrite history. Mock catalogue grew 12 → 48 courses (twelve could not support twelve paths each offering a genuine 5-10 choice); 12 paths, two per letter, so the within-letter ordering is actually exercised. Seed is idempotent — verified by three consecutive runs leaving row counts identical. The API tsconfig now typechecks `prisma/`.
+
+**1.4 API** — assessment, paths, courses, path commitment, dashboard. Rules live in services, never controllers. Confirm re-counts **inside** the transaction and guards on `confirmedAt IS NULL` in the `UPDATE … WHERE`, so two concurrent confirms cannot both succeed. Gold ordering calls the shared function rather than an `ORDER BY`. `resolveCourseAction` is pure and returns exactly one value, so §3's "never all three" is enforced by the response shape; an exhaustive sweep over all 48 state combinations asserts it. **No view type carries a weighting** — an integration test greps the whole `/api/assessment` response for `weight`, `dimension`, `points`, `riasec`, and the e2e suite has to read weights out of the database to produce a chosen code.
+
+**1.5 Web** — assessment flow, results with the gold ranking, path build with the live counter and the native-`<dialog>` commitment gate, catalogue + detail, My Path, the dashboard's three states, minimal profile. Authenticated pages sit under a `(portal)` route group; `PortalProvider` loads session + journey state once and owns the 401 redirect (D-037), because the nav depends on that state and a per-page copy would disagree with its own content.
+
+**Three defects the verification pass found — each now has the test that would have caught it:**
+- The `{}`→`null` normalisation also flattened an empty **array**, so an empty catalogue never reached its empty state and rendered a heading above nothing. Caught by the catalogue e2e.
+- The mock LMS numbered users from a **per-process counter**, so after a restart it handed a new user an id an existing row already held and enrolment died on the `moodle_user_id` unique index. Ids now derive from the email, matching the invariant a real Moodle has; the contract suite asserts stability across instances (D-036).
+- `PathCard` paired each value with a visually-hidden `<dt>`, making a screen reader announce *"دورة متاحة، 11 دورة متاحة"*.
+
+**Three more found only by driving the built app in a browser:** the modal pinned to the top (Tailwind's preflight zeroes the `margin:auto` the UA stylesheet centres a `<dialog>` with); the progress track invisible at 0% (cream on white); course detail printing its title twice.
+
+**Also:** error codes moved from `auth.errors` to a top-level `errors` catalogue — they come from one API vocabulary, and splitting them by feature means deciding where a shared code belongs.
+
+**Honest gaps at hand-off:** profile is read-only; `courseUrl` does not resolve until Phase 2; a confirmed path can exist without its LMS enrolments until sync runs; narrow-viewport layout still unverified (carried from Phase 0, Phase 6 owns it); CI has run once.
+
+**Next:** Phase 2 — the Moodle spike first, then the real adapter against `describeLmsContract`.
 
 ### 2026-08-17 — Phase 0 complete; PR opened for review
 
@@ -121,8 +165,8 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 ---
 
 ## Phase tracker
-- [x] **Phase 0 — Foundations** (skeleton, RTL/i18n, color tokens, auth+email verification, user model, mocked Moodle service, CI) — **PR open, not merged**
-- [ ] **Phase 1 — Assessment (RIASEC) + path core** (RIASEC questions+scoring→Holland Code, gold ranked results, letter-tagged paths, catalog+detail from mock, 5–10 build + single-path commit, dashboard's 3 states, My Path)
+- [x] **Phase 0 — Foundations** (skeleton, RTL/i18n, color tokens, auth+email verification, user model, mocked Moodle service, CI) — **merged** (PR #1, `main` @ b478327)
+- [x] **Phase 1 — Assessment (RIASEC) + path core** (RIASEC questions+scoring→Holland Code, gold ranked results, letter-tagged paths, catalog+detail from mock, 5–10 build + single-path commit, dashboard's 3 states, My Path) — **PR open, not merged**
 - [ ] **Phase 2 — Moodle integration** (spike first; web services, provisioning, catalog sync, enrollment, scheduled completion sync + pass threshold + shared-course reuse, auth/SSO, course player)
 - [ ] **Phase 3 — Certificates + CV** (idempotent course/path certs, Arabic PDF solved, gallery, CV builder + PDF export)
 - [ ] **Phase 4 — Entity / reviewer portal** (entity roles, course publishing + path/RIASEC tagging + ordering, learner review dashboards, scoping)
