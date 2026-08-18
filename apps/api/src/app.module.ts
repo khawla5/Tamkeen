@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AssessmentModule } from './assessment/assessment.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { CatalogSyncModule } from './catalog-sync/catalog-sync.module';
 import { CoursesModule } from './courses/courses.module';
 import { EnrollmentModule } from './enrollment/enrollment.module';
 import { JourneyModule } from './journey/journey.module';
@@ -62,6 +63,8 @@ import { PrismaModule } from './prisma/prisma.module';
     PathsModule,
     CoursesModule,
     EnrollmentModule,
+    /* Phase 2. */
+    CatalogSyncModule,
   ],
   providers: [
     /*

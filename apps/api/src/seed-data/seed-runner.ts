@@ -1,6 +1,7 @@
 import type { LmsPort } from '../moodle/lms.port';
 import type { PrismaClient } from '../../generated/prisma';
 import { ASSESSMENT_QUESTIONS, ASSESSMENT_SEED, LIKERT_LEVELS } from './assessment';
+import { fieldsForPublishedCourse } from '../catalog-sync/catalog-mapping';
 import { COURSE_METADATA, SEED_PATHS } from './catalog';
 
 /**
@@ -147,24 +148,28 @@ async function seedCatalog(
       throw new Error(`No seeded metadata for LMS course ${lmsCourse.lmsCourseId}.`);
     }
 
-    const status = lmsCourse.visible ? 'AVAILABLE' : 'HIDDEN_BUT_COMPLETABLE';
+    /* The same rule the catalogue sync applies, from the same function — a
+       seeded database and a synced one must not describe a course differently.
+       Passing `null` as the existing row is right here: the seed authors the
+       catalogue rather than reconciling with one. */
+    const { status, durationMinutes, title, summary } = fieldsForPublishedCourse(lmsCourse, null);
 
     const course = await prisma.course.upsert({
       where: { moodleCourseId: lmsCourse.lmsCourseId },
       create: {
         moodleCourseId: lmsCourse.lmsCourseId,
-        title: lmsCourse.title,
-        summary: lmsCourse.summary,
-        durationMinutes: lmsCourse.durationMinutes,
+        title,
+        summary,
+        durationMinutes,
         status,
         objectives: metadata.objectives,
         prerequisites: metadata.prerequisites,
         lastSyncedAt: syncedAt,
       },
       update: {
-        title: lmsCourse.title,
-        summary: lmsCourse.summary,
-        durationMinutes: lmsCourse.durationMinutes,
+        title,
+        summary,
+        durationMinutes,
         status,
         objectives: metadata.objectives,
         prerequisites: metadata.prerequisites,

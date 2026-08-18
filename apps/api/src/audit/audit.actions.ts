@@ -33,6 +33,16 @@ export const AuditAction = {
   PATH_CONFIRMED: 'PATH_CONFIRMED',
   /** LMS enrolment requested for a confirmed path's courses. */
   PATH_ENROLMENT_REQUESTED: 'PATH_ENROLMENT_REQUESTED',
+
+  // LMS integration (Phase 2)
+  /** A catalogue sync run finished. Recorded with counts, never course content. */
+  LMS_CATALOG_SYNCED: 'LMS_CATALOG_SYNCED',
+  /**
+   * A synced course left the catalogue — the LMS stopped returning it. Audited
+   * on its own because it is the one sync outcome that changes what a learner
+   * can see, and D-015 makes getting it wrong a product violation.
+   */
+  LMS_COURSE_WITHDRAWN: 'LMS_COURSE_WITHDRAWN',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];

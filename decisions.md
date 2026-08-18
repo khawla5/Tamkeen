@@ -5,6 +5,26 @@
 
 ---
 
+## D-040 — Catalogue sync: never delete, refuse an empty catalogue, and product metadata is untouchable
+Three rules govern what a sync run may do to `courses`. Each exists because the obvious implementation is quietly destructive.
+
+**1. A course that vanishes from the LMS is never deleted, and is only retired if nobody holds it.**
+Our `RETIRED` status is invisible to *everyone* — `CoursesService.visibleCourseFilter` excludes it even for a user who already selected the course, and `resolveCourseAction` returns `UNAVAILABLE`. So retiring an in-use course does precisely what §2/D-015 forbids: it pulls content out from under a learner mid-path. Sync therefore reads `user_path_courses` and demotes a vanished course to **`HIDDEN_BUT_COMPLETABLE`** when any learner holds it — gone from new selections, still completable by those already on it — and only to `RETIRED` when none does. Rows are never deleted at all.
+
+**2. An empty catalogue is a fault, not an instruction.**
+If `listCourses()` returns nothing, the run writes nothing and audits a FAILURE. Acting on it would withdraw the entire catalogue in a single pass, and every likely cause — a capability lost from the integration role, an instance mid-upgrade, a token rotated — is transient and recoverable. The seed runner already refuses an empty catalogue for the same reason. The asymmetry is deliberate: wrongly keeping a stale course costs a confusing catalogue entry, wrongly withdrawing every course costs every learner their path.
+
+**3. Sync writes only what the LMS owns.**
+Moodle owns a course *existing*, plus its title, summary and visibility. `objectives`, `prerequisites`, `durationMinutes`, path membership and ordering are ours (D-035, D-039), and sync never writes them — `path_courses` is not referenced by the service at all. The duration rule needed care: letting the LMS's `null` overwrite an authored value would erase every duration in the catalogue on the first run **without erroring**, because the column is nullable. An existing value therefore always wins, and the LMS's is accepted only where we hold none.
+
+**Two smaller choices:**
+- **A `RETIRED` course is not resurrected by the LMS making it visible again.** Retirement is our decision (Phase 4/5 unpublishing, or a course that vanished); an LMS visibility flag must not silently undo it. Reinstating is a human action.
+- **An absent `visible` field fails closed** — the course does not enter the catalogue as available. Its absence would signal a capability regression on the token; defaulting to visible would publish courses Moodle deliberately hides, silently, whereas defaulting to hidden is loud, recoverable and leaks nothing.
+
+**When it runs:** once at application startup in real mode, so a fresh deployment never serves a stale catalogue while waiting for the first tick, and on the scheduled interval thereafter (the scheduler arrives with the completion-sync job). It is fire-and-forget and **cannot fail boot** — the catalogue is cached in our own database, so an LMS down at deploy time is a degraded state, not a reason for the API to refuse to start. Every write is an upsert keyed on the unique `moodle_course_id`, so calling it at any other time is safe.
+
+**Also:** the seed runner and the sync now share `fieldsForPublishedCourse`. They both mirror an LMS catalogue, and if they disagreed about what "hidden" means or who owns duration, a seeded database and a synced one would describe the same course differently.
+
 ## D-039 — Phase 2 build decisions: version split, duration as our metadata, handoff for v1
 Resolves what D-038 left open, plus the shape choices the real client forced.
 

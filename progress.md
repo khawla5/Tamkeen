@@ -6,15 +6,17 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 1 — Assessment (RIASEC) + path core — **COMPLETE, user approved the test, awaiting human review of the PR.**
-- **Last completed task:** All of Phase 1. Checkpoints A–C reviewed and approved by the user, plus a hands-on run of the built app. PR opened from `phase-1-assessment-core` → `main`; **not merged** (human review gate, D-008).
-- **Next task:** After the Phase 1 PR is merged, begin **Phase 2 — Moodle integration**. First step is the **spike**, before any other Phase 2 work: prove *enrol a user via API → they complete a course in Moodle → the backend detects completion + grade*. Then swap `MOODLE_MODE=real` and run `describeLmsContract` against `MoodleHttpService`; if it passes, no caller changes (D-030).
-- **Active branch:** `phase-1-assessment-core` (5 commits, based on `main` @ b478327).
+- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1 (client + provisioning) and 2 (catalogue sync) complete and reviewed.
+- **Last completed task:** Checkpoint 2 — `listCourses`/`getCourse` against `core_course_get_courses_by_field`, plus `CatalogSyncService` (D-040). Verified against the live Moodle, not only mocks.
+- **Next task:** Checkpoint 3 — **enrolment**, including the verify-before-believing-the-error rule the spike proved necessary (D-038). Then completion sync, then the seamless-login spike before any course-player UI (D-039).
+- **Active branch:** `phase-2-moodle-integration`, off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. Nothing pushed.
+- **Phase 1 is merged** (PR #2, `origin/main` @ `f25b644`).
 - **Open blockers / questions for the human:**
-  1. **CI failed on its first Phase 1 run and has been fixed** — the workflow never seeded, and from Phase 1 the tests need real content. Verified by running the workflow's exact sequence against a fresh database. Confirm the re-run is green before merging.
-  2. **GitHub CLI is still not installed on the dev machine**, so the PR could not be opened from the terminal. The branch is pushed; see the log entry below for the compare URL and the PR body.
-  3. **The Arabic question wording is a reviewed first draft** (D-032). Question keys are stable, so revisions need no migration — hand over edits whenever the ministry has them.
-  4. **Ministry values still placeholders** (not blocking, needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format (currently a permissive regex).
+  1. **Production Moodle version is 4.5 LTS, development is 5.2.2** (D-039). The adapter is version-agnostic, but **the seamless-login mechanism must be re-verified on a real 4.5** rather than assumed from 5.2.
+  2. **Seamless login will probably need a Moodle-side install** — a custom `local_` plugin, or the mobile web service enabled. Being spiked before the course player is built; the human will need to act on it.
+  3. **The dev Moodle's integration role needed four fixes the initial setup missed:** `moodle/role:assign`, the Allow-role-assignments matrix row, `gradereport/user:view`, and disabling the manual-enrolment welcome message. **The same list applies to the ministry's Moodle** — see the 2026-08-18 spike entry.
+  4. **GitHub CLI is still not installed on the dev machine**, so PRs cannot be opened from the terminal.
+  5. **Ministry values still placeholders** (needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format.
 
 ---
 
@@ -65,6 +67,24 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-18 — Phase 2 checkpoint 2: catalogue sync
+
+`listCourses`/`getCourse` are real, and `CatalogSyncService` mirrors the LMS catalogue into `courses`.
+
+**Verified against the live Moodle**, not just mocks — `spike/verify-catalog.ts` reads the real catalogue through the adapter: two courses returned, **the site course (id 1) correctly discarded**, the hidden course present with `visible: false` so sync can see it, `getCourse(9999)` → `null`, and `durationMinutes: null` exactly as D-039 predicted.
+
+**Three destructive defaults avoided, recorded as D-040.** A vanished course is never deleted and is only retired if **no learner holds it** — `RETIRED` is invisible even to someone who already selected it, so retiring an in-use course would breach D-015. An empty catalogue is treated as a fault and writes nothing, rather than withdrawing everything in one pass. And sync writes only what Moodle owns: letting the LMS's `null` overwrite an authored `durationMinutes` would have erased every duration on the first run *without erroring*, since the column is nullable.
+
+**Two stale tests updated honestly rather than deleted.** `moodle.module.spec` asserted the real adapter throws `NotImplementedException`; it now reaches an unreachable host and reports the LMS down. The property under test — an unusable LMS must never present as an empty catalogue — is unchanged, and the test still asserts it.
+
+The seed runner now shares `fieldsForPublishedCourse` with the sync, so a seeded and a synced database cannot describe the same course differently.
+
+**Totals:** 268 API unit tests (was 234) and **90 integration tests against real PostgreSQL**, all green; typecheck, lint and format clean. Callers still unchanged.
+
+**Next checkpoint:** enrolment — including the verify-before-believing-the-error rule the spike proved necessary (D-038).
+
+
 
 ### 2026-08-18 — Phase 2 checkpoint 1: real Moodle client + user provisioning
 

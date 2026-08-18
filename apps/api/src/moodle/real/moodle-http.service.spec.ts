@@ -262,6 +262,114 @@ describe('MoodleHttpService', () => {
     });
   });
 
+  describe('listCourses', () => {
+    /* Payload fields replayed from a live Moodle 5.2.2. */
+    const moodleCourse = (overrides: Record<string, unknown> = {}) => ({
+      id: 2,
+      fullname: 'أساسيات الأمن',
+      summary: 'وصف',
+      visible: 1,
+      format: 'topics',
+      ...overrides,
+    });
+
+    it('uses core_course_get_courses_by_field, not core_course_get_courses', async () => {
+      /* get_courses omits , which Moodle gates behind
+         moodle/course:update - a capability a least-privilege integration user
+         must not hold. Our courses.status rule is derived from it (D-038). */
+      const { service, calls } = serviceWith(() => ({ courses: [moodleCourse()] }));
+      await service.listCourses();
+
+      expect(calls[0]!.wsfunction).toBe('core_course_get_courses_by_field');
+    });
+
+    it('translates the Moodle payload into our vocabulary', async () => {
+      const { service } = serviceWith(() => ({ courses: [moodleCourse()] }));
+
+      await expect(service.listCourses()).resolves.toEqual([
+        {
+          lmsCourseId: 2,
+          title: 'أساسيات الأمن',
+          summary: 'وصف',
+          durationMinutes: null,
+          visible: true,
+        },
+      ]);
+    });
+
+    it('leaks no Moodle-native field names to callers', async () => {
+      const { service } = serviceWith(() => ({ courses: [moodleCourse()] }));
+      const [course] = await service.listCourses();
+
+      for (const native of ['fullname', 'shortname', 'summaryformat', 'categoryid', 'format']) {
+        expect(course).not.toHaveProperty(native);
+      }
+    });
+
+    it('discards the site course, which is the front page and not a course', async () => {
+      const { service } = serviceWith(() => ({
+        courses: [moodleCourse({ id: 1, format: 'site' }), moodleCourse({ id: 2 })],
+      }));
+
+      const courses = await service.listCourses();
+
+      expect(courses.map((course) => course.lmsCourseId)).toEqual([2]);
+    });
+
+    it('includes courses the LMS is hiding, which sync needs to see', async () => {
+      /* A hidden course still has to reach us: our own status decides what is
+         offered, and D-015 keeps it completable for whoever already has it. */
+      const { service } = serviceWith(() => ({ courses: [moodleCourse({ visible: 0 })] }));
+
+      await expect(service.listCourses()).resolves.toMatchObject([{ visible: false }]);
+    });
+
+    it('fails closed when visible is absent entirely', async () => {
+      /* Its absence would signal a capability regression. Defaulting to visible
+         would publish courses Moodle deliberately hides - silently. Defaulting
+         to hidden is loud, recoverable and leaks nothing. */
+      const { service } = serviceWith(() => ({ courses: [moodleCourse({ visible: undefined })] }));
+
+      await expect(service.listCourses()).resolves.toMatchObject([{ visible: false }]);
+    });
+
+    it('reads a duration custom field when an instance defines one', async () => {
+      const { service } = serviceWith(() => ({
+        courses: [moodleCourse({ customfields: [{ shortname: 'duration', value: '120' }] })],
+      }));
+
+      await expect(service.listCourses()).resolves.toMatchObject([{ durationMinutes: 120 }]);
+    });
+
+    it('reports no duration rather than zero when Moodle has none', async () => {
+      /* Moodle models no nominal-effort field (D-039). A zero would read as a
+         real value in the catalogue. */
+      const { service } = serviceWith(() => ({
+        courses: [moodleCourse({ customfields: [{ shortname: 'other', value: 'x' }] })],
+      }));
+
+      await expect(service.listCourses()).resolves.toMatchObject([{ durationMinutes: null }]);
+    });
+  });
+
+  describe('getCourse', () => {
+    it('returns null for an unknown course rather than throwing', async () => {
+      /* Moodle answers an unknown id with an empty list plus a warning, not an
+         error, so null is both honest and what the contract requires. */
+      const { service } = serviceWith(() => ({ courses: [], warnings: [] }));
+
+      await expect(service.getCourse(9_999)).resolves.toBeNull();
+    });
+
+    it('asks Moodle for one course by id', async () => {
+      const { service, calls } = serviceWith(() => ({
+        courses: [{ id: 5, fullname: 'دورة', summary: '', visible: 1, format: 'topics' }],
+      }));
+
+      await expect(service.getCourse(5)).resolves.toMatchObject({ lmsCourseId: 5 });
+      expect(calls[0]!.params).toMatchObject({ field: 'id', value: 5 });
+    });
+  });
   describe('courseUrl', () => {
     it('embeds no token — this value is handed to a browser', () => {
       const { service } = serviceWith(() => null);

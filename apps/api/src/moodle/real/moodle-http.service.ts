@@ -51,6 +51,22 @@ interface MoodleUser {
   username?: string;
 }
 
+interface MoodleCourse {
+  id: number;
+  fullname?: string;
+  displayname?: string;
+  summary?: string;
+  /** Moodle sends 1/0 rather than a JSON boolean. */
+  visible?: number | boolean;
+  /** "site" marks the front page, which is not a course. */
+  format?: string;
+  customfields?: Array<{ shortname?: string; value?: unknown }>;
+}
+
+interface MoodleCoursesByField {
+  courses?: MoodleCourse[];
+}
+
 @Injectable()
 export class MoodleHttpService implements LmsPort {
   private readonly logger = new Logger(MoodleHttpService.name);
@@ -202,12 +218,48 @@ export class MoodleHttpService implements LmsPort {
 
   // ── catalogue, enrolment, progress — later checkpoints ────────────────────
 
-  listCourses(): Promise<LmsCourse[]> {
-    return this.notYet('listCourses');
+  /**
+   * The catalogue, for the sync into our cached `courses` table.
+   *
+   * Uses **`core_course_get_courses_by_field`**, not the more obvious
+   * `core_course_get_courses`. The spike found that `get_courses` omits
+   * `visible` and `enablecompletion` entirely: Moodle gates those behind
+   * `moodle/course:update` on the caller, which a least-privilege integration
+   * user must not hold. Our `courses.status` rule (D-015/D-035) is derived from
+   * `visible`, so sync is impossible without it, and `..._by_field` returns it
+   * under the same token (D-038).
+   */
+  async listCourses(): Promise<LmsCourse[]> {
+    const payload = await this.catalogueCall({});
+
+    return (payload.courses ?? []).filter((course) => !isSiteCourse(course)).map(toLmsCourse);
   }
 
-  getCourse(_lmsCourseId: LmsCourseId): Promise<LmsCourse | null> {
-    return this.notYet('getCourse');
+  async getCourse(lmsCourseId: LmsCourseId): Promise<LmsCourse | null> {
+    const payload = await this.catalogueCall({ field: 'id', value: lmsCourseId });
+    const course = (payload.courses ?? [])[0];
+
+    /* An unknown id comes back as an empty list with a warning, not as an
+       error — so `null` is the honest answer and the contract's requirement. */
+    return course && !isSiteCourse(course) ? toLmsCourse(course) : null;
+  }
+
+  private async catalogueCall(params: Record<string, unknown>): Promise<MoodleCoursesByField> {
+    try {
+      return await this.client.call<MoodleCoursesByField>(
+        'core_course_get_courses_by_field',
+        params,
+      );
+    } catch (error) {
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Catalogue read failed: ${error instanceof MoodleWsError ? error.errorcode : 'unknown'}`,
+      );
+      throw new LmsOperationError('SYNC');
+    }
   }
 
   enrol(_input: EnrolInput): Promise<void> {
@@ -241,4 +293,68 @@ export class MoodleHttpService implements LmsPort {
       `MOODLE_REAL_NOT_IMPLEMENTED: ${method} lands in a later Phase 2 checkpoint.`,
     );
   }
+}
+
+// ── translation: Moodle's course payload → our vocabulary ───────────────────
+
+/** Course custom fields a Moodle instance might use to express nominal effort. */
+const DURATION_FIELD_NAMES = new Set(['duration', 'durationminutes', 'duration_minutes']);
+
+/**
+ * Moodle's front page is a row in the courses table (id 1, `format: "site"`).
+ * It is not a course and must never reach our catalogue.
+ */
+function isSiteCourse(course: MoodleCourse): boolean {
+  return course.format === 'site';
+}
+
+function toLmsCourse(course: MoodleCourse): LmsCourse {
+  return {
+    lmsCourseId: course.id,
+    title: course.fullname ?? course.displayname ?? '',
+    summary: course.summary ?? '',
+    durationMinutes: readDurationMinutes(course),
+    visible: readVisible(course),
+  };
+}
+
+/**
+ * Fails **closed**: an absent `visible` means the course does not enter the
+ * catalogue as available.
+ *
+ * The field's absence would signal a capability regression on the integration
+ * token. Defaulting to visible would then publish courses Moodle is deliberately
+ * hiding — a content-governance failure that is silent. Defaulting to hidden
+ * takes the catalogue out of *new* selections while leaving enrolled learners
+ * untouched (D-015), which is loud, recoverable and leaks nothing.
+ */
+function readVisible(course: MoodleCourse): boolean {
+  if (course.visible === undefined) {
+    return false;
+  }
+
+  return Boolean(course.visible);
+}
+
+/**
+ * Duration is **our** product metadata (D-039) — Moodle models no such field, and
+ * the spike confirmed `customfields` empty with only calendar `startdate`/
+ * `enddate` available. This reads a custom field when an instance happens to
+ * define one, so the port stays honest without our catalogue depending on it;
+ * the sync prefers our own authored value regardless.
+ */
+function readDurationMinutes(course: MoodleCourse): number | null {
+  for (const field of course.customfields ?? []) {
+    if (!DURATION_FIELD_NAMES.has((field.shortname ?? '').toLowerCase())) {
+      continue;
+    }
+
+    const parsed = Number.parseInt(String(field.value ?? ''), 10);
+
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
