@@ -152,7 +152,11 @@ function randomPassword() {
  * key we control is the only reliable way to make provisioning idempotent.
  */
 function usernameFor(email) {
-  return email.trim().toLowerCase().split('@')[0].replace(/[^a-z0-9._-]/g, '.');
+  return email
+    .trim()
+    .toLowerCase()
+    .split('@')[0]
+    .replace(/[^a-z0-9._-]/g, '.');
 }
 
 /**
@@ -430,7 +434,8 @@ async function readProgress(userId) {
   );
 
   head('call timings');
-  for (const t of timings) log(`  ${String(t.ms).padStart(5)}ms  HTTP ${t.httpStatus}  ${t.wsfunction}`);
+  for (const t of timings)
+    log(`  ${String(t.ms).padStart(5)}ms  HTTP ${t.httpStatus}  ${t.wsfunction}`);
 }
 
 function printNextSteps(userId) {

@@ -5,6 +5,28 @@
 
 ---
 
+## D-039 — Phase 2 build decisions: version split, duration as our metadata, handoff for v1
+Resolves what D-038 left open, plus the shape choices the real client forced.
+
+**1. Version split: Moodle 4.5 LTS in production, 5.2 in development.**
+The spike ran against 5.2.2 because that is what the local Docker image pulled. Production stays on **4.5 LTS** — D-019's reasoning still governs: security support to Oct 2027 is the property a government system is buying, and 5.2 is not an LTS. Running two versions is acceptable only because **the adapter is version-agnostic**: nothing branches on a version, and `release` is read for reporting alone. The two behaviours the spike found to be surprising were both **capability**-gated rather than version-gated, which is why they are expected to carry across — but *expected* is not *verified*, so **the seamless-login mechanism must be re-verified against a real 4.5** rather than assumed from 5.2. A dev/prod version skew is a real risk and is accepted with that mitigation, not waved away.
+
+**2. `durationMinutes` is our product metadata, not Moodle's.**
+Moodle has no nominal-effort field: the spike confirmed `customfields` empty and only `startdate`/`enddate` (calendar dates, not effort) available. This is exactly the situation D-035 already ruled on for objectives and prerequisites — making the adapter responsible for data Moodle does not hold means it must infer, and it will infer wrongly. So duration is authored as our metadata and becomes entity-editable in Phase 4, alongside the fields it now keeps company with.
+`LmsCourse.durationMinutes` **stays on the port** (nullable), because a Moodle instance *could* supply one through a course custom field and removing the field would foreclose that. Catalogue sync prefers our own value and treats the LMS's as a fallback, so the port stays honest without our catalogue depending on it.
+**Rejected:** a Moodle course custom field (per-instance configuration the ministry must create and maintain correctly, to supply data we already own a better home for); deriving it from `enddate - startdate` (that is how long a course *runs*, not how long it *takes* — a year-long course is not a year of effort).
+
+**3. Course delivery for v1 is handoff, and seamless login is spiked before the player is built.**
+§5.4's MVP stands: hand off to an Arabic/RTL-themed Moodle, app remains the hub, no embedding. The open question is how the learner arrives **already signed in**. Core Moodle's only stock mechanism is `tool_mobile_get_autologin_key`, which is not on our token, needs the mobile web service enabled, and is understood to be rate-limited per user — plausibly too restrictive for "click a course, land in it". The alternatives are a small custom `local_` Moodle plugin or standing our app up as an OAuth2 IdP.
+**Decision: spike this specifically, early, before any course-player UI exists.** Building a player around a handoff that turns out to be unworkable would mean rebuilding the screen *and* renegotiating Moodle-side installation late. It is also the Phase 2 item most likely to need something installed on the ministry's Moodle, which is the longest-lead dependency we have.
+
+**Also decided, from building the client:**
+- **`MoodleWsError` carries the errorcode and nothing else.** It originally kept Moodle's human-readable `message` too; a test asserting no credential appears in any thrown error is what removed it. Moodle can echo the request it received in a debug response, and nothing branches on the prose — so keeping it out makes the property structural rather than a hope about Moodle's phrasing. Non-JSON bodies are likewise never parsed into an error; only their length is reported.
+- **`LmsOperationError` distinguishes a refusal from an outage.** `LmsUnavailableError` means "retry"; `LmsOperationError` means "a human must look". Folding both into one type would have made the hand-created-account case (D-038's accepted cost) indistinguishable from a network blip, and it is the one that needs an operator. Neither carries an LMS error code — that stays in the log, inside the module.
+- **The Moodle password is generated and immediately discarded.** We are the identity owner, so the account is reachable only through our handoff — and making that true *by construction* beats making it true by a setting someone can later change. There is also then no second credential to store, rotate or leak.
+- **`MOODLE_STUDENT_ROLE_ID` and `MOODLE_TIMEOUT_MS` are configuration.** Role ids are per-instance and we do not control the ministry's Moodle; a hardcoded `5` that meant something else there would enrol every learner with the wrong permissions.
+- **`MOODLE_MODE=real` now also requires `MOODLE_WS_TOKEN`**, not just a base URL. Booting without it yields an integration that starts cleanly and fails every call with `invalidtoken` — a slow, confusing failure in place of an immediate one.
+
 ## D-038 — Moodle accounts are keyed on a username we derive, and four other rules the Phase 2 spike forced
 **Context:** the spike (branch `phase-2-moodle-spike`, `spike/moodle-spike.mjs`) proved the loop end to end against a real Moodle **5.2.2** — provision → enrol → learner takes the quiz → we detect `completed: true`, `gradePercent: 100`, PASS at `PASS_THRESHOLD=70`. Five things it found are design decisions, not implementation trivia, and each was a defect waiting to happen.
 
@@ -28,7 +50,7 @@ There is no `completionstatus.timecompleted`. The timestamps live on `completion
 
 **Also confirmed:** core REST answers **HTTP 200 on failure**, with `{errorcode, message, exception}` in the body — the Catalyst RESTful plugin is not installed, so the status line proves nothing and the body must be inspected on every call. The student role id is **configurable** (`MOODLE_STUDENT_ROLE_ID`, default 5): hardcoding a role id against a Moodle we do not control is a latent production bug. Arabic names round-trip through `core_user_create_users` intact. Latency 60–256 ms per call locally.
 
-**Open, deliberately:** the production Moodle version (spiked against 5.2.2; D-019 targets 4.5 LTS) and the absence of any `durationMinutes` source in Moodle — `customfields` is empty and only `startdate`/`enddate` exist, so real courses sync with `durationMinutes: null` unless a Moodle course custom field is introduced.
+**Left open at the end of the spike** — the production Moodle version and the absent `durationMinutes` source — **both resolved in D-039.**
 
 ## D-037 — Frontend shape: a `(portal)` route group, one session load, and no query library
 **Decision:** Authenticated pages live under `apps/web/src/app/(portal)/`, whose layout renders `PortalProvider`. That provider loads `authApi.me()` and `dashboardApi.get()` **once**, exposes both through context, and owns the redirect to `/login` on a 401. Data fetching is a ~110-line in-house `useApiQuery`/`useApiMutation` pair shaped to feed the existing `DataView`, not TanStack Query.

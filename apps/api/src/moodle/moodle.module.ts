@@ -4,6 +4,7 @@ import { AppConfigModule, AppConfigService } from '../config/app-config.module';
 import { LMS_PORT, type LmsPort } from './lms.port';
 import { MockLmsService } from './mock/mock-lms.service';
 import { MoodleHttpService } from './real/moodle-http.service';
+import { MoodleWsClient } from './real/moodle-ws.client';
 
 /**
  * The LMS module — the single place that knows an LMS exists (CLAUDE.md §2A).
@@ -33,13 +34,21 @@ import { MoodleHttpService } from './real/moodle-http.service';
         const logger = new Logger('LmsModule');
 
         if (config.get('MOODLE_MODE') === 'real') {
-          /* validateEnv already refuses MOODLE_MODE=real without a base URL, so
-             this is defence in depth rather than the primary check. */
-          logger.warn('LMS mode: real (Moodle adapter is a Phase 2 stub)');
+          const baseUrl = config.get('MOODLE_BASE_URL');
+
+          /* validateEnv already refuses MOODLE_MODE=real without a base URL and
+             a token, so this is defence in depth rather than the primary check.
+             The URL is safe to log; the token is not, and is never logged
+             anywhere. */
+          logger.log(`LMS mode: real (${baseUrl})`);
 
           return new MoodleHttpService(
-            config.get('MOODLE_BASE_URL'),
-            config.get('MOODLE_WS_TOKEN'),
+            baseUrl,
+            new MoodleWsClient({
+              baseUrl,
+              token: config.get('MOODLE_WS_TOKEN'),
+              timeoutMs: config.get('MOODLE_TIMEOUT_MS'),
+            }),
           );
         }
 
