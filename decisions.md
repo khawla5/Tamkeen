@@ -5,6 +5,31 @@
 
 ---
 
+## D-038 — Moodle accounts are keyed on a username we derive, and four other rules the Phase 2 spike forced
+**Context:** the spike (branch `phase-2-moodle-spike`, `spike/moodle-spike.mjs`) proved the loop end to end against a real Moodle **5.2.2** — provision → enrol → learner takes the quiz → we detect `completed: true`, `gradePercent: 100`, PASS at `PASS_THRESHOLD=70`. Five things it found are design decisions, not implementation trivia, and each was a defect waiting to happen.
+
+**1. Moodle accounts are keyed on a deterministic username we derive from the email — NOT on an email lookup.**
+`core_user_get_users_by_field` with `field=email` returns an **empty list** for an address that certainly exists, and the returned user object carries no `email` key at all. Both are the missing `moodle/site:viewuseridentity` capability. Critically it is **silent**: no exception, no warning. An adapter trusting it would find no existing user on every retry and create a duplicate account each time — and `users.moodle_user_id` is unique, so the failure would surface far from its cause.
+**Decision:** do **not** grant `moodle/site:viewuseridentity`. We are the identity owner (D-000), so the username is ours to choose, and a key we control is stronger than an index we cannot query. `provisionUser` is lookup-by-username-then-create.
+**Cost, accepted:** if an admin hand-creates a Moodle account with a learner's email under a different username, we cannot detect it; provisioning fails with a Moodle error we surface rather than auto-resolve. A `viewuseridentity`-gated reconciliation path is documented as a future option should auto-linking of admin-created accounts ever be wanted.
+**Also:** a *blind* re-create is rejected with `invalidparameter`, so provisioning must be lookup-then-create, never create-then-catch.
+
+**2. `enrol` must verify before believing its own error.**
+`enrol_manual_enrol_users` threw `Message was not sent.` — Moodle failing to send the course-welcome email — **after the enrolment had already committed**. Reading the enrolments back showed it present, both times. Under D-036 enrolment is best-effort and the audit log is its only trace, so an adapter that trusted the exception would record a *successful* enrolment as `FAILURE`: a silently wrong operational record, undebuggable later. **On error, re-read enrolments; only genuine absence is failure.** This is a property of the call, not of one instance's broken mail.
+
+**3. Catalogue sync uses `core_course_get_courses_by_field`, not `core_course_get_courses`.**
+`core_course_get_courses` omits `visible` and `enablecompletion` — Moodle gates them behind `moodle/course:update` on the caller, which a least-privilege integration user must not have. `visible` drives our `courses.status` → `HIDDEN_BUT_COMPLETABLE` rule (D-015/D-035), so sync is impossible without it. `..._by_field` returns both, plus hidden courses, under the same token. The gating is capability-based rather than version-based, so this should hold on 4.5 too — to be re-verified, not assumed, if the version decision changes. Sync must also skip the site course (`format: "site"`, id 1), which is not a course.
+
+**4. The pass threshold is evaluated against the `itemtype: "course"` total, always.**
+`gradereport_user_get_grade_items` returned **only** the course total — no `mod/quiz` item — even though the grade came from a quiz. Preferring a quiz item "when present" would make the grade source differ between this instance and the ministry's, which is a latent inconsistency bug. The course total is also the correct product semantics: D-007 and §5.5 speak of a *course* being passed. `gradePercent = (graderaw - grademin) / (grademax - grademin) * 100`, and `graderaw: null` stays `null` — never 0 (an unattempted course must not read as a failed one).
+
+**5. `completedAt` is derived from the criteria, because the obvious field does not exist.**
+There is no `completionstatus.timecompleted`. The timestamps live on `completionstatus.completions[]`, so the course completion time is the latest satisfied criterion. Reading the obvious-looking path returns `null` on a course that is demonstrably complete — which would have written a null timestamp for every learner. (`gradedategraded` on the course total is a usable secondary source.)
+
+**Also confirmed:** core REST answers **HTTP 200 on failure**, with `{errorcode, message, exception}` in the body — the Catalyst RESTful plugin is not installed, so the status line proves nothing and the body must be inspected on every call. The student role id is **configurable** (`MOODLE_STUDENT_ROLE_ID`, default 5): hardcoding a role id against a Moodle we do not control is a latent production bug. Arabic names round-trip through `core_user_create_users` intact. Latency 60–256 ms per call locally.
+
+**Open, deliberately:** the production Moodle version (spiked against 5.2.2; D-019 targets 4.5 LTS) and the absence of any `durationMinutes` source in Moodle — `customfields` is empty and only `startdate`/`enddate` exist, so real courses sync with `durationMinutes: null` unless a Moodle course custom field is introduced.
+
 ## D-037 — Frontend shape: a `(portal)` route group, one session load, and no query library
 **Decision:** Authenticated pages live under `apps/web/src/app/(portal)/`, whose layout renders `PortalProvider`. That provider loads `authApi.me()` and `dashboardApi.get()` **once**, exposes both through context, and owns the redirect to `/login` on a 401. Data fetching is a ~110-line in-house `useApiQuery`/`useApiMutation` pair shaped to feed the existing `DataView`, not TanStack Query.
 **Why the single load:** the navigation itself depends on journey state — §4.2 hides My Path until a path exists — so a page that fetched its own copy would render a nav disagreeing with its own content for a frame. Centralising the 401 matters for the same reason a global guard does on the API: with per-page handling, every page repeats three lines and one is eventually missed, leaving a signed-out user staring at a permanent error state instead of the sign-in form. Sign-in and the password pages sit *outside* the group, so they never pay for the session lookup and cannot be caught by a redirect from `/login` to `/login`.
