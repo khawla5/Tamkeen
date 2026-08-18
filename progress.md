@@ -6,9 +6,9 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1 (client + provisioning) and 2 (catalogue sync) complete and reviewed.
-- **Last completed task:** Checkpoint 2 — `listCourses`/`getCourse` against `core_course_get_courses_by_field`, plus `CatalogSyncService` (D-040). Verified against the live Moodle, not only mocks.
-- **Next task:** Checkpoint 3 — **enrolment**, including the verify-before-believing-the-error rule the spike proved necessary (D-038). Then completion sync, then the seamless-login spike before any course-player UI (D-039).
+- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1 (client + provisioning), 2 (catalogue sync) and 3 (enrolment) complete.
+- **Last completed task:** Checkpoint 3 — real `enrol`/`isEnrolled` with verify-before-believing-the-error, per-course resilience, and `retryPendingEnrolments` (D-041). Verified against the live Moodle.
+- **Next task:** Checkpoint 4 — **completion sync**: the `completions` table keyed on `(user, moodle_course_id)`, the product pass threshold, and the BullMQ scheduler. Then the seamless-login spike before any course-player UI (D-039).
 - **Active branch:** `phase-2-moodle-integration`, off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. Nothing pushed.
 - **Phase 1 is merged** (PR #2, `origin/main` @ `f25b644`).
 - **Open blockers / questions for the human:**
@@ -67,6 +67,26 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-18 — Phase 2 checkpoint 3: enrolment
+
+`enrol`/`isEnrolled` are real, and enrolment now survives a Moodle that misbehaves (D-041).
+
+**Verified against the live Moodle** — `spike/verify-enrol.ts`: provision → `isEnrolled` false → `enrol` → `isEnrolled` true → `enrol` again, no error, and false for a course the learner does not hold.
+
+**Two defects that only exist against a real LMS.** `enrol` now **verifies before believing its own error**, because Moodle throws *after* committing the enrolment — the spike proved it, and the same reasoning covers a timeout, where the request may well have landed. And each course is enrolled **independently**: the old single `try` around the whole 5–10 course loop would abandon every course after a refused one and audit the batch as failed, leaving a learner half-enrolled in a path they cannot switch out of.
+
+**`retryPendingEnrolments` closes the loop D-036 left open** — best-effort enrolment is only defensible if something reconciles the leftovers. Bounded per run, safe any time, attributed to no IP address because it is a background job rather than a person.
+
+**A new unit suite for enrolment resilience**, which did not exist: Phase 1 tested enrolment only through the journey integration suite, where the mock never fails, so none of this was reachable. Nine cases covering partial failure, provisioning failure, double-enrol prevention and multi-path reconciliation.
+
+**Also fixed while here:** the reconciler counted enrolments by subtracting a global pending tally, which reports zero on a run that enrolled plenty whenever more rows are outstanding than the batch limit. It now sums what each attempt actually did.
+
+**Not built, deliberately:** the optional `enrollments` table (§6). `user_path_courses.enrolledAt` answers the only question anything asks; a table whose sole consumer is a hypothetical future debugger is speculative schema. Recorded in D-041.
+
+**Next checkpoint:** completion sync — the `completions` table keyed on `(user, moodle_course_id)`, the pass threshold, and the BullMQ scheduler that will also drive catalogue sync and enrolment reconciliation.
+
+
 
 ### 2026-08-18 — Phase 2 checkpoint 2: catalogue sync
 

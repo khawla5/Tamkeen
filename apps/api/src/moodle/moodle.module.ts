@@ -49,6 +49,7 @@ import { MoodleWsClient } from './real/moodle-ws.client';
               token: config.get('MOODLE_WS_TOKEN'),
               timeoutMs: config.get('MOODLE_TIMEOUT_MS'),
             }),
+            config.get('MOODLE_STUDENT_ROLE_ID'),
           );
         }
 

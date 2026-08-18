@@ -67,6 +67,10 @@ interface MoodleCoursesByField {
   courses?: MoodleCourse[];
 }
 
+interface MoodleEnrolledCourse {
+  id: number;
+}
+
 @Injectable()
 export class MoodleHttpService implements LmsPort {
   private readonly logger = new Logger(MoodleHttpService.name);
@@ -74,6 +78,9 @@ export class MoodleHttpService implements LmsPort {
   constructor(
     private readonly baseUrl: string,
     private readonly client: MoodleWsClient,
+    /** Configurable: role ids are per-instance and we do not control the
+     *  ministry's Moodle (D-039). */
+    private readonly studentRoleId: number,
   ) {}
 
   // ── health ────────────────────────────────────────────────────────────────
@@ -262,12 +269,85 @@ export class MoodleHttpService implements LmsPort {
     }
   }
 
-  enrol(_input: EnrolInput): Promise<void> {
-    return this.notYet('enrol');
+  /**
+   * Enrols a user in a course, then **verifies before believing its own error**.
+   *
+   * This is the rule the spike forced (D-038). Moodle threw
+   * `Message was not sent.` — the course-welcome email failing — *after* the
+   * enrolment had already committed, and reading the enrolments back showed it
+   * present, both times. An adapter that trusted the exception would report a
+   * successful enrolment as failed; under D-036, where enrolment is best-effort
+   * and the audit log is its only trace, that is a silently wrong operational
+   * record and the sync job would keep "repairing" something already correct.
+   *
+   * The same reasoning covers a timeout, which is the genuinely ambiguous case:
+   * the request may well have landed. So every failure is checked against
+   * reality rather than assumed, and only a real absence is a failure.
+   *
+   * Idempotent, as the contract requires: Moodle treats re-enrolling an
+   * already-enrolled user as a no-op.
+   */
+  async enrol(input: EnrolInput): Promise<void> {
+    try {
+      await this.client.call('enrol_manual_enrol_users', {
+        enrolments: [
+          {
+            roleid: this.studentRoleId,
+            userid: input.lmsUserId,
+            courseid: input.lmsCourseId,
+          },
+        ],
+      });
+
+      return;
+    } catch (error) {
+      /* The verification is itself allowed to fail — if Moodle is unreachable we
+         cannot learn anything, and the original error stands. */
+      const enrolled = await this.isEnrolled(input.lmsUserId, input.lmsCourseId).catch(() => false);
+
+      if (enrolled) {
+        this.logger.warn(
+          `Moodle reported a failure enrolling user ${input.lmsUserId} in course ` +
+            `${input.lmsCourseId}, but the enrolment is present; treating as success`,
+        );
+        return;
+      }
+
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Enrolment refused: ${error instanceof MoodleWsError ? error.errorcode : 'unknown'}`,
+      );
+      throw new LmsOperationError('ENROL');
+    }
   }
 
-  isEnrolled(_lmsUserId: LmsUserId, _lmsCourseId: LmsCourseId): Promise<boolean> {
-    return this.notYet('isEnrolled');
+  async isEnrolled(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): Promise<boolean> {
+    const courses = await this.enrolmentsFor(lmsUserId);
+
+    return courses.some((course) => course.id === lmsCourseId);
+  }
+
+  private async enrolmentsFor(lmsUserId: LmsUserId): Promise<MoodleEnrolledCourse[]> {
+    try {
+      const courses = await this.client.call<MoodleEnrolledCourse[]>(
+        'core_enrol_get_users_courses',
+        { userid: lmsUserId },
+      );
+
+      return Array.isArray(courses) ? courses : [];
+    } catch (error) {
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Enrolment read failed: ${error instanceof MoodleWsError ? error.errorcode : 'unknown'}`,
+      );
+      throw new LmsOperationError('SYNC');
+    }
   }
 
   getCourseProgress(

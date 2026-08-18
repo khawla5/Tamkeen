@@ -5,6 +5,23 @@
 
 ---
 
+## D-041 — Enrolment: verify before believing an error, and fail one course at a time
+Two changes to how enrolment behaves, both invisible under the mock and both load-bearing against a real Moodle.
+
+**1. `enrol` verifies before believing its own error.**
+The spike caught Moodle throwing `Message was not sent.` — the course-welcome email failing with no mail transport — **after the enrolment had already committed**. Reading the enrolments back showed it present, both times. So on any failure the adapter re-reads `core_enrol_get_users_courses` and only a genuine absence counts as a failure.
+**Why this is not just about one instance's broken mail:** the same reasoning covers a **timeout**, which is the genuinely ambiguous case — the request may well have landed. Assuming failure there would make the reconciliation job re-enrol forever, and under D-036 (enrolment is best-effort, the audit log is its only trace) it would record successful enrolments as `FAILURE`, sending an operator to fix something already correct. The verification is itself allowed to fail: if Moodle is unreachable we learn nothing and the original error stands.
+
+**2. Each course is enrolled independently, and the audit carries counts.**
+Enrolment previously wrapped the whole 5–10 course loop in one `try`. Under the mock nothing failed, so this never mattered; against a real Moodle a single refused course would abandon **every course after it** and audit the batch as failed — leaving a learner half-enrolled in a path they cannot switch out of (D-002), with no record of which half. Now each course is attempted on its own, the audit records `{requested, enrolled, failed}`, and the outcome is `FAILURE` only if something actually failed. Provisioning failure remains a whole-batch failure, correctly: with no LMS account there is nothing to enrol into.
+
+**3. `retryPendingEnrolments` closes D-036's loop.**
+Best-effort enrolment is only defensible if something comes back for the leftovers; otherwise it means "sometimes silently not enrolled". The reconciler picks up confirmed paths with `enrolledAt IS NULL`, is bounded per run so one bad batch cannot monopolise the scheduler, and is safe to run at any time. It is attributed to **no IP address** — it is a background job, and inventing one would make the audit trail claim a person acted. The scheduler that calls it arrives with the completion-sync job.
+
+**On the `enrollments` table (§6):** still not built, and deliberately. §6 marks it optional ("debugging syncs"), and `user_path_courses.enrolledAt` already answers the only question anything currently asks — *is this course enrolled yet?* — which is what both the retry query and idempotency need. A table whose only consumer would be a hypothetical future debugger is speculative schema. It earns its place when completion sync needs to record something `enrolledAt` cannot express.
+
+**Also:** `MOODLE_STUDENT_ROLE_ID` is passed into the adapter rather than read as a constant, and the enrolment count is summed from what each attempt actually did rather than derived from a global "pending" tally — with more rows outstanding than the batch limit, the derived figure reports zero enrolled on a run that enrolled plenty.
+
 ## D-040 — Catalogue sync: never delete, refuse an empty catalogue, and product metadata is untouchable
 Three rules govern what a sync run may do to `courses`. Each exists because the obvious implementation is quietly destructive.
 

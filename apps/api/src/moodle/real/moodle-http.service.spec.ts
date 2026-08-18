@@ -13,6 +13,8 @@ import { MoodleWsClient, MoodleWsError } from './moodle-ws.client';
 const EMAIL = 'ahmad.ali@ministry.gov.example';
 const USERNAME = deriveMoodleUsername(EMAIL);
 
+const STUDENT_ROLE_ID = 5;
+
 type Handler = (wsfunction: string, params: Record<string, unknown>) => unknown;
 
 interface CallLog {
@@ -35,7 +37,7 @@ function serviceWith(handler: Handler) {
     },
   } as unknown as MoodleWsClient;
 
-  return { service: new MoodleHttpService('http://moodle.test', client), calls };
+  return { service: new MoodleHttpService('http://moodle.test', client, STUDENT_ROLE_ID), calls };
 }
 
 const countOf = (calls: CallLog[], wsfunction: string) =>
@@ -370,6 +372,104 @@ describe('MoodleHttpService', () => {
       expect(calls[0]!.params).toMatchObject({ field: 'id', value: 5 });
     });
   });
+  describe('enrol', () => {
+    const input = { lmsUserId: 4, lmsCourseId: 2 };
+
+    it('enrols with the configured role rather than a hardcoded one', async () => {
+      /* Role ids are per-instance and we do not control the ministry's Moodle;
+         a hardcoded 5 that meant something else there would enrol every learner
+         with the wrong permissions (D-039). */
+      const { service, calls } = serviceWith(() => null);
+
+      await service.enrol(input);
+
+      expect(calls[0]!.wsfunction).toBe('enrol_manual_enrol_users');
+      expect(calls[0]!.params.enrolments).toEqual([
+        { roleid: STUDENT_ROLE_ID, userid: 4, courseid: 2 },
+      ]);
+    });
+
+    it('treats a failure as success when the enrolment is actually present', async () => {
+      /* The spike found Moodle throwing "Message was not sent." from the
+         course-welcome email AFTER the enrolment had committed. Believing the
+         error would audit a successful enrolment as failed (D-036, D-038). */
+      const { service } = serviceWith((wsfunction) => {
+        if (wsfunction === 'enrol_manual_enrol_users') {
+          throw new MoodleWsError('enrol_manual_enrol_users', 'Message was not sent.');
+        }
+        return [{ id: 2 }];
+      });
+
+      await expect(service.enrol(input)).resolves.toBeUndefined();
+    });
+
+    it('reports a failure when the enrolment really is absent', async () => {
+      const { service } = serviceWith((wsfunction) => {
+        if (wsfunction === 'enrol_manual_enrol_users') {
+          throw new MoodleWsError('enrol_manual_enrol_users', 'wsusercannotassign');
+        }
+        return [];
+      });
+
+      await expect(service.enrol(input)).rejects.toBeInstanceOf(LmsOperationError);
+    });
+
+    it('verifies after a timeout too, since the request may well have landed', async () => {
+      /* The genuinely ambiguous case: the transport gave up, but Moodle may have
+         committed. Assuming failure would make the sync job re-enrol forever. */
+      let attempted = false;
+
+      const { service } = serviceWith((wsfunction) => {
+        if (wsfunction === 'enrol_manual_enrol_users') {
+          attempted = true;
+          throw new LmsUnavailableError('UNREACHABLE');
+        }
+        return attempted ? [{ id: 2 }] : [];
+      });
+
+      await expect(service.enrol(input)).resolves.toBeUndefined();
+    });
+
+    it('keeps the outage error when verification cannot reach Moodle either', async () => {
+      const { service } = serviceWith(() => {
+        throw new LmsUnavailableError('UNREACHABLE');
+      });
+
+      await expect(service.enrol(input)).rejects.toBeInstanceOf(LmsUnavailableError);
+    });
+
+    it('is idempotent - a second enrol succeeds and changes nothing', async () => {
+      const enrolled = new Set<number>();
+
+      const { service } = serviceWith((wsfunction, params) => {
+        if (wsfunction === 'enrol_manual_enrol_users') {
+          const list = params.enrolments as Array<{ courseid: number }>;
+          enrolled.add(list[0]!.courseid);
+          return null;
+        }
+        return [...enrolled].map((id) => ({ id }));
+      });
+
+      await service.enrol(input);
+      await expect(service.enrol(input)).resolves.toBeUndefined();
+      await expect(service.isEnrolled(4, 2)).resolves.toBe(true);
+    });
+  });
+
+  describe('isEnrolled', () => {
+    it('is false for a course the user does not hold', async () => {
+      const { service } = serviceWith(() => [{ id: 99 }]);
+
+      await expect(service.isEnrolled(4, 2)).resolves.toBe(false);
+    });
+
+    it('is false for a user with no enrolments at all', async () => {
+      const { service } = serviceWith(() => []);
+
+      await expect(service.isEnrolled(4, 2)).resolves.toBe(false);
+    });
+  });
+
   describe('courseUrl', () => {
     it('embeds no token — this value is handed to a browser', () => {
       const { service } = serviceWith(() => null);
