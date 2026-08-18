@@ -64,6 +64,17 @@ export async function signIn(page: Page, account: Account): Promise<void> {
   await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
   await expect(page).toHaveURL('http://localhost:3000/');
+
+  /*
+   * Wait for the shell, not just the URL.
+   *
+   * `PortalProvider` loads the session and dashboard state before rendering
+   * anything but a loading state, so for a moment after the redirect there is no
+   * navigation and no skip link. A test that acted on the URL alone would
+   * sometimes tab into an empty page — which is exactly how the skip-link test
+   * flaked: it passed alone and failed under full-suite load.
+   */
+  await expect(page.getByRole('navigation', { name: 'التنقل الرئيسي' })).toBeVisible();
 }
 
 /** Register → verify → sign in, landing on the dashboard. */

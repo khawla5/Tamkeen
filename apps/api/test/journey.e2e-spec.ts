@@ -101,6 +101,21 @@ describe('Phase 1 journey (e2e)', () => {
       },
     });
 
+    /*
+     * Fail once, clearly, on an unseeded database.
+     *
+     * Without this, an empty database produces forty-odd unrelated-looking
+     * assertion failures and the actual cause — "nobody ran the seed" — has to
+     * be inferred from them. This is exactly how CI failed the first time Phase
+     * 1 ran: the workflow applied migrations but never seeded.
+     */
+    if (questions.length === 0) {
+      throw new Error(
+        'No assessment questions found. These tests need the seeded reference data — ' +
+          'run `npm run db:seed --workspace @tamkeen/api` against this database first.',
+      );
+    }
+
     questionLetter = new Map();
     optionsByWeight = new Map();
 

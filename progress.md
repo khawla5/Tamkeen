@@ -11,7 +11,7 @@
 - **Next task:** After the Phase 1 PR is merged, begin **Phase 2 — Moodle integration**. First step is the **spike**, before any other Phase 2 work: prove *enrol a user via API → they complete a course in Moodle → the backend detects completion + grade*. Then swap `MOODLE_MODE=real` and run `describeLmsContract` against `MoodleHttpService`; if it passes, no caller changes (D-030).
 - **Active branch:** `phase-1-assessment-core` (5 commits, based on `main` @ b478327).
 - **Open blockers / questions for the human:**
-  1. **CI has run exactly once** (the Phase 0 PR). Every gate passes locally; confirm this PR is green before merging.
+  1. **CI failed on its first Phase 1 run and has been fixed** — the workflow never seeded, and from Phase 1 the tests need real content. Verified by running the workflow's exact sequence against a fresh database. Confirm the re-run is green before merging.
   2. **GitHub CLI is still not installed on the dev machine**, so the PR could not be opened from the terminal. The branch is pushed; see the log entry below for the compare URL and the PR body.
   3. **The Arabic question wording is a reviewed first draft** (D-032). Question keys are stable, so revisions need no migration — hand over edits whenever the ministry has them.
   4. **Ministry values still placeholders** (not blocking, needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format (currently a permissive regex).
@@ -65,6 +65,17 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-18 — CI failed on the Phase 1 PR; fixed
+
+**Cause:** the workflow applied migrations but **never seeded**. Phase 0's tests only needed authentication, so an empty database was a valid starting state; from Phase 1 the tests need real content — the assessment bank, the paths, the catalogue — and the journey suite collapsed without it. A gap in the workflow, not in the code under test.
+
+**Fixed:**
+- `ci.yml` gained a **Seed reference data** step after `db:deploy` (the seed is idempotent, so re-running is safe).
+- `journey.e2e-spec.ts` now **fails once, clearly**, on an unseeded database instead of producing forty unrelated-looking assertion failures whose real cause has to be inferred.
+- Fixed a genuine e2e flake found while verifying: the skip-link test tabbed immediately after the redirect to `/`, but `PortalProvider` renders only a loading state until the session and dashboard load — so there was no shell and no skip link yet. `signIn` now waits for the navigation landmark, which makes every consumer of the helper safe rather than patching one test.
+
+**Verified** by reproducing against a fresh `tamkeen_ci` database and then running the workflow's exact sequence end to end on it: migrate → seed → format → lint → typecheck → unit → integration → build → Playwright. **459 tests pass from an empty database.**
 
 ### 2026-08-18 — Phase 1 complete; PR opened for review
 
