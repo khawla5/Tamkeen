@@ -151,10 +151,9 @@ function CourseAction({
     case 'START_COURSE':
       return (
         <Button asChild className="self-start">
-          {/* The handoff target comes from the LMS port, never built here. */}
-          <a href={course.courseUrl} target="_blank" rel="noreferrer noopener">
-            {t('actionStart')}
-          </a>
+          {/* Through the player, which mints the signed handoff on click. A
+              direct LMS link carries no session (D-044). */}
+          <Link href={`/courses/${course.id}/player`}>{t('actionStart')}</Link>
         </Button>
       );
 

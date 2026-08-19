@@ -37,7 +37,6 @@ export interface MyPathCourseView {
   gradePercent: number | null;
   /** Exactly one action applies at a time (§3). */
   isNextUp: boolean;
-  courseUrl: string;
 }
 
 export interface MyPathView {

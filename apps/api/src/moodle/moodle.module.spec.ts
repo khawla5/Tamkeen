@@ -1,9 +1,10 @@
-import { Inject, Injectable, NotImplementedException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import { AppConfigService } from '../config/app-config.module';
 import { validateEnv } from '../config/env.schema';
 import { LMS_PORT, type LmsPort } from './lms.port';
+import { LmsUnavailableError } from './lms.types';
 import { MockLmsService } from './mock/mock-lms.service';
 import { MoodleModule } from './moodle.module';
 
@@ -72,6 +73,9 @@ describe('MoodleModule wiring', () => {
       MOODLE_MODE: 'real',
       MOODLE_BASE_URL: 'https://moodle.ministry.gov.example',
       MOODLE_WS_TOKEN: 'a-server-side-only-token',
+      /* Short, so an unreachable host fails fast instead of holding the suite
+         open for the production timeout. */
+      MOODLE_TIMEOUT_MS: '50',
     };
 
     it('swaps the implementation without the caller changing', async () => {
@@ -87,9 +91,16 @@ describe('MoodleModule wiring', () => {
       const reader = moduleRef.get(CatalogueReader);
 
       /* Silently returning [] would look like a working integration with no
-         courses — far worse than an explicit refusal. */
-      await expect(reader.titles()).rejects.toThrow(NotImplementedException);
-      await expect(reader.titles()).rejects.toThrow(/Phase 2/);
+         courses — far worse than an explicit refusal.
+
+         Before the adapter existed this threw NotImplementedException; now it
+         reaches for an unreachable host and reports the LMS as down. The
+         mechanism changed, the property under test did not: an unusable LMS
+         must never present as an empty catalogue. */
+      await expect(reader.titles()).rejects.toThrow(LmsUnavailableError);
+
+      /* And specifically NOT an empty array, which is the failure this guards. */
+      await expect(reader.titles()).rejects.not.toEqual([]);
     });
 
     it('still builds a course URL, since that needs no Moodle call', async () => {

@@ -10,5 +10,7 @@ import { EnrollmentService } from './enrollment.service';
   imports: [PrismaModule, AuditModule, JourneyModule],
   controllers: [EnrollmentController, DashboardController],
   providers: [EnrollmentService],
+  /* Exported so the sync scheduler can drive enrolment reconciliation (D-036). */
+  exports: [EnrollmentService],
 })
 export class EnrollmentModule {}

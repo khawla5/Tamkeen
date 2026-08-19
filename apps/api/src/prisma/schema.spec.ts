@@ -123,14 +123,42 @@ describe('Prisma schema', () => {
     });
   });
 
+  describe('Completion (Phase 2)', () => {
+    it('is unique on (user, moodle_course_id)', () => {
+      /*
+       * One constraint carrying three rules: re-running the polled sync cannot
+       * duplicate a row (D-005), a course reachable by more than one route
+       * reuses the single completion rather than being re-taken (D-003, §2),
+       * and Phase 3's certificate issuance gets a stable key to be idempotent
+       * against.
+       */
+      expect(modelBody('Completion')).toMatch(/@@unique\(\[userId, moodleCourseId\]\)/);
+    });
+
+    it('keys on the LMS course id, not our catalogue row', () => {
+      /* The LMS course is the thing actually completed, and a completion must
+         survive our catalogue row being retired or re-created. */
+      expect(modelBody('Completion')).toMatch(/moodleCourseId\s+Int/);
+    });
+
+    it('records the threshold each verdict was judged against', () => {
+      /* Otherwise changing the product setting later makes a historical pass
+         unexplainable — which matters when a certificate was issued on it. */
+      expect(modelBody('Completion')).toMatch(/passThresholdUsed/);
+    });
+  });
+
   describe('scope discipline', () => {
     it('contains no tables belonging to later phases', () => {
       /*
-       * Phase 1 added the assessment, paths and courses. Completions,
-       * certificates and the CV still belong to Phases 2 and 3 — guessing their
-       * shape now would bake in assumptions those phases have not yet examined.
+       * Phase 2 added `Completion`, so it has left this list — the guard tracks
+       * what has actually been built rather than being widened to keep quiet.
+       * Certificates and the CV still belong to Phase 3, and `Enrollment`
+       * remains deliberately unbuilt: §6 marks it optional, and
+       * `user_path_courses.enrolled_at` answers the only question anything asks
+       * (D-041).
        */
-      const laterPhaseModels = ['Completion', 'Certificate', 'CvProfile', 'Enrollment'];
+      const laterPhaseModels = ['Certificate', 'CvProfile', 'Enrollment'];
 
       const premature = laterPhaseModels.filter((model) =>
         new RegExp(`model\\s+${model}\\s*\\{`).test(SCHEMA),

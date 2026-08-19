@@ -20,6 +20,8 @@ import type {
   AssessmentSubmission,
   AssessmentView,
   CourseDetail,
+  CourseLaunchView,
+  CoursePlayerView,
   CourseSummary,
   DashboardView,
   MyPathView,
@@ -256,6 +258,13 @@ export const coursesApi = {
     return api.get<CourseSummary[]>(`/api/courses${suffix ? `?${suffix}` : ''}`);
   },
   detail: (courseId: string) => api.get<CourseDetail>(`/api/courses/${courseId}`),
+  player: (courseId: string) => api.get<CoursePlayerView>(`/api/courses/${courseId}/player`),
+  /**
+   * POST, though it reads like a fetch: it mints a short-lived credential, so it
+   * must not be prefetched or cached, and as a POST it carries the CSRF token
+   * every mutating request does (D-044).
+   */
+  launch: (courseId: string) => api.post<CourseLaunchView>(`/api/courses/${courseId}/launch`),
 };
 
 export const myPathApi = {

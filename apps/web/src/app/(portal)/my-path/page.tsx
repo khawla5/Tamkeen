@@ -168,9 +168,12 @@ function CourseRow({ course }: { course: MyPathCourseView }) {
           "must not compete with continue". Completed rows offer nothing. */}
       {course.status !== 'COMPLETED' ? (
         <Button asChild variant={course.isNextUp ? 'primary' : 'outline'} size="sm">
-          <a href={course.courseUrl} target="_blank" rel="noreferrer noopener">
+          {/* The player owns the handoff. Linking at the LMS directly would
+              send the learner to a Moodle page that does not know who they
+              are — the deep link carries no session (D-044). */}
+          <Link href={`/courses/${course.courseId}/player`}>
             {course.status === 'IN_PROGRESS' ? t('continue') : t('start')}
-          </a>
+          </Link>
         </Button>
       ) : null}
     </div>

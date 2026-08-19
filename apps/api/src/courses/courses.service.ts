@@ -153,7 +153,6 @@ export class CoursesService {
         name: entry.path.name,
         riasecLetter: entry.path.riasecLetter,
       })),
-      courseUrl: this.lms.courseUrl(course.moodleCourseId),
       action,
       /* Only meaningful when the action is ADD_TO_PATH or IN_PATH; the client
          uses it to link to the right build page rather than guessing. */

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/tamkeensso/db" VERSION="20260819" COMMENT="Tamkeen seamless login">
+  <TABLES>
+    <TABLE NAME="local_tamkeensso_used" COMMENT="Handoff nonces already spent. Makes a token single-use: expiry alone would still leave a replay window to anyone who reads the URL.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="nonce" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="expiresat" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="usedat" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="nonce" UNIQUE="true" FIELDS="nonce" COMMENT="Unique so a replay loses the race at the database rather than in PHP."/>
+        <INDEX NAME="expiresat" UNIQUE="false" FIELDS="expiresat"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

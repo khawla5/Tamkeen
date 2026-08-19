@@ -76,6 +76,7 @@ model User {
   authTokens    AuthToken[]
   sessions      Session[]
   notifications Notification[]
+  completions   Completion[]
   auditEvents   AuditLog[]     @relation("AuditActor")
 
   /// Every attempt, newest wins. Retakes append rather than overwrite (D-033).
@@ -549,4 +550,50 @@ model UserPathCourse {
   @@unique([userPathId, courseId])
   @@index([userPathId, displayOrder])
   @@map("user_path_courses")
+}
+
+/// Course completion, mirrored from the LMS (§6, Phase 2E).
+///
+/// **Unique on (user, moodle_course_id).** That single constraint carries three
+/// separate rules. Re-running the sync cannot create a second row, so polling is
+/// safe (D-005). A course reachable through more than one route reuses the one
+/// completion rather than being re-taken (D-003, §2). And Phase 3's certificate
+/// issuance gets a stable key to be idempotent against.
+///
+/// Keyed on `moodle_course_id` rather than our `courses.id` deliberately: the
+/// LMS course is the thing actually completed, and a completion must survive our
+/// catalogue row being retired or re-created.
+model Completion {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  moodleCourseId Int @map("moodle_course_id")
+
+  /// The LMS's own completion signal, and when its last criterion was met.
+  completed   Boolean   @default(false)
+  completedAt DateTime? @map("completed_at")
+
+  /// Course-total grade, 0-100. Null when nothing has been attempted — never 0,
+  /// which would read as a failed attempt.
+  gradePercent Int? @map("grade_percent")
+
+  /// **Our** verdict, not the LMS's (D-007). Stored alongside the threshold it
+  /// was judged against, so a later change to the product setting cannot make a
+  /// historical pass unexplainable — which matters when a certificate was issued
+  /// on the strength of it.
+  passed            Boolean @default(false)
+  passThresholdUsed Int?    @map("pass_threshold_used")
+
+  /// When we last read this from the LMS. Distinct from `completedAt`, which is
+  /// when the learner finished.
+  syncedAt DateTime @map("synced_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, moodleCourseId])
+  @@index([userId])
+  @@map("completions")
 }

@@ -6,15 +6,18 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 1 — Assessment (RIASEC) + path core — **COMPLETE, user approved the test, awaiting human review of the PR.**
-- **Last completed task:** All of Phase 1. Checkpoints A–C reviewed and approved by the user, plus a hands-on run of the built app. PR opened from `phase-1-assessment-core` → `main`; **not merged** (human review gate, D-008).
-- **Next task:** After the Phase 1 PR is merged, begin **Phase 2 — Moodle integration**. First step is the **spike**, before any other Phase 2 work: prove *enrol a user via API → they complete a course in Moodle → the backend detects completion + grade*. Then swap `MOODLE_MODE=real` and run `describeLmsContract` against `MoodleHttpService`; if it passes, no caller changes (D-030).
-- **Active branch:** `phase-1-assessment-core` (5 commits, based on `main` @ b478327).
+- **Current phase:** Phase 2 — Moodle integration — **COMPLETE, user approved the test, awaiting human review of the PR.**
+- **Last completed task:** The **full Phase 2 test pass** against a real Moodle — the whole loop, ending in an automatic, idempotent completion detection. All checks passed.
+- **Next task:** **Phase 3 — certificates + CV**, once the Phase 2 PR is merged. `onCoursePassed` in `CompletionSyncService` is the seam issuance plugs into, and it will need its own idempotency check.
+- **Active branch:** `phase-2-moodle-integration` (9 commits), off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. **Both branches pushed; PR opened, not merged** (D-008).
+- **Phase 1 is merged** (PR #2, `origin/main` @ `f25b644`).
 - **Open blockers / questions for the human:**
-  1. **CI failed on its first Phase 1 run and has been fixed** — the workflow never seeded, and from Phase 1 the tests need real content. Verified by running the workflow's exact sequence against a fresh database. Confirm the re-run is green before merging.
-  2. **GitHub CLI is still not installed on the dev machine**, so the PR could not be opened from the terminal. The branch is pushed; see the log entry below for the compare URL and the PR body.
-  3. **The Arabic question wording is a reviewed first draft** (D-032). Question keys are stable, so revisions need no migration — hand over edits whenever the ministry has them.
-  4. **Ministry values still placeholders** (not blocking, needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format (currently a permissive regex).
+  1. **Production Moodle version is 4.5 LTS, development is 5.2.2** (D-039). The adapter is version-agnostic, but **the seamless-login mechanism must be re-verified on a real 4.5** — and note 5.x moved the docroot to `public/`, so the plugin install path differs between the two versions.
+  2. **⚠ MINISTRY APPROVAL OF CUSTOM MOODLE PLUGINS IS UNCONFIRMED.** Seamless login uses `local_tamkeensso` (Option A) **for the pilot**; core Moodle provably cannot do this (D-044). **Approval MUST be confirmed before production — if refused, switch to Option B (OAuth2 IdP) during hardening.** The user is raising it with the ministry in parallel. This is the longest-lead dependency in the project.
+  3. **The dev Moodle's integration role needed four fixes the initial setup missed:** `moodle/role:assign`, the Allow-role-assignments matrix row, `gradereport/user:view`, and disabling the manual-enrolment welcome message. **The same list applies to the ministry's Moodle** — see the 2026-08-18 spike entry.
+  4. **`npm audit` reports 3 high advisories** for `deepmerge-ts` via `prisma` → `@prisma/config` — **accepted and deferred by decision (D-043), owned by the Phase 6 dependency review** alongside the D-022 pins. Not introduced by Phase 2 (traced; not from BullMQ). Prisma is deliberately **not** downgraded: npm's fix installs Prisma 6.x and breaks D-026. An `overrides` pin does not take effect. Exposure is low — Prisma's config loader, not the request path. **Phase 6 must re-check whether Prisma has bumped the pin upstream by then.**
+  5. **GitHub CLI is still not installed on the dev machine**, so PRs cannot be opened from the terminal.
+  6. **Ministry values still placeholders** (needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format.
 
 ---
 
@@ -24,12 +27,15 @@
 - **A confirmed path can exist without its LMS enrolments.** Enrolment is best-effort after the commitment is recorded and is audited on failure; **Phase 2's sync job** owns reconciliation (D-036).
 - **My Path reads live LMS progress but never persists it.** Writing `completions` is **Phase 2's** job; two writers on those rows would be a race (D-036).
 - **`courseUrl` points at the mock (`localhost:8080`) and does not resolve.** Expected until **Phase 2** stands up Moodle and the seamless handoff.
-- **`user_path_courses.enrolledAt` stands in for the optional `enrollments` table** (§6). It earns its own table in **Phase 2**, when sync debugging needs more than a timestamp.
+- **The optional `enrollments` table (§6) is still not built**, now deliberately: `user_path_courses.enrolledAt` answers the only question anything asks, and a table whose sole consumer is a hypothetical debugger is speculative schema (D-041).
 - **The balance rule must survive Phase 5's assessment editor.** `isBalancedBank` fails CI if an edit unbalances the bank; **Phase 5** must either keep it balanced or move ranking to normalised percentages (D-032).
 - **Rate limiting is in-process** — per-instance counters, so horizontal scaling multiplies the effective limit. **Phase 7** must swap in a shared store when deployment topology is decided. Per-account lockout is in the database and unaffected. (D-028)
+- **`deepmerge-ts` carries 3 high advisories** through `prisma` → `@prisma/config`, accepted and deferred (D-043). **Phase 6** must re-check whether Prisma bumped the pin upstream; do not downgrade Prisma to silence it (D-026).
 - **`postcss` / `sharp` are pinned via npm `overrides`** to clear 3 high CVEs while holding Next 15. Each Next upgrade must re-check the pins. **Phase 6** dependency review owns this, and should consider dropping the `sharp` pin by disabling `next/image` optimisation entirely. (D-022)
 - **Narrow-viewport layout not visually verified.** The `md:` breakpoint logic exists; the browser resize did not take effect during the Checkpoint C review, so no claim is made. **Phase 6** accessibility/responsive pass.
 - **Employee IDs are format-validated, not verified.** Real verification needs a ministry roster or `admin-only` provisioning; the `REGISTRATION_MODE` switch exists for that decision. (D-017)
+- **Completion sync processes every eligible learner in one pass**, with no batching or rotation. A silent cap would starve whoever fell outside it; **Phase 6** (sync reliability + load testing) owns making this scale. (D-042)
+- **Seamless login is a custom Moodle plugin pending governance approval** (D-044). If the ministry refuses custom PHP, **Phase 6** must replace it with the OAuth2-IdP route, which is a larger piece of work — the decision should be chased early, not at hardening.
 - **Entity scoping is not built.** RBAC is role-based only; which courses/learners an entity may see is data-scoped filtering and belongs with the entity model in **Phase 4**. (D-027)
 - **`packages/types` holds only roles, locale and formatting.** RIASEC/path/certificate types arrive with the phases that define them.
 
@@ -65,6 +71,198 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-19 — Phase 2 complete; PR opened for review
+
+Branches `phase-2-moodle-spike` and `phase-2-moodle-integration` pushed. **Not merged** (human review gate, D-008). PR body in `.github/PR_BODY_phase-2.md`; `gh` is still not installed on this machine, so the PR is opened from the compare URL.
+
+**Test totals:** 352 API unit · 96 API integration against real PostgreSQL · 142 web unit · 14 browser e2e in Chromium — **604 automated**, plus the real-Moodle pass. Typecheck, lint and format clean.
+
+**Nine commits**, one per checkpoint plus the spike, the dependency decision and the final pass.
+
+**The claim the phase rests on:** the mock→real swap changed only the implementation. No caller of `LmsPort` was touched in any checkpoint — the port, the executable contract and the mock were built in Phase 0 for exactly this, and they held.
+
+
+
+### 2026-08-19 — Phase 2 test pass: the whole loop, against a real Moodle
+
+`MOODLE_MODE=real`, an isolated database, the **BullMQ scheduler polling every minute**, and a human taking a real quiz. Every effect landed in Moodle 5.2.2.
+
+**The journey, over HTTP only** — so nothing it proves can be a rule living solely in a React component:
+
+```
+health      {"moodleMode":"real","lms":"up","lmsSiteName":"Dockerized_Moodle"}
+register    → verified with a token read out of the delivered mail
+assessment  → Holland Code: RIA
+path        → 7 courses offered (the hidden one correctly excluded)
+confirm     → 5 courses committed
+```
+
+**Enrolment, asked of Moodle rather than trusted from our own status field:** all five present on user 7.
+
+**The loop closed on its own.** The scheduler logged `1 newly passed` at 15:26:48 and `0 newly passed` at 15:27:48 — the transition fired exactly once, with no manual trigger.
+
+```
+PASS  the app records the course as completed        status = COMPLETED
+PASS  the grade came back from Moodle                gradePercent = 100
+PASS  passed against the product threshold           passed=true at threshold 70
+PASS  exactly one course-passed email was sent       1 email(s)
+PASS  a second sync changes nothing                  COMPLETED/100 -> COMPLETED/100
+PASS  and does NOT send the email again              1 email(s) after a second sync
+```
+
+**The `completions` table, read directly:** course 2 is `completed=t, grade=100, passed=t, pass_threshold_used=70` with a real `completed_at`; the four unattempted courses carry `grade_percent = NULL`, **not 0** — the distinction that would otherwise read as a failed attempt. **5 rows, 5 distinct `(user, moodle_course_id)` keys** after a dozen sync cycles.
+
+**Setup the pass needed:** the dev Moodle had one usable course and the 5-10 rule needs five, so six test courses were created on it through Moodle's own PHP API. `scripts/real-pass-setup.ts` seeds the assessment, mirrors the live catalogue and builds one path over it — the last part is test scaffolding, since the seeded twelve paths are built on mock course ids. **Phase 7 owns real catalogue and path data.**
+
+**Two things learned while doing it:**
+- `tsx` cannot boot the Nest container — esbuild does not emit `emitDecoratorMetadata`, which is exactly what Nest reads to resolve constructor parameters, and the failure presents as a misleading "dependency at index [0] is undefined". Scripts that need DI must run compiled.
+- The 60-second handoff TTL is right for production and impractical for a human step; the pass ran at the 300-second cap. The verify script now reads the lifetime out of the token rather than printing a constant that would quietly become wrong.
+
+**Phase 2's "done when" is met:** a real user, from the app, entered a real Moodle course, took its quiz, and the app reflected completion and pass/fail automatically and idempotently. The mock→real swap changed only the implementation — no caller of `LmsPort` was touched in any checkpoint.
+
+**Awaiting the user's approval of this test before opening the PR** (D-008).
+
+
+
+### 2026-08-19 — Phase 2 checkpoint 6: the course player
+
+§4.8's page, and it is now the **only** route into a course.
+
+**The handoff is minted per click, never rendered.** `POST /api/courses/:id/launch` returns a fresh signed URL; the page contains no credential until the learner asks for one. A component test and a browser test both assert the markup does not contain it — the point of minting on click is defeated the moment a URL sits in the DOM waiting.
+
+**`courseUrl` is gone from `CourseDetail` and `MyPathCourseView` (D-045).** Both screens previously linked straight at the Moodle deep link, which **carries no session** — a learner following it would land on a Moodle page that did not know who they were. Now that the handoff works, leaving the unauthenticated link in the API contract would leave the wrong thing equally available.
+
+**Enrolment now also happens on demand at launch.** A learner who confirmed while the LMS was down had a committed path with no enrolments (D-036) and would have hit a Moodle access-denied page. `ensureEnrolledForLaunch` enrols right then, idempotently — "wait a sync interval and hope" becomes "it works".
+
+**The mock got stricter, again.** Its launch URL was stable, and an integration test asserting freshness failed against it. A handoff is single-use, so a stable URL hands back an already-spent token; the mock now varies per call and the **contract** requires it. This is the second time a too-permissive mock would have let a real bug through (D-036 was the first).
+
+**Two of my own test mistakes, both instructive:** a component test rendered twice in one case without unmounting, so the "absent" assertion found the first render's link; and an integration test asserted a property the mock did not have. Both are fixed at the cause rather than by loosening the assertion.
+
+**Totals:** 352 API unit, 96 API integration, 142 web unit — all green. Typecheck, lint and format clean across both apps. The browser e2e now walks My Path → player → back, and was run against built apps.
+
+**Next:** the full Phase 2 test pass — the whole loop against the real Moodle end to end — then the PR.
+
+
+
+### 2026-08-19 — Phase 2 checkpoint 5: seamless login, proven end to end
+
+`local_tamkeensso` (D-044) plus app-side token minting. **Verified against the live Moodle, including the refusals** — a handoff that only proves it lets people in has demonstrated nothing about who it keeps out:
+
+| check | result |
+|---|---|
+| fresh token | `303 → /course/view.php?id=2`, and the course page renders the learner's Arabic name — a real session, no login form |
+| replayed token | refused ("already been used") |
+| tampered payload (user id edited to 1) | refused ("not valid") |
+| expired but validly signed | refused ("expired") |
+
+Repeatable as `npx tsx spike/verify-sso.ts`.
+
+**Cross-language agreement is asserted, not assumed.** The plugin verifies in PHP what we mint in TypeScript, so a unit test pins the wire format exactly — unpadded base64url, HMAC-SHA256 over the *encoded* payload string, camelCase claims — and a live check ran a TS-minted token through the plugin's PHP verification inside the container. Two implementations read side by side would have drifted.
+
+**Why core Moodle could not do this** (established, not assumed): every core mechanism mints a session for the **web-service token's own user**, and our token is `tamkeen-integration`, not the learner. `tool_mobile_get_autologin_key` fails on that plus three other counts.
+
+**A version difference worth knowing:** Moodle 5.x moved the web-facing tree into `public/`, so the plugin installs to `public/local/tamkeensso` on 5.x but `local/tamkeensso` on the 4.5 production target. Getting it wrong means the plugin silently never loads. Both paths are in `moodle-plugin/README.md`.
+
+**Installed on the dev Moodle** to verify rather than shipping untested PHP — a throwaway instance the user said can be wiped.
+
+**Totals:** 351 API unit tests (was 331), 90 integration tests, all green; typecheck, lint, format clean.
+
+**Owed:** re-verification on a real **4.5** (D-039), and the governance answer on custom plugins (D-044) — the longest-lead item in the project.
+
+**Next checkpoint:** the course player (§4.8) — now unblocked — then the full Phase 2 test pass.
+
+
+
+### 2026-08-19 — Phase 2 checkpoint 4: completion sync
+
+The loop now closes in the product, not just in a spike. `getCourseProgress`/`listProgressForUser` are real, `completions` exists, and a scheduled job drives catalogue sync, enrolment reconciliation and completion sync in that order (D-042).
+
+**Verified against the live Moodle**, reading the learner who actually took the quiz: `{"completed":true,"completedAt":"2026-08-18T13:57:59.000Z","gradePercent":100}` → our verdict `passed: true` at `PASS_THRESHOLD=70`. A course they are not enrolled in returns `null`; an unknown learner returns `[]`; three consecutive reads are identical.
+
+**One constraint carries three rules.** `completions` unique on `(user_id, moodle_course_id)`: polling cannot duplicate a row, a shared course reuses the one completion instead of being re-taken (D-003), and Phase 3 gets a stable idempotency key. Keyed on the *LMS* course id so a completion survives our catalogue row being retired.
+
+**The email fires only on the transition into passing** — the single irreversible act in a job that re-reads the same data forever. Tested by running the sync three times and asserting one email.
+
+**A hazard the spike had already shown us** is now guarded: a Moodle course with no completion criteria reports `completed:false` forever, so nobody on it can ever pass however well they score, and the symptom is "certificates never arrive" with nothing in any log. `isGradedButNotComplete` detects that exact shape and names the course.
+
+**My Path's live-progress overlay is gone, closing D-036.** Phase 1 read the LMS on every render because nothing persisted progress; this job is the writer that was missing. It also removes an N+1 LMS call from a page load — the page no longer needs Moodle to be up to render.
+
+**Totals:** 331 API unit tests (was 285), 90 integration tests against real PostgreSQL, all green; typecheck, lint, format clean. One migration (`phase_2_completions`). Callers of `LmsPort` still unchanged.
+
+**A security finding, not introduced here:** `npm audit` now reports **3 high** advisories for `deepmerge-ts`, reached through `prisma` → `@prisma/config`. It is not from BullMQ (verified by tracing the tree) — it is a newly published advisory against a dependency we already had. An npm `overrides` pin in the D-022 style **does not take effect** here, and npm's own fix downgrades Prisma to 6.x, breaking D-026. Exposure is low: it is a CLI/config-time dependency reached when loading a Prisma config file, not in the request path. **Flagged for a decision rather than silently absorbed** — see the blocker list above.
+
+**Next checkpoint:** the seamless-login spike, before any course-player UI is built (D-039).
+
+
+
+### 2026-08-18 — Phase 2 checkpoint 3: enrolment
+
+`enrol`/`isEnrolled` are real, and enrolment now survives a Moodle that misbehaves (D-041).
+
+**Verified against the live Moodle** — `spike/verify-enrol.ts`: provision → `isEnrolled` false → `enrol` → `isEnrolled` true → `enrol` again, no error, and false for a course the learner does not hold.
+
+**Two defects that only exist against a real LMS.** `enrol` now **verifies before believing its own error**, because Moodle throws *after* committing the enrolment — the spike proved it, and the same reasoning covers a timeout, where the request may well have landed. And each course is enrolled **independently**: the old single `try` around the whole 5–10 course loop would abandon every course after a refused one and audit the batch as failed, leaving a learner half-enrolled in a path they cannot switch out of.
+
+**`retryPendingEnrolments` closes the loop D-036 left open** — best-effort enrolment is only defensible if something reconciles the leftovers. Bounded per run, safe any time, attributed to no IP address because it is a background job rather than a person.
+
+**A new unit suite for enrolment resilience**, which did not exist: Phase 1 tested enrolment only through the journey integration suite, where the mock never fails, so none of this was reachable. Nine cases covering partial failure, provisioning failure, double-enrol prevention and multi-path reconciliation.
+
+**Also fixed while here:** the reconciler counted enrolments by subtracting a global pending tally, which reports zero on a run that enrolled plenty whenever more rows are outstanding than the batch limit. It now sums what each attempt actually did.
+
+**Not built, deliberately:** the optional `enrollments` table (§6). `user_path_courses.enrolledAt` answers the only question anything asks; a table whose sole consumer is a hypothetical future debugger is speculative schema. Recorded in D-041.
+
+**Next checkpoint:** completion sync — the `completions` table keyed on `(user, moodle_course_id)`, the pass threshold, and the BullMQ scheduler that will also drive catalogue sync and enrolment reconciliation.
+
+
+
+### 2026-08-18 — Phase 2 checkpoint 2: catalogue sync
+
+`listCourses`/`getCourse` are real, and `CatalogSyncService` mirrors the LMS catalogue into `courses`.
+
+**Verified against the live Moodle**, not just mocks — `spike/verify-catalog.ts` reads the real catalogue through the adapter: two courses returned, **the site course (id 1) correctly discarded**, the hidden course present with `visible: false` so sync can see it, `getCourse(9999)` → `null`, and `durationMinutes: null` exactly as D-039 predicted.
+
+**Three destructive defaults avoided, recorded as D-040.** A vanished course is never deleted and is only retired if **no learner holds it** — `RETIRED` is invisible even to someone who already selected it, so retiring an in-use course would breach D-015. An empty catalogue is treated as a fault and writes nothing, rather than withdrawing everything in one pass. And sync writes only what Moodle owns: letting the LMS's `null` overwrite an authored `durationMinutes` would have erased every duration on the first run *without erroring*, since the column is nullable.
+
+**Two stale tests updated honestly rather than deleted.** `moodle.module.spec` asserted the real adapter throws `NotImplementedException`; it now reaches an unreachable host and reports the LMS down. The property under test — an unusable LMS must never present as an empty catalogue — is unchanged, and the test still asserts it.
+
+The seed runner now shares `fieldsForPublishedCourse` with the sync, so a seeded and a synced database cannot describe the same course differently.
+
+**Totals:** 268 API unit tests (was 234) and **90 integration tests against real PostgreSQL**, all green; typecheck, lint and format clean. Callers still unchanged.
+
+**Next checkpoint:** enrolment — including the verify-before-believing-the-error rule the spike proved necessary (D-038).
+
+
+
+### 2026-08-18 — Phase 2 checkpoint 1: real Moodle client + user provisioning
+
+Branch `phase-2-moodle-integration`, off `phase-2-moodle-spike` so the proof stays in the history rather than being orphaned.
+
+**Built.** `MoodleWsClient` — the only thing that speaks HTTP to Moodle: PHP nested form encoding, timeouts, and the protocol's dangerous quirk, that **core REST answers HTTP 200 for errors** with the failure in the body. It handles real status codes too, so installing the Catalyst plugin later is not a behavioural change. `moodle-identity.ts` holds the derived-username scheme D-038 rests on. `MoodleHttpService` now really implements `checkHealth`, `provisionUser` and `findUserByEmail`; catalogue, enrolment and progress still refuse, by checkpoint.
+
+**Verified three ways**, deliberately: 86 unit tests over the module with the HTTP layer mocked (our logic); the spike's raw REST calls (Moodle's behaviour); and `spike/verify-adapter.ts` driving the **real adapter against the live Moodle** — `checkHealth` → `5.2.2`, `provisionUser` twice → same id, uppercased email → same id, no duplicate. The gap between "our logic is right" and "it works against a real server" is where integrations usually fail, so it is closed explicitly.
+
+**A test changed the code.** Asserting that no failure mode puts the token into a thrown error found that `MoodleWsError` was carrying Moodle's raw `message`, which a debug response can echo the request into. It now carries only the errorcode.
+
+**Totals:** 234 API unit tests (was 189), all green; typecheck + lint clean. `LmsOperationError` added to `lms.types` to separate "retry this" from "a human must look" — the mock is unaffected, so the swap stays intact.
+
+**Decisions:** D-039 records the version split (4.5 LTS production / 5.2 dev, adapter version-agnostic, seamless login to be re-verified on 4.5), `durationMinutes` as our product metadata, handoff-plus-early-login-spike for v1, and the client shape choices.
+
+**Next checkpoint:** catalogue sync — `core_course_get_courses_by_field` per D-038, skipping the site course, idempotent and re-runnable.
+
+### 2026-08-18 — Phase 2 spike: the Moodle loop is proven
+
+Branch `phase-2-moodle-spike` off `origin/main` @ `f25b644`. One file, `spike/moodle-spike.mjs` — plain Node ESM, no build step, talks to Moodle's REST endpoint **directly** rather than through our adapter, so what it proves is a property of Moodle and not of code we wrote to satisfy ourselves.
+
+**The loop closes.** Against real Moodle **5.2.2** at `localhost:8080`: provision user → enrol in course 2 → learner took the quiz in Moodle → we detect `completed: true`, `completedAt: 2026-08-18T13:57:59Z`, `gradePercent: 100` ⇒ **PASS** at `PASS_THRESHOLD=70`. Three consecutive reads returned byte-identical results.
+
+**Five findings became D-038**, each a defect that would otherwise have shipped: email lookup silently returns empty under least privilege (→ key on a username we derive); `enrol` throws *after* committing (→ verify before believing the error); `core_course_get_courses` omits `visible` (→ use `..._by_field`); only a course-total grade item is returned (→ always evaluate the course total); `completionstatus.timecompleted` does not exist (→ derive from the criteria).
+
+**Four Moodle-side gaps the spike surfaced**, all fixed by the human: `moodle/role:assign` plus the Allow-role-assignments matrix row (enrolment returned `wsusercannotassign` for *every* role id until both were set); the manual-enrolment welcome message (no mail transport in the container); and the test course, which turned out to contain no quiz at all — `core_course_get_contents` showed only the default Announcements forum, which explained both `nocriteriaset` and the missing grade item.
+
+**Not yet built:** anything in `apps/`. The spike is deliberately disposable and no application code has changed. `MoodleHttpService` still throws `NotImplementedException`; `MOODLE_MODE` is still `mock`; no `completions` table, no BullMQ.
+
+**Next:** on approval, branch `phase-2-moodle-integration` and build the real adapter against `describeLmsContract`, in the order: client + provisioning → catalogue sync → enrolment → completion sync → seamless login + player.
 
 ### 2026-08-18 — CI failed on the Phase 1 PR; fixed
 
