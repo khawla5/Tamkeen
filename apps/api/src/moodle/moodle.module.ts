@@ -50,6 +50,8 @@ import { MoodleWsClient } from './real/moodle-ws.client';
               timeoutMs: config.get('MOODLE_TIMEOUT_MS'),
             }),
             config.get('MOODLE_STUDENT_ROLE_ID'),
+            config.get('MOODLE_SSO_SECRET'),
+            config.get('MOODLE_SSO_TTL_SECONDS'),
           );
         }
 

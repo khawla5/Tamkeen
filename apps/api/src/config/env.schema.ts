@@ -94,6 +94,19 @@ export const envSchema = z.object({
   /** Per-call ceiling. Moodle answered in 60–256 ms in the spike; 10s is a
    *  generous outage detector, not a normal-operation budget. */
   MOODLE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  /**
+   * Shared with the `local_tamkeensso` plugin, which verifies the handoff
+   * signature with it (D-044). Server-side only, never sent to a browser.
+   * Minimum length is enforced at mint time as well, so a short secret cannot
+   * quietly make the signature decorative.
+   */
+  MOODLE_SSO_SECRET: z.string().default(''),
+  /**
+   * Handoff lifetime. The URL reaches the browser, so this is the window in
+   * which anyone who reads it — from history, a referrer header, a shared
+   * screen — could become that learner. Seconds, deliberately.
+   */
+  MOODLE_SSO_TTL_SECONDS: z.coerce.number().int().positive().max(300).default(60),
   PASS_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
   COMPLETION_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5),
   /**

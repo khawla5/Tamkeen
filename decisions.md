@@ -5,6 +5,19 @@
 
 ---
 
+## D-044 — Seamless login is a small custom Moodle plugin, pending ministry approval of custom PHP
+**Decision:** the course handoff uses **`local_tamkeensso`** (Option A) — a small Moodle plugin that accepts a short-lived, single-use, HMAC-signed token from our app and logs the learner straight into the course. OAuth2-IdP (Option B) remains the hardening target per §5.3.
+
+> **⚠ OPEN BLOCKER — not yet resolved.** Whether the ministry will accept **custom PHP on their production Moodle** is a governance question that has not been confirmed. `local_tamkeensso` is approved **for the pilot**. **Ministry approval of custom Moodle plugins MUST be confirmed before production; if refused, switch to Option B (OAuth2) during hardening.** The user is raising this in parallel. Nothing else in Phase 2 depends on the answer, so the work proceeds — but the answer changes which mechanism ships.
+
+**Why core Moodle cannot do this, established empirically rather than assumed:** every core mechanism that mints a session mints one for **the token's own user**, and our web-services token belongs to `tamkeen-integration`, not to the learner. `tool_mobile_get_autologin_key` is core's only candidate and fails three times over — it is not on our external service, it issues a key only for the token owner, it needs a `privatetoken` that manually created tokens do not carry, and it is rate-limited per user. Issuing per-learner tokens does not rescue it: creating tokens is not exposed as a web-service function, so a plugin would be needed anyway, and the rate limit still breaks "click a course, land in it".
+
+**Why the plugin over OAuth2 for v1:** the security surface is small enough to review properly — an HMAC signature, a short expiry, single use, and binding to **one user and one course** — and it is exactly what §5.4's MVP handoff and D-004 describe. OAuth2 would be the single largest piece of work in Phase 2, and two frictions make it worse as a *first* step rather than a hardening step: `auth_oauth2` links accounts by **email**, whereas we deliberately key on a derived username (D-038) and provision accounts as `manual`; and Moodle's first OAuth2 login normally shows an account-linking confirmation, which breaks "no second login" on the very first course entry unless auto-linking is configured.
+
+**A correction worth recording, because it nearly became a false finding:** the first probe inferred from HTTP 404s that `auth_oauth2` and `tool_mobile` were absent from the instance. That inference was wrong — `/course/view.php`, which certainly exists, also answers 404 without parameters, because Moodle renders its own 404 for a missing course id. On this instance a 404 means "PHP declined", not "file absent", and unauthenticated probing cannot enumerate plugins. The spike script now demonstrates that calibration instead of asserting the conclusion. The verdict rests only on the token-identity finding, which is structural.
+
+**Re-verification owed (D-039):** the mechanism is being built against 5.2.2 and **must be re-verified on a real 4.5** before production, since that is the version production will run.
+
 ## D-043 — The `deepmerge-ts` advisory is accepted and deferred, not fixed by downgrading Prisma
 **Decision:** `npm audit` reports **3 high** advisories for `deepmerge-ts` (stack exhaustion on recursive object graphs), reached through `prisma` → `@prisma/config`. We **accept it for now** and hand it to the **Phase 6 dependency review**, which already owns the D-022 `postcss`/`sharp` pins. Prisma is **not** downgraded.
 **Why not fix it:** npm's own remedy installs `prisma@6.12.0`, which is a major downgrade and directly contradicts D-026 — Prisma 7 was chosen deliberately so a system intended to run for years does not start on an already-superseded major with an earlier end of support. Trading a live framework decision for a low-exposure advisory is the wrong way round.

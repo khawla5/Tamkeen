@@ -19,6 +19,7 @@ import {
   normaliseEmail,
   splitFullName,
 } from './moodle-identity';
+import { mintHandoffToken } from './moodle-handoff';
 import { MoodleWsClient, MoodleWsError } from './moodle-ws.client';
 
 /**
@@ -107,6 +108,9 @@ export class MoodleHttpService implements LmsPort {
     /** Configurable: role ids are per-instance and we do not control the
      *  ministry's Moodle (D-039). */
     private readonly studentRoleId: number,
+    /** Shared with the `local_tamkeensso` plugin. Server-side only. */
+    private readonly ssoSecret: string,
+    private readonly ssoTtlSeconds: number,
   ) {}
 
   // ── health ────────────────────────────────────────────────────────────────
@@ -522,6 +526,22 @@ export class MoodleHttpService implements LmsPort {
        value is handed to a browser, where it would land in history and referrer
        headers. Seamless sign-in is a separate mechanism. */
     return `${this.baseUrl.replace(/\/+$/, '')}/course/view.php?id=${lmsCourseId}`;
+  }
+
+  /**
+   * Mints the signed handoff and points it at the plugin (D-044).
+   *
+   * Called per click rather than per render, so the token's short life begins
+   * when the learner actually goes to the course.
+   */
+  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
+    const token = mintHandoffToken(
+      { moodleUserId: lmsUserId, moodleCourseId: lmsCourseId },
+      this.ssoSecret,
+      this.ssoTtlSeconds,
+    );
+
+    return `${this.baseUrl.replace(/\/+$/, '')}/local/tamkeensso/login.php?token=${encodeURIComponent(token)}`;
   }
 
   private notYet(method: string): never {

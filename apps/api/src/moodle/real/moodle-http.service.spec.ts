@@ -14,6 +14,7 @@ const EMAIL = 'ahmad.ali@ministry.gov.example';
 const USERNAME = deriveMoodleUsername(EMAIL);
 
 const STUDENT_ROLE_ID = 5;
+const SSO_SECRET = 'a-test-secret-that-is-long-enough-000000';
 
 type Handler = (wsfunction: string, params: Record<string, unknown>) => unknown;
 
@@ -37,7 +38,10 @@ function serviceWith(handler: Handler) {
     },
   } as unknown as MoodleWsClient;
 
-  return { service: new MoodleHttpService('http://moodle.test', client, STUDENT_ROLE_ID), calls };
+  return {
+    service: new MoodleHttpService('http://moodle.test', client, STUDENT_ROLE_ID, SSO_SECRET, 60),
+    calls,
+  };
 }
 
 const countOf = (calls: CallLog[], wsfunction: string) =>

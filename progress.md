@@ -6,14 +6,14 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1 (client + provisioning), 2 (catalogue sync), 3 (enrolment) and 4 (completion sync) complete.
-- **Last completed task:** Checkpoint 4 — real progress reads, the `completions` table, the pass threshold, and the BullMQ sync scheduler (D-042). Verified against the live Moodle.
-- **Next task:** Checkpoint 5 — the **seamless-login spike**, before any course-player UI exists (D-039). Then the player, then the full Phase 2 test pass.
+- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1 (client + provisioning), 2 (catalogue sync), 3 (enrolment), 4 (completion sync) and 5 (seamless login) complete.
+- **Last completed task:** Checkpoint 5 — seamless login via `local_tamkeensso` plus app-side token minting (D-044), proven live including replay, forgery and expiry refusals.
+- **Next task:** Checkpoint 6 — the **course player** (§4.8), now unblocked. Then the full Phase 2 test pass and the PR.
 - **Active branch:** `phase-2-moodle-integration`, off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. Nothing pushed.
 - **Phase 1 is merged** (PR #2, `origin/main` @ `f25b644`).
 - **Open blockers / questions for the human:**
-  1. **Production Moodle version is 4.5 LTS, development is 5.2.2** (D-039). The adapter is version-agnostic, but **the seamless-login mechanism must be re-verified on a real 4.5** rather than assumed from 5.2.
-  2. **Seamless login will probably need a Moodle-side install** — a custom `local_` plugin, or the mobile web service enabled. Being spiked before the course player is built; the human will need to act on it.
+  1. **Production Moodle version is 4.5 LTS, development is 5.2.2** (D-039). The adapter is version-agnostic, but **the seamless-login mechanism must be re-verified on a real 4.5** — and note 5.x moved the docroot to `public/`, so the plugin install path differs between the two versions.
+  2. **⚠ MINISTRY APPROVAL OF CUSTOM MOODLE PLUGINS IS UNCONFIRMED.** Seamless login uses `local_tamkeensso` (Option A) **for the pilot**; core Moodle provably cannot do this (D-044). **Approval MUST be confirmed before production — if refused, switch to Option B (OAuth2 IdP) during hardening.** The user is raising it with the ministry in parallel. This is the longest-lead dependency in the project.
   3. **The dev Moodle's integration role needed four fixes the initial setup missed:** `moodle/role:assign`, the Allow-role-assignments matrix row, `gradereport/user:view`, and disabling the manual-enrolment welcome message. **The same list applies to the ministry's Moodle** — see the 2026-08-18 spike entry.
   4. **`npm audit` reports 3 high advisories** for `deepmerge-ts` via `prisma` → `@prisma/config` — **accepted and deferred by decision (D-043), owned by the Phase 6 dependency review** alongside the D-022 pins. Not introduced by Phase 2 (traced; not from BullMQ). Prisma is deliberately **not** downgraded: npm's fix installs Prisma 6.x and breaks D-026. An `overrides` pin does not take effect. Exposure is low — Prisma's config loader, not the request path. **Phase 6 must re-check whether Prisma has bumped the pin upstream by then.**
   5. **GitHub CLI is still not installed on the dev machine**, so PRs cannot be opened from the terminal.
@@ -35,6 +35,7 @@
 - **Narrow-viewport layout not visually verified.** The `md:` breakpoint logic exists; the browser resize did not take effect during the Checkpoint C review, so no claim is made. **Phase 6** accessibility/responsive pass.
 - **Employee IDs are format-validated, not verified.** Real verification needs a ministry roster or `admin-only` provisioning; the `REGISTRATION_MODE` switch exists for that decision. (D-017)
 - **Completion sync processes every eligible learner in one pass**, with no batching or rotation. A silent cap would starve whoever fell outside it; **Phase 6** (sync reliability + load testing) owns making this scale. (D-042)
+- **Seamless login is a custom Moodle plugin pending governance approval** (D-044). If the ministry refuses custom PHP, **Phase 6** must replace it with the OAuth2-IdP route, which is a larger piece of work — the decision should be chased early, not at hardening.
 - **Entity scoping is not built.** RBAC is role-based only; which courses/learners an entity may see is data-scoped filtering and belongs with the entity model in **Phase 4**. (D-027)
 - **`packages/types` holds only roles, locale and formatting.** RIASEC/path/certificate types arrive with the phases that define them.
 
@@ -70,6 +71,35 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-19 — Phase 2 checkpoint 5: seamless login, proven end to end
+
+`local_tamkeensso` (D-044) plus app-side token minting. **Verified against the live Moodle, including the refusals** — a handoff that only proves it lets people in has demonstrated nothing about who it keeps out:
+
+| check | result |
+|---|---|
+| fresh token | `303 → /course/view.php?id=2`, and the course page renders the learner's Arabic name — a real session, no login form |
+| replayed token | refused ("already been used") |
+| tampered payload (user id edited to 1) | refused ("not valid") |
+| expired but validly signed | refused ("expired") |
+
+Repeatable as `npx tsx spike/verify-sso.ts`.
+
+**Cross-language agreement is asserted, not assumed.** The plugin verifies in PHP what we mint in TypeScript, so a unit test pins the wire format exactly — unpadded base64url, HMAC-SHA256 over the *encoded* payload string, camelCase claims — and a live check ran a TS-minted token through the plugin's PHP verification inside the container. Two implementations read side by side would have drifted.
+
+**Why core Moodle could not do this** (established, not assumed): every core mechanism mints a session for the **web-service token's own user**, and our token is `tamkeen-integration`, not the learner. `tool_mobile_get_autologin_key` fails on that plus three other counts.
+
+**A version difference worth knowing:** Moodle 5.x moved the web-facing tree into `public/`, so the plugin installs to `public/local/tamkeensso` on 5.x but `local/tamkeensso` on the 4.5 production target. Getting it wrong means the plugin silently never loads. Both paths are in `moodle-plugin/README.md`.
+
+**Installed on the dev Moodle** to verify rather than shipping untested PHP — a throwaway instance the user said can be wiped.
+
+**Totals:** 351 API unit tests (was 331), 90 integration tests, all green; typecheck, lint, format clean.
+
+**Owed:** re-verification on a real **4.5** (D-039), and the governance answer on custom plugins (D-044) — the longest-lead item in the project.
+
+**Next checkpoint:** the course player (§4.8) — now unblocked — then the full Phase 2 test pass.
+
+
 
 ### 2026-08-19 — Phase 2 checkpoint 4: completion sync
 

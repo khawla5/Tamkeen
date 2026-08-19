@@ -177,6 +177,16 @@ export class MockLmsService implements LmsPort {
     return `${MOCK_LMS_BASE_URL}/course/view.php?id=${lmsCourseId}`;
   }
 
+  /**
+   * A stand-in handoff URL. It is deliberately **not** signed: the mock has no
+   * shared secret and inventing one would suggest this value is safe to trust.
+   * What it does reproduce are the properties callers depend on — it is
+   * absolute, it differs per learner, and it carries no web-services token.
+   */
+  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
+    return `${MOCK_LMS_BASE_URL}/local/tamkeensso/login.php?mockuser=${lmsUserId}&mockcourse=${lmsCourseId}`;
+  }
+
   // ── Simulation helpers — NOT part of LmsPort ────────────────────────────────
   // A real Moodle adapter cannot implement these, which is precisely why they
   // are not on the port. Tests and local development only.

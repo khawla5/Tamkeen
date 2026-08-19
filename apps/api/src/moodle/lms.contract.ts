@@ -343,5 +343,65 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
         expect(lms.courseUrl(101)).toBe(lms.courseUrl(101));
       });
     });
+
+    describe('courseLaunchUrl', () => {
+      it('builds an absolute URL', async () => {
+        const user = await lms.provisionUser({
+          email: 'launch@ministry.gov.example',
+          fullName: 'متعلم',
+          externalUserId: 'ext-launch',
+        });
+
+        expect(lms.courseLaunchUrl(user.lmsUserId, 101)).toMatch(/^https?:\/\//);
+      });
+
+      it('never carries the web-services token', async () => {
+        /* Unlike `courseUrl` this URL DOES carry a credential — a short-lived,
+           single-use handoff. That is deliberate. The web-services token is a
+           different thing entirely: it is long-lived, grants the whole API, and
+           must never reach a browser. */
+        const user = await lms.provisionUser({
+          email: 'launch-2@ministry.gov.example',
+          fullName: 'متعلم',
+          externalUserId: 'ext-launch-2',
+        });
+        const url = lms.courseLaunchUrl(user.lmsUserId, 101);
+
+        expect(url).not.toMatch(/wstoken/i);
+      });
+
+      it('differs between learners', async () => {
+        /* A launch URL is a login. If two learners got the same one, it would be
+           a login to whichever account the LMS happened to resolve. */
+        const [first, second] = await Promise.all([
+          lms.provisionUser({
+            email: 'launch-a@ministry.gov.example',
+            fullName: 'أول',
+            externalUserId: 'ext-launch-a',
+          }),
+          lms.provisionUser({
+            email: 'launch-b@ministry.gov.example',
+            fullName: 'ثاني',
+            externalUserId: 'ext-launch-b',
+          }),
+        ]);
+
+        expect(lms.courseLaunchUrl(first!.lmsUserId, 101)).not.toBe(
+          lms.courseLaunchUrl(second!.lmsUserId, 101),
+        );
+      });
+
+      it('differs between courses for one learner', async () => {
+        const user = await lms.provisionUser({
+          email: 'launch-3@ministry.gov.example',
+          fullName: 'متعلم',
+          externalUserId: 'ext-launch-3',
+        });
+
+        expect(lms.courseLaunchUrl(user.lmsUserId, 101)).not.toBe(
+          lms.courseLaunchUrl(user.lmsUserId, 102),
+        );
+      });
+    });
   });
 }
