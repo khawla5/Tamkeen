@@ -6,6 +6,7 @@ import { AssessmentModule } from './assessment/assessment.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogSyncModule } from './catalog-sync/catalog-sync.module';
+import { CertificatesModule } from './certificates/certificates.module';
 import { CompletionSyncModule } from './completion-sync/completion-sync.module';
 import { SyncSchedulerModule } from './sync-scheduler/sync-scheduler.module';
 import { CoursesModule } from './courses/courses.module';
@@ -69,6 +70,8 @@ import { PrismaModule } from './prisma/prisma.module';
     CatalogSyncModule,
     CompletionSyncModule,
     SyncSchedulerModule,
+    /* Phase 3. */
+    CertificatesModule,
   ],
   providers: [
     /*

@@ -1,5 +1,6 @@
 import { AuditAction } from '../audit/audit.actions';
 import type { AuditEntry, AuditService } from '../audit/audit.service';
+import type { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import type { AppConfigService } from '../config/app-config.module';
 import type { EmailService } from '../email/email.service';
 import type { LmsPort } from '../moodle/lms.port';
@@ -39,12 +40,14 @@ function harness(options: {
   passThreshold?: number;
   listProgressThrows?: boolean;
   emailThrows?: boolean;
+  issuanceThrows?: boolean;
   pathConfirmed?: boolean;
 }) {
   const completions = options.completions ?? [];
   const chosen = options.chosen ?? [];
   const audits: AuditEntry[] = [];
-  const emails: Array<{ to: string; title: string }> = [];
+  const emails: Array<{ to: string; title: string; certificateIssued: boolean }> = [];
+  const issued: Array<{ userId: string; courseId: string }> = [];
   const pathUpdates: string[] = [];
 
   const learners = options.learners ?? [
@@ -109,7 +112,7 @@ function harness(options: {
         return Promise.resolve({});
       },
     },
-    course: { findUnique: () => Promise.resolve({ title: 'دورة الأمن' }) },
+    course: { findUnique: () => Promise.resolve({ id: 'course-1', title: 'دورة الأمن' }) },
   } as unknown as PrismaService;
 
   const audit = {
@@ -124,12 +127,26 @@ function harness(options: {
   } as unknown as AppConfigService;
 
   const email = {
-    sendCoursePassed: (to: string, title: string) => {
+    sendCoursePassed: (
+      to: string,
+      title: string,
+      opts: { certificateIssued: boolean } = { certificateIssued: false },
+    ) => {
       if (options.emailThrows) return Promise.reject(new Error('smtp down'));
-      emails.push({ to, title });
+      emails.push({ to, title, certificateIssued: opts.certificateIssued });
       return Promise.resolve();
     },
   } as unknown as EmailService;
+
+  /* Issuance has its own suite; here it only has to prove the seam is called
+     once per transition and that a failure to issue does not fail the sync. */
+  const certificates = {
+    issueCourseCertificate: (userId: string, courseId: string) => {
+      if (options.issuanceThrows) return Promise.reject(new Error('chromium down'));
+      issued.push({ userId, courseId });
+      return Promise.resolve({ certificate: { id: 'cert-1' }, created: true });
+    },
+  } as unknown as CertificateIssuanceService;
 
   const lms = {
     listProgressForUser: () => {
@@ -141,11 +158,12 @@ function harness(options: {
   } as unknown as LmsPort;
 
   return {
-    service: new CompletionSyncService(prisma, audit, config, email, lms),
+    service: new CompletionSyncService(prisma, audit, config, email, certificates, lms),
     completions,
     chosen,
     audits,
     emails,
+    issued,
     pathUpdates,
   };
 }
@@ -199,13 +217,69 @@ describe('CompletionSyncService', () => {
     });
   });
 
+  describe('the certificate seam', () => {
+    it('issues the course certificate on the run that turns the course into a pass', async () => {
+      const { service, issued } = harness({ progress: [passed()] });
+
+      await service.sync();
+
+      expect(issued).toEqual([{ userId: 'user-1', courseId: 'course-1' }]);
+    });
+
+    it('does not re-enter issuance on later runs', async () => {
+      /* Not the uniqueness guarantee — that is the unique index, and issuance
+         checks for itself (D-042 §5). This only asserts the cheap path stays
+         cheap: a polled job must not re-render a PDF every few minutes. */
+      const { service, issued } = harness({ progress: [passed()] });
+
+      await service.sync();
+      await service.sync();
+
+      expect(issued).toHaveLength(1);
+    });
+
+    it('issues nothing for a course that has not passed', async () => {
+      const { service, issued } = harness({ progress: [{ ...passed(), gradePercent: 40 }] });
+
+      await service.sync();
+
+      expect(issued).toEqual([]);
+    });
+
+    it('still records the completion when issuance fails', async () => {
+      /* Rendering needs Chromium and a writable disk. Neither is worth failing
+         a sync over: the pass is true regardless, and reconciliation owns the
+         retry. */
+      const { service, completions } = harness({ progress: [passed()], issuanceThrows: true });
+
+      await service.sync();
+
+      expect(completions).toHaveLength(1);
+      expect(completions[0]).toMatchObject({ passed: true });
+    });
+
+    it('still emails the learner when issuance fails, without promising a certificate', async () => {
+      /* The learner passed. Telling them so is right; linking to a certificate
+         that was never produced is not. */
+      const { service, emails } = harness({ progress: [passed()], issuanceThrows: true });
+
+      await service.sync();
+
+      expect(emails).toEqual([
+        { to: 'learner@ministry.gov.example', title: 'دورة الأمن', certificateIssued: false },
+      ]);
+    });
+  });
+
   describe('the course-passed email', () => {
     it('is sent once, on the run that turns the course into a pass', async () => {
       const { service, emails } = harness({ progress: [passed()] });
 
       await service.sync();
 
-      expect(emails).toEqual([{ to: 'learner@ministry.gov.example', title: 'دورة الأمن' }]);
+      expect(emails).toEqual([
+        { to: 'learner@ministry.gov.example', title: 'دورة الأمن', certificateIssued: true },
+      ]);
     });
 
     it('is NOT re-sent on later runs', async () => {

@@ -122,6 +122,14 @@ export const envSchema = z.object({
 
   // ---- Certificates (Phase 3) ----
   CERT_VERIFICATION_BASE_URL: z.string().url().default('http://localhost:3000/verify'),
+  /**
+   * Where rendered certificate PDFs are written. The bytes are produced once at
+   * issue time and never re-rendered — a credential has to stay the artefact it
+   * was — so this directory holds the only copy and belongs in the backup set.
+   * Rows store a path *relative* to it, so moving the root does not rewrite them.
+   * Object storage is a Phase 7 concern.
+   */
+  CERT_STORAGE_DIR: z.string().default('./.storage/certificates'),
 });
 
 export type Env = z.infer<typeof envSchema>;

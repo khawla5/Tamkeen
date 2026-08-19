@@ -53,8 +53,21 @@ export class EmailService {
     await this.send(to, passwordResetEmail(url, minutes));
   }
 
-  async sendCoursePassed(to: string, courseTitle: string): Promise<void> {
-    await this.send(to, coursePassedEmail(courseTitle, `${this.config.get('APP_URL')}/my-path`));
+  async sendCoursePassed(
+    to: string,
+    courseTitle: string,
+    options: { certificateIssued: boolean } = { certificateIssued: false },
+  ): Promise<void> {
+    const appUrl = this.config.get('APP_URL');
+
+    await this.send(
+      to,
+      coursePassedEmail(
+        courseTitle,
+        `${appUrl}/my-path`,
+        options.certificateIssued ? `${appUrl}/certificates` : null,
+      ),
+    );
   }
 
   private async send(

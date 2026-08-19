@@ -1,10 +1,9 @@
-// Schema through Phase 1.
+// Schema through Phase 3.
 //
 // Phase 0 added the foundation (users, auth_tokens, sessions, audit_log,
-// notifications). Phase 1 adds the assessment, paths, courses and the user's
-// single chosen path. Still absent, deliberately, are the tables their own
-// phases will sharpen: `completions` and `certificates` (Phase 2/3) and
-// `cv_profiles` (Phase 3).
+// notifications). Phase 1 added the assessment, paths, courses and the user's
+// single chosen path. Phase 2 added `completions`. Phase 3 adds `certificates`;
+// `cv_profiles` follows with the CV builder in the same phase.
 //
 // Conventions: models are PascalCase in Prisma and snake_case in Postgres via
 // @@map/@map. Primary keys are UUIDs rather than sequential integers so record
@@ -77,6 +76,7 @@ model User {
   sessions      Session[]
   notifications Notification[]
   completions   Completion[]
+  certificates  Certificate[]
   auditEvents   AuditLog[]     @relation("AuditActor")
 
   /// Every attempt, newest wins. Retakes append rather than overwrite (D-033).
@@ -427,8 +427,9 @@ model Path {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  pathCourses PathCourse[]
-  userPaths   UserPath[]
+  pathCourses  PathCourse[]
+  userPaths    UserPath[]
+  certificates Certificate[]
 
   @@index([riasecLetter])
   @@map("paths")
@@ -465,6 +466,7 @@ model Course {
 
   pathCourses     PathCourse[]
   userPathCourses UserPathCourse[]
+  certificates    Certificate[]
 
   @@index([status])
   @@map("courses")
@@ -596,4 +598,85 @@ model Completion {
   @@unique([userId, moodleCourseId])
   @@index([userId])
   @@map("completions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3 — certificates
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// What a certificate was issued for (§2). A course certificate is earned by
+/// passing one course's quiz; the larger path certificate by passing every
+/// course the user chose.
+enum CertificateType {
+  COURSE
+  PATH
+}
+
+/// A credential issued by *us*, not by the LMS (D-006).
+///
+/// **Issuance is idempotent, and three separate mechanisms carry that.** The
+/// service checks before issuing; the unique indexes below make a duplicate
+/// impossible even under two concurrent sync runs; and the caller's transition
+/// guard (D-042 §5) keeps the common case cheap. Only the middle one is a
+/// guarantee — the completion sync polls forever, and anything that is merely
+/// *usually* unique eventually is not.
+///
+/// **The printed values are stored, not joined.** `holderName` and
+/// `subjectTitle` are copied in as they were rendered, because the PDF bytes
+/// are immutable and everything they were built from is not: a person may
+/// change their name, and catalogue sync rewrites `courses.title` from the LMS
+/// on every run (D-040). Joining live rows would let the public verification
+/// page contradict the certificate it is verifying — which is precisely the
+/// thing a third party consults it to rule out.
+model Certificate {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type CertificateType
+
+  /// Exactly one of these is set, matching `type`. Prisma cannot express that,
+  /// so a CHECK constraint in the migration does — a certificate for both a
+  /// course and a path, or for neither, is not a state worth handling in code.
+  /// `Restrict` on both: a course or path with issued certificates cannot be
+  /// deleted out from under them (§2, D-015).
+  courseId String? @map("course_id") @db.Uuid
+  course   Course? @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  pathId String? @map("path_id") @db.Uuid
+  path   Path?   @relation(fields: [pathId], references: [id], onDelete: Restrict)
+
+  /// The public handle (§2, D-016). 256 bits of CSPRNG from `generateToken`, so
+  /// it cannot be guessed or enumerated, and stored **in the clear** — unlike
+  /// session and auth tokens, which are hashed. The difference is deliberate:
+  /// this is not a credential that authenticates anyone, it is the name of a
+  /// public record, and the QR on the paper has to resolve to it.
+  verificationId String @unique @map("verification_id")
+
+  /// Rendered once at issue time and never again. Relative to CERT_STORAGE_DIR
+  /// so the storage root can move without rewriting every row.
+  pdfPath   String @map("pdf_path")
+  /// Of the stored bytes, so corruption or tampering is detectable rather than
+  /// merely unlikely.
+  pdfSha256 String @map("pdf_sha256")
+  pdfBytes  Int    @map("pdf_bytes")
+
+  /// As printed on the certificate face. See the model comment.
+  holderName   String @map("holder_name")
+  subjectTitle String @map("subject_title")
+
+  issuedAt DateTime @default(now()) @map("issued_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// One course certificate per user per course, and one path certificate per
+  /// user per path. Two constraints rather than one because the target lives in
+  /// two columns; each is inert for the type it does not describe, since
+  /// Postgres treats NULLs as distinct.
+  @@unique([userId, type, courseId])
+  @@unique([userId, type, pathId])
+  @@index([userId, issuedAt])
+  @@map("certificates")
 }

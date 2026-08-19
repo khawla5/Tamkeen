@@ -51,13 +51,21 @@ export const AuditAction = {
    * absent: it is in `completions`, and an audit log is not the place for it.
    */
   LMS_COURSE_PASSED: 'LMS_COURSE_PASSED',
-  /** Every chosen course passed. The path certificate itself is Phase 3. */
+  /** Every chosen course passed. */
   PATH_COMPLETED: 'PATH_COMPLETED',
   /**
    * A seamless-login handoff was minted (D-044). Audited because it is the one
    * place the product issues a credential that logs someone in somewhere else.
    */
   LMS_COURSE_LAUNCHED: 'LMS_COURSE_LAUNCHED',
+
+  // Certificates (Phase 3)
+  /**
+   * A certificate was issued. Recorded on creation only — the idempotent path
+   * returns an existing certificate and is not an event, or the trail would
+   * claim a credential was issued once per sync run forever.
+   */
+  CERTIFICATE_ISSUED: 'CERTIFICATE_ISSUED',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -151,14 +151,14 @@ describe('Prisma schema', () => {
   describe('scope discipline', () => {
     it('contains no tables belonging to later phases', () => {
       /*
-       * Phase 2 added `Completion`, so it has left this list — the guard tracks
-       * what has actually been built rather than being widened to keep quiet.
-       * Certificates and the CV still belong to Phase 3, and `Enrollment`
-       * remains deliberately unbuilt: §6 marks it optional, and
-       * `user_path_courses.enrolled_at` answers the only question anything asks
-       * (D-041).
+       * Phase 2 added `Completion` and Phase 3 adds `Certificate`, so both have
+       * left this list — the guard tracks what has actually been built rather
+       * than being widened to keep quiet. `CvProfile` arrives with the CV
+       * builder later in this phase, and `Enrollment` remains deliberately
+       * unbuilt: §6 marks it optional, and `user_path_courses.enrolled_at`
+       * answers the only question anything asks (D-041).
        */
-      const laterPhaseModels = ['Certificate', 'CvProfile', 'Enrollment'];
+      const laterPhaseModels = ['CvProfile', 'Enrollment'];
 
       const premature = laterPhaseModels.filter((model) =>
         new RegExp(`model\\s+${model}\\s*\\{`).test(SCHEMA),
@@ -299,6 +299,62 @@ describe('Prisma schema', () => {
          freeze a policy decision into a row. */
       expect(chosen).toMatch(/gradePercent\s+Int\?/);
       expect(chosen).not.toMatch(/\bpassed\b/);
+    });
+  });
+  // ───────────────────────────────────────────────────────────────────────────
+  // Phase 3
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('Certificate', () => {
+    const certificate = modelBody('Certificate');
+
+    it('makes a duplicate certificate impossible, per type and target', () => {
+      /* The caller's transition guard is a spam guard, not a uniqueness one
+         (D-042 §5). Under a sync that polls forever, this constraint is what
+         actually prevents a second credential for the same achievement — the
+         application check in front of it only makes the common case cheap. */
+      expect(certificate).toMatch(/@@unique\(\[userId, type, courseId\]\)/);
+      expect(certificate).toMatch(/@@unique\(\[userId, type, pathId\]\)/);
+    });
+
+    it('carries a unique public verification id (D-016)', () => {
+      expect(certificate).toMatch(/verificationId\s+String\s+@unique/);
+    });
+
+    it('stores the printed holder name and subject title rather than joining them', () => {
+      /* The PDF bytes are immutable; people change their names and catalogue
+         sync rewrites course titles on every run (D-040). Joining live rows
+         would let the public verification page contradict the certificate it
+         exists to verify. */
+      expect(certificate).toMatch(/holderName\s+String/);
+      expect(certificate).toMatch(/subjectTitle\s+String/);
+    });
+
+    it('references the stored bytes, with a digest to detect corruption', () => {
+      expect(certificate).toMatch(/pdfPath\s+String/);
+      expect(certificate).toMatch(/pdfSha256\s+String/);
+    });
+
+    it('will not let a certified course or path be deleted out from under it', () => {
+      expect(certificate).toMatch(/course\s+Course\?.*onDelete:\s*Restrict/);
+      expect(certificate).toMatch(/path\s+Path\?.*onDelete:\s*Restrict/);
+    });
+
+    it('constrains the target to match the type, in the database', () => {
+      /* Prisma cannot express "exactly one of these, and it is the one the type
+         names", so the migration adds it by hand. A credential store is the
+         wrong place to find out that a bug produced a certificate for both a
+         course and a path, or for neither. */
+      const migrationsDir = join(__dirname, '../../prisma/migrations');
+      const phase3 = readdirSync(migrationsDir).find((name) =>
+        name.endsWith('_phase_3_certificates'),
+      );
+
+      expect(phase3).toBeDefined();
+
+      const sql = readFileSync(join(migrationsDir, phase3!, 'migration.sql'), 'utf8');
+
+      expect(sql).toMatch(/CONSTRAINT "certificates_target_matches_type" CHECK/);
     });
   });
 });
