@@ -62,6 +62,15 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # Puppeteer downloads its own Chromium (~150 MB) on install, for the
+      # certificate and CV PDF rendering. Cached on the resolved puppeteer
+      # version so a run only pays for it when that version moves.
+      - name: Cache Puppeteer browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci
 
