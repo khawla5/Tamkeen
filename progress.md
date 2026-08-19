@@ -6,10 +6,10 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; **all six checkpoints and the full real-Moodle test pass complete.** Awaiting approval to open the PR.
+- **Current phase:** Phase 2 — Moodle integration — **COMPLETE, user approved the test, awaiting human review of the PR.**
 - **Last completed task:** The **full Phase 2 test pass** against a real Moodle — the whole loop, ending in an automatic, idempotent completion detection. All checks passed.
-- **Next task:** **Open the PR** to `main` from `phase-2-moodle-integration` once the user approves the test (D-008). Then Phase 3 — certificates + CV.
-- **Active branch:** `phase-2-moodle-integration`, off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. Nothing pushed.
+- **Next task:** **Phase 3 — certificates + CV**, once the Phase 2 PR is merged. `onCoursePassed` in `CompletionSyncService` is the seam issuance plugs into, and it will need its own idempotency check.
+- **Active branch:** `phase-2-moodle-integration` (9 commits), off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. **Both branches pushed; PR opened, not merged** (D-008).
 - **Phase 1 is merged** (PR #2, `origin/main` @ `f25b644`).
 - **Open blockers / questions for the human:**
   1. **Production Moodle version is 4.5 LTS, development is 5.2.2** (D-039). The adapter is version-agnostic, but **the seamless-login mechanism must be re-verified on a real 4.5** — and note 5.x moved the docroot to `public/`, so the plugin install path differs between the two versions.
@@ -71,6 +71,18 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-19 — Phase 2 complete; PR opened for review
+
+Branches `phase-2-moodle-spike` and `phase-2-moodle-integration` pushed. **Not merged** (human review gate, D-008). PR body in `.github/PR_BODY_phase-2.md`; `gh` is still not installed on this machine, so the PR is opened from the compare URL.
+
+**Test totals:** 352 API unit · 96 API integration against real PostgreSQL · 142 web unit · 14 browser e2e in Chromium — **604 automated**, plus the real-Moodle pass. Typecheck, lint and format clean.
+
+**Nine commits**, one per checkpoint plus the spike, the dependency decision and the final pass.
+
+**The claim the phase rests on:** the mock→real swap changed only the implementation. No caller of `LmsPort` was touched in any checkpoint — the port, the executable contract and the mock were built in Phase 0 for exactly this, and they held.
+
+
 
 ### 2026-08-19 — Phase 2 test pass: the whole loop, against a real Moodle
 
