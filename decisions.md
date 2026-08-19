@@ -5,6 +5,14 @@
 
 ---
 
+## D-043 — The `deepmerge-ts` advisory is accepted and deferred, not fixed by downgrading Prisma
+**Decision:** `npm audit` reports **3 high** advisories for `deepmerge-ts` (stack exhaustion on recursive object graphs), reached through `prisma` → `@prisma/config`. We **accept it for now** and hand it to the **Phase 6 dependency review**, which already owns the D-022 `postcss`/`sharp` pins. Prisma is **not** downgraded.
+**Why not fix it:** npm's own remedy installs `prisma@6.12.0`, which is a major downgrade and directly contradicts D-026 — Prisma 7 was chosen deliberately so a system intended to run for years does not start on an already-superseded major with an earlier end of support. Trading a live framework decision for a low-exposure advisory is the wrong way round.
+**Why the D-022 trick does not work here:** an npm `overrides` pin on `deepmerge-ts` **has no effect** — verified, including a full lockfile regeneration. `@prisma/config` pins the version exactly and the override does not displace it. (Regenerating the lockfile also produced a 6,476-line diff, which was reverted rather than folded into a feature commit; the only lockfile change in that commit is BullMQ.)
+**Exposure, stated plainly:** `deepmerge-ts` is reached by Prisma's **config loader** — CLI and boot-time configuration, not the request path. Triggering it needs an attacker-controlled recursive object graph in a Prisma config file, and ours is repo-authored. This is an argument for not panicking, not for ignoring it.
+**Not introduced by Phase 2.** Traced through the dependency tree: it comes from `prisma`, not from the newly added `bullmq`. It is a newly published advisory against a dependency the project already had, which is why the Phase 0 audit was clean.
+**What Phase 6 must do:** re-check whether Prisma has bumped `@prisma/config`'s `deepmerge-ts` pin (the fix is theirs to ship), and if not, decide between an upstream fix, a patch-package approach, or accepting it explicitly for launch. Recorded in `progress.md`'s open-blocker list so it stays visible across sessions rather than living only here.
+
 ## D-042 — Completion sync: one writer, one constraint, and one email
 The polled sync (D-005) writes completion state. Everything below exists because this code runs every few minutes forever, so anything not idempotent becomes a duplicate row, a repeated email, or — in Phase 3 — a certificate issued twice.
 
