@@ -5,6 +5,21 @@
 
 ---
 
+## D-045 — The course player is a handoff page, and the raw LMS link is removed from the API
+**Decision:** §4.8's course view is a thin page that provides path context, the outcome of the last attempt, and **one** action that launches into Moodle. It does not embed Moodle, and it is now the only route into a course.
+
+**Launching is a POST, minted per click.** The URL carries a short-lived single-use credential (D-044), so it must not be prefetched by a browser, cached, or arrived at by following a link — and as a POST it inherits the CSRF protection every mutating endpoint has. Rendering it into the page would mean a live credential sat in the DOM, in view-source and in any cached copy, from the moment the page loaded and for as long as anyone left the tab open. A component test and a browser test both assert the markup does not contain it.
+
+**`courseUrl` is removed from `CourseDetail` and `MyPathCourseView`.** Both screens previously linked straight at the Moodle deep link, which **carries no session** — a learner following it would land on a Moodle page that does not know who they are. Now that a working handoff exists, leaving the unauthenticated link in the API contract would leave the wrong thing available and equally easy to use. The method stays on the port, because the plugin redirects to exactly that URL after establishing the session; it just no longer reaches a browser.
+
+**Enrolment happens on demand at launch, not only on the sync schedule.** A learner who confirmed their path while the LMS was unreachable has a committed path with no enrolments (D-036), and clicking a course would drop them onto a Moodle page refusing access. `ensureEnrolledForLaunch` closes that window: it enrols right then, idempotently, and turns "wait up to a sync interval and hope" into "it works". Reconciliation still runs on the schedule for learners who never click.
+
+**Refusals are deliberately indistinguishable.** A course not in a confirmed path and a course the LMS refused both answer `COURSE_NOT_ENROLLED`. Distinguishing them would tell a caller which courses exist in someone else's path. Launch is audited either way, success and failure — it is the one place the product issues a credential that logs someone in somewhere else.
+
+**Passing is re-derived, not stored on the chosen course.** The threshold is a product setting (D-007); a frozen boolean would keep asserting the old policy on screen after it changed, while `completions` recorded the new one.
+
+**A mock made stricter, again.** `MockLmsService.courseLaunchUrl` originally returned a stable URL, and an integration test asserting freshness failed against it. The mock now varies per call and the **contract** requires it. A handoff is single-use, so returning the same URL twice means returning an already-spent token — the mock being easier to satisfy than reality is exactly the failure D-036 already recorded once, with the user-id counter.
+
 ## D-044 — Seamless login is a small custom Moodle plugin, pending ministry approval of custom PHP
 **Decision:** the course handoff uses **`local_tamkeensso`** (Option A) — a small Moodle plugin that accepts a short-lived, single-use, HMAC-signed token from our app and logs the learner straight into the course. OAuth2-IdP (Option B) remains the hardening target per §5.3.
 

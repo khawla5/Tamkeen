@@ -53,6 +53,11 @@ export const AuditAction = {
   LMS_COURSE_PASSED: 'LMS_COURSE_PASSED',
   /** Every chosen course passed. The path certificate itself is Phase 3. */
   PATH_COMPLETED: 'PATH_COMPLETED',
+  /**
+   * A seamless-login handoff was minted (D-044). Audited because it is the one
+   * place the product issues a credential that logs someone in somewhere else.
+   */
+  LMS_COURSE_LAUNCHED: 'LMS_COURSE_LAUNCHED',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];

@@ -6,9 +6,9 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1 (client + provisioning), 2 (catalogue sync), 3 (enrolment), 4 (completion sync) and 5 (seamless login) complete.
-- **Last completed task:** Checkpoint 5 — seamless login via `local_tamkeensso` plus app-side token minting (D-044), proven live including replay, forgery and expiry refusals.
-- **Next task:** Checkpoint 6 — the **course player** (§4.8), now unblocked. Then the full Phase 2 test pass and the PR.
+- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1-6 complete (client + provisioning, catalogue sync, enrolment, completion sync, seamless login, course player). The full Phase 2 test pass remains.
+- **Last completed task:** Checkpoint 6 — the course player (§4.8), with the handoff minted per click and the unauthenticated LMS link removed from the API (D-045).
+- **Next task:** The **full Phase 2 test pass** — the whole loop against the real Moodle end to end, with `MOODLE_MODE=real` — then the PR to `main` once the user approves the test.
 - **Active branch:** `phase-2-moodle-integration`, off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. Nothing pushed.
 - **Phase 1 is merged** (PR #2, `origin/main` @ `f25b644`).
 - **Open blockers / questions for the human:**
@@ -71,6 +71,26 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-19 — Phase 2 checkpoint 6: the course player
+
+§4.8's page, and it is now the **only** route into a course.
+
+**The handoff is minted per click, never rendered.** `POST /api/courses/:id/launch` returns a fresh signed URL; the page contains no credential until the learner asks for one. A component test and a browser test both assert the markup does not contain it — the point of minting on click is defeated the moment a URL sits in the DOM waiting.
+
+**`courseUrl` is gone from `CourseDetail` and `MyPathCourseView` (D-045).** Both screens previously linked straight at the Moodle deep link, which **carries no session** — a learner following it would land on a Moodle page that did not know who they were. Now that the handoff works, leaving the unauthenticated link in the API contract would leave the wrong thing equally available.
+
+**Enrolment now also happens on demand at launch.** A learner who confirmed while the LMS was down had a committed path with no enrolments (D-036) and would have hit a Moodle access-denied page. `ensureEnrolledForLaunch` enrols right then, idempotently — "wait a sync interval and hope" becomes "it works".
+
+**The mock got stricter, again.** Its launch URL was stable, and an integration test asserting freshness failed against it. A handoff is single-use, so a stable URL hands back an already-spent token; the mock now varies per call and the **contract** requires it. This is the second time a too-permissive mock would have let a real bug through (D-036 was the first).
+
+**Two of my own test mistakes, both instructive:** a component test rendered twice in one case without unmounting, so the "absent" assertion found the first render's link; and an integration test asserted a property the mock did not have. Both are fixed at the cause rather than by loosening the assertion.
+
+**Totals:** 352 API unit, 96 API integration, 142 web unit — all green. Typecheck, lint and format clean across both apps. The browser e2e now walks My Path → player → back, and was run against built apps.
+
+**Next:** the full Phase 2 test pass — the whole loop against the real Moodle end to end — then the PR.
+
+
 
 ### 2026-08-19 — Phase 2 checkpoint 5: seamless login, proven end to end
 

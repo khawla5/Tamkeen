@@ -322,7 +322,6 @@ export class EnrollmentService {
         status,
         gradePercent: chosen.gradePercent,
         isNextUp,
-        courseUrl: this.lms.courseUrl(chosen.course.moodleCourseId),
       };
     });
 
@@ -535,6 +534,48 @@ export class EnrollmentService {
     });
 
     return { enrolled, failed };
+  }
+
+  /**
+   * Makes sure this learner is actually enrolled in this course, right now.
+   *
+   * Called when they click into a course rather than waiting for the scheduled
+   * reconciliation. The gap it closes is real and otherwise invisible: a learner
+   * who confirmed their path while the LMS was unreachable has a committed path
+   * with no enrolments, and clicking a course would drop them into a Moodle page
+   * telling them they cannot access it. Enrolling on demand turns "wait up to a
+   * sync interval and hope" into "it works".
+   *
+   * Idempotent at both layers — the query only picks up rows with no
+   * `enrolledAt`, and `LmsPort.enrol` is idempotent by contract.
+   */
+  async ensureEnrolledForLaunch(userId: string, courseId: string): Promise<boolean> {
+    const chosen = await this.prisma.userPathCourse.findFirst({
+      where: {
+        courseId,
+        userPath: { userId, confirmedAt: { not: null } },
+      },
+      select: { id: true, enrolledAt: true, userPathId: true },
+    });
+
+    if (!chosen) {
+      /* Not in a confirmed path: there is nothing to enrol into, and minting a
+         launch token would hand out entry to a course they never chose. */
+      return false;
+    }
+
+    if (chosen.enrolledAt !== null) {
+      return true;
+    }
+
+    await this.enrol(userId, chosen.userPathId, [courseId], null);
+
+    const after = await this.prisma.userPathCourse.findUnique({
+      where: { id: chosen.id },
+      select: { enrolledAt: true },
+    });
+
+    return after?.enrolledAt !== null && after?.enrolledAt !== undefined;
   }
 
   /**

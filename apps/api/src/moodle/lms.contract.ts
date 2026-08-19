@@ -391,6 +391,21 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
         );
       });
 
+      it('is fresh on every call', async () => {
+        /* A handoff is single-use by design, so returning the same URL twice
+           would return an already-spent token the second time. Callers mint per
+           click precisely because of this. */
+        const user = await lms.provisionUser({
+          email: 'launch-fresh@ministry.gov.example',
+          fullName: 'متعلم',
+          externalUserId: 'ext-launch-fresh',
+        });
+
+        expect(lms.courseLaunchUrl(user.lmsUserId, 101)).not.toBe(
+          lms.courseLaunchUrl(user.lmsUserId, 101),
+        );
+      });
+
       it('differs between courses for one learner', async () => {
         const user = await lms.provisionUser({
           email: 'launch-3@ministry.gov.example',

@@ -34,6 +34,8 @@ export class MockLmsService implements LmsPort {
   private readonly users = new Map<LmsUserId, LmsUserRef>();
   private readonly enrolments = new Set<string>();
   private readonly progress = new Map<string, LmsCourseProgress>();
+  /** Makes each stand-in handoff URL distinct; see `courseLaunchUrl`. */
+  private launchCounter = 0;
 
   private key(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
     return `${lmsUserId}:${lmsCourseId}`;
@@ -178,13 +180,24 @@ export class MockLmsService implements LmsPort {
   }
 
   /**
-   * A stand-in handoff URL. It is deliberately **not** signed: the mock has no
-   * shared secret and inventing one would suggest this value is safe to trust.
-   * What it does reproduce are the properties callers depend on — it is
-   * absolute, it differs per learner, and it carries no web-services token.
+   * A stand-in handoff URL, deliberately **not** signed — the mock has no shared
+   * secret, and inventing one would suggest this value is safe to trust.
+   *
+   * It does reproduce the properties callers depend on: absolute, distinct per
+   * learner and per course, no web-services token, and **fresh on every call**.
+   * That last one costs a counter and is worth it for the same reason the mock's
+   * user ids stopped coming from a process counter (D-036): a mock that is
+   * easier to satisfy than reality lets a bug pass here and fail in production.
+   * A handoff is single-use, so handing out the same URL twice would be handing
+   * out an already-spent token.
    */
   courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
-    return `${MOCK_LMS_BASE_URL}/local/tamkeensso/login.php?mockuser=${lmsUserId}&mockcourse=${lmsCourseId}`;
+    this.launchCounter += 1;
+
+    return (
+      `${MOCK_LMS_BASE_URL}/local/tamkeensso/login.php` +
+      `?mockuser=${lmsUserId}&mockcourse=${lmsCourseId}&mocknonce=${this.launchCounter}`
+    );
   }
 
   // ── Simulation helpers — NOT part of LmsPort ────────────────────────────────

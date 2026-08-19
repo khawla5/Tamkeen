@@ -12,6 +12,8 @@ import {
   type AssessmentResultView,
   type AssessmentView,
   type CourseDetail,
+  type CourseLaunchView,
+  type CoursePlayerView,
   type CourseSummary,
   type DashboardView,
   type MyPathView,
@@ -845,6 +847,91 @@ describe('Phase 1 journey (e2e)', () => {
     });
   });
 
+  describe('the course player and its handoff (§4.8, D-044)', () => {
+    it('reports the path context and refuses to launch before commitment', async () => {
+      const session = await signedInUser('pl1');
+      await takeAssessment(session);
+      const { courseIds } = await buildPath(session, PATH_MIN_COURSES);
+
+      const player = (await get(`/api/courses/${courseIds[0]!}/player`, session).expect(200))
+        .body as CoursePlayerView;
+
+      expect(player.orderInPath).toBe(1);
+      expect(player.totalInPath).toBe(PATH_MIN_COURSES);
+      /* Nothing is enrolled until the commitment gate, so offering entry would
+         be offering something that cannot work (§4.5). */
+      expect(player.canLaunch).toBe(false);
+    });
+
+    it('mints a launch URL once the path is confirmed', async () => {
+      const session = await signedInUser('pl2');
+      await takeAssessment(session);
+      const { courseIds } = await buildPath(session, PATH_MIN_COURSES);
+      await post('/api/my-path/confirm', {}, session).expect(200);
+
+      const player = (await get(`/api/courses/${courseIds[0]!}/player`, session).expect(200))
+        .body as CoursePlayerView;
+      expect(player.canLaunch).toBe(true);
+
+      const launch = (await post(`/api/courses/${courseIds[0]!}/launch`, {}, session).expect(201))
+        .body as CourseLaunchView;
+
+      expect(launch.url).toMatch(/^https?:\/\//);
+      /* The web-services token is long-lived and grants the whole API. It must
+         never reach a browser, whatever else this URL carries. */
+      expect(launch.url).not.toMatch(/wstoken/i);
+    });
+
+    it('refuses to launch a course the learner never chose', async () => {
+      /* The guard that matters: without it, any authenticated user could mint
+         entry to any course in the catalogue. */
+      const session = await signedInUser('pl3');
+      await takeAssessment(session);
+      const { courseIds, detail } = await buildPath(session, PATH_MIN_COURSES);
+      await post('/api/my-path/confirm', {}, session).expect(200);
+
+      const notChosen = detail.courses.find((course) => !courseIds.includes(course.id));
+      expect(notChosen).toBeDefined();
+
+      await post(`/api/courses/${notChosen!.id}/launch`, {}, session).expect(409);
+    });
+
+    it('refuses to launch for a user with no path at all', async () => {
+      const session = await signedInUser('pl4');
+      const courses = (await get('/api/courses', session).expect(200)).body as CourseSummary[];
+
+      await post(`/api/courses/${courses[0]!.id}/launch`, {}, session).expect(409);
+    });
+
+    it('requires a session', async () => {
+      const courses = (await get('/api/courses', await signedInUser('pl5')).expect(200))
+        .body as CourseSummary[];
+
+      await request(server())
+        .post(`/api/courses/${courses[0]!.id}/launch`)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({})
+        .expect(401);
+    });
+
+    it('mints a different URL every time, so none can be replayed', async () => {
+      /* Single use is enforced by the plugin, but a stable URL would mean the
+         same spent token was handed out again on the next click. */
+      const session = await signedInUser('pl6');
+      await takeAssessment(session);
+      const { courseIds } = await buildPath(session, PATH_MIN_COURSES);
+      await post('/api/my-path/confirm', {}, session).expect(200);
+
+      const first = (await post(`/api/courses/${courseIds[0]!}/launch`, {}, session).expect(201))
+        .body as CourseLaunchView;
+      const second = (await post(`/api/courses/${courseIds[0]!}/launch`, {}, session).expect(201))
+        .body as CourseLaunchView;
+
+      expect(second.url).not.toBe(first.url);
+    });
+  });
+
   describe('course detail offers exactly one action (§4.7)', () => {
     it('offers nothing to act on before a path is chosen', async () => {
       const session = await signedInUser('x1');
@@ -855,7 +942,11 @@ describe('Phase 1 journey (e2e)', () => {
 
       expect(detail.action).toBe('NONE');
       expect(detail.objectives.length).toBeGreaterThanOrEqual(3);
-      expect(detail.courseUrl).toMatch(/^https?:\/\//);
+      /* The raw LMS deep link is deliberately no longer part of this response.
+         It carries no session, so a screen linking to it would send the learner
+         to a Moodle page that does not know who they are; entry goes through
+         the player's signed handoff instead (D-044). */
+      expect(detail).not.toHaveProperty('courseUrl');
     });
 
     it('offers ADD_TO_PATH for an unselected course in the path being built', async () => {
