@@ -6,9 +6,9 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1-6 complete (client + provisioning, catalogue sync, enrolment, completion sync, seamless login, course player). The full Phase 2 test pass remains.
-- **Last completed task:** Checkpoint 6 — the course player (§4.8), with the handoff minted per click and the unauthenticated LMS link removed from the API (D-045).
-- **Next task:** The **full Phase 2 test pass** — the whole loop against the real Moodle end to end, with `MOODLE_MODE=real` — then the PR to `main` once the user approves the test.
+- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; **all six checkpoints and the full real-Moodle test pass complete.** Awaiting approval to open the PR.
+- **Last completed task:** The **full Phase 2 test pass** against a real Moodle — the whole loop, ending in an automatic, idempotent completion detection. All checks passed.
+- **Next task:** **Open the PR** to `main` from `phase-2-moodle-integration` once the user approves the test (D-008). Then Phase 3 — certificates + CV.
 - **Active branch:** `phase-2-moodle-integration`, off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. Nothing pushed.
 - **Phase 1 is merged** (PR #2, `origin/main` @ `f25b644`).
 - **Open blockers / questions for the human:**
@@ -71,6 +71,47 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-19 — Phase 2 test pass: the whole loop, against a real Moodle
+
+`MOODLE_MODE=real`, an isolated database, the **BullMQ scheduler polling every minute**, and a human taking a real quiz. Every effect landed in Moodle 5.2.2.
+
+**The journey, over HTTP only** — so nothing it proves can be a rule living solely in a React component:
+
+```
+health      {"moodleMode":"real","lms":"up","lmsSiteName":"Dockerized_Moodle"}
+register    → verified with a token read out of the delivered mail
+assessment  → Holland Code: RIA
+path        → 7 courses offered (the hidden one correctly excluded)
+confirm     → 5 courses committed
+```
+
+**Enrolment, asked of Moodle rather than trusted from our own status field:** all five present on user 7.
+
+**The loop closed on its own.** The scheduler logged `1 newly passed` at 15:26:48 and `0 newly passed` at 15:27:48 — the transition fired exactly once, with no manual trigger.
+
+```
+PASS  the app records the course as completed        status = COMPLETED
+PASS  the grade came back from Moodle                gradePercent = 100
+PASS  passed against the product threshold           passed=true at threshold 70
+PASS  exactly one course-passed email was sent       1 email(s)
+PASS  a second sync changes nothing                  COMPLETED/100 -> COMPLETED/100
+PASS  and does NOT send the email again              1 email(s) after a second sync
+```
+
+**The `completions` table, read directly:** course 2 is `completed=t, grade=100, passed=t, pass_threshold_used=70` with a real `completed_at`; the four unattempted courses carry `grade_percent = NULL`, **not 0** — the distinction that would otherwise read as a failed attempt. **5 rows, 5 distinct `(user, moodle_course_id)` keys** after a dozen sync cycles.
+
+**Setup the pass needed:** the dev Moodle had one usable course and the 5-10 rule needs five, so six test courses were created on it through Moodle's own PHP API. `scripts/real-pass-setup.ts` seeds the assessment, mirrors the live catalogue and builds one path over it — the last part is test scaffolding, since the seeded twelve paths are built on mock course ids. **Phase 7 owns real catalogue and path data.**
+
+**Two things learned while doing it:**
+- `tsx` cannot boot the Nest container — esbuild does not emit `emitDecoratorMetadata`, which is exactly what Nest reads to resolve constructor parameters, and the failure presents as a misleading "dependency at index [0] is undefined". Scripts that need DI must run compiled.
+- The 60-second handoff TTL is right for production and impractical for a human step; the pass ran at the 300-second cap. The verify script now reads the lifetime out of the token rather than printing a constant that would quietly become wrong.
+
+**Phase 2's "done when" is met:** a real user, from the app, entered a real Moodle course, took its quiz, and the app reflected completion and pass/fail automatically and idempotently. The mock→real swap changed only the implementation — no caller of `LmsPort` was touched in any checkpoint.
+
+**Awaiting the user's approval of this test before opening the PR** (D-008).
+
+
 
 ### 2026-08-19 — Phase 2 checkpoint 6: the course player
 

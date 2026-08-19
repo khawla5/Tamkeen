@@ -46,3 +46,6 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Phase 2 real-Moodle test pass — local run state, not shared
+spike/.real-pass-state.json

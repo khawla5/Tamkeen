@@ -36,7 +36,10 @@ export interface SeedCounts {
  * Rows are matched by their stable `key`, so revising a question's Arabic
  * wording updates it in place and the responses that reference it stay valid.
  */
-async function seedAssessment(
+/* Exported so a real-LMS run can seed the assessment without also seeding the
+   mock catalogue: the two are independent, and against a real Moodle the
+   catalogue comes from sync rather than from COURSE_METADATA. */
+export async function seedAssessment(
   prisma: PrismaClient,
 ): Promise<Pick<SeedCounts, 'questions' | 'options'>> {
   const assessment = await prisma.assessment.upsert({
