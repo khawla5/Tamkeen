@@ -67,10 +67,22 @@
 - **Schema constraints carry the product rules — unique `user_paths.user_id`, weights as an enum table, `Restrict` from responses to the bank (D-035).**
 - **LMS provisioning is lazy at confirm; enrolment is best-effort after the commitment is recorded; live progress is read, never persisted (D-036).**
 - **Authenticated pages sit behind one `PortalProvider`; Certificates/CV stay out of the nav until Phase 3 builds them (D-037).**
+- **Course authoring uses Model 1 — entities author content in Moodle via handoff; the portals wrap only the product layer (D-046).**
+- **Each course is single-language as authored (Arabic OR English); no per-course bilingual requirement (D-047).**
+- **Admins edit assessment questions + weightings, NOT the core scoring algorithm (D-048).**
+- **Assessment edits freeze existing results — versioning; past results never mutate (D-049).**
+- **The CV is an ENGLISH document with Arabic proper nouns passed through as authored (D-050).** Supersedes the earlier "Arabic CV" wording; the Phase 3 PDF pipeline must prove English-body-with-inline-Arabic.
+- **Entity & super-admin portals now fully specified in CLAUDE.md §4A/4B/4C; Phase 4/5 deliverables updated accordingly.**
 
 ---
 
 ## Log (newest first)
+
+### [DATE] — Phase 4/5 portals specified + language decisions (planning, no code)
+- CLAUDE.md gained §4A (Model 1 authoring + cross-portal linking rules), §4B (Entity/reviewer portal full page spec), §4C (Super-admin portal full page spec). Phase 4 + Phase 5 in §7 rewritten to reference them and to fold in the deferred items they own (D-027 entity scoping, D-035 objectives/prerequisites editable, deferred Profile items).
+- Locked D-046 (Model 1 authoring), D-047 (single-language courses), D-048 (admins edit questions/weightings not the algorithm), D-049 (assessment-edit result freezing), D-050 (English CV with pass-through Arabic).
+- §4.11 CV spec changed from Arabic-first to English-document. NOTE for Phase 3: the CV is English with inline Arabic proper nouns — the PDF spike must cover that case, not only pure Arabic.
+- **Reminder:** Phase 2's PR is approved but still NOT merged (gh not installed; open/merge it on GitHub). Phase 3 must branch off a main that includes Phase 2.
 
 ### 2026-08-19 — Phase 2 complete; PR opened for review
 

@@ -232,13 +232,92 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - Flat gallery: course certificates + the larger path certificate (visually distinguished). Each: title, date earned, view, download (PDF). Nothing else.
 
 ### 4.11 CV Builder (السيرة الذاتية)
-- Form-based, pre-filled from profile + earned certificates (certifications auto-inserted).
-- Editable sections: personal info, experience, education, skills. Live preview + export to PDF. One save, one export. No template zoo initially.
+- Form-based, pre-filled from profile + earned certificates (certifications auto-inserted). Editable sections: personal info, experience, education, skills. Live preview + export to PDF. One save, one export. No template zoo initially.
+- **Language (LOCKED, D-050):** the CV is an **ENGLISH document (LTR)** — the builder chrome stays Arabic-first, but the CV content the user types and the exported PDF are English. System-injected proper nouns (name, department, path, RIASEC type names, certificate/course titles) **pass through as authored** (likely Arabic) — not translated, no English versions required. The PDF must render English body (LTR) with correctly-shaped inline Arabic runs. A fully-localized CV is a possible later addition; v1 is English-body with pass-through proper nouns.
 
 ### 4.12 Profile / Settings (الملف الشخصي)
 - Personal/employee info, change password, email (verified; re-verify on change), language. Minimal.
 
 **Steady-state nav:** Dashboard, Courses, My Path, Certificates, CV, Profile (6 items). Assessment & Results are contextual flow pages.
+
+---
+
+## 4A. Course-authoring model & cross-portal rules (LOCKED — see decisions.md D-046)
+
+**Model 1 (LOCKED): entities author course CONTENT inside a themed Moodle; the portals wrap the PRODUCT layer around it.** We do NOT rebuild Moodle's authoring UI (lectures, videos, materials, quiz questions) inside our app — Moodle already does that well, and it mirrors the learner-side handoff (§5.4, D-045). The entity portal owns only what Moodle doesn't: product metadata (path membership, RIASEC letter, duration, objectives, prerequisites — consistent with D-035), publish/unpublish, and learner review. Entities create/edit actual content by being handed into Moodle via the same seamless-login handoff learners use (D-044/D-045).
+
+**Course language (LOCKED, D-047):** each course exists in a SINGLE language as authored by the entity (Arabic OR English). The catalog shows each course's title/description in the language it was authored — we do NOT require or maintain both languages per course. App chrome stays Arabic-first regardless.
+
+**Cross-portal linking (the experience must be continuous):**
+- A course an entity PUBLISHES (with its path + RIASEC tag + product metadata) is exactly what appears in the learner's Courses catalog and path-build screen. Publishing is the bridge entity portal → user portal.
+- Paths and the assessment configured in the super-admin portal drive what learners see in Results & Path Selection and path building.
+- Course-edit protection (§2, D-015/D-040) is enforced across portals: a course in any user's confirmed path cannot be deleted/unpublished, only hidden from NEW selections (`HIDDEN_BUT_COMPLETABLE`) while enrolled learners finish; retired only when nobody holds it.
+- All three portals share one backend, one design system (navy/gold, RTL), one RBAC model (employee / entity / super-admin), and one audit log.
+
+---
+
+## 4B. Entity / Reviewer portal (content spec — Phase 4)
+
+The portal for organizations that supply and own courses. RBAC-scoped: an entity sees ONLY its own courses and their learners (the data-scoping owed since D-027). Arabic-first, same design system.
+
+### 4B.1 Entity Dashboard
+At-a-glance: this entity's published/draft course counts, total enrolled learners, completion stats, anything pending, and a single "add a course" primary action. Only actionable items — no vanity widgets.
+
+### 4B.2 My Courses
+List of courses this entity owns, each showing status (draft / published / `HIDDEN_BUT_COMPLETABLE` / retired), enrolled-learner count, completion rate. Filter/search. Click → Manage Course.
+
+### 4B.3 Add / Manage Course
+The create + edit flow:
+- Create the course shell, then be HANDED INTO MOODLE (seamless login, D-044) to author content — lectures, videos, materials, quiz + questions — using Moodle's own tools (Model 1).
+- Back in the portal, set the PRODUCT metadata our app owns: path(s) the course belongs to, its RIASEC letter (consistent with the path), duration (product field, D-035), objectives, prerequisites, and course language (D-047).
+- Publish / unpublish / hide — publish makes it appear in the learner catalog; unpublish/hide respects course-edit protection (can't strand mid-path learners).
+- A clear "author content in Moodle" launch action keeps the seam smooth.
+
+### 4B.4 Course Content (launch-to-Moodle)
+Thin: a launch-into-Moodle button for authoring, plus a read-back summary of what Moodle holds (activities, quiz presence, completion criteria configured — the exact gap D-042 flagged) so the entity can confirm the course is actually completable before publishing. We do not rebuild Moodle's editor.
+
+### 4B.5 Learners / Review
+For THIS entity's courses only: enrolled learners, per-learner progress, quiz results, completions. Strictly RBAC-scoped. Optional flag/note. No other entities' data; no PII beyond what review requires.
+
+### 4B.6 Entity Profile
+Organization info and contacts. Minimal.
+
+**Entity nav:** Dashboard, My Courses, Learners, Profile.
+
+---
+
+## 4C. Super-admin portal (content spec — Phase 5)
+
+Central control. The admin does not just observe — they CONFIGURE the product itself (assessment, weightings, paths, settings). Arabic-first, same design system, full RBAC.
+
+### 4C.1 Admin Dashboard
+System-wide overview: user counts (employees + entities), active paths, completion rates, Holland-code distribution, and INTEGRATION HEALTH (Moodle reachable? sync healthy? — `core_webservice_get_site_info`). Recent activity. Actionable, not decorative.
+
+### 4C.2 User Management
+Manage employees and entities: view, activate/deactivate/suspend, assign roles, handle restricted-registration rules (D-017), create entity accounts, see a user's path/assessment/certificate status. No raw password access; every change audited.
+
+### 4C.3 Assessment Management
+Edit the Holland/RIASEC assessment: questions, options, and each option's RIASEC dimension WEIGHTINGS (§3A). Admins edit QUESTIONS and WEIGHTINGS — NOT the core scoring algorithm (LOCKED, D-048): the tally→rank→top-three-code logic is fixed in code (D-031/D-034); only inputs are editable.
+- **Versioning (LOCKED, D-049):** editing the assessment must NOT retroactively change results of employees who already completed it. Existing `assessment_results` are FROZEN as taken — consistent with the append-only, restrict-on-delete model already built (D-033/D-035, `assessment_responses onDelete: Restrict`). Edits apply to FUTURE takers; surface version + effective date.
+- The bank **balance** rule (D-032, `isBalancedBank`) must be respected: an edit that unbalances the six dimensions fails CI and must be rebalanced (or ranking moved to normalised percentages) — a deliberate decision, never a silent skew.
+- Full loading/empty/error states; changes audited.
+
+### 4C.4 Path Management
+Create/edit study paths: name, description, duration, RIASEC letter (§3A). Manage `path_courses` membership, ordering, and — if ever made configurable — the 5–10 bounds. Retiring a path respects course-edit protection and doesn't strand learners on a confirmed path (D-002).
+
+### 4C.5 Course Oversight
+Global view across ALL entities' courses (admin sees everything; entities see only their own). Intervene (hide/retire a problematic course, correct metadata) — respecting course-edit protection (D-040).
+
+### 4C.6 System Settings
+The product knobs: pass threshold (D-007), completion-sync interval (D-042), registration policy + real allowed email domain / employee-ID format (D-017; placeholders today), digits/date default (D-018), notification settings, Moodle connection config (base URL; token server-side only). Changes audited.
+
+### 4C.7 Certificate Templates
+Manage the certificate look/template and ministry logo/seal + signature block. Because issued certificates store their rendered bytes (immutable), template edits affect only FUTURE issuances — state this in the UI.
+
+### 4C.8 Audit & Reports
+View the audit log (who/what/when) and system-wide reports: completion rates, popular paths, Holland-code distributions, certificate issuance. Read-only, exportable.
+
+**Admin nav:** Dashboard, Users, Assessment, Paths, Courses, Settings, Certificate Templates, Audit/Reports.
 
 ---
 
@@ -321,15 +400,15 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 *Deliverables:* **idempotent certificate issuance** — course certificate on passing a course's quiz, **path certificate** when all chosen courses are passed; **unique verification ID + QR/public verification page per certificate** (§2); **path-completed / certificate-ready notification**; **Arabic PDF rendering** solved (RTL, correct shaping) for certificates; **Certificates gallery** (view/download); **CV Builder** (form-based, pre-filled from profile + earned certificates, editable sections, live preview, **PDF export** with the same Arabic-PDF solution).
 *Done when:* completing courses yields correct, non-duplicated Arabic certificates each with a working verification URL/QR; completing a whole path yields the path certificate; a user can build and export an Arabic CV pre-filled with their certifications.
 
-**Phase 4 — Entity / reviewer portal.**
-*Goal:* the people who supply courses and review learners.
-*Deliverables:* entity accounts + roles/permissions; **course provisioning workflow** (course creation lives in Moodle; the portal wraps **path membership tagging, `riasec_letter` assignment, ordering**, and publishing to the catalog); **course edit/unpublish protection** — a course in any user's confirmed path cannot be deleted/unpublished, only hidden from new selections while enrolled users finish (§2); **learner review dashboards** (see enrolled learners, progress, completions per course/path); scoping so an entity sees only its own courses/learners.
-*Done when:* an entity can publish a Moodle course into the catalog with a path + RIASEC tag, and review the learners taking it.
+**Phase 4 — Entity / reviewer portal.** (Full page spec: §4B. Authoring model + cross-portal rules: §4A.)
+*Goal:* the organizations that supply courses and review learners — self-sufficiently, without code/DB edits.
+*Deliverables:* entity accounts + RBAC data-scoping (an entity sees only its own courses/learners — closes D-027); the pages in §4B — Dashboard, My Courses, Add/Manage Course (Model 1: content authored in Moodle via seamless handoff; the portal owns product metadata — path membership, `riasec_letter`, duration, objectives, prerequisites (D-035), course language (D-047) — plus publish/unpublish), Course Content (launch-to-Moodle + a read-back that surfaces missing completion criteria per D-042), Learners/Review (scoped), Entity Profile; **course edit/unpublish protection** enforced (§2, D-040); publishing bridges to the learner catalog (§4A). Objectives/prerequisites become entity-editable here (owed since D-035).
+*Done when:* an entity can create a course, author its content in Moodle via handoff, set its path + RIASEC + product metadata, publish it so it appears in the learner catalog, and review only its own learners' progress.
 
-**Phase 5 — Super-admin portal.**
-*Goal:* central control of the whole system.
-*Deliverables:* super-admin account(s); **user management** (employees + entities), **path management** (create/edit paths, assign `riasec_letter`), **assessment management** (edit questions/option weightings, versioning), **system settings** (pass threshold, sync interval), **certificate template management**, and **global oversight dashboards** (system-wide progress, integration health via `core_webservice_get_site_info`).
-*Done when:* an admin can manage users, paths, the assessment, settings, and monitor system + Moodle health from one portal.
+**Phase 5 — Super-admin portal.** (Full page spec: §4C.)
+*Goal:* central control — the ministry runs and configures the whole product without touching code or the database.
+*Deliverables:* super-admin account(s); the pages in §4C — Dashboard (incl. Moodle integration health), User Management (employees + entities), **Assessment Management** (edit questions + option RIASEC weightings, NOT the core algorithm — D-048; with **frozen-result versioning** — D-049; must keep the bank balanced — D-032), **Path Management** (create/edit paths, `riasec_letter`, `path_courses`, ordering), Course Oversight (global, D-040), System Settings (pass threshold, sync interval, registration policy + real ministry email domain/employee-ID format, digits/date, notifications, Moodle config), Certificate Templates (affects future issuances only — issued certs are immutable), Audit & Reports. Also completes the deferred Profile items — change-password, email re-verification, language switch (owed since Phase 1).
+*Done when:* an admin can manage users, edit the assessment (questions + weightings) with existing results frozen and the bank still balanced, manage paths, configure system settings, manage certificate templates, and monitor system + Moodle health — all from the portal.
 
 **Phase 6 — Hardening.**
 *Goal:* production-grade quality for a government system.

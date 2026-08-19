@@ -5,6 +5,32 @@
 
 ---
 
+## D-050 — CV is an English document with pass-through Arabic proper nouns
+**Decision:** The CV builder produces an ENGLISH (LTR) document; the builder UI chrome stays Arabic-first. System-injected proper nouns (name, department, path name, RIASEC type names, certificate/course titles) pass through in whatever language they were authored (likely Arabic), untranslated. The PDF renders English body with correctly-shaped inline Arabic runs. A fully-localized CV is deferred.
+**Why:** The user specified the CV should be in English — CVs are commonly expected in English even in an Arabic-first system, since they are used externally/professionally. Names and credential titles staying in their original language on an English CV is normal and correct, and it avoids forcing bilingual authoring of every field across the assessment, catalog and certificates for little benefit.
+**Supersedes:** the earlier "Arabic CV" phrasing in §4.11 and the Phase 3 deliverable. The PDF pipeline (Phase 3) must therefore prove the English-body-with-inline-Arabic case, not only pure-Arabic RTL.
+**Rejected:** Arabic CV (contradicts the requirement); requiring maintained English versions of all names/titles (large authoring burden for little value).
+
+## D-049 — Assessment edits freeze existing results (versioning)
+**Decision:** Editing assessment questions/options/weightings in the Phase 5 admin portal does NOT retroactively change results of employees who already completed it. Existing `assessment_results` are frozen as taken; edits apply to future takers. Surface version + effective date.
+**Why:** A person's Holland result is a record of what they answered under a specific instrument, and certificates/paths flow from it — silently mutating past results would be wrong and corrupting. This is already structurally supported: results are append-only (D-033), all six scores are stored as columns with `maxScore` so a historical result renders correctly even after the bank changes size (D-035), and `assessment_responses` references the bank `onDelete: Restrict` so editing a question cannot delete the answers people already gave (D-035). D-049 states the product rule those mechanisms exist to serve.
+**Rejected:** Recomputing old results on edit (changes history under people's feet); blocking edits entirely (admin must be able to improve the assessment).
+
+## D-048 — Admins edit assessment questions + weightings, NOT the core scoring algorithm
+**Decision:** The super-admin can edit questions, answer options, and each option's RIASEC dimension weightings. The core scoring logic — tally per dimension → rank (canonical-order tie-break, D-031) → top-three Holland Code, and the gold recommendation sort — stays fixed in code (D-034) and is NOT admin-editable.
+**Why:** Editing weightings is powerful enough to tune the assessment without risking a broken or nonsensical scoring engine that an editable algorithm would invite; it keeps the correctness tests (D-031/D-032/D-034) meaningful. The weighting editor gets referential integrity for free because option weights are an enum-column table, not JSON (D-035).
+**Rejected:** Exposing the raw algorithm to admins (high blast radius, untestable, easy to break); locking questions too (admin must be able to improve content — the bank is seeded data precisely so Phase 5 can edit it without a deploy, D-032).
+
+## D-047 — Each course is single-language as authored
+**Decision:** A course exists in ONE language (Arabic or English) as the entity authored it. The catalog shows each course's title/description in that language; we do not require or maintain both languages per course. App chrome stays Arabic-first.
+**Why:** The user said courses may be in Arabic and English and content passes through as authored. Per-course single language matches how entities actually create content in Moodle (Model 1, D-046) and avoids a large bilingual-authoring burden for v1.
+**Rejected:** Mandatory bilingual title/description per course (authoring overhead, little value now).
+
+## D-046 — Course authoring uses Model 1 (author in Moodle; portals wrap the product layer)
+**Decision:** Entities author course CONTENT (lectures, videos, materials, quiz questions) inside a themed Moodle via the seamless-login handoff (D-044/D-045). The entity/admin portals own only the product layer Moodle lacks: path membership, RIASEC letter, duration, objectives, prerequisites (D-035), publish/unpublish, and learner review. We do NOT rebuild Moodle's authoring UI in our app.
+**Why:** Moodle is already a full authoring system; rebuilding it in-app would be the single largest build in the project, would duplicate Moodle, and would fight Moodle's weak content-creation API. Model 1 matches the "app = experience layer, Moodle = engine" principle (D-000) and mirrors the learner-side handoff already chosen (D-045). It also fits what §6/D-040 already do — our `courses` row is a thin mirror carrying product metadata over an LMS-owned course.
+**Rejected:** Model 2 (full authoring UI in our own portal pushing content to Moodle) — largest single build, duplicates Moodle, fights a limited API, for a mostly-cosmetic unified-authoring benefit. Revisit only if the ministry later insists entities never see Moodle even for authoring.
+
 ## D-045 — The course player is a handoff page, and the raw LMS link is removed from the API
 **Decision:** §4.8's course view is a thin page that provides path context, the outcome of the last attempt, and **one** action that launches into Moodle. It does not embed Moodle, and it is now the only route into a course.
 
