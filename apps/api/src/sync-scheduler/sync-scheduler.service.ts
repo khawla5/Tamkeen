@@ -7,6 +7,7 @@ import {
 import { Queue, Worker } from 'bullmq';
 
 import { CatalogSyncService } from '../catalog-sync/catalog-sync.service';
+import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import { CompletionSyncService } from '../completion-sync/completion-sync.service';
 import { AppConfigService } from '../config/app-config.module';
 import { EnrollmentService } from '../enrollment/enrollment.service';
@@ -18,6 +19,7 @@ export interface SyncCycleResult {
   catalog: { seen: number; withdrawn: number } | null;
   enrolments: { enrolled: number; stillPending: number } | null;
   completions: { completions: number; newlyPassed: number } | null;
+  certificates: { issued: number; failed: number } | null;
 }
 
 /**
@@ -44,6 +46,7 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
     private readonly catalog: CatalogSyncService,
     private readonly enrollment: EnrollmentService,
     private readonly completion: CompletionSyncService,
+    private readonly certificates: CertificateIssuanceService,
   ) {}
 
   /**
@@ -60,7 +63,12 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
    * learner's progress.
    */
   async runSyncCycle(): Promise<SyncCycleResult> {
-    const result: SyncCycleResult = { catalog: null, enrolments: null, completions: null };
+    const result: SyncCycleResult = {
+      catalog: null,
+      enrolments: null,
+      completions: null,
+      certificates: null,
+    };
 
     try {
       result.catalog = await this.catalog.sync();
@@ -78,6 +86,16 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
       result.completions = await this.completion.sync();
     } catch (error) {
       this.logger.error(`Completion sync failed: ${describe(error)}`);
+    }
+
+    /* Last, and after completions, because it exists to catch what the stage
+       before it could not finish. Issuance fires from a transition that happens
+       exactly once, so a render that failed at that moment is never retried by
+       the sync itself — this is the only thing that comes back for it. */
+    try {
+      result.certificates = await this.certificates.reconcileMissingCertificates();
+    } catch (error) {
+      this.logger.error(`Certificate reconciliation failed: ${describe(error)}`);
     }
 
     return result;

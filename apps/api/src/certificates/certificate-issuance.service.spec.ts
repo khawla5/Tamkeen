@@ -32,10 +32,19 @@ interface Options {
   concurrentInsert?: boolean;
   createError?: { code: string } | Error;
   renderThrows?: boolean;
+  /** The learner's confirmed path, and which of its courses they passed. */
+  pathCourseIds?: number[];
+  passedCourseIds?: number[];
+  pathConfirmed?: boolean;
+  /** A different path than the one issuance is asked for (D-002 makes this a mismatch). */
+  committedPathId?: string;
+  /** Finished paths reconciliation should find. */
+  finishedPaths?: Array<{ userId: string; pathId: string }>;
 }
 
 const COURSE_ID = 'course-1';
 const USER_ID = 'user-1';
+const PATH_ID = 'path-1';
 const MOODLE_COURSE_ID = 101;
 
 function harness(options: Options = {}) {
@@ -70,6 +79,14 @@ function harness(options: Options = {}) {
       (row) => row.userId === userId && row.type === 'COURSE' && row.courseId === courseId,
     ) ?? null;
 
+  const findPathCert = (userId: string, pathId: string) =>
+    certificates.find(
+      (row) => row.userId === userId && row.type === 'PATH' && row.pathId === pathId,
+    ) ?? null;
+
+  const pathCourseIds = options.pathCourseIds ?? [MOODLE_COURSE_ID, 102];
+  const passedCourseIds = options.passedCourseIds ?? pathCourseIds;
+
   const prisma = {
     certificate: {
       findUnique: (args: {
@@ -78,8 +95,13 @@ function harness(options: Options = {}) {
           userId_type_pathId?: { userId: string; type: string; pathId: string };
         };
       }) => {
-        const key = args.where.userId_type_courseId;
-        return Promise.resolve(key ? findCourseCert(key.userId, key.courseId) : null);
+        const courseKey = args.where.userId_type_courseId;
+        if (courseKey) {
+          return Promise.resolve(findCourseCert(courseKey.userId, courseKey.courseId));
+        }
+
+        const pathKey = args.where.userId_type_pathId;
+        return Promise.resolve(pathKey ? findPathCert(pathKey.userId, pathKey.pathId) : null);
       },
       create: (args: { data: Certificate }) => {
         if (options.createError) {
@@ -114,9 +136,23 @@ function harness(options: Options = {}) {
       findUnique: () =>
         Promise.resolve(options.completionMissing ? null : { passed: options.passed ?? true }),
       findMany: () => Promise.resolve([{ userId: USER_ID, moodleCourseId: MOODLE_COURSE_ID }]),
+      count: (args: { where: { moodleCourseId: { in: number[] } } }) =>
+        Promise.resolve(
+          passedCourseIds.filter((id) => args.where.moodleCourseId.in.includes(id)).length,
+        ),
     },
     userPath: {
-      findUnique: () => Promise.resolve({ path: { name: 'مسار القيادة الإدارية' } }),
+      findUnique: () =>
+        Promise.resolve({
+          path: { name: 'مسار القيادة الإدارية' },
+          pathId: options.committedPathId ?? PATH_ID,
+          confirmedAt: options.pathConfirmed === false ? null : new Date('2026-06-01'),
+          courses: pathCourseIds.map((moodleCourseId) => ({ course: { moodleCourseId } })),
+        }),
+      findMany: () => Promise.resolve(options.finishedPaths ?? []),
+    },
+    path: {
+      findUnique: () => Promise.resolve({ name: 'مسار القيادة الإدارية' }),
     },
     notification: {
       create: (args: { data: { userId: string; relatedId: string | null } }) => {
@@ -269,6 +305,91 @@ describe('CertificateIssuanceService', () => {
     });
   });
 
+  describe('issuing a path certificate', () => {
+    it('issues one when every chosen course has been passed', async () => {
+      const { service, certificates } = harness();
+
+      const outcome = await service.issuePathCertificate(USER_ID, PATH_ID);
+
+      expect(outcome.created).toBe(true);
+      expect(outcome.certificate).toMatchObject({
+        type: 'PATH',
+        pathId: PATH_ID,
+        courseId: null,
+        subjectTitle: 'مسار القيادة الإدارية',
+      });
+      expect(certificates).toHaveLength(1);
+    });
+
+    it('refuses when a course was completed but not passed', async () => {
+      /*
+       * The whole reason this gate reads `completions.passed` rather than
+       * `UserPathCourse.status`: a course can be COMPLETED in the LMS and below
+       * the product threshold (D-042 §4). Certifying that path would attest to
+       * something that did not happen.
+       */
+      const { service, certificates, renderCount } = harness({
+        pathCourseIds: [101, 102],
+        passedCourseIds: [101],
+      });
+
+      await expect(service.issuePathCertificate(USER_ID, PATH_ID)).rejects.toThrow(
+        CertificateNotEarnedError,
+      );
+      expect(certificates).toHaveLength(0);
+      expect(renderCount()).toBe(0);
+    });
+
+    it('refuses when the path was never confirmed', async () => {
+      const { service } = harness({ pathConfirmed: false });
+
+      await expect(service.issuePathCertificate(USER_ID, PATH_ID)).rejects.toThrow(
+        CertificateNotEarnedError,
+      );
+    });
+
+    it('refuses a path the learner did not commit to', async () => {
+      /* One path per user (D-002), so being asked about another one is a
+         mismatch rather than a second path to check. */
+      const { service } = harness({ committedPathId: 'some-other-path' });
+
+      await expect(service.issuePathCertificate(USER_ID, PATH_ID)).rejects.toThrow(
+        CertificateNotEarnedError,
+      );
+    });
+
+    it('refuses an empty path rather than reading it as finished', async () => {
+      const { service } = harness({ pathCourseIds: [], passedCourseIds: [] });
+
+      await expect(service.issuePathCertificate(USER_ID, PATH_ID)).rejects.toThrow(
+        CertificateNotEarnedError,
+      );
+    });
+
+    it('yields exactly one path certificate across repeated issuance', async () => {
+      const { service, certificates } = harness();
+
+      const first = await service.issuePathCertificate(USER_ID, PATH_ID);
+      const second = await service.issuePathCertificate(USER_ID, PATH_ID);
+
+      expect(certificates).toHaveLength(1);
+      expect(second.created).toBe(false);
+      expect(second.certificate.id).toBe(first.certificate.id);
+    });
+
+    it('does not collide with the course certificate for the same learner', async () => {
+      /* Two unique indexes, each inert for the type it does not describe. A
+         learner holds a course certificate and a path certificate at once. */
+      const { service, certificates } = harness();
+
+      await service.issueCourseCertificate(USER_ID, COURSE_ID);
+      await service.issuePathCertificate(USER_ID, PATH_ID);
+
+      expect(certificates).toHaveLength(2);
+      expect(certificates.map((row) => row.type).sort()).toEqual(['COURSE', 'PATH']);
+    });
+  });
+
   describe('idempotency', () => {
     it('returns the existing certificate without rendering again', async () => {
       const { service, certificates, renderCount } = harness({
@@ -380,6 +501,34 @@ describe('CertificateIssuanceService', () => {
 
       expect(result).toEqual({ issued: 0, failed: 1 });
       expect(certificates).toHaveLength(0);
+    });
+
+    it('issues a path certificate for a finished path that never got one', async () => {
+      /* `onPathCompleted` fires on the run that flips the path to COMPLETED and
+         `refreshPathStatus` returns early ever after, so a render that failed
+         there is never retried by the sync either. */
+      const { service, certificates } = harness({
+        finishedPaths: [{ userId: USER_ID, pathId: PATH_ID }],
+      });
+
+      const result = await service.reconcileMissingCertificates();
+
+      expect(result.issued).toBe(2); // the course certificate, and the path one
+      expect(certificates.filter((row) => row.type === 'PATH')).toHaveLength(1);
+    });
+
+    it('leaves a finished path alone once its certificate exists', async () => {
+      const { service } = harness({
+        finishedPaths: [{ userId: USER_ID, pathId: PATH_ID }],
+        existing: [
+          { userId: USER_ID, type: 'COURSE' },
+          { userId: USER_ID, type: 'PATH', pathId: PATH_ID },
+        ],
+      });
+
+      const result = await service.reconcileMissingCertificates();
+
+      expect(result).toEqual({ issued: 0, failed: 0 });
     });
   });
 });

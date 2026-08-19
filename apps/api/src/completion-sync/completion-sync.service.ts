@@ -136,9 +136,13 @@ export class CompletionSyncService {
       if (passedNow) newlyPassed += 1;
     }
 
-    const pathCompleted = await this.refreshPathStatus(learner.id);
+    const path = await this.refreshPathStatus(learner.id);
 
-    return { completions, newlyPassed, pathCompleted };
+    if (path.completed) {
+      await this.onPathCompleted(learner, path.pathId);
+    }
+
+    return { completions, newlyPassed, pathCompleted: path.completed };
   }
 
   /**
@@ -247,31 +251,51 @@ export class CompletionSyncService {
   }
 
   /**
-   * Marks the path finished once every chosen course is complete.
+   * Marks the path finished once every chosen course has been **passed**.
    *
-   * The **path certificate** is Phase 3; this only moves the status, which is
-   * what My Path renders. Returns whether this run is the one that finished it.
+   * **Passed, not merely completed** — and the distinction is the whole point.
+   * `UserPathCourse.status` becomes `COMPLETED` from the LMS's completion
+   * signal alone, so a learner who finishes a course in Moodle and scores below
+   * the product threshold is completed-but-not-passed, which Phase 2 records
+   * correctly (D-042 §4). Reading the status here would have finished a path
+   * nobody passed, and then certified it — §4.9 is explicit that the path
+   * certificate unlocks on "complete **and** passed".
+   *
+   * `completions.passed` is our verdict against the threshold (D-007) and
+   * already requires the completion signal, so it is the whole test.
+   *
+   * Returns whether this run is the one that finished it.
    */
-  private async refreshPathStatus(userId: string): Promise<boolean> {
+  private async refreshPathStatus(userId: string): Promise<{ completed: boolean; pathId: string }> {
     const userPath = await this.prisma.userPath.findUnique({
       where: { userId },
       select: {
         id: true,
+        pathId: true,
         status: true,
         confirmedAt: true,
-        courses: { select: { status: true } },
+        courses: { select: { course: { select: { moodleCourseId: true } } } },
       },
     });
 
     if (!userPath || userPath.confirmedAt === null || userPath.status === 'COMPLETED') {
-      return false;
+      return { completed: false, pathId: userPath?.pathId ?? '' };
     }
 
-    const courses = userPath.courses;
-    const finished = courses.length > 0 && courses.every((course) => course.status === 'COMPLETED');
+    const moodleCourseIds = userPath.courses.map((chosen) => chosen.course.moodleCourseId);
 
-    if (!finished) {
-      return false;
+    /* An empty path must never read as finished. The 5-10 rule makes it
+       unreachable, which is why ruling it out costs nothing. */
+    if (moodleCourseIds.length === 0) {
+      return { completed: false, pathId: userPath.pathId };
+    }
+
+    const passedCount = await this.prisma.completion.count({
+      where: { userId, moodleCourseId: { in: moodleCourseIds }, passed: true },
+    });
+
+    if (passedCount !== moodleCourseIds.length) {
+      return { completed: false, pathId: userPath.pathId };
     }
 
     await this.prisma.userPath.update({
@@ -286,10 +310,56 @@ export class CompletionSyncService {
       ipAddress: null,
       targetType: 'user_path',
       targetId: userPath.id,
-      detail: { courses: courses.length },
+      detail: { courses: moodleCourseIds.length },
     });
 
-    return true;
+    return { completed: true, pathId: userPath.pathId };
+  }
+
+  /**
+   * The path certificate, and the one email that announces it.
+   *
+   * Mirrors `onCoursePassed`: reached only on the transition, issuance does its
+   * own idempotency check behind a unique index, and neither a failed render
+   * nor a failed send may fail the sync. `reconcileMissingCertificates` covers
+   * the same gap on this side — `refreshPathStatus` returns early once the path
+   * is `COMPLETED`, so nothing re-enters here.
+   *
+   * Unlike a passed course, this **does** get its own email: finishing a whole
+   * path is a distinct event from passing the last course in it, and folding
+   * the two into one message would bury the larger award.
+   */
+  private async onPathCompleted(
+    learner: { id: string; email: string },
+    pathId: string,
+  ): Promise<void> {
+    let certificateIssued = false;
+
+    try {
+      await this.certificates.issuePathCertificate(learner.id, pathId);
+      certificateIssued = true;
+    } catch (error) {
+      this.logger.error(
+        `Could not issue the path certificate for user ${learner.id}, path ${pathId}: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+    }
+
+    const path = await this.prisma.path.findUnique({
+      where: { id: pathId },
+      select: { name: true },
+    });
+
+    try {
+      await this.email.sendPathCompleted(learner.email, path?.name ?? '', { certificateIssued });
+    } catch (error) {
+      this.logger.error(
+        `Could not send the path-completed email: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+    }
   }
 
   /**

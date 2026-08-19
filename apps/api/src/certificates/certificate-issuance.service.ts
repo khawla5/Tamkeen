@@ -21,7 +21,9 @@ export interface IssueOutcome {
 
 /** Raised when issuance is asked for something the learner has not earned. */
 export class CertificateNotEarnedError extends Error {
-  constructor(readonly reason: 'NO_PASSING_COMPLETION' | 'UNKNOWN_TARGET') {
+  constructor(
+    readonly reason: 'NO_PASSING_COMPLETION' | 'UNKNOWN_TARGET' | 'PATH_NOT_FULLY_PASSED',
+  ) {
     super(`Certificate not earned: ${reason}`);
     this.name = 'CertificateNotEarnedError';
   }
@@ -123,6 +125,95 @@ export class CertificateIssuanceService {
           where: { userId_type_courseId: { userId, type: 'COURSE', courseId } },
         }),
     });
+  }
+
+  /**
+   * The path certificate (§2, §4.10): the larger award, earned when every course
+   * the learner chose has been passed.
+   *
+   * **Gated on passes, not on statuses.** `UserPathCourse.status` becomes
+   * `COMPLETED` from the LMS's completion signal alone — a learner can finish a
+   * course in Moodle and score below the threshold, and Phase 2 records that as
+   * completed-but-not-passed, correctly (D-042 §4). Reading the status here
+   * would certify a path nobody passed.
+   */
+  async issuePathCertificate(userId: string, pathId: string): Promise<IssueOutcome> {
+    const existing = await this.prisma.certificate.findUnique({
+      where: { userId_type_pathId: { userId, type: 'PATH', pathId } },
+    });
+
+    if (existing) {
+      return { certificate: existing, created: false };
+    }
+
+    const [user, path] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } }),
+      this.prisma.path.findUnique({ where: { id: pathId }, select: { name: true } }),
+    ]);
+
+    if (!user || !path) {
+      throw new CertificateNotEarnedError('UNKNOWN_TARGET');
+    }
+
+    const passedCount = await this.countPassedPathCourses(userId, pathId);
+
+    if (passedCount === null) {
+      throw new CertificateNotEarnedError('PATH_NOT_FULLY_PASSED');
+    }
+
+    return this.render({
+      userId,
+      type: 'PATH',
+      courseId: null,
+      pathId,
+      holderName: user.fullName,
+      subjectTitle: path.name,
+      pathName: null,
+      courseCount: passedCount,
+      findExisting: () =>
+        this.prisma.certificate.findUnique({
+          where: { userId_type_pathId: { userId, type: 'PATH', pathId } },
+        }),
+    });
+  }
+
+  /**
+   * How many of the learner's chosen courses they have passed, or `null` if the
+   * path is not theirs, not confirmed, or not finished.
+   *
+   * `completions.passed` is our verdict against the product threshold (D-007)
+   * and already requires the LMS's completion signal, so it is the whole test —
+   * a course cannot be passed without having been completed.
+   */
+  private async countPassedPathCourses(userId: string, pathId: string): Promise<number | null> {
+    const userPath = await this.prisma.userPath.findUnique({
+      where: { userId },
+      select: {
+        pathId: true,
+        confirmedAt: true,
+        courses: { select: { course: { select: { moodleCourseId: true } } } },
+      },
+    });
+
+    /* A path the learner never committed to, or a different one — one path per
+       user (D-002), so this is a mismatch rather than a lookup. */
+    if (!userPath || userPath.pathId !== pathId || userPath.confirmedAt === null) {
+      return null;
+    }
+
+    const moodleCourseIds = userPath.courses.map((chosen) => chosen.course.moodleCourseId);
+
+    /* An empty path must never read as "finished" — the 5-10 rule (§2) makes
+       this unreachable, which is exactly why it is cheap to rule out. */
+    if (moodleCourseIds.length === 0) {
+      return null;
+    }
+
+    const passed = await this.prisma.completion.count({
+      where: { userId, moodleCourseId: { in: moodleCourseIds }, passed: true },
+    });
+
+    return passed === moodleCourseIds.length ? passed : null;
   }
 
   /**
@@ -258,6 +349,23 @@ export class CertificateIssuanceService {
    * cannot monopolise the scheduler, and safe to run at any time.
    */
   async reconcileMissingCertificates(): Promise<{ issued: number; failed: number }> {
+    const courses = await this.reconcileCourseCertificates();
+    const paths = await this.reconcilePathCertificates();
+
+    const issued = courses.issued + paths.issued;
+    const failed = courses.failed + paths.failed;
+
+    if (issued > 0 || failed > 0) {
+      this.logger.log(
+        `Certificate reconciliation: ${courses.issued} course, ${paths.issued} path, ` +
+          `${failed} failed`,
+      );
+    }
+
+    return { issued, failed };
+  }
+
+  private async reconcileCourseCertificates(): Promise<{ issued: number; failed: number }> {
     const passed = await this.prisma.completion.findMany({
       where: { passed: true },
       select: { userId: true, moodleCourseId: true },
@@ -305,8 +413,47 @@ export class CertificateIssuanceService {
       }
     }
 
-    if (issued > 0 || failed > 0) {
-      this.logger.log(`Certificate reconciliation: ${issued} issued, ${failed} failed`);
+    return { issued, failed };
+  }
+
+  /**
+   * The path half of the same gap.
+   *
+   * `onPathCompleted` fires on the run that flips the path to `COMPLETED`, and
+   * `refreshPathStatus` returns early ever after — so a render that failed
+   * there is never retried either. Finished paths are few, so this scans them
+   * all rather than paging.
+   */
+  private async reconcilePathCertificates(): Promise<{ issued: number; failed: number }> {
+    const finished = await this.prisma.userPath.findMany({
+      where: { status: 'COMPLETED', confirmedAt: { not: null } },
+      select: { userId: true, pathId: true },
+      take: RECONCILE_BATCH,
+    });
+
+    let issued = 0;
+    let failed = 0;
+
+    for (const userPath of finished) {
+      const already = await this.prisma.certificate.findUnique({
+        where: {
+          userId_type_pathId: { userId: userPath.userId, type: 'PATH', pathId: userPath.pathId },
+        },
+        select: { id: true },
+      });
+
+      if (already) continue;
+
+      try {
+        const outcome = await this.issuePathCertificate(userPath.userId, userPath.pathId);
+        if (outcome.created) issued += 1;
+      } catch (error) {
+        failed += 1;
+        this.logger.error(
+          `Could not issue the missing path certificate for user ${userPath.userId}, path ` +
+            `${userPath.pathId}: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
     }
 
     return { issued, failed };

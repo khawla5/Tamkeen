@@ -148,6 +148,50 @@ export function coursePassedEmail(
 }
 
 /**
+ * "You finished your path" (§2 notifications — transactional only).
+ *
+ * **This one does get its own message**, unlike the course certificate folded
+ * into the pass email. Finishing a whole path is a distinct event from passing
+ * the last course in it, and it happens once per learner under the one-path
+ * rule (D-002) — folding it in would bury the larger award behind the smaller.
+ *
+ * `certificateUrl` is nullable for the same reason as the course email: the
+ * path is finished whether or not the render succeeded, and announcing a
+ * certificate that is not there would be worse than saying nothing about it.
+ */
+export function pathCompletedEmail(
+  pathName: string,
+  myPathUrl: string,
+  certificateUrl: string | null,
+): EmailContent {
+  const heading = 'أتممت مسارك بنجاح';
+  const named = pathName.trim().length > 0 ? escapeHtml(pathName.trim()) : 'مسارك';
+  const plain = pathName.trim().length > 0 ? pathName.trim() : 'مسارك';
+  const certified = certificateUrl !== null;
+
+  return {
+    subject: heading,
+    html: layout(
+      heading,
+      `<p style="margin:0;">تهانينا، لقد أتممت جميع دورات «${named}» بنجاح${
+        certified ? '، وصدرت شهادة إتمام المسار' : ''
+      }.</p>
+       ${certified ? button(certificateUrl, 'عرض شهادة المسار') : button(myPathUrl, 'عرض مساري')}`,
+    ),
+    text: [
+      heading,
+      '',
+      `تهانينا، لقد أتممت جميع دورات «${plain}» بنجاح${
+        certified ? '، وصدرت شهادة إتمام المسار' : ''
+      }.`,
+      '',
+      certified ? 'عرض شهادة المسار:' : 'عرض مساري:',
+      certified ? certificateUrl : myPathUrl,
+    ].join('\n'),
+  };
+}
+
+/**
  * Minimal HTML escaping for values that did not originate in this file.
  *
  * The other templates interpolate only URLs we built and numbers we computed;

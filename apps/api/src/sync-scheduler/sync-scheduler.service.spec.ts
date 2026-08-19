@@ -1,4 +1,5 @@
 import type { CatalogSyncService } from '../catalog-sync/catalog-sync.service';
+import type { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import type { CompletionSyncService } from '../completion-sync/completion-sync.service';
 import type { AppConfigService } from '../config/app-config.module';
 import type { EnrollmentService } from '../enrollment/enrollment.service';
@@ -18,6 +19,7 @@ function harness(
     catalogThrows?: boolean;
     enrolThrows?: boolean;
     completionThrows?: boolean;
+    reconcileThrows?: boolean;
     nodeEnv?: string;
     schedulerEnabled?: boolean;
     redisUrl?: string;
@@ -55,6 +57,14 @@ function harness(
     },
   } as unknown as CompletionSyncService;
 
+  const certificates = {
+    reconcileMissingCertificates: () => {
+      order.push('certificates');
+      if (options.reconcileThrows) return Promise.reject(new Error('renderer down'));
+      return Promise.resolve({ issued: 0, failed: 0 });
+    },
+  } as unknown as CertificateIssuanceService;
+
   const config = {
     get: (key: string) => {
       if (key === 'NODE_ENV') return options.nodeEnv ?? 'development';
@@ -66,24 +76,25 @@ function harness(
   } as unknown as AppConfigService;
 
   return {
-    service: new SyncSchedulerService(config, catalog, enrollment, completion),
+    service: new SyncSchedulerService(config, catalog, enrollment, completion, certificates),
     order,
   };
 }
 
 describe('SyncSchedulerService', () => {
   describe('the sync cycle', () => {
-    it('runs catalogue, then enrolments, then completions', async () => {
+    it('runs catalogue, enrolments, completions, then certificate reconciliation', async () => {
       /* Order is load-bearing. The catalogue first so a new or vanished course
          is known before anything reasons about it; enrolments before
          completions so a learner whose enrolment never landed is enrolled
          before we ask about their progress, rather than waiting a whole
-         interval for nothing. */
+         interval for nothing; and reconciliation last, because it exists to
+         catch what the stage before it could not finish. */
       const { service, order } = harness();
 
       await service.runSyncCycle();
 
-      expect(order).toEqual(['catalog', 'enrolments', 'completions']);
+      expect(order).toEqual(['catalog', 'enrolments', 'completions', 'certificates']);
     });
 
     it('returns what each stage reported', async () => {
@@ -93,6 +104,7 @@ describe('SyncSchedulerService', () => {
         catalog: { seen: 3 },
         enrolments: { enrolled: 2 },
         completions: { newlyPassed: 1 },
+        certificates: { issued: 0 },
       });
     });
 
@@ -103,7 +115,7 @@ describe('SyncSchedulerService', () => {
 
       const result = await service.runSyncCycle();
 
-      expect(order).toEqual(['catalog', 'enrolments', 'completions']);
+      expect(order).toEqual(['catalog', 'enrolments', 'completions', 'certificates']);
       expect(result.catalog).toBeNull();
       expect(result.completions).not.toBeNull();
     });
@@ -124,12 +136,14 @@ describe('SyncSchedulerService', () => {
         catalogThrows: true,
         enrolThrows: true,
         completionThrows: true,
+        reconcileThrows: true,
       });
 
       await expect(service.runSyncCycle()).resolves.toEqual({
         catalog: null,
         enrolments: null,
         completions: null,
+        certificates: null,
       });
     });
   });
