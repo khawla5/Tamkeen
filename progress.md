@@ -6,17 +6,18 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1 (client + provisioning), 2 (catalogue sync) and 3 (enrolment) complete.
-- **Last completed task:** Checkpoint 3 — real `enrol`/`isEnrolled` with verify-before-believing-the-error, per-course resilience, and `retryPendingEnrolments` (D-041). Verified against the live Moodle.
-- **Next task:** Checkpoint 4 — **completion sync**: the `completions` table keyed on `(user, moodle_course_id)`, the product pass threshold, and the BullMQ scheduler. Then the seamless-login spike before any course-player UI (D-039).
+- **Current phase:** Phase 2 — Moodle integration — **in progress.** Spike proven; checkpoints 1 (client + provisioning), 2 (catalogue sync), 3 (enrolment) and 4 (completion sync) complete.
+- **Last completed task:** Checkpoint 4 — real progress reads, the `completions` table, the pass threshold, and the BullMQ sync scheduler (D-042). Verified against the live Moodle.
+- **Next task:** Checkpoint 5 — the **seamless-login spike**, before any course-player UI exists (D-039). Then the player, then the full Phase 2 test pass.
 - **Active branch:** `phase-2-moodle-integration`, off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. Nothing pushed.
 - **Phase 1 is merged** (PR #2, `origin/main` @ `f25b644`).
 - **Open blockers / questions for the human:**
   1. **Production Moodle version is 4.5 LTS, development is 5.2.2** (D-039). The adapter is version-agnostic, but **the seamless-login mechanism must be re-verified on a real 4.5** rather than assumed from 5.2.
   2. **Seamless login will probably need a Moodle-side install** — a custom `local_` plugin, or the mobile web service enabled. Being spiked before the course player is built; the human will need to act on it.
   3. **The dev Moodle's integration role needed four fixes the initial setup missed:** `moodle/role:assign`, the Allow-role-assignments matrix row, `gradereport/user:view`, and disabling the manual-enrolment welcome message. **The same list applies to the ministry's Moodle** — see the 2026-08-18 spike entry.
-  4. **GitHub CLI is still not installed on the dev machine**, so PRs cannot be opened from the terminal.
-  5. **Ministry values still placeholders** (needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format.
+  4. **`npm audit` reports 3 high advisories** for `deepmerge-ts` via `prisma` → `@prisma/config`. **Not introduced by Phase 2** (traced; not from BullMQ) — a newly published advisory against an existing dependency. An `overrides` pin in the D-022 style does not take effect, and npm's suggested fix downgrades Prisma to 6.x, breaking D-026. Exposure is low (CLI/config-time, not the request path). **Needs a decision:** accept and defer to the Phase 6 dependency review, or revisit the Prisma major.
+  5. **GitHub CLI is still not installed on the dev machine**, so PRs cannot be opened from the terminal.
+  6. **Ministry values still placeholders** (needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format.
 
 ---
 
@@ -26,12 +27,13 @@
 - **A confirmed path can exist without its LMS enrolments.** Enrolment is best-effort after the commitment is recorded and is audited on failure; **Phase 2's sync job** owns reconciliation (D-036).
 - **My Path reads live LMS progress but never persists it.** Writing `completions` is **Phase 2's** job; two writers on those rows would be a race (D-036).
 - **`courseUrl` points at the mock (`localhost:8080`) and does not resolve.** Expected until **Phase 2** stands up Moodle and the seamless handoff.
-- **`user_path_courses.enrolledAt` stands in for the optional `enrollments` table** (§6). It earns its own table in **Phase 2**, when sync debugging needs more than a timestamp.
+- **The optional `enrollments` table (§6) is still not built**, now deliberately: `user_path_courses.enrolledAt` answers the only question anything asks, and a table whose sole consumer is a hypothetical debugger is speculative schema (D-041).
 - **The balance rule must survive Phase 5's assessment editor.** `isBalancedBank` fails CI if an edit unbalances the bank; **Phase 5** must either keep it balanced or move ranking to normalised percentages (D-032).
 - **Rate limiting is in-process** — per-instance counters, so horizontal scaling multiplies the effective limit. **Phase 7** must swap in a shared store when deployment topology is decided. Per-account lockout is in the database and unaffected. (D-028)
 - **`postcss` / `sharp` are pinned via npm `overrides`** to clear 3 high CVEs while holding Next 15. Each Next upgrade must re-check the pins. **Phase 6** dependency review owns this, and should consider dropping the `sharp` pin by disabling `next/image` optimisation entirely. (D-022)
 - **Narrow-viewport layout not visually verified.** The `md:` breakpoint logic exists; the browser resize did not take effect during the Checkpoint C review, so no claim is made. **Phase 6** accessibility/responsive pass.
 - **Employee IDs are format-validated, not verified.** Real verification needs a ministry roster or `admin-only` provisioning; the `REGISTRATION_MODE` switch exists for that decision. (D-017)
+- **Completion sync processes every eligible learner in one pass**, with no batching or rotation. A silent cap would starve whoever fell outside it; **Phase 6** (sync reliability + load testing) owns making this scale. (D-042)
 - **Entity scoping is not built.** RBAC is role-based only; which courses/learners an entity may see is data-scoped filtering and belongs with the entity model in **Phase 4**. (D-027)
 - **`packages/types` holds only roles, locale and formatting.** RIASEC/path/certificate types arrive with the phases that define them.
 
@@ -67,6 +69,28 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-19 — Phase 2 checkpoint 4: completion sync
+
+The loop now closes in the product, not just in a spike. `getCourseProgress`/`listProgressForUser` are real, `completions` exists, and a scheduled job drives catalogue sync, enrolment reconciliation and completion sync in that order (D-042).
+
+**Verified against the live Moodle**, reading the learner who actually took the quiz: `{"completed":true,"completedAt":"2026-08-18T13:57:59.000Z","gradePercent":100}` → our verdict `passed: true` at `PASS_THRESHOLD=70`. A course they are not enrolled in returns `null`; an unknown learner returns `[]`; three consecutive reads are identical.
+
+**One constraint carries three rules.** `completions` unique on `(user_id, moodle_course_id)`: polling cannot duplicate a row, a shared course reuses the one completion instead of being re-taken (D-003), and Phase 3 gets a stable idempotency key. Keyed on the *LMS* course id so a completion survives our catalogue row being retired.
+
+**The email fires only on the transition into passing** — the single irreversible act in a job that re-reads the same data forever. Tested by running the sync three times and asserting one email.
+
+**A hazard the spike had already shown us** is now guarded: a Moodle course with no completion criteria reports `completed:false` forever, so nobody on it can ever pass however well they score, and the symptom is "certificates never arrive" with nothing in any log. `isGradedButNotComplete` detects that exact shape and names the course.
+
+**My Path's live-progress overlay is gone, closing D-036.** Phase 1 read the LMS on every render because nothing persisted progress; this job is the writer that was missing. It also removes an N+1 LMS call from a page load — the page no longer needs Moodle to be up to render.
+
+**Totals:** 331 API unit tests (was 285), 90 integration tests against real PostgreSQL, all green; typecheck, lint, format clean. One migration (`phase_2_completions`). Callers of `LmsPort` still unchanged.
+
+**A security finding, not introduced here:** `npm audit` now reports **3 high** advisories for `deepmerge-ts`, reached through `prisma` → `@prisma/config`. It is not from BullMQ (verified by tracing the tree) — it is a newly published advisory against a dependency we already had. An npm `overrides` pin in the D-022 style **does not take effect** here, and npm's own fix downgrades Prisma to 6.x, breaking D-026. Exposure is low: it is a CLI/config-time dependency reached when loading a Prisma config file, not in the request path. **Flagged for a decision rather than silently absorbed** — see the blocker list above.
+
+**Next checkpoint:** the seamless-login spike, before any course-player UI is built (D-039).
+
+
 
 ### 2026-08-18 — Phase 2 checkpoint 3: enrolment
 

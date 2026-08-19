@@ -293,23 +293,19 @@ export class EnrollmentService {
       return null;
     }
 
-    const live = await this.liveProgress(userId);
-
     let nextAssigned = false;
     const courses: MyPathCourseView[] = userPath.courses.map((chosen) => {
-      const progress = live.get(chosen.course.moodleCourseId);
-
       /*
-       * Stored status is the record; live LMS progress is an overlay on top of
-       * it. Phase 1 deliberately does not write the overlay back — persisting
-       * completions is the Phase 2 sync job's job, and doing it here would put
-       * two writers on the same rows.
+       * The stored status is now the whole truth. Phase 1 overlaid live LMS
+       * progress here because nothing persisted it yet; the completion-sync job
+       * is that missing writer, and it has arrived (D-036, D-042).
+       *
+       * Removing the overlay is not merely tidying: it took an N+1 call to the
+       * LMS on every render of this page, which against a real Moodle means the
+       * page's latency — and its ability to render at all — depended on the LMS
+       * being up. It no longer does.
        */
-      const status: UserPathCourseStatus = progress?.completed
-        ? 'COMPLETED'
-        : progress?.gradePercent != null
-          ? 'IN_PROGRESS'
-          : chosen.status;
+      const status: UserPathCourseStatus = chosen.status;
 
       const isNextUp = !nextAssigned && status !== 'COMPLETED';
       if (isNextUp) {
@@ -324,7 +320,7 @@ export class EnrollmentService {
         durationMinutes: chosen.course.durationMinutes,
         order: chosen.displayOrder,
         status,
-        gradePercent: progress?.gradePercent ?? chosen.gradePercent,
+        gradePercent: chosen.gradePercent,
         isNextUp,
         courseUrl: this.lms.courseUrl(chosen.course.moodleCourseId),
       };
@@ -621,41 +617,6 @@ export class EnrollmentService {
     });
 
     return reference.lmsUserId;
-  }
-
-  /**
-   * Live progress from the LMS, keyed by course.
-   *
-   * Never throws: My Path must render whether or not the LMS is reachable. An
-   * empty map degrades to the stored status, which is the honest fallback —
-   * "we do not know of any progress" rather than "there is none".
-   */
-  private async liveProgress(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { moodleUserId: true },
-    });
-
-    if (user?.moodleUserId == null) {
-      return new Map<number, { completed: boolean; gradePercent: number | null }>();
-    }
-
-    try {
-      const progress = await this.lms.listProgressForUser(user.moodleUserId);
-
-      return new Map(
-        progress.map((entry) => [
-          entry.lmsCourseId,
-          { completed: entry.completed, gradePercent: entry.gradePercent },
-        ]),
-      );
-    } catch (error) {
-      this.logger.warn(
-        `Could not read LMS progress: ${error instanceof Error ? error.message : 'unknown error'}`,
-      );
-
-      return new Map<number, { completed: boolean; gradePercent: number | null }>();
-    }
   }
 
   private async auditFailure(

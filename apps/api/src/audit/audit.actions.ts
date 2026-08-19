@@ -43,6 +43,16 @@ export const AuditAction = {
    * can see, and D-015 makes getting it wrong a product violation.
    */
   LMS_COURSE_WITHDRAWN: 'LMS_COURSE_WITHDRAWN',
+  /** A completion-sync run finished. Counts only, never grades or names. */
+  LMS_COMPLETION_SYNCED: 'LMS_COMPLETION_SYNCED',
+  /**
+   * A learner passed a course. Recorded on the transition only, so the trail
+   * shows when it happened rather than once per poll. The grade is deliberately
+   * absent: it is in `completions`, and an audit log is not the place for it.
+   */
+  LMS_COURSE_PASSED: 'LMS_COURSE_PASSED',
+  /** Every chosen course passed. The path certificate itself is Phase 3. */
+  PATH_COMPLETED: 'PATH_COMPLETED',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];

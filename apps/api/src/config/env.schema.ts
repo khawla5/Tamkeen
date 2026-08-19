@@ -96,6 +96,16 @@ export const envSchema = z.object({
   MOODLE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
   PASS_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
   COMPLETION_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5),
+  /**
+   * Whether the background sync scheduler runs. Off in tests regardless, since a
+   * repeatable job firing mid-suite would write underneath assertions and read
+   * as flakiness rather than as a scheduler.
+   * Not z.coerce.boolean(): that treats the string "false" as true.
+   */
+  SYNC_SCHEDULER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
 
   // ---- Certificates (Phase 3) ----
   CERT_VERIFICATION_BASE_URL: z.string().url().default('http://localhost:3000/verify'),

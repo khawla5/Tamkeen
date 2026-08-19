@@ -5,6 +5,27 @@
 
 ---
 
+## D-042 — Completion sync: one writer, one constraint, and one email
+The polled sync (D-005) writes completion state. Everything below exists because this code runs every few minutes forever, so anything not idempotent becomes a duplicate row, a repeated email, or — in Phase 3 — a certificate issued twice.
+
+**1. `completions` is unique on `(user_id, moodle_course_id)`, and that one constraint carries three rules.** Re-running the sync cannot create a second row, so polling is safe. A course reachable through more than one route reuses the single completion rather than being re-taken (D-003, §2). And Phase 3's issuance gets a stable key to be idempotent against. It is keyed on the **LMS** course id rather than our `courses.id` deliberately: the LMS course is the thing actually completed, and the record must survive our catalogue row being retired or re-created.
+
+**2. The verdict is stored with the threshold it was judged against.** `passed` is *our* evaluation, not the LMS's (D-007) — but a stored boolean whose meaning depends on a setting that can change is unexplainable a year later, exactly when someone asks why a certificate was issued. `passThresholdUsed` makes each historical verdict self-describing.
+
+**3. The grade is rounded once, and the decision uses the rounded value.** The alternative — deciding on the precise grade while displaying a rounded one — produces a learner shown "70%" and told they failed, because the true figure was 69.6. For a government system the grade on the screen must be the grade decided on. The cost is that the effective boundary sits half a point below the nominal one; that is deliberate and explainable rather than hidden.
+
+**4. Passing requires the LMS's completion signal *and* the grade.** A high quiz score in an unfinished course is not a finished course, and a certificate saying otherwise would be false (§5.5). This creates one operational hazard worth naming: a Moodle course with **no completion criteria configured** reports `completed:false` forever, so nobody on it can ever pass however well they score — and the symptom is "certificates never arrive" with nothing to explain it. `isGradedButNotComplete` detects exactly that shape and logs it against the course. The spike hit this very failure on the test course, which is why it is guarded rather than theorised.
+
+**5. The email fires only on the transition into passing.** It is the single irreversible side effect in a job that re-reads the same completions indefinitely; without the check a learner would be emailed about the same course every few minutes. The previous `passed` value is therefore read *before* the upsert. A failed send never fails the sync — the completion is true regardless, and the next run must not re-process it because SMTP was down. **Phase 3 issues the course certificate at this same seam (`onCoursePassed`) and must still do its own idempotency check**: this guard is about not spamming, not about uniqueness, and a re-run after a partial failure can legitimately arrive here twice.
+
+**6. My Path's live-progress overlay is gone, closing D-036.** Phase 1 read progress from the LMS on every render because nothing persisted it; this job is the missing writer, so the stored status is now the whole truth. That is not tidying: the overlay made an N+1 LMS call on every page load, so the page's latency — and its ability to render at all — depended on the LMS being up. It no longer does, and there is exactly one writer of those rows.
+
+**Scheduling.** The cycle runs **catalogue → enrolment reconciliation → completions**, and the order is load-bearing: the catalogue first so a new or vanished course is known before anything reasons about it, and enrolments before completions so a learner whose enrolment never landed is enrolled before we ask about their progress rather than waiting a whole interval for nothing. Each stage is isolated — they fail for unrelated reasons, and a catalogue problem must not freeze every learner's progress. The cycle never throws, because a failed BullMQ job would retry stages that already succeeded. Worker concurrency is **1**: two overlapping cycles would put two writers on `completions` and could double-send an email in the window between reading the previous verdict and writing the new one.
+
+**The schedule and the work are separate on purpose.** `SyncSchedulerService` only calls three services in order; all the logic lives in them, testable without Redis, a queue or a clock. Scheduling is fire-and-forget at bootstrap and its failure is logged, not thrown — the product works without sync running, just with staler data, and refusing to start would turn a background-job outage into a total one. It never schedules under `NODE_ENV=test` whatever the flag says, because a repeatable job firing mid-suite would write underneath assertions and read as flakiness.
+
+**Deferred, deliberately:** the sync processes every eligible learner in one pass, with no batching or rotation. A silent cap would starve whoever fell outside it, which is worse than a long run; **Phase 6** (sync reliability and load testing) owns making this scale.
+
 ## D-041 — Enrolment: verify before believing an error, and fail one course at a time
 Two changes to how enrolment behaves, both invisible under the mock and both load-bearing against a real Moodle.
 

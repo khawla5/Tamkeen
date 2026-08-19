@@ -71,6 +71,32 @@ interface MoodleEnrolledCourse {
   id: number;
 }
 
+interface MoodleCompletionCriterion {
+  complete?: boolean;
+  timecompleted?: number;
+}
+
+interface MoodleCompletionStatus {
+  completed?: boolean;
+  completions?: MoodleCompletionCriterion[];
+}
+
+interface MoodleCompletionResponse {
+  completionstatus?: MoodleCompletionStatus;
+}
+
+interface MoodleGradeItem {
+  itemtype?: string;
+  itemmodule?: string | null;
+  graderaw?: number | null;
+  grademin?: number | null;
+  grademax?: number | null;
+}
+
+interface MoodleGradeReport {
+  usergrades?: Array<{ gradeitems?: MoodleGradeItem[] }>;
+}
+
 @Injectable()
 export class MoodleHttpService implements LmsPort {
   private readonly logger = new Logger(MoodleHttpService.name);
@@ -350,15 +376,145 @@ export class MoodleHttpService implements LmsPort {
     }
   }
 
-  getCourseProgress(
-    _lmsUserId: LmsUserId,
-    _lmsCourseId: LmsCourseId,
+  /**
+   * Completion and grade for one enrolment, or `null` when the user is not
+   * enrolled.
+   *
+   * Two Moodle error codes are **answers, not failures**, and translating them
+   * is most of this method's job:
+   *
+   *  - `usernotenroled` → `null`. Moodle checks enrolment before anything else,
+   *    which is why one call can answer "is this person even on the course".
+   *  - `nocriteriaset` → not complete. The course defines no completion
+   *    criteria, so it cannot be complete — but the user *is* enrolled (the
+   *    enrolment check already passed), and a grade may still exist. Treating
+   *    this as an error would make every not-yet-configured course look like an
+   *    outage.
+   */
+  async getCourseProgress(
+    lmsUserId: LmsUserId,
+    lmsCourseId: LmsCourseId,
   ): Promise<LmsCourseProgress | null> {
-    return this.notYet('getCourseProgress');
+    let status: MoodleCompletionStatus | null;
+
+    try {
+      const payload = await this.client.call<MoodleCompletionResponse>(
+        'core_completion_get_course_completion_status',
+        { courseid: lmsCourseId, userid: lmsUserId },
+      );
+
+      status = payload?.completionstatus ?? null;
+    } catch (error) {
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      const errorcode = error instanceof MoodleWsError ? error.errorcode : 'unknown';
+
+      if (errorcode === 'usernotenroled') {
+        return null;
+      }
+
+      if (errorcode !== 'nocriteriaset') {
+        this.logger.error(`Completion read failed: ${errorcode}`);
+        throw new LmsOperationError('SYNC');
+      }
+
+      status = null;
+    }
+
+    return {
+      lmsUserId,
+      lmsCourseId,
+      completed: status?.completed ?? false,
+      completedAt: readCompletedAt(status),
+      gradePercent: await this.readCourseGrade(lmsUserId, lmsCourseId),
+    };
   }
 
-  listProgressForUser(_lmsUserId: LmsUserId): Promise<LmsCourseProgress[]> {
-    return this.notYet('listProgressForUser');
+  /**
+   * Progress across every enrolment of one user — what the sync job needs.
+   *
+   * Necessarily N+1: Moodle exposes no bulk equivalent, so this is one call to
+   * list the enrolments plus completion and grade per course. Bounded in
+   * practice by the 5-10 course rule (§2), and the sync job is scheduled rather
+   * than serving a request, so latency here costs nobody a page load.
+   */
+  async listProgressForUser(lmsUserId: LmsUserId): Promise<LmsCourseProgress[]> {
+    const enrolments = await this.enrolmentsFor(lmsUserId);
+    const progress: LmsCourseProgress[] = [];
+
+    for (const course of enrolments) {
+      const entry = await this.getCourseProgress(lmsUserId, course.id);
+
+      /* null means "not enrolled", which contradicts the list we just read —
+         an enrolment removed mid-loop. Skipping is right: reporting it would
+         invent progress for a course the user no longer has. */
+      if (entry) {
+        progress.push(entry);
+      }
+    }
+
+    return progress;
+  }
+
+  /**
+   * The course-total grade as a percentage, or `null` when nothing is graded.
+   *
+   * **The course total, always** — never a quiz item. The spike found Moodle
+   * returning *only* the course total under our token, so preferring a quiz item
+   * "when present" would silently change the grade source between instances.
+   * It is also the right product semantics: D-007 and §5.5 speak of a course
+   * being passed, not a quiz.
+   *
+   * `null` rather than 0 for an unattempted course: a zero would read as a
+   * failed attempt to the threshold check, implying a quiz was taken when none
+   * was.
+   */
+  private async readCourseGrade(
+    lmsUserId: LmsUserId,
+    lmsCourseId: LmsCourseId,
+  ): Promise<number | null> {
+    let report: MoodleGradeReport;
+
+    try {
+      report = await this.client.call<MoodleGradeReport>('gradereport_user_get_grade_items', {
+        courseid: lmsCourseId,
+        userid: lmsUserId,
+      });
+    } catch (error) {
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Grade read failed: ${error instanceof MoodleWsError ? error.errorcode : 'unknown'}`,
+      );
+      throw new LmsOperationError('SYNC');
+    }
+
+    const item = report?.usergrades?.[0]?.gradeitems?.find((entry) => entry.itemtype === 'course');
+
+    if (!item || item.graderaw === null || item.graderaw === undefined) {
+      return null;
+    }
+
+    const min = Number(item.grademin ?? 0);
+    const max = Number(item.grademax ?? 100);
+
+    if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+      return null;
+    }
+
+    const percent = ((Number(item.graderaw) - min) / (max - min)) * 100;
+
+    if (!Number.isFinite(percent)) {
+      return null;
+    }
+
+    /* Clamped: Moodle permits grades above the maximum through overrides, and a
+       107% would be a surprising thing to hand a caller. */
+    return Math.min(100, Math.max(0, percent));
   }
 
   courseUrl(lmsCourseId: LmsCourseId): string {
@@ -437,4 +593,30 @@ function readDurationMinutes(course: MoodleCourse): number | null {
   }
 
   return null;
+}
+
+/**
+ * When the course was completed.
+ *
+ * There is **no `completionstatus.timecompleted`** — the obvious-looking field
+ * does not exist. The timestamps live on the individual criteria, so the course
+ * completion time is the latest satisfied one. Reading the obvious path returns
+ * `null` on a course that is demonstrably complete, which would have written a
+ * null timestamp for every learner (D-038).
+ */
+function readCompletedAt(status: MoodleCompletionStatus | null): Date | null {
+  if (!status?.completed) {
+    return null;
+  }
+
+  const stamps = (status.completions ?? [])
+    .filter((criterion) => criterion.complete && criterion.timecompleted)
+    .map((criterion) => Number(criterion.timecompleted));
+
+  if (stamps.length === 0) {
+    return null;
+  }
+
+  /* Seconds in Moodle, milliseconds in JavaScript. */
+  return new Date(Math.max(...stamps) * 1000);
 }

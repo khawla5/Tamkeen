@@ -1,0 +1,337 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+
+import { AuditAction } from '../audit/audit.actions';
+import { AuditService } from '../audit/audit.service';
+import { AppConfigService } from '../config/app-config.module';
+import { EmailService } from '../email/email.service';
+import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
+import type { LmsCourseProgress } from '../moodle/lms.types';
+import { PrismaService } from '../prisma/prisma.service';
+import { evaluateCompletion, isGradedButNotComplete } from './pass-threshold';
+
+export interface CompletionSyncResult {
+  users: number;
+  /** Completion rows written or refreshed. */
+  completions: number;
+  /** Courses that went from not-passed to passed on this run. */
+  newlyPassed: number;
+  /** Paths that finished on this run. */
+  pathsCompleted: number;
+  /** Users whose sync failed; the rest still ran. */
+  failures: number;
+}
+
+/**
+ * Reads completion and grades from the LMS and records them (§5.5, Phase 2E).
+ *
+ * **The single writer of completion state.** Phase 1's My Path overlaid live LMS
+ * progress on the stored status without persisting it, precisely because two
+ * writers on those rows would race (D-036). This is that second writer arriving,
+ * so the overlay goes and this becomes the only thing that writes.
+ *
+ * **Idempotent throughout**, which is not optional: this polls, so it re-reads
+ * the same completions indefinitely. `completions` is unique on
+ * `(user, moodle_course_id)` and every write is an upsert, so a run that has
+ * already happened changes nothing. The email is the one irreversible side
+ * effect, so it fires only on the transition into passing — never on a re-read.
+ *
+ * **Certificates are Phase 3.** This stops at recording completion and pass/fail
+ * and updating status. `onCoursePassed` is the seam where issuance plugs in.
+ */
+@Injectable()
+export class CompletionSyncService {
+  private readonly logger = new Logger(CompletionSyncService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+    private readonly config: AppConfigService,
+    private readonly email: EmailService,
+    @Inject(LMS_PORT) private readonly lms: LmsPort,
+  ) {}
+
+  async sync(): Promise<CompletionSyncResult> {
+    const learners = await this.prisma.user.findMany({
+      where: {
+        moodleUserId: { not: null },
+        userPath: { confirmedAt: { not: null } },
+      },
+      select: { id: true, email: true, moodleUserId: true },
+    });
+
+    const result: CompletionSyncResult = {
+      users: learners.length,
+      completions: 0,
+      newlyPassed: 0,
+      pathsCompleted: 0,
+      failures: 0,
+    };
+
+    for (const learner of learners) {
+      try {
+        const perUser = await this.syncUser({
+          id: learner.id,
+          email: learner.email,
+          moodleUserId: learner.moodleUserId!,
+        });
+
+        result.completions += perUser.completions;
+        result.newlyPassed += perUser.newlyPassed;
+        result.pathsCompleted += perUser.pathCompleted ? 1 : 0;
+      } catch (error) {
+        /* One learner's failure must not abandon the rest — an LMS that refuses
+           a single account would otherwise stop the whole ministry's sync. */
+        result.failures += 1;
+        this.logger.error(
+          `Completion sync failed for user ${learner.id}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      }
+    }
+
+    await this.audit.record({
+      action: AuditAction.LMS_COMPLETION_SYNCED,
+      outcome: result.failures === 0 ? 'SUCCESS' : 'FAILURE',
+      actorUserId: null,
+      ipAddress: null,
+      detail: {
+        users: result.users,
+        completions: result.completions,
+        newlyPassed: result.newlyPassed,
+        pathsCompleted: result.pathsCompleted,
+        failures: result.failures,
+      },
+    });
+
+    this.logger.log(
+      `Completion sync: ${result.users} learner(s), ${result.completions} completion(s), ` +
+        `${result.newlyPassed} newly passed, ${result.pathsCompleted} path(s) completed, ` +
+        `${result.failures} failure(s)`,
+    );
+
+    return result;
+  }
+
+  private async syncUser(learner: { id: string; email: string; moodleUserId: number }): Promise<{
+    completions: number;
+    newlyPassed: number;
+    pathCompleted: boolean;
+  }> {
+    const progress = await this.lms.listProgressForUser(learner.moodleUserId);
+
+    if (progress.length === 0) {
+      return { completions: 0, newlyPassed: 0, pathCompleted: false };
+    }
+
+    const passThreshold = this.config.get('PASS_THRESHOLD');
+    let completions = 0;
+    let newlyPassed = 0;
+
+    for (const entry of progress) {
+      const passedNow = await this.recordCompletion(learner, entry, passThreshold);
+      completions += 1;
+      if (passedNow) newlyPassed += 1;
+    }
+
+    const pathCompleted = await this.refreshPathStatus(learner.id);
+
+    return { completions, newlyPassed, pathCompleted };
+  }
+
+  /**
+   * Writes one completion row and mirrors it onto the learner's chosen course.
+   *
+   * Returns whether this run is the one that turned it into a pass, which is the
+   * only moment anything irreversible may happen.
+   */
+  private async recordCompletion(
+    learner: { id: string; email: string },
+    entry: LmsCourseProgress,
+    passThreshold: number,
+  ): Promise<boolean> {
+    const verdict = evaluateCompletion(entry, passThreshold);
+
+    if (isGradedButNotComplete(verdict, passThreshold)) {
+      /* A silent blocker made loud: almost always a Moodle course with no
+         completion criteria, which reports `completed:false` forever, so nobody
+         on it can ever pass however well they score. */
+      this.logger.warn(
+        `LMS course ${entry.lmsCourseId} reports grade ${String(verdict.gradePercent)} for user ` +
+          `${learner.id} but is not marked complete — check the course's completion criteria`,
+      );
+    }
+
+    const existing = await this.prisma.completion.findUnique({
+      where: {
+        userId_moodleCourseId: { userId: learner.id, moodleCourseId: entry.lmsCourseId },
+      },
+      select: { passed: true },
+    });
+
+    await this.prisma.completion.upsert({
+      where: {
+        userId_moodleCourseId: { userId: learner.id, moodleCourseId: entry.lmsCourseId },
+      },
+      create: {
+        userId: learner.id,
+        moodleCourseId: entry.lmsCourseId,
+        completed: verdict.completed,
+        completedAt: verdict.completedAt,
+        gradePercent: verdict.gradePercent,
+        passed: verdict.passed,
+        passThresholdUsed: passThreshold,
+        syncedAt: new Date(),
+      },
+      update: {
+        completed: verdict.completed,
+        completedAt: verdict.completedAt,
+        gradePercent: verdict.gradePercent,
+        passed: verdict.passed,
+        passThresholdUsed: passThreshold,
+        syncedAt: new Date(),
+      },
+    });
+
+    await this.mirrorOntoChosenCourses(learner.id, entry.lmsCourseId, verdict);
+
+    const newlyPassed = verdict.passed && existing?.passed !== true;
+
+    if (newlyPassed) {
+      await this.onCoursePassed(learner, entry.lmsCourseId);
+    }
+
+    return newlyPassed;
+  }
+
+  /**
+   * Reflects a completion onto whichever of the learner's chosen courses it
+   * belongs to.
+   *
+   * Matched through `moodle_course_id`, which is what makes shared-course reuse
+   * work (D-003): one completion satisfies the course by whatever route the
+   * learner reached it, and nothing is ever re-taken.
+   */
+  private async mirrorOntoChosenCourses(
+    userId: string,
+    moodleCourseId: number,
+    verdict: { completed: boolean; completedAt: Date | null; gradePercent: number | null },
+  ): Promise<void> {
+    const chosen = await this.prisma.userPathCourse.findMany({
+      where: { userPath: { userId }, course: { moodleCourseId } },
+      select: { id: true, status: true },
+    });
+
+    for (const row of chosen) {
+      const status = verdict.completed
+        ? 'COMPLETED'
+        : verdict.gradePercent !== null
+          ? 'IN_PROGRESS'
+          : row.status;
+
+      await this.prisma.userPathCourse.update({
+        where: { id: row.id },
+        data: {
+          status,
+          gradePercent: verdict.gradePercent,
+          completedAt: verdict.completedAt,
+          /* Set once, on first evidence of activity, and never moved backwards. */
+          ...(row.status === 'NOT_STARTED' && status !== 'NOT_STARTED'
+            ? { startedAt: new Date() }
+            : {}),
+        },
+      });
+    }
+  }
+
+  /**
+   * Marks the path finished once every chosen course is complete.
+   *
+   * The **path certificate** is Phase 3; this only moves the status, which is
+   * what My Path renders. Returns whether this run is the one that finished it.
+   */
+  private async refreshPathStatus(userId: string): Promise<boolean> {
+    const userPath = await this.prisma.userPath.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        status: true,
+        confirmedAt: true,
+        courses: { select: { status: true } },
+      },
+    });
+
+    if (!userPath || userPath.confirmedAt === null || userPath.status === 'COMPLETED') {
+      return false;
+    }
+
+    const courses = userPath.courses;
+    const finished = courses.length > 0 && courses.every((course) => course.status === 'COMPLETED');
+
+    if (!finished) {
+      return false;
+    }
+
+    await this.prisma.userPath.update({
+      where: { id: userPath.id },
+      data: { status: 'COMPLETED' },
+    });
+
+    await this.audit.record({
+      action: AuditAction.PATH_COMPLETED,
+      outcome: 'SUCCESS',
+      actorUserId: userId,
+      ipAddress: null,
+      targetType: 'user_path',
+      targetId: userPath.id,
+      detail: { courses: courses.length },
+    });
+
+    return true;
+  }
+
+  /**
+   * The one irreversible side effect, and the seam Phase 3 plugs into.
+   *
+   * Reached **only on the transition into passing**, never on a re-read — which
+   * is why the previous `passed` value is fetched before the upsert. Polling
+   * every few minutes would otherwise email a learner about the same course
+   * indefinitely.
+   *
+   * **Phase 3 issues the course certificate here**, and must do its own
+   * idempotency check regardless: this guard is about not spamming, not about
+   * uniqueness, and a re-run after a partial failure can legitimately arrive
+   * here twice.
+   */
+  private async onCoursePassed(
+    learner: { id: string; email: string },
+    moodleCourseId: number,
+  ): Promise<void> {
+    const course = await this.prisma.course.findUnique({
+      where: { moodleCourseId },
+      select: { title: true },
+    });
+
+    await this.audit.record({
+      action: AuditAction.LMS_COURSE_PASSED,
+      outcome: 'SUCCESS',
+      actorUserId: learner.id,
+      ipAddress: null,
+      targetType: 'course',
+      targetId: String(moodleCourseId),
+    });
+
+    try {
+      await this.email.sendCoursePassed(learner.email, course?.title ?? '');
+    } catch (error) {
+      /* A failed email must not fail the sync: the completion is recorded and
+         true regardless, and the next run must not re-process it just because
+         the mail server was down. */
+      this.logger.error(
+        `Could not send the course-passed email: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+    }
+  }
+}
