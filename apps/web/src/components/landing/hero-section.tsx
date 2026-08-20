@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useFormat } from '@/i18n/format-provider';
 
 /**
  * `ArrowLeft` is the "forward" glyph here, not "back". This product is
@@ -13,9 +14,27 @@ import { Button } from '@/components/ui/button';
  * the left-pointing glyph directly is the correct icon for this direction,
  * not a workaround.
  */
+const HERO_PILL_KEYS = ['heroPill1', 'heroPill2', 'heroPill3'] as const;
+
+/**
+ * Real catalogue facts (apps/api/src/seed-data/catalog.ts — 12 seed paths,
+ * two per RIASEC letter, 48 seeded courses) and the fixed RIASEC/journey
+ * shape, not invented adoption metrics. A pre-launch government platform has
+ * no "78% employment rate" to report yet, and the trust section already
+ * commits to grounded claims over aspirational marketing (see its comment) —
+ * this stat row holds the same line.
+ */
+const HERO_STATS: Array<{ key: string; value: number }> = [
+  { key: 'heroStatSteps', value: 4 },
+  { key: 'heroStatPaths', value: 12 },
+  { key: 'heroStatCourses', value: 48 },
+  { key: 'heroStatRiasec', value: 6 },
+];
+
 export function HeroSection() {
   const t = useTranslations('landing');
   const tAuth = useTranslations('auth');
+  const { number } = useFormat();
 
   return (
     <section className="border-b border-border bg-cream">
@@ -35,7 +54,15 @@ export function HeroSection() {
             {t('heroBody')}
           </p>
 
-          <div className="mt-10 flex flex-col items-center gap-4">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+            {HERO_PILL_KEYS.map((key) => (
+              <Badge key={key} variant="soft">
+                {t(key)}
+              </Badge>
+            ))}
+          </div>
+
+          <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Button asChild size="lg">
               <Link href="/register">
                 {t('heroCta')}
@@ -43,14 +70,32 @@ export function HeroSection() {
               </Link>
             </Button>
 
-            <p className="text-sm text-muted-foreground">
-              {tAuth('haveAccount')}{' '}
-              <Link href="/login" className="font-medium text-navy underline underline-offset-4">
-                {tAuth('signInLink')}
-              </Link>
-            </p>
+            {/* Same-page jump to the four-step journey, not a route — a plain
+                anchor is correct here, not next/link. */}
+            <Button asChild size="lg" variant="outline">
+              <a href="#how-it-works">{t('heroSecondaryCta')}</a>
+            </Button>
           </div>
+
+          <p className="mt-4 text-sm text-muted-foreground">
+            {tAuth('haveAccount')}{' '}
+            <Link href="/login" className="font-medium text-navy underline underline-offset-4">
+              {tAuth('signInLink')}
+            </Link>
+          </p>
         </div>
+
+        {/* Catalogue scope, in numbers — see HERO_STATS for why these four and
+            not usage metrics. A <dl>: each figure (term) is paired with what
+            it counts (description). */}
+        <dl className="mx-auto mt-14 grid max-w-3xl grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
+          {HERO_STATS.map(({ key, value }) => (
+            <div key={key} className="text-center">
+              <dt className="text-3xl font-extrabold text-navy">{number(value)}</dt>
+              <dd className="mt-1 text-xs text-muted-foreground">{t(`${key}Label`)}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </section>
   );

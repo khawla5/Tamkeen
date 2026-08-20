@@ -32,7 +32,10 @@ export function StepsSection() {
   const { number } = useFormat();
 
   return (
-    <section className="border-y border-border bg-navy py-16 sm:py-24 lg:py-28">
+    <section
+      id="how-it-works"
+      className="scroll-mt-20 border-y border-border bg-navy py-16 sm:py-24 lg:py-28"
+    >
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="mx-auto max-w-2xl text-center">
           <Badge variant="navy">{t('stepsEyebrow')}</Badge>
