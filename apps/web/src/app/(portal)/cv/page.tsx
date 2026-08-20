@@ -1,6 +1,6 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { Check, Download } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 
@@ -68,6 +68,10 @@ export default function CvPage() {
 
   const isDirty = profile !== null && baseline !== null && JSON.stringify(profile) !== baseline;
 
+  /* Exportable only when the saved document and the one on screen are the same
+     thing, and only once there is a saved document at all. */
+  const canExport = savedAt !== null && !isDirty && !save.isPending;
+
   return (
     <PortalPage
       title={t('title')}
@@ -79,6 +83,32 @@ export default function CvPage() {
               {t('saved')}
             </span>
           ) : null}
+
+          {/*
+            The export renders the *saved* document, so it is unavailable while
+            there are unsaved edits. A file that quietly differed from the
+            preview it was exported from would be worse than one the learner
+            has to press save for — and the reason is stated rather than left
+            to be inferred from a greyed-out button.
+          */}
+          <Button
+            asChild={canExport}
+            variant="outline"
+            disabled={!canExport}
+            title={canExport ? undefined : t('exportBlocked')}
+          >
+            {canExport ? (
+              <a href={cvApi.exportUrl()}>
+                <Download aria-hidden="true" />
+                {t('export')}
+              </a>
+            ) : (
+              <span>
+                <Download aria-hidden="true" />
+                {t('export')}
+              </span>
+            )}
+          </Button>
 
           <Button
             type="button"

@@ -396,6 +396,8 @@
     "remove": "حذف",
     "removeEntry": "حذف {name}",
     "entryCount": "{count} من {max}",
-    "limitReached": "بلغت الحد الأقصى للعناصر في هذا القسم."
+    "limitReached": "بلغت الحد الأقصى للعناصر في هذا القسم.",
+    "export": "تصدير",
+    "exportBlocked": "احفظ التغييرات قبل التصدير."
   }
 }

@@ -9,6 +9,7 @@ import type { App } from 'supertest/types';
 import { CV_MAX_SKILLS, type CvView } from '@tamkeen/types';
 
 import { AppModule } from '../src/app.module';
+import { PdfRendererService } from '../src/certificates/pdf-renderer.service';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -32,6 +33,23 @@ class EmailCapture {
   sendEmailVerification(to: string, token: string): Promise<void> {
     this.verifications.set(to, token);
     return Promise.resolve();
+  }
+}
+
+/** Captures what the PDF pipeline was asked to render. See the export suite. */
+class RendererStub {
+  lastHtml: string | null = null;
+  lastLandscape: boolean | null = null;
+
+  render(html: string, options: { landscape: boolean }): Promise<Buffer> {
+    this.lastHtml = html;
+    this.lastLandscape = options.landscape;
+    return Promise.resolve(Buffer.from('%PDF-1.4 stub'));
+  }
+
+  reset(): void {
+    this.lastHtml = null;
+    this.lastLandscape = null;
   }
 }
 
@@ -72,6 +90,7 @@ describe('CV builder (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let emails: EmailCapture;
+  let renderer: RendererStub;
 
   let csrfCookie: string;
   let csrfToken: string;
@@ -120,10 +139,13 @@ describe('CV builder (e2e)', () => {
   beforeAll(async () => {
     process.env.RATE_LIMIT_ENABLED = 'false';
     emails = new EmailCapture();
+    renderer = new RendererStub();
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(EmailService)
       .useValue(emails)
+      .overrideProvider(PdfRendererService)
+      .useValue(renderer)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -334,5 +356,93 @@ describe('CV builder (e2e)', () => {
 
   it('requires the CSRF token to save', async () => {
     await request(server()).put('/api/cv').set('Cookie', ownerSession).send(BASE_CV).expect(403);
+  });
+  describe('the PDF export (§4.11)', () => {
+    /*
+     * The renderer is stubbed here, and the reason is a constraint rather than
+     * a preference: Puppeteer 25 is ESM-only and Jest's CommonJS runtime cannot
+     * load it, which is the same reason `PdfRendererService` imports it lazily
+     * in the first place. The *real* render is proven where it can be — against
+     * the built API in the browser end-to-end suite, and by the spike script
+     * against a real Chromium.
+     *
+     * What a stub proves better than a real render, though, is the **contract**:
+     * exactly what HTML the pipeline is handed. A failure in these assertions
+     * is a document defect; a failure in Chromium is an environment one, and
+     * conflating them makes both harder to read.
+     */
+    it('needs a session', async () => {
+      await request(server()).get('/api/cv/export').expect(401);
+    });
+
+    it('serves the PDF as an attachment, uncached and unindexed', async () => {
+      await put('/api/cv', BASE_CV, ownerSession).expect(200);
+
+      const response = await request(server())
+        .get('/api/cv/export')
+        .set('Cookie', ownerSession)
+        .expect(200);
+
+      expect(response.headers['content-type']).toContain('application/pdf');
+      expect(response.headers['content-disposition']).toContain('attachment');
+      /* An ASCII slug of the name, or `cv.pdf` — never a raw Arabic filename,
+         which needs RFC 5987 encoding not every client handles. */
+      expect(response.headers['content-disposition']).toMatch(/filename="cv[a-z0-9-]*\.pdf"/);
+      expect(response.headers['cache-control']).toBe('no-store, private');
+      expect(response.headers['x-robots-tag']).toBe('noindex, nofollow');
+    });
+
+    it('hands the pipeline an English LTR document with the typeface embedded', async () => {
+      await put('/api/cv', BASE_CV, ownerSession).expect(200);
+      renderer.reset();
+
+      await request(server()).get('/api/cv/export').set('Cookie', ownerSession).expect(200);
+
+      const html = renderer.lastHtml!;
+
+      expect(html).toContain('<html lang="en" dir="ltr">');
+      /* A container has no Arabic system font; an unembedded face degrades to
+         tofu or to unshaped letters, not to something merely different. */
+      expect(html).toContain('data:font/woff2;base64,');
+      expect(html).not.toMatch(/https?:\/\/fonts\./);
+      expect(renderer.lastLandscape).toBe(false);
+    });
+
+    it('carries the learner’s own words and the Arabic proper nouns beside them', async () => {
+      await put('/api/cv', BASE_CV, ownerSession).expect(200);
+      renderer.reset();
+
+      await request(server()).get('/api/cv/export').set('Cookie', ownerSession).expect(200);
+
+      const html = renderer.lastHtml!;
+
+      expect(html).toContain('Training Officer');
+      /* D-050: proper nouns pass through as authored, marked RTL so they sit
+         correctly inside the English flow. */
+      expect(html).toContain('<span dir="rtl" lang="ar">وزارة الداخلية</span>');
+      /* The certificate the learner never typed — read from `certificates`. */
+      expect(html).toContain('أساسيات القيادة الإدارية');
+      expect(html).toContain('Course certificate');
+    });
+
+    it('exports the saved document, not a stale one', async () => {
+      await put('/api/cv', { ...BASE_CV, jobTitle: 'First Title' }, ownerSession).expect(200);
+      await put('/api/cv', { ...BASE_CV, jobTitle: 'Second Title' }, ownerSession).expect(200);
+      renderer.reset();
+
+      await request(server()).get('/api/cv/export').set('Cookie', ownerSession).expect(200);
+
+      expect(renderer.lastHtml).toContain('Second Title');
+      expect(renderer.lastHtml).not.toContain('First Title');
+    });
+
+    it('exports each learner their own CV', async () => {
+      await put('/api/cv', { ...BASE_CV, jobTitle: 'Owner Only' }, ownerSession).expect(200);
+      renderer.reset();
+
+      await request(server()).get('/api/cv/export').set('Cookie', strangerSession).expect(200);
+
+      expect(renderer.lastHtml).not.toContain('Owner Only');
+    });
   });
 });

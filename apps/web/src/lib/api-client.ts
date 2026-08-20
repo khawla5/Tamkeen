@@ -285,6 +285,12 @@ export const cvApi = {
   get: () => api.get<CvView>('/api/cv'),
   /** PUT: §4.11 asks for one save, and the document is written whole. */
   save: (profile: CvProfile) => api.put<CvView>('/api/cv', profile),
+  /**
+   * The export URL, not a fetch — the browser's own download handling beats
+   * streaming bytes through JavaScript to re-offer them as a blob, and the
+   * session cookie rides along as it does on any navigation.
+   */
+  exportUrl: () => `${API_URL}/api/cv/export`,
 };
 
 export const notificationsApi = {

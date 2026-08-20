@@ -23,7 +23,11 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/api-client', () => ({
-  cvApi: { get: api.get, save: api.save },
+  cvApi: {
+    get: api.get,
+    save: api.save,
+    exportUrl: () => 'http://api.test/api/cv/export',
+  },
 }));
 
 vi.mock('@/components/layout/portal-page', () => ({
@@ -370,5 +374,48 @@ describe('CV builder', () => {
         'تُكتب السيرة الذاتية بالإنجليزية. أما الأسماء وعناوين الشهادات والمسارات فتظهر كما هي دون ترجمة.',
       ),
     ).toBeInTheDocument();
+  });
+  describe('the PDF export (§4.11)', () => {
+    it('is unavailable until the CV has been saved once', async () => {
+      /* There is nothing on the server to render yet. */
+      renderWithProviders(<CvPage />);
+
+      await screen.findByLabelText('الاسم الكامل');
+
+      expect(screen.queryByRole('link', { name: /تصدير/ })).not.toBeInTheDocument();
+    });
+
+    it('becomes a real download link once saved', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<CvPage />);
+
+      await user.type(await screen.findByLabelText('المسمّى الوظيفي'), 'Officer');
+      await user.click(screen.getByRole('button', { name: 'حفظ' }));
+
+      const link = await screen.findByRole('link', { name: /تصدير/ });
+      expect(link).toHaveAttribute('href', 'http://api.test/api/cv/export');
+    });
+
+    it('goes away again while there are unsaved edits', async () => {
+      /*
+       * The export renders the *saved* document. A file that quietly differed
+       * from the preview it was exported from would be worse than one the
+       * learner has to press save for.
+       */
+      const user = userEvent.setup();
+      renderWithProviders(<CvPage />);
+
+      await user.type(await screen.findByLabelText('المسمّى الوظيفي'), 'Officer');
+      await user.click(screen.getByRole('button', { name: 'حفظ' }));
+      await screen.findByRole('link', { name: /تصدير/ });
+
+      await user.type(screen.getByLabelText('نبذة مهنية'), 'More');
+
+      await waitFor(() => {
+        expect(screen.queryByRole('link', { name: /تصدير/ })).not.toBeInTheDocument();
+      });
+      /* And it says why rather than leaving a greyed-out button to interpret. */
+      expect(screen.getByTitle('احفظ التغييرات قبل التصدير.')).toBeInTheDocument();
+    });
   });
 });
