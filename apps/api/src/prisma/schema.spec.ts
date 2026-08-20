@@ -151,14 +151,14 @@ describe('Prisma schema', () => {
   describe('scope discipline', () => {
     it('contains no tables belonging to later phases', () => {
       /*
-       * Phase 2 added `Completion` and Phase 3 adds `Certificate`, so both have
-       * left this list — the guard tracks what has actually been built rather
-       * than being widened to keep quiet. `CvProfile` arrives with the CV
-       * builder later in this phase, and `Enrollment` remains deliberately
-       * unbuilt: §6 marks it optional, and `user_path_courses.enrolled_at`
-       * answers the only question anything asks (D-041).
+       * Phase 2 added `Completion` and Phase 3 added `Certificate` and
+       * `CvProfile`, so all three have left this list — the guard tracks what
+       * has actually been built rather than being widened to keep quiet.
+       * `Enrollment` remains deliberately unbuilt: §6 marks it optional, and
+       * `user_path_courses.enrolled_at` answers the only question anything
+       * asks (D-041).
        */
-      const laterPhaseModels = ['CvProfile', 'Enrollment'];
+      const laterPhaseModels = ['Enrollment'];
 
       const premature = laterPhaseModels.filter((model) =>
         new RegExp(`model\\s+${model}\\s*\\{`).test(SCHEMA),
@@ -355,6 +355,44 @@ describe('Prisma schema', () => {
       const sql = readFileSync(join(migrationsDir, phase3!, 'migration.sql'), 'utf8');
 
       expect(sql).toMatch(/CONSTRAINT "certificates_target_matches_type" CHECK/);
+    });
+  });
+  describe('CvProfile', () => {
+    const cv = modelBody('CvProfile');
+
+    it('holds one CV per learner', () => {
+      /* §4.11 ships one template and no gallery, so there is nothing a second
+         row would represent. */
+      expect(cv).toMatch(/userId\s+String\s+@unique/);
+    });
+
+    it('stores the repeating sections as JSON', () => {
+      /* The one place in this schema where a blob is right: nothing queries
+         across a job history, it is written and read whole, and §6 sanctions
+         it. Shapes are validated at the API boundary instead. */
+      expect(cv).toMatch(/experience\s+Json/);
+      expect(cv).toMatch(/education\s+Json/);
+      expect(cv).toMatch(/skills\s+Json/);
+      expect(cv).toMatch(/externalCertifications\s+Json/);
+    });
+
+    it('stores no certifications, name or Holland code of its own', () => {
+      /*
+       * The important assertion in this file. Certifications are read from
+       * `certificates` at load time and never copied here, so a CV cannot
+       * claim a credential its holder does not have. A column for them would
+       * make that possible the day someone wrote to it.
+       */
+      /* `externalCertifications` is the learner's own typing and belongs here;
+         a bare `certifications` field would be the platform's, and must not. */
+      expect(cv).not.toMatch(/^\s*certifications\s/m);
+      expect(cv).not.toMatch(/hollandCode|riasec/i);
+      expect(cv).not.toMatch(/pathName/);
+    });
+
+    it('goes with the learner when the account does', () => {
+      /* A CV is personal data about one person and nobody else (§2). */
+      expect(cv).toMatch(/onDelete:\s*Cascade/);
     });
   });
 });

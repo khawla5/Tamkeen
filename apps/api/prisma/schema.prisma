@@ -2,8 +2,8 @@
 //
 // Phase 0 added the foundation (users, auth_tokens, sessions, audit_log,
 // notifications). Phase 1 added the assessment, paths, courses and the user's
-// single chosen path. Phase 2 added `completions`. Phase 3 adds `certificates`;
-// `cv_profiles` follows with the CV builder in the same phase.
+// single chosen path. Phase 2 added `completions`. Phase 3 adds `certificates`
+// and `cv_profiles`.
 //
 // Conventions: models are PascalCase in Prisma and snake_case in Postgres via
 // @@map/@map. Primary keys are UUIDs rather than sequential integers so record
@@ -77,6 +77,7 @@ model User {
   notifications Notification[]
   completions   Completion[]
   certificates  Certificate[]
+  cvProfile     CvProfile?
   auditEvents   AuditLog[]     @relation("AuditActor")
 
   /// Every attempt, newest wins. Retakes append rather than overwrite (D-033).
@@ -679,4 +680,62 @@ model Certificate {
   @@unique([userId, type, pathId])
   @@index([userId, issuedAt])
   @@map("certificates")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3 — the CV builder
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The learner's CV, as they authored it (§4.11, §6, D-050).
+///
+/// **One row per user**, enforced by the unique `userId` — a person has one CV
+/// here, and "no template zoo initially" (§4.11) means there is nothing a
+/// second row would represent.
+///
+/// **The repeating sections are JSON, deliberately, and this is the one place
+/// that is right.** Everywhere else in this schema the opposite call was made:
+/// option weights are an enum-column table rather than a blob precisely so a
+/// mistyped letter cannot fail silently (D-035). The difference is what the
+/// data is *for*. Nothing queries across a learner's job history — it is
+/// written whole, read whole, and rendered whole into one document — so a
+/// normalised `cv_experience` table would buy joins nobody makes and cost the
+/// reordering, partial edits and shape changes a CV form does constantly. §6
+/// sanctions it explicitly ("structured JSON sections ok"); the shapes are
+/// validated at the API boundary against the types in @tamkeen/types.
+///
+/// **What is absent matters more than what is here.** No certifications: those
+/// are read from `certificates` at load time and never copied in, so a CV
+/// cannot claim a credential the learner does not hold. Same for the name,
+/// department and Holland code the system contributes.
+model CvProfile {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Personal details as they should appear on the CV. Pre-filled from the
+  /// account, then editable — a learner writing in English may want a Latin
+  /// form of a name the ministry holds in Arabic.
+  fullName   String @map("full_name")
+  jobTitle   String @default("") @map("job_title")
+  department String @default("")
+  email      String @default("")
+  phone      String @default("")
+  summary    String @default("")
+
+  /// `CvExperienceEntry[]`, `CvEducationEntry[]`, `string[]` and
+  /// `CvExternalCertification[]` from @tamkeen/types.
+  experience             Json @default("[]")
+  education              Json @default("[]")
+  skills                 Json @default("[]")
+  externalCertifications Json @default("[]") @map("external_certifications")
+
+  /// Whether to print the career-orientation line (§4.11). Hides the line, not
+  /// the result — the assessment record is untouched either way.
+  showCareerProfile Boolean @default(true) @map("show_career_profile")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("cv_profiles")
 }
