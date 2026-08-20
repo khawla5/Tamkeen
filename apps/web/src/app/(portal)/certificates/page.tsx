@@ -2,15 +2,17 @@
 
 import { Award, Download, Eye, Medal } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useEffect, useRef } from 'react';
 
 import type { CertificateSummary } from '@tamkeen/types';
 
 import { PortalPage } from '@/components/layout/portal-page';
+import { usePortal } from '@/components/layout/portal-provider';
 import { DataView } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useFormat } from '@/i18n/format-provider';
-import { certificatesApi } from '@/lib/api-client';
+import { certificatesApi, notificationsApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +30,32 @@ import { cn } from '@/lib/utils';
 export default function CertificatesPage() {
   const t = useTranslations('certificates');
   const certificates = useApiQuery(() => certificatesApi.list(), []);
+  const { unreadCertificates, refreshNotifications } = usePortal();
+
+  /*
+   * Arriving here *is* the acknowledgement (§2).
+   *
+   * The indicator points at exactly one destination, so a separate "mark as
+   * read" control would be a second thing to do about a dot. Guarded on there
+   * being something unread so a learner browsing their gallery does not send a
+   * write on every visit, and the ref stops React's development double-mount
+   * firing it twice.
+   */
+  const cleared = useRef(false);
+
+  useEffect(() => {
+    if (unreadCertificates === 0 || cleared.current) {
+      return;
+    }
+    cleared.current = true;
+
+    void notificationsApi
+      .markCertificatesRead()
+      .then(refreshNotifications)
+      /* A failed clear leaves the dot up, which is the harmless direction: the
+         learner sees it again next time rather than losing the news. */
+      .catch(() => undefined);
+  }, [unreadCertificates, refreshNotifications]);
 
   return (
     <PortalPage title={t('title')}>

@@ -1,5 +1,5 @@
-import { screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { screen, waitFor } from '@testing-library/react';
+import { StrictMode, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CertificateSummary } from '@tamkeen/types';
@@ -18,6 +18,9 @@ import { renderWithProviders } from '@/test/render';
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
+  markCertificatesRead: vi.fn(),
+  refreshNotifications: vi.fn(),
+  unreadCertificates: { current: 0 },
   fileUrl: vi.fn(
     (id: string, disposition: string) =>
       `http://api.test/api/certificates/${id}/file${
@@ -28,6 +31,14 @@ const api = vi.hoisted(() => ({
 
 vi.mock('@/lib/api-client', () => ({
   certificatesApi: { list: api.list, fileUrl: api.fileUrl },
+  notificationsApi: { markCertificatesRead: api.markCertificatesRead },
+}));
+
+vi.mock('@/components/layout/portal-provider', () => ({
+  usePortal: () => ({
+    unreadCertificates: api.unreadCertificates.current,
+    refreshNotifications: api.refreshNotifications,
+  }),
 }));
 
 vi.mock('@/components/layout/portal-page', () => ({
@@ -58,6 +69,10 @@ const PATH: CertificateSummary = {
 describe('certificates gallery', () => {
   beforeEach(() => {
     api.list.mockReset();
+    api.markCertificatesRead.mockReset();
+    api.markCertificatesRead.mockResolvedValue(undefined);
+    api.refreshNotifications.mockReset();
+    api.unreadCertificates.current = 0;
   });
 
   it('shows a loading state first', () => {
@@ -163,5 +178,67 @@ describe('certificates gallery', () => {
     expect(text).not.toMatch(/%/);
     expect(text).not.toContain('الدرجة');
     expect(text).not.toContain('cert-course-1');
+  });
+  describe('the in-app indicator (§2)', () => {
+    it('clears itself when the gallery is opened', async () => {
+      /* Arriving here *is* the acknowledgement — the indicator points at
+         exactly one destination, so a separate "mark as read" control would be
+         a second thing to do about a dot. */
+      api.unreadCertificates.current = 2;
+      api.list.mockResolvedValue([PATH, COURSE]);
+
+      renderWithProviders(<CertificatesPage />);
+      await screen.findByText('مسار القيادة الإدارية');
+
+      await waitFor(() => {
+        expect(api.markCertificatesRead).toHaveBeenCalledTimes(1);
+      });
+      await waitFor(() => {
+        expect(api.refreshNotifications).toHaveBeenCalled();
+      });
+    });
+
+    it('writes nothing when there was nothing unseen', async () => {
+      /* A learner browsing their own gallery must not send a write on every
+         visit. */
+      api.unreadCertificates.current = 0;
+      api.list.mockResolvedValue([COURSE]);
+
+      renderWithProviders(<CertificatesPage />);
+      await screen.findByText('أساسيات القيادة الإدارية');
+
+      expect(api.markCertificatesRead).not.toHaveBeenCalled();
+    });
+
+    it('clears once under React’s double-invoked effects', async () => {
+      /* StrictMode mounts effects twice in development — the exact reason the
+         guard is a ref rather than a plain flag. Without it the learner's
+         notifications would be written twice on every visit. */
+      api.unreadCertificates.current = 1;
+      api.list.mockResolvedValue([COURSE]);
+
+      renderWithProviders(
+        <StrictMode>
+          <CertificatesPage />
+        </StrictMode>,
+      );
+      await screen.findByText('أساسيات القيادة الإدارية');
+
+      await waitFor(() => {
+        expect(api.markCertificatesRead).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('still renders the gallery when clearing the indicator fails', async () => {
+      /* Leaving the dot up is the harmless direction: the learner sees it again
+         next time rather than losing the news. */
+      api.unreadCertificates.current = 1;
+      api.markCertificatesRead.mockRejectedValue(new Error('offline'));
+      api.list.mockResolvedValue([COURSE]);
+
+      renderWithProviders(<CertificatesPage />);
+
+      expect(await screen.findByText('أساسيات القيادة الإدارية')).toBeInTheDocument();
+    });
   });
 });

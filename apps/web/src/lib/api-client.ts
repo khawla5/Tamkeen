@@ -29,6 +29,7 @@ import type {
   MyPathView,
   PathDetail,
   PathRecommendations,
+  UnreadNotificationsView,
 } from '@tamkeen/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -276,6 +277,12 @@ export const myPathApi = {
     api.put<{ selectedCourseIds: string[] }>('/api/my-path/courses', { courseIds }),
   addCourse: (courseId: string) => api.post<void>('/api/my-path/courses', { courseId }),
   confirm: () => api.post<MyPathView>('/api/my-path/confirm'),
+};
+
+export const notificationsApi = {
+  unread: () => api.get<UnreadNotificationsView>('/api/notifications/unread'),
+  /** POST: it changes state, so it must not be prefetched or replayed. */
+  markCertificatesRead: () => api.post<void>('/api/notifications/certificates/read'),
 };
 
 export const dashboardApi = {

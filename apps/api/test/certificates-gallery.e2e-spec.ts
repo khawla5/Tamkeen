@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import type { CertificateSummary } from '@tamkeen/types';
+import type { CertificateSummary, UnreadNotificationsView } from '@tamkeen/types';
 
 import { AppModule } from '../src/app.module';
 import { CertificateStorageService } from '../src/certificates/certificate-storage.service';
@@ -314,5 +314,99 @@ describe('Certificate gallery (e2e)', () => {
       .get(`/api/certificates/${courseCertificateId}/file`)
       .set('Cookie', ownerSession)
       .expect(500);
+  });
+  // The in-app indicator (§2)
+
+  describe('the in-app indicator', () => {
+    let ownerUserId: string;
+
+    beforeAll(async () => {
+      const owner = await prisma.user.findUniqueOrThrow({
+        where: { email: `gallery-${RUN_ID}-owner@ministry.gov.example` },
+        select: { id: true },
+      });
+      ownerUserId = owner.id;
+
+      /* Two unseen certificate notifications, the shape issuance writes. */
+      await prisma.notification.createMany({
+        data: [
+          { userId: ownerUserId, type: 'CERTIFICATE_ISSUED', relatedId: courseCertificateId },
+          { userId: ownerUserId, type: 'CERTIFICATE_ISSUED', relatedId: courseCertificateId },
+        ],
+      });
+    });
+
+    it('needs a session', async () => {
+      await request(server()).get('/api/notifications/unread').expect(401);
+    });
+
+    it('reports what the learner has not seen', async () => {
+      const response = await request(server())
+        .get('/api/notifications/unread')
+        .set('Cookie', ownerSession)
+        .expect(200);
+
+      expect(response.body as UnreadNotificationsView).toEqual({ certificates: 2 });
+    });
+
+    it('does not leak one learner indicator to another', async () => {
+      const response = await request(server())
+        .get('/api/notifications/unread')
+        .set('Cookie', strangerSession)
+        .expect(200);
+
+      expect(response.body as UnreadNotificationsView).toEqual({ certificates: 0 });
+    });
+
+    it('clears once the learner marks them seen', async () => {
+      await request(server())
+        .post('/api/notifications/certificates/read')
+        .set('Cookie', [csrfCookie, ownerSession].join('; '))
+        .set('X-CSRF-Token', csrfToken)
+        .expect(204);
+
+      const response = await request(server())
+        .get('/api/notifications/unread')
+        .set('Cookie', ownerSession)
+        .expect(200);
+
+      expect(response.body as UnreadNotificationsView).toEqual({ certificates: 0 });
+    });
+
+    it('does not move readAt on rows that were already read', async () => {
+      /*
+       * The `readAt: null` filter. Without it a second visit would rewrite the
+       * timestamps, losing when the learner actually first saw each
+       * certificate — the only thing the column records.
+       */
+      const before = await prisma.notification.findMany({
+        where: { userId: ownerUserId },
+        select: { id: true, readAt: true },
+        orderBy: { id: 'asc' },
+      });
+
+      await request(server())
+        .post('/api/notifications/certificates/read')
+        .set('Cookie', [csrfCookie, ownerSession].join('; '))
+        .set('X-CSRF-Token', csrfToken)
+        .expect(204);
+
+      const after = await prisma.notification.findMany({
+        where: { userId: ownerUserId },
+        select: { id: true, readAt: true },
+        orderBy: { id: 'asc' },
+      });
+
+      expect(after).toEqual(before);
+    });
+
+    it('rejects marking read without the CSRF token', async () => {
+      /* It changes state, so it carries the double-submit token every mutating
+         request does. */
+      await request(server())
+        .post('/api/notifications/certificates/read')
+        .set('Cookie', ownerSession)
+        .expect(403);
+    });
   });
 });

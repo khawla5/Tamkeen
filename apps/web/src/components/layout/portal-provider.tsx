@@ -7,7 +7,13 @@ import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import type { DashboardView } from '@tamkeen/types';
 
 import { ErrorState, LoadingState } from '@/components/states';
-import { ApiError, authApi, dashboardApi, type CurrentUser } from '@/lib/api-client';
+import {
+  ApiError,
+  authApi,
+  dashboardApi,
+  notificationsApi,
+  type CurrentUser,
+} from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 
 /**
@@ -26,8 +32,18 @@ import { useApiQuery } from '@/lib/use-api';
 export interface PortalValue {
   user: CurrentUser;
   dashboard: DashboardView;
+  /**
+   * Certificates issued since the learner last opened their gallery (§2).
+   *
+   * Lives here rather than in the gallery because the *navigation* is what
+   * shows it — a learner has to learn a certificate arrived without already
+   * being on the page that would tell them.
+   */
+  unreadCertificates: number;
   /** Re-reads the dashboard, e.g. after confirming a path changes the nav. */
   refresh: () => void;
+  /** Re-reads the indicator after the gallery marks certificates seen. */
+  refreshNotifications: () => void;
 }
 
 const PortalContext = createContext<PortalValue | null>(null);
@@ -52,6 +68,11 @@ export function PortalProvider({ children }: { children: ReactNode }) {
 
   const session = useApiQuery(() => authApi.me(), []);
   const dashboard = useApiQuery(() => dashboardApi.get(), []);
+  /* Not part of the gate below: a failed indicator lookup must not stop the
+     portal rendering. §2 calls this a *light* indicator — its absence costs a
+     learner nothing, and blocking every authenticated page on it would trade a
+     dot for the whole product. */
+  const notifications = useApiQuery(() => notificationsApi.unread(), []);
 
   const unauthorized = isUnauthorized(session.error) || isUnauthorized(dashboard.error);
 
@@ -90,7 +111,9 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       value={{
         user: session.data,
         dashboard: dashboard.data,
+        unreadCertificates: notifications.data?.certificates ?? 0,
         refresh: dashboard.refetch,
+        refreshNotifications: notifications.refetch,
       }}
     >
       {children}

@@ -18,3 +18,4 @@ export * from './journey';
 
 /* Phase 3 — certificates and the CV. */
 export * from './certificates';
+export * from './notifications';

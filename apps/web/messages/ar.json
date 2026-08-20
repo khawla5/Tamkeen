@@ -5,7 +5,8 @@
   },
   "a11y": {
     "skipToContent": "تجاوز إلى المحتوى الرئيسي",
-    "primaryNav": "التنقل الرئيسي"
+    "primaryNav": "التنقل الرئيسي",
+    "newCertificates": "لديك شهادات جديدة"
   },
   "nav": {
     "dashboard": "الرئيسية",
