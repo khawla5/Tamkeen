@@ -4,6 +4,8 @@ import { AuditModule } from '../audit/audit.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CertificateIssuanceService } from './certificate-issuance.service';
 import { CertificateStorageService } from './certificate-storage.service';
+import { CertificateVerificationService } from './certificate-verification.service';
+import { CertificatesController } from './certificates.controller';
 import { PdfRendererService } from './pdf-renderer.service';
 
 /**
@@ -15,7 +17,13 @@ import { PdfRendererService } from './pdf-renderer.service';
  */
 @Module({
   imports: [PrismaModule, AuditModule],
-  providers: [CertificateIssuanceService, CertificateStorageService, PdfRendererService],
+  controllers: [CertificatesController],
+  providers: [
+    CertificateIssuanceService,
+    CertificateStorageService,
+    CertificateVerificationService,
+    PdfRendererService,
+  ],
   exports: [CertificateIssuanceService, CertificateStorageService, PdfRendererService],
 })
 export class CertificatesModule {}

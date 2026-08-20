@@ -17,6 +17,7 @@
 
 import type {
   AssessmentResultView,
+  CertificateVerificationView,
   AssessmentSubmission,
   AssessmentView,
   CourseDetail,
@@ -278,4 +279,20 @@ export const myPathApi = {
 
 export const dashboardApi = {
   get: () => api.get<DashboardView>('/api/dashboard'),
+};
+
+export const certificatesApi = {
+  /**
+   * The public verification lookup (§2, D-016).
+   *
+   * The only call here that works without a session. It still goes through this
+   * client so it inherits one error shape and one place the API origin is
+   * configured — `credentials: 'include'` is harmless on a route that ignores
+   * the cookie, and diverging into a bare `fetch` would be a second way of
+   * talking to the API for no gain.
+   */
+  verify: (verificationId: string) =>
+    api.get<CertificateVerificationView>(
+      `/api/certificates/verify/${encodeURIComponent(verificationId)}`,
+    ),
 };
