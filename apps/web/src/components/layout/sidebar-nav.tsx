@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Route,
   User,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -24,6 +25,7 @@ const ICONS: Record<NavIconName, LucideIcon> = {
   certificates: Award,
   cv: FileText,
   profile: User,
+  learners: Users,
 };
 
 export interface SidebarNavProps {

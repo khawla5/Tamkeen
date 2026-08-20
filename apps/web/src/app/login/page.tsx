@@ -40,10 +40,17 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
-      await authApi.login({ email, password });
+      const { user } = await authApi.login({ email, password });
+
+      /*
+       * Routed by role (D-065). The sign-in response already carries it, so this
+       * costs no extra request — and sending everyone to `/` would land an
+       * entity on the learner dashboard, which would then bounce them here,
+       * producing a visible flicker on every sign-in rather than a destination.
+       */
       /* refresh() so the server components re-render with the new session
          rather than serving a cached anonymous view. */
-      router.replace('/');
+      router.replace(user.role === 'ENTITY' ? '/entity' : '/');
       router.refresh();
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'EMAIL_NOT_VERIFIED') {
