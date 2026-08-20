@@ -24,12 +24,13 @@ describe('navForState', () => {
     expect(keys('ASSESSED_NO_PATH')).toEqual(['dashboard', 'courses', 'profile']);
   });
 
-  it('adds My Path and Certificates once a path is active', () => {
+  it('shows the full six once a path is active (§4)', () => {
     expect(keys('ACTIVE_PATH')).toEqual([
       'dashboard',
       'courses',
       'myPath',
       'certificates',
+      'cv',
       'profile',
     ]);
   });
@@ -41,8 +42,11 @@ describe('navForState', () => {
     expect(keys('ACTIVE_PATH')).toContain('certificates');
   });
 
-  it('still hides the CV, because the builder does not exist yet', () => {
-    for (const state of ['PRE_ASSESSMENT', 'ASSESSED_NO_PATH', 'ACTIVE_PATH'] as const) {
+  it('keeps Certificates and the CV out of the pre-path states', () => {
+    /* Both pages exist now (D-037 is closed), but neither is a destination for
+       someone who has not started a path — §4.2 keeps that nav to three. */
+    for (const state of ['PRE_ASSESSMENT', 'ASSESSED_NO_PATH'] as const) {
+      expect(keys(state)).not.toContain('certificates');
       expect(keys(state)).not.toContain('cv');
     }
   });

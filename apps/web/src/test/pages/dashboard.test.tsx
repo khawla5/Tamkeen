@@ -163,12 +163,11 @@ describe('dashboard — ACTIVE_PATH', () => {
     setDashboard(ACTIVE);
     renderWithProviders(<DashboardPage />);
 
-    /* §4.2 names My Path, Certificates and CV. Certificates has a gallery
-       behind it now, so it is a real destination; the CV builder does not
-       exist yet, and a tile for it would advertise something the product
-       cannot do. */
+    /* §4.2 names My Path, Certificates and CV, and all three now have pages
+       behind them. Courses is ours — a learner mid-path still browses. */
     expect(screen.getByRole('link', { name: 'مساري' })).toHaveAttribute('href', '/my-path');
+    expect(screen.getByRole('link', { name: 'الدورات' })).toHaveAttribute('href', '/courses');
     expect(screen.getByRole('link', { name: 'شهاداتي' })).toHaveAttribute('href', '/certificates');
-    expect(screen.queryByText('السيرة الذاتية')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'السيرة الذاتية' })).toHaveAttribute('href', '/cv');
   });
 });

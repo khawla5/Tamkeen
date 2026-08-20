@@ -55,8 +55,8 @@ export const STEADY_STATE_NAV: readonly NavItem[] = [
  * The second is ours: **a nav item appears only once the page behind it
  * exists.** An item leading to a 404, or to a page explaining that the feature
  * is not built, is worse than its absence — it advertises something the product
- * cannot do and costs a click to find out. Certificates joins the list now that
- * Phase 3 has built the gallery; CV waits for the builder.
+ * cannot do and costs a click to find out. Certificates and the CV both have
+ * pages behind them now that Phase 3 has built them, which closes D-037.
  *
  * Certificates is shown to a learner with an active path even before they have
  * earned one, deliberately. The gallery has a real empty state that says how
@@ -66,7 +66,7 @@ export const STEADY_STATE_NAV: readonly NavItem[] = [
 export function navForState(state: DashboardState): readonly NavItem[] {
   const keys: string[] =
     state === 'ACTIVE_PATH'
-      ? ['dashboard', 'courses', 'myPath', 'certificates', 'profile']
+      ? ['dashboard', 'courses', 'myPath', 'certificates', 'cv', 'profile']
       : ['dashboard', 'courses', 'profile'];
 
   return STEADY_STATE_NAV.filter((item) => keys.includes(item.key));

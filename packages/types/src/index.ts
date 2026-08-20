@@ -20,3 +20,4 @@ export * from './journey';
 export * from './certificates';
 export * from './notifications';
 export * from './cv';
+export * from './cv-document';

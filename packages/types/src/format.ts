@@ -134,3 +134,45 @@ export function clearFormatterCaches(): void {
   numberFormatters.clear();
   dateFormatters.clear();
 }
+
+/**
+ * The formatting context for the CV (D-050).
+ *
+ * The CV is an English document, so its dates read "March 2021" and its
+ * numerals are Western — regardless of what the app is configured to show
+ * elsewhere. It is deliberately a fixed context rather than a switch: the CV's
+ * language is a product decision, not a user preference, and letting the D-018
+ * digit switch reach it would put Arabic-Indic numerals on an English CV.
+ */
+export const CV_FORMAT_CONTEXT: FormatContext = {
+  locale: 'en',
+  numberFormat: 'western',
+  calendar: 'gregory',
+};
+
+/**
+ * "March 2021" — the granularity a CV states, from the `YYYY-MM` the builder
+ * stores.
+ *
+ * Takes the string rather than a `Date` because that is what is stored, and
+ * because constructing a `Date` from `YYYY-MM` invites a timezone shift that
+ * can move an entry into the previous month.
+ */
+export function formatMonthYear(value: string, context: FormatContext = CV_FORMAT_CONTEXT): string {
+  const [year, month] = value.split('-').map(Number);
+
+  if (!year || !month) {
+    return value;
+  }
+
+  /* Midday UTC: far enough from either boundary that no timezone can shift the
+     rendered month. */
+  return dateFormatter(context, { year: 'numeric', month: 'long' }).format(
+    new Date(Date.UTC(year, month - 1, 15, 12)),
+  );
+}
+
+/** A bare year, through the same layer so digits honour the context. */
+export function formatYear(value: number, context: FormatContext = CV_FORMAT_CONTEXT): string {
+  return numberFormatter(context, { useGrouping: false, maximumFractionDigits: 0 }).format(value);
+}

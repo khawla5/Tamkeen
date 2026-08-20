@@ -18,6 +18,8 @@
 import type {
   AssessmentResultView,
   CertificateSummary,
+  CvProfile,
+  CvView,
   CertificateVerificationView,
   AssessmentSubmission,
   AssessmentView,
@@ -277,6 +279,12 @@ export const myPathApi = {
     api.put<{ selectedCourseIds: string[] }>('/api/my-path/courses', { courseIds }),
   addCourse: (courseId: string) => api.post<void>('/api/my-path/courses', { courseId }),
   confirm: () => api.post<MyPathView>('/api/my-path/confirm'),
+};
+
+export const cvApi = {
+  get: () => api.get<CvView>('/api/cv'),
+  /** PUT: §4.11 asks for one save, and the document is written whole. */
+  save: (profile: CvProfile) => api.put<CvView>('/api/cv', profile),
 };
 
 export const notificationsApi = {
