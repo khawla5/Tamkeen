@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -14,6 +16,19 @@ import { defineConfig, devices } from '@playwright/test';
  *   - both apps built     → webServer below starts them
  */
 const IS_CI = Boolean(process.env.CI);
+
+/*
+ * Where issued certificates are stored, as an absolute path.
+ *
+ * `CERT_STORAGE_DIR` defaults to a *relative* one, and `npm run --workspace`
+ * starts the API with its own directory as the working directory — so the
+ * server resolved it under `apps/api` while the test fixture resolved it from
+ * the repo root, and downloads 500'd on a file that was written somewhere else.
+ * Pinning it absolute removes the ambiguity for both. Worth carrying into
+ * deployment (Phase 7): a relative storage root for credentials means the
+ * bytes move if anything ever changes the working directory.
+ */
+const CERT_STORAGE_DIR = resolve('..', '..', '.storage', 'certificates');
 
 export default defineConfig({
   testDir: './e2e',
@@ -59,6 +74,7 @@ export default defineConfig({
          * refuses this in production, so it cannot leak into a real deployment.
          */
         RATE_LIMIT_ENABLED: 'false',
+        CERT_STORAGE_DIR,
         /* Mailpit, so the test can read the verification email. */
         SMTP_HOST: 'localhost',
         SMTP_PORT: '1025',
