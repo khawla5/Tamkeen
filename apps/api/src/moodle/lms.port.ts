@@ -89,6 +89,22 @@ export interface LmsPort {
    * Phase 2 concern.
    */
   courseUrl(lmsCourseId: LmsCourseId): string;
+
+  /**
+   * A URL that drops a specific learner **straight into** a course, already
+   * signed in (§5.3, D-044).
+   *
+   * Unlike `courseUrl`, this one deliberately **does** carry a credential — a
+   * short-lived, single-use, HMAC-signed handoff bound to this user and this
+   * course. That is the whole point of it, and it is why it is a separate method
+   * rather than an option on `courseUrl`: a plain deep link is safe to embed in
+   * a page, and this is not.
+   *
+   * It must therefore be minted **at the moment of the click**, not when a page
+   * renders, so its short life starts when it is actually used. It must never
+   * contain the web-services token.
+   */
+  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string;
 }
 
 /**

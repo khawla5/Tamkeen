@@ -83,8 +83,42 @@ export const envSchema = z.object({
   MOODLE_MODE: z.enum(['mock', 'real']).default('mock'),
   MOODLE_BASE_URL: z.string().default(''),
   MOODLE_WS_TOKEN: z.string().default(''),
+  /**
+   * The Moodle role granted on enrolment. Configurable, not hardcoded: 5 is the
+   * stock id for Student, but role ids are per-instance and we do not control
+   * the ministry's Moodle. A hardcoded 5 that turned out to be something else
+   * there would enrol every learner with the wrong permissions — a latent
+   * production bug for the sake of one constant.
+   */
+  MOODLE_STUDENT_ROLE_ID: z.coerce.number().int().positive().default(5),
+  /** Per-call ceiling. Moodle answered in 60–256 ms in the spike; 10s is a
+   *  generous outage detector, not a normal-operation budget. */
+  MOODLE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  /**
+   * Shared with the `local_tamkeensso` plugin, which verifies the handoff
+   * signature with it (D-044). Server-side only, never sent to a browser.
+   * Minimum length is enforced at mint time as well, so a short secret cannot
+   * quietly make the signature decorative.
+   */
+  MOODLE_SSO_SECRET: z.string().default(''),
+  /**
+   * Handoff lifetime. The URL reaches the browser, so this is the window in
+   * which anyone who reads it — from history, a referrer header, a shared
+   * screen — could become that learner. Seconds, deliberately.
+   */
+  MOODLE_SSO_TTL_SECONDS: z.coerce.number().int().positive().max(300).default(60),
   PASS_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
   COMPLETION_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5),
+  /**
+   * Whether the background sync scheduler runs. Off in tests regardless, since a
+   * repeatable job firing mid-suite would write underneath assertions and read
+   * as flakiness rather than as a scheduler.
+   * Not z.coerce.boolean(): that treats the string "false" as true.
+   */
+  SYNC_SCHEDULER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
 
   // ---- Certificates (Phase 3) ----
   CERT_VERIFICATION_BASE_URL: z.string().url().default('http://localhost:3000/verify'),
@@ -108,10 +142,19 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     );
   }
 
-  // The real Moodle client does not exist until Phase 2; refuse to pretend.
+  /* A real LMS needs both an address and a credential. Starting without the
+     token would produce an integration that boots cleanly and then fails every
+     single call with `invalidtoken` — a slow, confusing failure in place of an
+     immediate, obvious one. */
   if (parsed.data.MOODLE_MODE === 'real' && parsed.data.MOODLE_BASE_URL.length === 0) {
     throw new Error(
       'Invalid environment configuration:\n  - MOODLE_BASE_URL is required when MOODLE_MODE=real',
+    );
+  }
+
+  if (parsed.data.MOODLE_MODE === 'real' && parsed.data.MOODLE_WS_TOKEN.length === 0) {
+    throw new Error(
+      'Invalid environment configuration:\n  - MOODLE_WS_TOKEN is required when MOODLE_MODE=real',
     );
   }
 

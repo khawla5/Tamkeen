@@ -109,6 +109,28 @@ test.describe('Phase 1 journey', () => {
     await expect(page.getByText('التالية', { exact: true })).toHaveCount(1);
     await expect(page.getByText('تُفتح شهادة المسار بعد إكمال جميع دوراتك.')).toBeVisible();
 
+    // ── Into a course, through the player (§4.8, Phase 2) ─────────────────────
+    /* The Phase 2 user-visible flow: My Path no longer links at the LMS
+       directly, because that deep link carries no session. Entry goes through
+       the player, which mints a signed single-use handoff on click (D-044). */
+    await page.getByRole('link', { name: 'ابدأ الدورة' }).first().click();
+    await expect(page).toHaveURL(/\/courses\/[0-9a-f-]+\/player$/, { timeout: 15_000 });
+
+    await expect(page.getByText('الدورة 1 من 5')).toBeVisible();
+    await expect(page.getByText(/منصة التعلّم/)).toBeVisible();
+
+    /* Nothing has been attempted, so no outcome is claimed either way. */
+    await expect(page.getByText('اجتزت هذه الدورة')).toHaveCount(0);
+    await expect(page.getByText('لم تجتز هذه الدورة بعد')).toHaveCount(0);
+
+    /* One action, and the handoff URL is NOT in the page — it is minted when
+       the learner clicks, so a credential never sits in the rendered markup. */
+    await expect(page.getByRole('button', { name: 'ابدأ الدورة' })).toBeVisible();
+    expect(await page.content()).not.toContain('tamkeensso');
+
+    await page.getByRole('link', { name: 'العودة إلى مساري' }).click();
+    await expect(page).toHaveURL(/\/my-path$/, { timeout: 15_000 });
+
     // ── The commitment is visible everywhere afterwards ───────────────────────
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'تابع من حيث توقفت' })).toBeVisible();

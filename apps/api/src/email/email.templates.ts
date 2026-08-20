@@ -97,3 +97,48 @@ export function passwordResetEmail(url: string, expiryMinutes: number): EmailCon
     ].join('\n'),
   };
 }
+
+/**
+ * "You passed a course" (§2 notifications — transactional only).
+ *
+ * Short, Arabic-first, and it deliberately **does not mention a certificate**:
+ * issuance is Phase 3, and promising an artefact that does not exist yet would
+ * be a lie in the learner's inbox.
+ *
+ * The course title comes from our own catalogue, which is synced from the LMS —
+ * so it is escaped before going into the HTML rather than trusted. A title is
+ * authored by an entity in Phase 4, which makes it user-supplied content
+ * arriving from another system.
+ */
+export function coursePassedEmail(courseTitle: string, myPathUrl: string): EmailContent {
+  const heading = 'اجتزت الدورة بنجاح';
+  const named = courseTitle.trim().length > 0 ? escapeHtml(courseTitle.trim()) : 'الدورة';
+  const plain = courseTitle.trim().length > 0 ? courseTitle.trim() : 'الدورة';
+
+  return {
+    subject: heading,
+    html: layout(
+      heading,
+      `<p style="margin:0;">تهانينا، لقد اجتزت «${named}» بنجاح.</p>
+       ${button(myPathUrl, 'عرض مساري')}`,
+    ),
+    text: [heading, '', `تهانينا، لقد اجتزت «${plain}» بنجاح.`, '', 'تابع تقدّمك:', myPathUrl].join(
+      '\n',
+    ),
+  };
+}
+
+/**
+ * Minimal HTML escaping for values that did not originate in this file.
+ *
+ * The other templates interpolate only URLs we built and numbers we computed;
+ * a course title is neither, so it gets escaped rather than trusted.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}

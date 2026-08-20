@@ -81,3 +81,21 @@ export class LmsUnavailableError extends Error {
     this.name = 'LmsUnavailableError';
   }
 }
+
+/**
+ * Raised when the LMS is reachable and answered, but *refused* the operation —
+ * a hand-created account already holding the address, a course that will not
+ * accept an enrolment.
+ *
+ * Distinct from `LmsUnavailableError` because the operational response differs:
+ * an outage is retried, a refusal needs a human. The underlying LMS error code
+ * is deliberately **not** carried here — it is LMS vocabulary and would leak the
+ * boundary (D-030). It is written to the log inside the module instead, where an
+ * operator can find it and a caller cannot couple to it.
+ */
+export class LmsOperationError extends Error {
+  constructor(readonly operation: 'PROVISION' | 'ENROL' | 'SYNC') {
+    super(`LMS_${operation}_REJECTED`);
+    this.name = 'LmsOperationError';
+  }
+}

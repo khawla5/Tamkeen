@@ -1,3 +1,4 @@
+import type { UserPathCourseStatus } from './journey';
 import type { RiasecLetter } from './riasec';
 
 /**
@@ -78,8 +79,6 @@ export type CourseAction = (typeof COURSE_ACTIONS)[number];
 export interface CourseDetail extends CourseSummary {
   objectives: string[];
   prerequisites: string | null;
-  /** Deep link for the Phase 2 handoff; built by the LMS port, never guessed. */
-  courseUrl: string;
   action: CourseAction;
   /** Set when `action` is `ADD_TO_PATH`, so the card can link to the build page. */
   buildablePathId: string | null;
@@ -113,4 +112,55 @@ export interface PathRecommendations {
   /** Null before the assessment is taken; the catalogue is still browsable. */
   code: RiasecLetter[] | null;
   paths: PathSummary[];
+}
+
+/**
+ * The course view / player (§4.8).
+ *
+ * Deliberately thin. Moodle owns the content, the quiz and the grading; this
+ * page owns only the context around them — where the learner is in their path,
+ * what happened last time, and the single action that applies now. Rebuilding
+ * Moodle's chrome here would duplicate the LMS badly and put the product in the
+ * business of rendering course material it does not own (D-000).
+ */
+export interface CoursePlayerView {
+  courseId: string;
+  title: string;
+  summary: string;
+  durationMinutes: number | null;
+
+  /** Path context for the header. Null when the course is not in a path. */
+  pathName: string | null;
+  /** Position within the learner's chosen courses, for "الدورة ٣ من ٧". */
+  orderInPath: number | null;
+  totalInPath: number | null;
+
+  status: UserPathCourseStatus;
+  /** Mirrored from the LMS by the sync job; null until something is attempted. */
+  gradePercent: number | null;
+  /** Our verdict against the product threshold (D-007), never the LMS's. */
+  passed: boolean;
+  /** Shown so a failing learner knows what they are aiming at. */
+  passThreshold: number;
+
+  /**
+   * Whether entering the course is possible at all. False before the path is
+   * confirmed — nothing is enrolled until the commitment gate (§4.5), so an
+   * enabled button would be one that cannot do what it says.
+   */
+  canLaunch: boolean;
+
+  /** Where "continue" goes after passing. Null when this was the last one. */
+  nextCourseId: string | null;
+}
+
+/**
+ * The response to a launch request.
+ *
+ * A URL rather than a redirect so the client controls the navigation, and
+ * minted per request rather than embedded in a page: it carries a short-lived
+ * credential, so its life must start when the learner actually clicks (D-044).
+ */
+export interface CourseLaunchView {
+  url: string;
 }

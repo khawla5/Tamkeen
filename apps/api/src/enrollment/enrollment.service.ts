@@ -293,23 +293,19 @@ export class EnrollmentService {
       return null;
     }
 
-    const live = await this.liveProgress(userId);
-
     let nextAssigned = false;
     const courses: MyPathCourseView[] = userPath.courses.map((chosen) => {
-      const progress = live.get(chosen.course.moodleCourseId);
-
       /*
-       * Stored status is the record; live LMS progress is an overlay on top of
-       * it. Phase 1 deliberately does not write the overlay back — persisting
-       * completions is the Phase 2 sync job's job, and doing it here would put
-       * two writers on the same rows.
+       * The stored status is now the whole truth. Phase 1 overlaid live LMS
+       * progress here because nothing persisted it yet; the completion-sync job
+       * is that missing writer, and it has arrived (D-036, D-042).
+       *
+       * Removing the overlay is not merely tidying: it took an N+1 call to the
+       * LMS on every render of this page, which against a real Moodle means the
+       * page's latency — and its ability to render at all — depended on the LMS
+       * being up. It no longer does.
        */
-      const status: UserPathCourseStatus = progress?.completed
-        ? 'COMPLETED'
-        : progress?.gradePercent != null
-          ? 'IN_PROGRESS'
-          : chosen.status;
+      const status: UserPathCourseStatus = chosen.status;
 
       const isNextUp = !nextAssigned && status !== 'COMPLETED';
       if (isNextUp) {
@@ -324,9 +320,8 @@ export class EnrollmentService {
         durationMinutes: chosen.course.durationMinutes,
         order: chosen.displayOrder,
         status,
-        gradePercent: progress?.gradePercent ?? chosen.gradePercent,
+        gradePercent: chosen.gradePercent,
         isNextUp,
-        courseUrl: this.lms.courseUrl(chosen.course.moodleCourseId),
       };
     });
 
@@ -449,52 +444,47 @@ export class EnrollmentService {
    * **Best effort, deliberately.** The commitment already happened and is
    * recorded in our database, which is the source of truth for it; failing the
    * request because the LMS was unreachable would tell the user their
-   * irreversible decision did not take, when it did. The failure is audited so
-   * it is visible, and Phase 2's sync job is where reconciliation belongs.
+   * irreversible decision did not take, when it did. Failures are audited so
+   * they are visible, and `retryPendingEnrolments` reconciles them (D-036).
    *
-   * Provisioning the LMS user here is the same reasoning: `provisionUser` is
-   * idempotent by contract, so calling it at the first moment an LMS account is
-   * actually needed is safe, and it goes through the port — Phase 2 changes the
-   * implementation, not this call (D-034).
+   * **Each course is attempted independently.** With the mock this did not
+   * matter, because nothing failed; against a real Moodle a single refused
+   * course would otherwise abandon every course after it in the list and audit
+   * the whole batch as failed, leaving a learner with a half-enrolled path and
+   * no record of which half.
+   *
+   * Only courses not yet enrolled are attempted, so a retry cannot double-enrol
+   * even before the port's own idempotency is considered.
    */
   private async enrol(
     userId: string,
     userPathId: string,
     courseIds: string[],
     ipAddress: string | null,
-  ): Promise<void> {
+  ): Promise<{ enrolled: number; failed: number }> {
     if (courseIds.length === 0) {
-      return;
+      return { enrolled: 0, failed: 0 };
     }
 
+    const courses = await this.prisma.userPathCourse.findMany({
+      where: { userPathId, courseId: { in: courseIds }, enrolledAt: null },
+      select: { id: true, course: { select: { moodleCourseId: true } } },
+    });
+
+    if (courses.length === 0) {
+      // Everything already enrolled — nothing to do, and nothing to audit.
+      return { enrolled: 0, failed: 0 };
+    }
+
+    let lmsUserId: number;
+
     try {
-      const lmsUserId = await this.resolveLmsUserId(userId);
-
-      const courses = await this.prisma.userPathCourse.findMany({
-        where: { userPathId, courseId: { in: courseIds } },
-        select: { id: true, course: { select: { moodleCourseId: true } } },
-      });
-
-      for (const chosen of courses) {
-        await this.lms.enrol({ lmsUserId, lmsCourseId: chosen.course.moodleCourseId });
-        await this.prisma.userPathCourse.update({
-          where: { id: chosen.id },
-          data: { enrolledAt: new Date() },
-        });
-      }
-
-      await this.audit.record({
-        action: AuditAction.PATH_ENROLMENT_REQUESTED,
-        outcome: 'SUCCESS',
-        actorUserId: userId,
-        ipAddress,
-        targetType: 'user_path',
-        targetId: userPathId,
-        detail: { courses: courses.length },
-      });
+      lmsUserId = await this.resolveLmsUserId(userId);
     } catch (error) {
+      /* Without an LMS account nothing can be enrolled, so this is the one
+         whole-batch failure left. */
       this.logger.error(
-        `LMS enrolment failed for user path ${userPathId}: ${
+        `LMS provisioning failed for user path ${userPathId}: ${
           error instanceof Error ? error.message : 'unknown error'
         }`,
       );
@@ -506,8 +496,144 @@ export class EnrollmentService {
         ipAddress,
         targetType: 'user_path',
         targetId: userPathId,
+        detail: { requested: courses.length, enrolled: 0, failed: courses.length },
       });
+
+      return { enrolled: 0, failed: courses.length };
     }
+
+    let enrolled = 0;
+    let failed = 0;
+
+    for (const chosen of courses) {
+      try {
+        await this.lms.enrol({ lmsUserId, lmsCourseId: chosen.course.moodleCourseId });
+        await this.prisma.userPathCourse.update({
+          where: { id: chosen.id },
+          data: { enrolledAt: new Date() },
+        });
+        enrolled += 1;
+      } catch (error) {
+        failed += 1;
+        this.logger.error(
+          `LMS enrolment failed for user path ${userPathId}, course ${
+            chosen.course.moodleCourseId
+          }: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
+    }
+
+    await this.audit.record({
+      action: AuditAction.PATH_ENROLMENT_REQUESTED,
+      outcome: failed === 0 ? 'SUCCESS' : 'FAILURE',
+      actorUserId: userId,
+      ipAddress,
+      targetType: 'user_path',
+      targetId: userPathId,
+      detail: { requested: courses.length, enrolled, failed },
+    });
+
+    return { enrolled, failed };
+  }
+
+  /**
+   * Makes sure this learner is actually enrolled in this course, right now.
+   *
+   * Called when they click into a course rather than waiting for the scheduled
+   * reconciliation. The gap it closes is real and otherwise invisible: a learner
+   * who confirmed their path while the LMS was unreachable has a committed path
+   * with no enrolments, and clicking a course would drop them into a Moodle page
+   * telling them they cannot access it. Enrolling on demand turns "wait up to a
+   * sync interval and hope" into "it works".
+   *
+   * Idempotent at both layers — the query only picks up rows with no
+   * `enrolledAt`, and `LmsPort.enrol` is idempotent by contract.
+   */
+  async ensureEnrolledForLaunch(userId: string, courseId: string): Promise<boolean> {
+    const chosen = await this.prisma.userPathCourse.findFirst({
+      where: {
+        courseId,
+        userPath: { userId, confirmedAt: { not: null } },
+      },
+      select: { id: true, enrolledAt: true, userPathId: true },
+    });
+
+    if (!chosen) {
+      /* Not in a confirmed path: there is nothing to enrol into, and minting a
+         launch token would hand out entry to a course they never chose. */
+      return false;
+    }
+
+    if (chosen.enrolledAt !== null) {
+      return true;
+    }
+
+    await this.enrol(userId, chosen.userPathId, [courseId], null);
+
+    const after = await this.prisma.userPathCourse.findUnique({
+      where: { id: chosen.id },
+      select: { enrolledAt: true },
+    });
+
+    return after?.enrolledAt !== null && after?.enrolledAt !== undefined;
+  }
+
+  /**
+   * Reconciles confirmed paths whose LMS enrolments never landed (D-036).
+   *
+   * This is the other half of best-effort enrolment: the confirm request is
+   * allowed to succeed with the LMS down precisely because something later comes
+   * back for the leftovers. Without it, "best effort" would just mean "sometimes
+   * silently not enrolled".
+   *
+   * Bounded per run so one bad batch cannot monopolise the scheduler, and safe
+   * to run at any time — it only ever looks at rows with no `enrolledAt`.
+   */
+  async retryPendingEnrolments(limit = 100): Promise<{
+    paths: number;
+    enrolled: number;
+    stillPending: number;
+  }> {
+    const pending = await this.prisma.userPathCourse.findMany({
+      where: { enrolledAt: null, userPath: { confirmedAt: { not: null } } },
+      select: { courseId: true, userPathId: true, userPath: { select: { userId: true } } },
+      orderBy: { id: 'asc' },
+      take: limit,
+    });
+
+    if (pending.length === 0) {
+      return { paths: 0, enrolled: 0, stillPending: 0 };
+    }
+
+    const byPath = new Map<string, { userId: string; courseIds: string[] }>();
+
+    for (const row of pending) {
+      const group = byPath.get(row.userPathId) ?? { userId: row.userPath.userId, courseIds: [] };
+      group.courseIds.push(row.courseId);
+      byPath.set(row.userPathId, group);
+    }
+
+    let enrolled = 0;
+
+    for (const [userPathId, group] of byPath) {
+      /* No IP address: this is a background reconciliation, not a user action,
+         and inventing one would make the audit trail lie about who acted. */
+      const result = await this.enrol(group.userId, userPathId, group.courseIds, null);
+      enrolled += result.enrolled;
+    }
+
+    /* Counted from what each attempt actually did, not derived from a global
+       tally: with more rows outstanding than the batch limit, "pending minus
+       what remains" would report zero enrolled on a run that enrolled plenty. */
+    const stillPending = await this.prisma.userPathCourse.count({
+      where: { enrolledAt: null, userPath: { confirmedAt: { not: null } } },
+    });
+
+    this.logger.log(
+      `Enrolment reconciliation: ${byPath.size} path(s), ${enrolled} enrolled, ${stillPending} still pending`,
+    );
+
+    return { paths: byPath.size, enrolled, stillPending };
   }
 
   private async resolveLmsUserId(userId: string): Promise<number> {
@@ -532,41 +658,6 @@ export class EnrollmentService {
     });
 
     return reference.lmsUserId;
-  }
-
-  /**
-   * Live progress from the LMS, keyed by course.
-   *
-   * Never throws: My Path must render whether or not the LMS is reachable. An
-   * empty map degrades to the stored status, which is the honest fallback —
-   * "we do not know of any progress" rather than "there is none".
-   */
-  private async liveProgress(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { moodleUserId: true },
-    });
-
-    if (user?.moodleUserId == null) {
-      return new Map<number, { completed: boolean; gradePercent: number | null }>();
-    }
-
-    try {
-      const progress = await this.lms.listProgressForUser(user.moodleUserId);
-
-      return new Map(
-        progress.map((entry) => [
-          entry.lmsCourseId,
-          { completed: entry.completed, gradePercent: entry.gradePercent },
-        ]),
-      );
-    } catch (error) {
-      this.logger.warn(
-        `Could not read LMS progress: ${error instanceof Error ? error.message : 'unknown error'}`,
-      );
-
-      return new Map<number, { completed: boolean; gradePercent: number | null }>();
-    }
   }
 
   private async auditFailure(
