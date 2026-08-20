@@ -182,11 +182,28 @@ test.describe('Arabic-first shell', () => {
     }
   });
 
-  test('an unauthenticated visitor is sent to sign in, not left on an error', async ({ page }) => {
-    /* From Phase 1 the portal is behind a session. The API is fail-closed and
-       answers 401; the redirect is what turns that into something a user can
-       act on rather than a permanent error state. */
+  test('an unauthenticated visitor at "/" sees the public landing page, not an error', async ({
+    page,
+  }) => {
+    /* `/` is the one portal path a signed-out visitor is allowed to land on
+       (PortalProvider): it renders the same public LandingView as `/landing`
+       instead of redirecting, so a first-time visitor gets the marketing
+       page rather than a sign-in wall. */
     await page.goto('/');
+
+    await expect(page).toHaveURL('/');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('مسارك المهني');
+  });
+
+  test('an unauthenticated visitor at any other portal path is sent to sign in, not left on an error', async ({
+    page,
+  }) => {
+    /* Every other portal path still bounces to /login on a 401 (PortalProvider)
+       — the public root above is the one exception, not a loosening of auth
+       anywhere else. The API is fail-closed and answers 401; the redirect is
+       what turns that into something a user can act on rather than a
+       permanent error state. */
+    await page.goto('/my-path');
 
     await expect(page).toHaveURL(/\/login$/);
   });
