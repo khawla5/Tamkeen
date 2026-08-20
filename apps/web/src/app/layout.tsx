@@ -3,8 +3,7 @@ import localFont from 'next/font/local';
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 
-import { getFormatContext, htmlDir, htmlLang } from '@/i18n/config';
-import { getRequestLocale } from '@/i18n/locale.server';
+import { HTML_DIR, HTML_LANG, getFormatContext } from '@/i18n/config';
 import { FormatProvider } from '@/i18n/format-provider';
 
 import './globals.css';
@@ -41,21 +40,12 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  /*
-   * `lang` and `dir` are computed from one value, so the document can never end
-   * up Arabic-but-LTR. The typeface stays IBM Plex Sans Arabic in both
-   * languages: it is a complete family with Latin glyphs, and loading a second
-   * webfont for English would cost every visitor a request to serve a
-   * secondary locale (D-023's reasoning still applies).
-   */
-  const locale = await getRequestLocale();
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang={htmlLang(locale)} dir={htmlDir(locale)} className={arabic.variable}>
+    <html lang={HTML_LANG} dir={HTML_DIR} className={arabic.variable}>
       <body className="min-h-dvh font-sans antialiased">
         <NextIntlClientProvider>
-          <FormatProvider context={getFormatContext(locale)}>{children}</FormatProvider>
+          <FormatProvider context={getFormatContext()}>{children}</FormatProvider>
         </NextIntlClientProvider>
       </body>
     </html>

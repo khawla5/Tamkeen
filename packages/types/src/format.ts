@@ -101,18 +101,6 @@ export function formatFraction(
 
 export type DateStyle = 'short' | 'long';
 
-/**
- * A bare year — a copyright line, a graduation year.
- *
- * Grouping is switched off deliberately: `formatNumber` would render 2026 as
- * "2,026", because a year is the one number that looks like a quantity and is
- * not one. It still goes through this layer rather than `String(year)` so the
- * D-018 digit switch reaches it like everything else.
- */
-export function formatYear(value: number, context: FormatContext = DEFAULT_FORMAT_CONTEXT): string {
-  return numberFormatter(context, { useGrouping: false, maximumFractionDigits: 0 }).format(value);
-}
-
 /** A certificate issue date, a completion date. */
 export function formatDate(
   value: Date,

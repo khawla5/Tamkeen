@@ -3,64 +3,34 @@
 
 /*
  * ── Brand palette ────────────────────────────────────────────────────────────
- * The IMSIU / Tamkeen palette, adopted from the reference frontend's `master`
- * branch (D-042). This SUPERSEDES the seven colours CLAUDE.md §3 lists and the
- * values D-009 locked; the token *names* are unchanged, so every component in
- * the app inherits the new brand without an edit.
- *
+ * CLAUDE.md §3 / D-009. These seven values are the entire brand palette.
  * Never hardcode a hex in a component; add or reuse a token here.
  *
- * Gold stays reserved for the recommended-path highlight and achievement
- * accents (§3's product rule, which is about meaning, not about which yellow).
+ * Gold is reserved for the recommended-path highlight and achievement accents.
  * Keep it scarce — if gold appears everywhere it stops meaning "recommended".
  *
- * ACCESSIBILITY (measured, see src/lib/contrast.test.ts). Three constraints
- * survive the palette change, and one is new:
- *   - --color-gold on white is 3.74:1 and on the page background 3.03:1. Valid
- *     ONLY for borders, focus rings, icons and large/bold text (>=24px, or
- *     >=18.66px bold), where the 3:1 threshold applies.
- *   - --color-gold-deep IS legible as body text, but only on white (5.25:1).
- *     On the page background it is 4.26:1 and fails. This is new capability —
- *     the old palette had no gold that could carry small text anywhere.
- *   - For a gold *fill* behind body-size text use --color-gold-light with navy
- *     text (5.67:1).
- *   - The page background is now a tinted blue rather than a near-white cream,
- *     which is what forces --color-muted below: the reference's own
- *     #7a8b95 is 3.53:1 on white and 3.21:1 on that background, so it cannot
- *     carry secondary text at AA. The hue is kept and the value darkened to the
- *     lightest one that clears 4.5:1 on both (6.09:1 and 4.89:1).
- * The contrast test enforces all of this; it is not a style opinion.
+ * ACCESSIBILITY CONSTRAINT (measured, see src/lib/contrast.test.ts):
+ *   --color-gold on white is 3.42:1 and on navy 3.99:1 — below the 4.5:1 AA
+ *   floor for body text. Gold is therefore valid ONLY for borders, focus rings,
+ *   icons, and large/bold text (>=24px, or >=18.66px bold), where 3:1 applies.
+ *   For a gold *fill* behind body-size text use --color-gold-light with navy
+ *   text (6.01:1). The contrast test enforces this; it is not a style opinion.
  */
 @theme {
-  --color-navy: #0a2e42;
-  --color-navy-soft: #045d84;
-  --color-navy-deep: #03526f;
-  --color-blue: #80bace;
-  --color-sky: #b3ddf5;
-  --color-gold: #99823f;
-  --color-gold-deep: #806b30;
-  --color-gold-light: #b7a362;
-  --color-gold-pale: #f5f0e3;
-  --color-cream: #dfe7f4;
+  --color-navy: #222e42;
+  --color-navy-soft: #2e3a50;
+  --color-gold: #a8863c;
+  --color-gold-light: #c9a85c;
+  --color-cream: #f4f3f1;
   --color-surface: #ffffff;
-  --color-muted: #566577;
-
-  /* The reference's darkest surface: the near-black olive its closing section
-     and its footer accents sit on. Not a second navy — it reads as unlit gold,
-     which is what makes the gold on top of it look lit. */
-  --color-ink: #1a1409;
+  --color-muted: #5e6b85;
 
   /*
    * Functional status colours — deliberately NOT part of the brand palette.
    * Mandatory error/success states (§2B DoD 4) need a signal colour, and the
-   * brand contains none. Kept separate so they cannot be mistaken for brand
-   * accents and so gold stays scarce.
-   *
-   * These are the ONLY two values not taken from the reference, and the reason
-   * is measured rather than aesthetic: its #c0392b is 4.35:1 on the new page
-   * background and its #2d9f6f is 3.33:1 on white — both below the AA floor for
-   * the error and success text they exist to carry. Ours clear it in every
-   * direction (D-025, re-measured in D-042).
+   * brand seven contain none. Kept separate so they cannot be mistaken for
+   * brand accents and so gold stays scarce. Both clear 4.5:1 in either
+   * direction on white and cream (D-025).
    */
   --color-danger: #a32015;
   --color-success: #1e6f4e;
@@ -83,16 +53,14 @@
   --card: var(--color-surface);
   --card-foreground: var(--color-navy);
 
-  /* Primary action: white text on navy = 14.20:1. The reference declares
-     #045d84 as its `--primary`, but renders the dark navy for the landing's
-     primary button; the rendered design is what this follows. */
+  /* Primary action: navy on white text = 13.66:1. */
   --primary: var(--color-navy);
   --primary-foreground: var(--color-surface);
 
   --secondary: var(--color-navy-soft);
   --secondary-foreground: var(--color-surface);
 
-  /* Achievement / recommended fill: navy on light gold = 5.67:1. */
+  /* Achievement / recommended fill: navy on light gold = 6.01:1. */
   --accent: var(--color-gold-light);
   --accent-foreground: var(--color-navy);
 
@@ -102,24 +70,11 @@
   --destructive: var(--color-danger);
   --destructive-foreground: var(--color-surface);
 
-  /* Card and divider edges, straight from the reference: a pale sky line that
-     separates surfaces without drawing attention. Decorative — nothing depends
-     on seeing it, so the 1.16:1 it manages against the page background is not a
-     failure, it is the intent. */
-  --border: var(--color-sky);
+  --border: color-mix(in srgb, var(--color-muted) 28%, transparent);
+  --input: color-mix(in srgb, var(--color-muted) 40%, transparent);
 
-  /*
-   * Form-field edges are NOT decorative: a text input's border is the only
-   * thing that says where the control is, so WCAG 1.4.11 wants 3:1. The
-   * reference uses the same pale sky line here as for cards, which measures
-   * 1.44:1 on white — so this is the one place its token is not adopted. Muted
-   * keeps the same cool grey-blue family at 6.09:1.
-   */
-  --input: var(--color-muted);
-
-  /* Focus ring, from the reference: brand blue at 7.29:1 on white, far past the
-     3:1 non-text threshold — and more visible than the old gold ring was. */
-  --ring: var(--color-navy-soft);
+  /* Gold focus ring: 3.42:1 on white, clearing the 3:1 non-text threshold. */
+  --ring: var(--color-gold);
 }
 
 @theme inline {
@@ -150,16 +105,6 @@
     color-scheme: light;
     /* Arabic diacritics and taller glyphs need a little more breathing room. */
     line-height: 1.7;
-    /*
-     * In-page anchors (the landing bar's seven links) glide instead of jumping,
-     * so a visitor can see where they were taken. The prefers-reduced-motion
-     * block below forces this back to `auto` — a long smooth scroll is exactly
-     * the kind of motion that triggers vestibular symptoms, so the preference
-     * has to win. Section targets carry `scroll-mt-20` to clear the sticky
-     * header, and `tabIndex={-1}` so focus follows the scroll for keyboard
-     * users instead of staying behind in the bar.
-     */
-    scroll-behavior: smooth;
   }
 
   body {
@@ -193,37 +138,6 @@
 }
 
 @layer utilities {
-  /*
-   * The partner marquee, carried over from the reference frontend (D-045).
-   *
-   * The track holds the logo list TWICE and travels exactly -50%, so the
-   * second copy is in the first copy's place at the moment the animation
-   * loops — which is what makes the seam invisible. Changing one without the
-   * other produces a visible jump every cycle.
-   *
-   * Its motion is covered by the `prefers-reduced-motion` block above, which
-   * halts every animation on the page. That leaves the row parked at its start
-   * rather than empty, and the container it sits in scrolls horizontally, so a
-   * reader who has asked for no motion can still reach every logo by hand.
-   */
-  @keyframes marquee-x {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(-50%);
-    }
-  }
-
-  .animate-marquee-x {
-    animation: marquee-x 60s linear infinite;
-  }
-
-  /* Hovering holds the row still long enough to actually read a mark. */
-  .marquee-group:hover .animate-marquee-x {
-    animation-play-state: paused;
-  }
-
   /* Visually hidden but available to screen readers (skip links, live regions). */
   .sr-only-focusable:not(:focus):not(:focus-within) {
     position: absolute;

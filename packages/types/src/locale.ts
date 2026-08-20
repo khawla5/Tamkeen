@@ -1,36 +1,16 @@
 /**
  * Locale + digit presentation (CLAUDE.md §2 "Digits & dates", D-018).
  *
- * Arabic is the default and primary locale, and stays first in this list:
- * CLAUDE.md §2 allows English "as a later add-on but never at the expense of
- * the Arabic experience", so `ar` is what every caller falls back to and what
- * ships when nothing has been chosen (D-041).
- *
- * Digits default to Western Arabic numerals (0-9); switching to Arabic-Indic
- * (٠-٩) must be a single config change, never a code change in feature files —
- * hence this single source of truth shared by web and api (both format
- * dates/numbers, e.g. for PDFs).
+ * Arabic is the default and primary locale. Digits default to Western Arabic
+ * numerals (0-9); switching to Arabic-Indic (٠-٩) must be a single config
+ * change, never a code change in feature files — hence this single source of
+ * truth shared by web and api (both format dates/numbers, e.g. for PDFs).
  */
-export const LOCALES = ['ar', 'en'] as const;
+export const LOCALES = ['ar'] as const;
 
 export type Locale = (typeof LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = 'ar';
-
-export function isLocale(value: unknown): value is Locale {
-  return typeof value === 'string' && (LOCALES as readonly string[]).includes(value);
-}
-
-export type Direction = 'rtl' | 'ltr';
-
-/**
- * Writing direction, derived rather than stored. Keeping it a function of the
- * locale means a page cannot end up Arabic-but-LTR: there is no second switch
- * to forget to flip.
- */
-export function directionFor(locale: Locale): Direction {
-  return locale === 'ar' ? 'rtl' : 'ltr';
-}
 
 export const NUMBER_FORMATS = ['western', 'arabic-indic'] as const;
 
