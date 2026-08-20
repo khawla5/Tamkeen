@@ -1,0 +1,407 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* Fonts — self-hosted (@fontsource, imported in src/main.tsx).
+     Latin is consolidated onto Geist; Arabic uses IBM Plex Sans Arabic. */
+  --font-sans: "Geist Variable", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+  --font-heading: "Geist Variable", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+  --font-display: "Geist Variable", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+  --font-body: "Geist Variable", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+  --font-arabic: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+
+  /* IMSIU brand palette — Tamkeen */
+  --color-imamu-navy: #045d84;
+  --color-imamu-navy-deep: #03526f;
+  --color-imamu-blue: #80bace;
+  --color-imamu-sky: #b3ddf5;
+  --color-imamu-ice: #dfe7f4;
+  --color-imamu-dark: #0a2e42;
+  --color-imamu-gold: #99823f;
+  --color-imamu-gold-deep: #806b30;
+  --color-imamu-warm-gold: #b7a362;
+  --color-imamu-navy-50: #e6f0f5;
+  --color-imamu-navy-100: #b3d4e3;
+  --color-imamu-gold-50: #f5f0e3;
+  --color-imamu-gold-100: #e6dcc0;
+
+  /* Legacy aliases (teal/terra/wheat) re-mapped to imamu so any not-yet-migrated
+     class names continue to render the new brand. Safe to delete once every
+     `bg-teal*`, `text-terra*`, etc. class has been replaced in the codebase. */
+  --color-teal: #045d84;
+  --color-teal-dark: #0a2e42;
+  --color-teal-deep: #03526f;
+  --color-teal-light: #80bace;
+  --color-teal-50: #b3ddf5;
+  --color-teal-mist: #dfe7f4;
+
+  --color-terra: #99823f;
+  --color-terra-dark: #806b30;
+  --color-terra-light: #b7a362;
+
+  --color-wheat: #f5f0e3;
+
+  --color-success: #2d9f6f;
+  --color-warning: #d4a017;
+  --color-danger: #c0392b;
+  --color-info: #045d84;
+  --color-muted: #7a8b95;
+
+  /* Dashboard glass card tokens */
+  --color-glass: rgba(255, 255, 255, 0.07);
+  --color-glass-border: rgba(255, 255, 255, 0.12);
+  --color-glass-hover: rgba(255, 255, 255, 0.11);
+  --color-glass-inner: rgba(255, 255, 255, 0.05);
+
+  /* shadcn semantic mappings */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  /* Radius */
+  --radius: 8px;
+  --radius-sm: 5px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  --radius-4xl: 28px;
+}
+
+:root {
+  --background: #dfe7f4;
+  --foreground: #0a2e42;
+  --card: #ffffff;
+  --card-foreground: #0a2e42;
+  --popover: #ffffff;
+  --popover-foreground: #0a2e42;
+  --primary: #045d84;
+  --primary-foreground: #ffffff;
+  --secondary: #99823f;
+  --secondary-foreground: #ffffff;
+  --muted: #b3ddf5;
+  --muted-foreground: #7a8b95;
+  --accent: #b3ddf5;
+  --accent-foreground: #0a2e42;
+  --destructive: #c0392b;
+  --border: #b3ddf5;
+  --input: #b3ddf5;
+  --ring: #045d84;
+  --chart-1: #045d84;
+  --chart-2: #99823f;
+  --chart-3: #b7a362;
+  --chart-4: #2d9f6f;
+  --chart-5: #80bace;
+  --sidebar: #0a2e42;
+  --sidebar-foreground: #b3ddf5;
+  --sidebar-primary: #045d84;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #03526f;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: #80bace;
+}
+
+.dark {
+  --background: #0a2e42;
+  --foreground: #b3ddf5;
+  --card: #0f3a52;
+  --card-foreground: #b3ddf5;
+  --popover: #0f3a52;
+  --popover-foreground: #b3ddf5;
+  --primary: #045d84;
+  --primary-foreground: #ffffff;
+  --secondary: #99823f;
+  --secondary-foreground: #ffffff;
+  --muted: #143e57;
+  --muted-foreground: #80bace;
+  --accent: #143e57;
+  --accent-foreground: #b3ddf5;
+  --destructive: #c0392b;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.15);
+  --ring: #80bace;
+  --chart-1: #80bace;
+  --chart-2: #b7a362;
+  --chart-3: #99823f;
+  --chart-4: #2d9f6f;
+  --chart-5: #b3ddf5;
+  --sidebar: #082435;
+  --sidebar-foreground: #b3ddf5;
+  --sidebar-primary: #045d84;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #03526f;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: #80bace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+  }
+
+  /* Focus-visible rings for accessibility */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid #045d84;
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(4, 93, 132, 0.3);
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(4, 93, 132, 0.5);
+  }
+
+  /* Selection styling */
+  ::selection {
+    background: rgba(4, 93, 132, 0.2);
+    color: #0a2e42;
+  }
+}
+
+/* A2 — Arabic must never carry letter-spacing: positive tracking breaks the
+   cursive joining of Arabic glyphs. In this app Arabic only ever renders in an
+   RTL subtree (the whole document in Arabic mode, or an explicit dir="rtl"
+   island like an Arabic name inside English UI), so we neutralise any
+   `tracking-*` utility that lands on RTL text. This keeps Latin (LTR) tracking
+   — e.g. uppercase eyebrow labels in English — untouched. A Latin wordmark that
+   must keep its tracking even while the page is in Arabic (e.g. the "TAMKEEN"
+   lockup caption) opts out by marking itself dir="ltr". Unlayered + !important
+   so it wins over Tailwind's utility layer. */
+[dir="rtl"] [class*="tracking-"]:not([dir="ltr"]) {
+  letter-spacing: normal !important;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Glass card effect for dark dashboard backgrounds */
+.glass-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%);
+  border: 1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 4px 24px rgba(0,0,0,0.12),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.glass-card:hover {
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.06) 100%);
+  border-color: rgba(255,255,255,0.14);
+}
+
+.glass-inner {
+  background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.glass-inner:hover {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(4, 93, 132, 0.2);
+}
+
+/* Stat card shimmer accent */
+.stat-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.stat-shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(4, 93, 132, 0.4), transparent);
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(4, 93, 132, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px rgba(4, 93, 132, 0.1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes marquee-x {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee-x {
+  animation: marquee-x 50s linear infinite;
+  will-change: transform;
+}
+
+@keyframes float-y-sm {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+.animate-float-up {
+  animation: float-y-sm 3s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes float-y-sm-down {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+.animate-float-down {
+  animation: float-y-sm-down 3.5s ease-in-out infinite 1s;
+  will-change: transform;
+}
+
+/* ── Demo tour (driver.js) — IMSIU brand popover, bilingual/RTL aware ── */
+.driver-popover.tamkeen-tour {
+  border-radius: 14px;
+  border: 1px solid var(--color-imamu-navy-100, #cfe3ee);
+  box-shadow: 0 18px 46px rgba(4, 93, 132, 0.18);
+  max-width: 340px;
+}
+.driver-popover.tamkeen-tour .driver-popover-title {
+  color: var(--color-imamu-navy, #045d84);
+  font-weight: 800;
+  font-size: 15px;
+}
+.driver-popover.tamkeen-tour .driver-popover-description {
+  color: var(--color-imamu-dark, #0a2e42);
+  line-height: 1.7;
+}
+.driver-popover.tamkeen-tour .driver-popover-progress-text {
+  color: var(--color-imamu-gold-deep, #99823f);
+  font-weight: 700;
+}
+.driver-popover.tamkeen-tour .tamkeen-tour-progress {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-imamu-gold-deep, #99823f);
+}
+.driver-popover.tamkeen-tour .driver-popover-next-btn,
+.driver-popover.tamkeen-tour .driver-popover-next-btn:hover {
+  background: var(--color-imamu-navy, #045d84);
+  color: #fff;
+  border: none;
+  text-shadow: none;
+  border-radius: 8px;
+  font-weight: 700;
+}
+.driver-popover.tamkeen-tour .driver-popover-prev-btn {
+  border-radius: 8px;
+  font-weight: 600;
+}
+/* RTL: Arabic popovers read right-to-left */
+html[dir="rtl"] .driver-popover.tamkeen-tour .driver-popover-title,
+html[dir="rtl"] .driver-popover.tamkeen-tour .driver-popover-description {
+  text-align: right;
+}

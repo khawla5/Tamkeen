@@ -1,0 +1,15 @@
+export const university = {
+  studentsAssessed: 'Students assessed',
+  skillsRecordsComplete: 'Skills records complete',
+  coopPlacements: 'Co-op placements',
+  employmentRate: 'Post-grad employment',
+  thisSemester: 'this semester',
+  connectedSystems: 'Connected national systems',
+  connected: 'Connected',
+  pending: 'Pending',
+  moe: 'Ministry of Education',
+  etec: 'ETEC',
+  hrdf: 'HRDF (Hadaf)',
+  sdaia: 'SDAIA',
+  laborObservatory: 'National Labor Observatory',
+}

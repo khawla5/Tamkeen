@@ -1,0 +1,915 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Fursati / Schema Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&family=Inter+Tight:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  
+  :root {
+    --ink-0: #0a1424;
+    --ink-1: #0f1c30;
+    --ink-2: #16263f;
+    --ink-3: #1d3050;
+    --line: #2a4368;
+    --line-soft: #1d2f4a;
+    --paper: #f5ecd9;
+    --paper-dim: #c9bfa9;
+    --paper-mute: #6f7a8c;
+    --gold: #d4a73a;
+    --gold-soft: #b88d2c;
+    --teal: #6fb3a8;
+    --coral: #e07a5f;
+    --plum: #b18cce;
+    --rose: #d8688b;
+    --sage: #8aab6e;
+
+    --font-display: "Fraunces", "Times New Roman", serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --font-body: "Inter Tight", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--ink-0);
+    color: var(--paper);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: auto;
+  }
+
+  body {
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px),
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(212,167,58,0.06) 0%, transparent 60%);
+    background-size: 48px 48px, 48px 48px, 100% 100%;
+    background-position: 0 0, 0 0, 0 0;
+  }
+
+  /* grain overlay */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.96 0 0 0 0 0.92 0 0 0 0 0.85 0 0 0 0.04 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+    opacity: .55;
+    z-index: 1;
+  }
+
+  header.masthead {
+    position: relative;
+    z-index: 3;
+    padding: 56px 56px 28px;
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 32px;
+    align-items: end;
+  }
+
+  .titleblock h1 {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-style: italic;
+    font-size: clamp(48px, 6vw, 88px);
+    line-height: .92;
+    letter-spacing: -.02em;
+    margin: 0;
+    color: var(--paper);
+  }
+  .titleblock h1 em {
+    font-style: normal;
+    color: var(--gold);
+    font-weight: 400;
+  }
+  .titleblock p {
+    margin: 18px 0 0;
+    max-width: 56ch;
+    color: var(--paper-dim);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  .meta {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    color: var(--paper-mute);
+    line-height: 2.1;
+  }
+  .meta span { color: var(--paper); }
+  .meta .stamp {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 5px 11px;
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    border-radius: 2px;
+    font-size: 10px;
+  }
+
+  /* Legend bar */
+  .legend {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding: 18px 56px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(15, 28, 48, 0.6);
+    backdrop-filter: blur(6px);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    color: var(--paper-dim);
+  }
+  .legend .group { display: flex; align-items: center; gap: 8px; }
+  .legend .swatch {
+    width: 12px; height: 12px;
+    border-radius: 2px;
+    border: 1px solid rgba(0,0,0,.35);
+  }
+  .legend .rel { display: flex; align-items: center; gap: 10px; }
+  .legend .rel svg { display: block; }
+
+  /* Canvas */
+  .canvas-wrap {
+    position: relative;
+    z-index: 2;
+    padding: 56px;
+    overflow: auto;
+  }
+  .canvas {
+    position: relative;
+    width: 2360px;
+    height: 1340px;
+    margin: 0 auto;
+  }
+
+  .canvas svg.wires {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+  .wires path {
+    fill: none;
+    stroke: var(--gold-soft);
+    stroke-width: 1.2;
+    opacity: .55;
+    stroke-dasharray: 3 4;
+    transition: opacity .25s, stroke .25s, stroke-width .25s, stroke-dasharray .25s;
+  }
+  .wires path.solid {
+    stroke-dasharray: none;
+    opacity: .7;
+  }
+  .wires .endpoint {
+    fill: var(--gold);
+    transition: opacity .25s;
+  }
+  .wires .label {
+    fill: var(--paper-mute);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    transition: fill .25s, opacity .25s;
+  }
+
+  /* Domain plates */
+  .plate {
+    position: absolute;
+    border: 1px dashed rgba(255,255,255,.06);
+    border-radius: 4px;
+    pointer-events: none;
+  }
+  .plate-label {
+    position: absolute;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .22em;
+    color: var(--paper-mute);
+    pointer-events: none;
+  }
+  .plate-label::before {
+    content: "§ ";
+    color: var(--gold);
+  }
+
+  /* Tables */
+  .table {
+    position: absolute;
+    width: 248px;
+    background: linear-gradient(180deg, var(--ink-2) 0%, var(--ink-1) 100%);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.04) inset,
+      0 24px 40px -20px rgba(0,0,0,.6);
+    transition: transform .3s cubic-bezier(.2,.7,.2,1), box-shadow .3s, border-color .3s, opacity .3s;
+    overflow: hidden;
+  }
+  .table.hub {
+    width: 280px;
+    border-color: var(--gold);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.06) inset,
+      0 0 0 1px rgba(212,167,58,.18),
+      0 30px 60px -20px rgba(212,167,58,.25);
+  }
+  .table .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0));
+  }
+  .table .head .name {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 18px;
+    color: var(--paper);
+    letter-spacing: -.01em;
+  }
+  .table.hub .head .name { color: var(--gold); }
+  .table .head .domain {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .2em;
+    color: var(--paper-mute);
+  }
+
+  .table .stripe {
+    height: 3px;
+    background: var(--accent, var(--paper-dim));
+  }
+
+  .table ul {
+    list-style: none;
+    margin: 0;
+    padding: 8px 0;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+  .table li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 3px 14px;
+    color: var(--paper-dim);
+    position: relative;
+  }
+  .table li .field { flex: 1; color: var(--paper); }
+  .table li .type {
+    color: var(--paper-mute);
+    font-size: 10px;
+    text-transform: lowercase;
+  }
+  .table li.pk .field { color: var(--gold); }
+  .table li.pk::before {
+    content: "◆";
+    color: var(--gold);
+    font-size: 9px;
+    width: 10px;
+  }
+  .table li.fk::before {
+    content: "→";
+    color: var(--teal);
+    font-size: 11px;
+    width: 10px;
+  }
+  .table li:not(.pk):not(.fk)::before {
+    content: "·";
+    color: var(--paper-mute);
+    width: 10px;
+    text-align: center;
+  }
+
+  .table .foot {
+    padding: 7px 14px 9px;
+    border-top: 1px dashed var(--line);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    color: var(--paper-mute);
+    display: flex;
+    justify-content: space-between;
+  }
+  .table .foot .badge { color: var(--accent, var(--gold)); }
+
+  /* Hover state */
+  .canvas.hovering .table:not(.is-active):not(.is-related) { opacity: .22; }
+  .canvas.hovering .wires path:not(.is-active) { opacity: .08; }
+  .canvas.hovering .wires .endpoint:not(.is-active) { opacity: .15; }
+  .canvas.hovering .wires .label:not(.is-active) { opacity: 0; }
+
+  .table.is-active {
+    transform: translateY(-2px);
+    border-color: var(--gold);
+    box-shadow:
+      0 0 0 1px rgba(212,167,58,.3),
+      0 30px 50px -15px rgba(0,0,0,.7);
+  }
+  .table.is-related {
+    border-color: var(--accent, var(--teal));
+  }
+  .wires path.is-active {
+    stroke: var(--gold) !important;
+    opacity: 1 !important;
+    stroke-width: 1.6;
+    stroke-dasharray: none;
+  }
+
+  /* footer */
+  footer.colophon {
+    position: relative;
+    z-index: 3;
+    padding: 32px 56px 56px;
+    border-top: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 40px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--paper-mute);
+    letter-spacing: .04em;
+  }
+  .colophon h4 {
+    margin: 0 0 10px;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 18px;
+    color: var(--paper);
+  }
+  .colophon p { margin: 0; line-height: 1.6; }
+  .colophon code {
+    color: var(--gold);
+    background: rgba(212,167,58,.06);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  /* corner registration marks */
+  .reg {
+    position: fixed;
+    width: 22px; height: 22px;
+    pointer-events: none;
+    z-index: 4;
+    opacity: .6;
+  }
+  .reg::before, .reg::after {
+    content: ""; position: absolute; background: var(--gold);
+  }
+  .reg::before { left: 50%; top: 0; width: 1px; height: 100%; }
+  .reg::after  { top: 50%; left: 0; width: 100%; height: 1px; }
+  .reg.tl { top: 16px; left: 16px; }
+  .reg.tr { top: 16px; right: 16px; }
+  .reg.bl { bottom: 16px; left: 16px; }
+  .reg.br { bottom: 16px; right: 16px; }
+
+  @media (max-width: 900px) {
+    header.masthead { padding: 36px 24px 20px; grid-template-columns: 1fr; }
+    .meta { text-align: left; }
+    .legend { padding: 14px 24px; }
+    .canvas-wrap { padding: 24px; }
+    footer.colophon { grid-template-columns: 1fr; padding: 24px; gap: 24px; }
+  }
+</style>
+</head>
+<body>
+
+  <span class="reg tl"></span>
+  <span class="reg tr"></span>
+  <span class="reg bl"></span>
+  <span class="reg br"></span>
+
+  <header class="masthead">
+    <div class="titleblock">
+      <h1>Schema <em>Atlas</em></h1>
+      <p>A cartography of the <strong style="color:var(--paper)">Fursati</strong> data model — six roles, twenty tables, the rivers of foreign keys that connect them. Drawn on graph paper for clarity, annotated for the engineer who has to live with it.</p>
+    </div>
+    <div class="meta">
+      <div>Project — <span>Fursati</span></div>
+      <div>Backend — <span>Supabase / Postgres</span></div>
+      <div>Tables — <span>20</span></div>
+      <div>Revision — <span>0001 · init</span></div>
+      <div class="stamp">DRAFT · v1</div>
+    </div>
+  </header>
+
+  <nav class="legend">
+    <div class="group"><span class="swatch" style="background:var(--gold)"></span> Identity</div>
+    <div class="group"><span class="swatch" style="background:var(--teal)"></span> Role profiles</div>
+    <div class="group"><span class="swatch" style="background:var(--coral)"></span> Opportunities</div>
+    <div class="group"><span class="swatch" style="background:var(--plum)"></span> Content / catalog</div>
+    <div class="group"><span class="swatch" style="background:var(--rose)"></span> Engagements</div>
+    <div class="group"><span class="swatch" style="background:var(--sage)"></span> Learning</div>
+    <div class="rel">
+      <svg width="46" height="10"><path d="M0 5 Q 12 -2 23 5 T 46 5" stroke="var(--gold-soft)" stroke-width="1.2" fill="none" stroke-dasharray="3 4"/></svg>
+      <span>foreign key</span>
+    </div>
+    <div class="rel">
+      <span>◆ pk</span>
+      <span>→ fk</span>
+    </div>
+  </nav>
+
+  <main class="canvas-wrap">
+    <div class="canvas" id="canvas">
+
+      <!-- domain plates (decorative regions) -->
+      <div class="plate"  style="left:30px;  top:60px;  width:600px;  height:840px; "></div>
+      <div class="plate-label" style="left:42px; top:42px;">i · student tooling</div>
+
+      <div class="plate"  style="left:660px; top:60px;  width:610px;  height:1040px;"></div>
+      <div class="plate-label" style="left:672px; top:42px;">ii · profiles & identity</div>
+
+      <div class="plate"  style="left:1300px;top:60px;  width:1030px; height:1040px;"></div>
+      <div class="plate-label" style="left:1312px; top:42px;">iii · opportunities, orgs & learning</div>
+
+      <!-- SVG wires -->
+      <svg class="wires" id="wires"></svg>
+
+      <!-- ============== TABLES ============== -->
+
+      <!-- IDENTITY -->
+      <div class="table hub" data-table="users" data-domain="identity"
+           style="left:880px; top:520px;" data-color="gold">
+        <div class="stripe" style="--accent:var(--gold)"></div>
+        <div class="head"><span class="name">users</span><span class="domain">identity</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li><span class="field">role</span><span class="type">enum</span></li>
+          <li><span class="field">email</span><span class="type">text · uniq</span></li>
+          <li><span class="field">name / name_ar</span><span class="type">text</span></li>
+          <li><span class="field">avatar_url</span><span class="type">text</span></li>
+          <li><span class="field">subtitle / _ar</span><span class="type">text</span></li>
+          <li><span class="field">created_at</span><span class="type">tstz</span></li>
+        </ul>
+        <div class="foot"><span>auth.users ↔ public.users</span><span class="badge" style="--accent:var(--gold)">hub</span></div>
+      </div>
+
+      <!-- ROLE PROFILES -->
+      <div class="table" data-table="student_profiles" data-domain="profiles" style="left:680px; top:80px;" data-color="teal">
+        <div class="stripe" style="--accent:var(--teal)"></div>
+        <div class="head"><span class="name">student_profiles</span><span class="domain">role</span></div>
+        <ul>
+          <li class="pk fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li><span class="field">university / _ar</span><span class="type">text</span></li>
+          <li><span class="field">major / _ar</span><span class="type">text</span></li>
+          <li><span class="field">graduation_year</span><span class="type">int</span></li>
+          <li><span class="field">gpa</span><span class="type">numeric</span></li>
+          <li><span class="field">profile_completion</span><span class="type">int</span></li>
+          <li><span class="field">cv_score</span><span class="type">int</span></li>
+          <li class="fk"><span class="field">recommended_career_path_id</span><span class="type">→ career_paths</span></li>
+          <li><span class="field">assessment_completed</span><span class="type">bool</span></li>
+        </ul>
+        <div class="foot"><span>1:1 with users</span><span class="badge" style="--accent:var(--teal)">student</span></div>
+      </div>
+
+      <div class="table" data-table="retiree_profiles" data-domain="profiles" style="left:680px; top:380px;" data-color="teal">
+        <div class="stripe" style="--accent:var(--teal)"></div>
+        <div class="head"><span class="name">retiree_profiles</span><span class="domain">role</span></div>
+        <ul>
+          <li class="pk fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li><span class="field">industry / _ar</span><span class="type">text</span></li>
+          <li><span class="field">years_experience</span><span class="type">int</span></li>
+          <li><span class="field">expertise[] / _ar[]</span><span class="type">text[]</span></li>
+          <li><span class="field">availability</span><span class="type">text</span></li>
+          <li><span class="field">preferred_work[]</span><span class="type">text[]</span></li>
+          <li><span class="field">profile_completion</span><span class="type">int</span></li>
+        </ul>
+        <div class="foot"><span>1:1 with users</span><span class="badge" style="--accent:var(--teal)">retiree</span></div>
+      </div>
+
+      <div class="table" data-table="employee_profiles" data-domain="profiles" style="left:680px; top:670px;" data-color="teal">
+        <div class="stripe" style="--accent:var(--teal)"></div>
+        <div class="head"><span class="name">employee_profiles</span><span class="domain">role</span></div>
+        <ul>
+          <li class="pk fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li><span class="field">job_title / _ar</span><span class="type">text</span></li>
+          <li><span class="field">company_name</span><span class="type">text</span></li>
+          <li><span class="field">years_in_role</span><span class="type">int</span></li>
+          <li><span class="field">upskilling_goals[]</span><span class="type">text[]</span></li>
+        </ul>
+        <div class="foot"><span>1:1 with users</span><span class="badge" style="--accent:var(--teal)">employee</span></div>
+      </div>
+
+      <div class="table" data-table="companies" data-domain="profiles" style="left:680px; top:910px;" data-color="teal">
+        <div class="stripe" style="--accent:var(--teal)"></div>
+        <div class="head"><span class="name">companies</span><span class="domain">org</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li><span class="field">name / name_ar</span><span class="type">text</span></li>
+          <li><span class="field">logo_url</span><span class="type">text</span></li>
+          <li><span class="field">industry / size / location</span><span class="type">text</span></li>
+          <li><span class="field">plan</span><span class="type">enum</span></li>
+        </ul>
+        <div class="foot"><span>posts opportunities</span><span class="badge" style="--accent:var(--teal)">company</span></div>
+      </div>
+
+      <div class="table" data-table="universities" data-domain="profiles" style="left:1320px; top:80px;" data-color="teal">
+        <div class="stripe" style="--accent:var(--teal)"></div>
+        <div class="head"><span class="name">universities</span><span class="domain">org</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li><span class="field">name / name_ar</span><span class="type">text</span></li>
+          <li><span class="field">logo_url</span><span class="type">text</span></li>
+          <li><span class="field">location</span><span class="type">text</span></li>
+          <li><span class="field">total_students</span><span class="type">int</span></li>
+        </ul>
+        <div class="foot"><span>1:1 with users</span><span class="badge" style="--accent:var(--teal)">university</span></div>
+      </div>
+
+      <div class="table" data-table="course_providers" data-domain="profiles" style="left:1320px; top:910px;" data-color="teal">
+        <div class="stripe" style="--accent:var(--teal)"></div>
+        <div class="head"><span class="name">course_providers</span><span class="domain">org</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li><span class="field">name / name_ar</span><span class="type">text</span></li>
+          <li><span class="field">logo_url</span><span class="type">text</span></li>
+          <li><span class="field">rating</span><span class="type">numeric</span></li>
+        </ul>
+        <div class="foot"><span>owns courses</span><span class="badge" style="--accent:var(--teal)">provider</span></div>
+      </div>
+
+      <!-- STUDENT TOOLING (left column) -->
+      <div class="table" data-table="career_paths" data-domain="content" style="left:50px; top:80px;" data-color="plum">
+        <div class="stripe" style="--accent:var(--plum)"></div>
+        <div class="head"><span class="name">career_paths</span><span class="domain">catalog</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li><span class="field">title / _ar</span><span class="type">text</span></li>
+          <li><span class="field">icon</span><span class="type">text</span></li>
+          <li><span class="field">description / _ar</span><span class="type">text</span></li>
+          <li><span class="field">stages[] / _ar[]</span><span class="type">text[]</span></li>
+          <li><span class="field">required_skills[]</span><span class="type">text[]</span></li>
+          <li><span class="field">avg_salary</span><span class="type">text</span></li>
+        </ul>
+        <div class="foot"><span>seed data</span><span class="badge" style="--accent:var(--plum)">catalog</span></div>
+      </div>
+
+      <div class="table" data-table="assessment_questions" data-domain="content" style="left:50px; top:380px;" data-color="plum">
+        <div class="stripe" style="--accent:var(--plum)"></div>
+        <div class="head"><span class="name">assessment_questions</span><span class="domain">catalog</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li><span class="field">section</span><span class="type">text</span></li>
+          <li><span class="field">question / _ar</span><span class="type">text</span></li>
+          <li><span class="field">options</span><span class="type">jsonb</span></li>
+          <li><span class="field">display_order</span><span class="type">int</span></li>
+        </ul>
+        <div class="foot"><span>15 seeded questions</span><span class="badge" style="--accent:var(--plum)">catalog</span></div>
+      </div>
+
+      <div class="table" data-table="cv_templates" data-domain="content" style="left:50px; top:640px;" data-color="plum">
+        <div class="stripe" style="--accent:var(--plum)"></div>
+        <div class="head"><span class="name">cv_templates</span><span class="domain">catalog</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li><span class="field">name / name_ar</span><span class="type">text</span></li>
+          <li><span class="field">color</span><span class="type">text</span></li>
+          <li><span class="field">popular</span><span class="type">bool</span></li>
+        </ul>
+        <div class="foot"><span>4 seeded</span><span class="badge" style="--accent:var(--plum)">catalog</span></div>
+      </div>
+
+      <div class="table" data-table="assessment_responses" data-domain="engagements" style="left:340px; top:240px;" data-color="rose">
+        <div class="stripe" style="--accent:var(--rose)"></div>
+        <div class="head"><span class="name">assessment_responses</span><span class="domain">user data</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li><span class="field">answers</span><span class="type">jsonb</span></li>
+          <li class="fk"><span class="field">result_career_path_id</span><span class="type">→ career_paths</span></li>
+          <li><span class="field">match_score</span><span class="type">int</span></li>
+          <li><span class="field">completed_at</span><span class="type">tstz</span></li>
+        </ul>
+        <div class="foot"><span>1 row per user</span><span class="badge" style="--accent:var(--rose)">student</span></div>
+      </div>
+
+      <div class="table" data-table="cv_data" data-domain="engagements" style="left:340px; top:520px;" data-color="rose">
+        <div class="stripe" style="--accent:var(--rose)"></div>
+        <div class="head"><span class="name">cv_data</span><span class="domain">user data</span></div>
+        <ul>
+          <li class="pk fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li class="fk"><span class="field">template_id</span><span class="type">→ cv_templates</span></li>
+          <li><span class="field">personal</span><span class="type">jsonb</span></li>
+          <li><span class="field">education</span><span class="type">jsonb</span></li>
+          <li><span class="field">experience</span><span class="type">jsonb</span></li>
+          <li><span class="field">skills / languages</span><span class="type">jsonb</span></li>
+          <li><span class="field">cv_file_url</span><span class="type">text</span></li>
+        </ul>
+        <div class="foot"><span>cvs/ bucket</span><span class="badge" style="--accent:var(--rose)">student</span></div>
+      </div>
+
+      <div class="table" data-table="student_skills" data-domain="engagements" style="left:340px; top:790px;" data-color="rose">
+        <div class="stripe" style="--accent:var(--rose)"></div>
+        <div class="head"><span class="name">student_skills</span><span class="domain">user data</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">student_id</span><span class="type">→ student_profiles</span></li>
+          <li><span class="field">name</span><span class="type">text</span></li>
+          <li><span class="field">level</span><span class="type">int 0–100</span></li>
+        </ul>
+        <div class="foot"><span>uniq(student, name)</span><span class="badge" style="--accent:var(--rose)">student</span></div>
+      </div>
+
+      <!-- OPPORTUNITIES & FLOW (right) -->
+      <div class="table" data-table="opportunities" data-domain="opportunities" style="left:1320px; top:380px;" data-color="coral">
+        <div class="stripe" style="--accent:var(--coral)"></div>
+        <div class="head"><span class="name">opportunities</span><span class="domain">marketplace</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">company_id</span><span class="type">→ companies</span></li>
+          <li><span class="field">title / title_ar</span><span class="type">text</span></li>
+          <li><span class="field">type</span><span class="type">enum</span></li>
+          <li><span class="field">location / _ar</span><span class="type">text</span></li>
+          <li><span class="field">duration / salary (+_ar)</span><span class="type">text</span></li>
+          <li><span class="field">description / _ar</span><span class="type">text</span></li>
+          <li><span class="field">skills[]</span><span class="type">text[]</span></li>
+          <li><span class="field">deadline</span><span class="type">date</span></li>
+          <li><span class="field">for_retirees</span><span class="type">bool</span></li>
+          <li><span class="field">is_active</span><span class="type">bool</span></li>
+        </ul>
+        <div class="foot"><span>gin index on skills + trgm</span><span class="badge" style="--accent:var(--coral)">core</span></div>
+      </div>
+
+      <div class="table" data-table="applications" data-domain="opportunities" style="left:1620px; top:380px;" data-color="coral">
+        <div class="stripe" style="--accent:var(--coral)"></div>
+        <div class="head"><span class="name">applications</span><span class="domain">marketplace</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li class="fk"><span class="field">opportunity_id</span><span class="type">→ opportunities</span></li>
+          <li><span class="field">status</span><span class="type">enum</span></li>
+          <li><span class="field">cover_letter</span><span class="type">text</span></li>
+          <li><span class="field">applied_at</span><span class="type">tstz</span></li>
+        </ul>
+        <div class="foot"><span>uniq(user, opportunity)</span><span class="badge" style="--accent:var(--coral)">junction</span></div>
+      </div>
+
+      <div class="table" data-table="interviews" data-domain="opportunities" style="left:1920px; top:380px;" data-color="coral">
+        <div class="stripe" style="--accent:var(--coral)"></div>
+        <div class="head"><span class="name">interviews</span><span class="domain">marketplace</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li class="fk"><span class="field">application_id</span><span class="type">→ applications</span></li>
+          <li><span class="field">company</span><span class="type">text</span></li>
+          <li><span class="field">scheduled_at</span><span class="type">tstz</span></li>
+          <li><span class="field">type</span><span class="type">enum</span></li>
+          <li><span class="field">notes</span><span class="type">text</span></li>
+        </ul>
+        <div class="foot"><span>per applicant</span><span class="badge" style="--accent:var(--coral)">workflow</span></div>
+      </div>
+
+      <div class="table" data-table="retiree_engagements" data-domain="engagements" style="left:1620px; top:680px;" data-color="rose">
+        <div class="stripe" style="--accent:var(--rose)"></div>
+        <div class="head"><span class="name">retiree_engagements</span><span class="domain">history</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">retiree_id</span><span class="type">→ retiree_profiles</span></li>
+          <li><span class="field">company / role</span><span class="type">text</span></li>
+          <li><span class="field">duration</span><span class="type">text</span></li>
+          <li><span class="field">rating</span><span class="type">numeric 0–5</span></li>
+        </ul>
+        <div class="foot"><span>past work history</span><span class="badge" style="--accent:var(--rose)">retiree</span></div>
+      </div>
+
+      <!-- LEARNING -->
+      <div class="table" data-table="courses" data-domain="learning" style="left:1620px; top:910px;" data-color="sage">
+        <div class="stripe" style="--accent:var(--sage)"></div>
+        <div class="head"><span class="name">courses</span><span class="domain">learning</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">provider_id</span><span class="type">→ course_providers</span></li>
+          <li><span class="field">name / name_ar</span><span class="type">text</span></li>
+          <li><span class="field">description / _ar</span><span class="type">text</span></li>
+          <li><span class="field">price</span><span class="type">numeric</span></li>
+          <li><span class="field">is_active</span><span class="type">bool</span></li>
+        </ul>
+        <div class="foot"><span>by provider</span><span class="badge" style="--accent:var(--sage)">catalog</span></div>
+      </div>
+
+      <div class="table" data-table="course_enrollments" data-domain="learning" style="left:1920px; top:910px;" data-color="sage">
+        <div class="stripe" style="--accent:var(--sage)"></div>
+        <div class="head"><span class="name">course_enrollments</span><span class="domain">learning</span></div>
+        <ul>
+          <li class="pk"><span class="field">id</span><span class="type">uuid</span></li>
+          <li class="fk"><span class="field">user_id</span><span class="type">→ users</span></li>
+          <li class="fk"><span class="field">course_id</span><span class="type">→ courses</span></li>
+          <li><span class="field">progress</span><span class="type">int 0–100</span></li>
+          <li><span class="field">enrolled_at</span><span class="type">tstz</span></li>
+          <li><span class="field">completed_at</span><span class="type">tstz</span></li>
+        </ul>
+        <div class="foot"><span>uniq(user, course)</span><span class="badge" style="--accent:var(--sage)">junction</span></div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="colophon">
+    <div>
+      <h4>Conventions</h4>
+      <p>
+        Bilingual columns mirror the front-end <code>field</code> / <code>field_ar</code> pattern.
+        Mutable counts (<code>applicant_count</code>, <code>posted_days</code>) are derived in queries —
+        not denormalized. Status flags are Postgres enums; arrays use <code>text[]</code> with GIN indexes.
+      </p>
+    </div>
+    <div>
+      <h4>Storage</h4>
+      <p>
+        Three buckets: <code>avatars</code> · <code>company_logos</code> (public),
+        <code>cvs</code> (private, signed URLs). Object paths are namespaced by
+        <code>auth.uid()</code>; RLS enforces it.
+      </p>
+    </div>
+    <div>
+      <h4>Row-level security</h4>
+      <p>
+        Owners write their own profile. Companies see applications to their opportunities.
+        Catalog tables (career_paths, assessment_questions, cv_templates) are public-read,
+        admin-write.
+      </p>
+    </div>
+  </footer>
+
+<script>
+  // ============== RELATIONSHIPS ==============
+  // [from_table, to_table, side_from, side_to, label?]
+  // sides: 'l' | 'r' | 't' | 'b' | 'auto'
+  const REL = [
+    ['student_profiles', 'users', 'r', 'l', '1:1'],
+    ['retiree_profiles', 'users', 'r', 'l', '1:1'],
+    ['employee_profiles','users', 'r', 'l', '1:1'],
+    ['companies',        'users', 'r', 'l', '1:1'],
+    ['universities',     'users', 'l', 'r', '1:1'],
+    ['course_providers', 'users', 'l', 'r', '1:1'],
+
+    ['student_profiles', 'career_paths',         'l', 'r', 'recommended'],
+    ['assessment_responses','users',             'r', 'l', '1:1'],
+    ['assessment_responses','career_paths',      'l', 'r', 'result'],
+    ['cv_data',             'users',             'r', 'l', '1:1'],
+    ['cv_data',             'cv_templates',      'l', 'r', 'template'],
+    ['student_skills',      'student_profiles',  'r', 'l', '1:N'],
+
+    ['opportunities',       'companies',         'l', 'r', 'posted by'],
+    ['applications',        'users',             'l', 'r', 'applicant'],
+    ['applications',        'opportunities',     'l', 'r', '1:N'],
+    ['interviews',          'applications',      'l', 'r', 'scheduled'],
+    ['interviews',          'users',             'l', 'l', null],
+
+    ['retiree_engagements', 'retiree_profiles',  'l', 'r', '1:N'],
+
+    ['courses',             'course_providers',  'l', 'r', '1:N'],
+    ['course_enrollments',  'courses',           'l', 'r', '1:N'],
+    ['course_enrollments',  'users',             'l', 'l', null],
+  ];
+
+  const canvas = document.getElementById('canvas');
+  const wires  = document.getElementById('wires');
+  const tables = Array.from(canvas.querySelectorAll('.table'));
+
+  function tableRect(name) {
+    const el = canvas.querySelector(`[data-table="${name}"]`);
+    if (!el) return null;
+    return {
+      el,
+      x: el.offsetLeft,
+      y: el.offsetTop,
+      w: el.offsetWidth,
+      h: el.offsetHeight,
+    };
+  }
+
+  function point(rect, side) {
+    const cy = rect.y + rect.h / 2;
+    const cx = rect.x + rect.w / 2;
+    switch (side) {
+      case 'l': return { x: rect.x,         y: cy };
+      case 'r': return { x: rect.x + rect.w, y: cy };
+      case 't': return { x: cx,             y: rect.y };
+      case 'b': return { x: cx,             y: rect.y + rect.h };
+    }
+    return { x: cx, y: cy };
+  }
+
+  function pathFor(p1, p2) {
+    const dx = Math.abs(p2.x - p1.x);
+    const tension = Math.max(60, dx * 0.45);
+    const c1x = p1.x + (p1.x < p2.x ? tension : -tension);
+    const c2x = p2.x + (p1.x < p2.x ? -tension : tension);
+    return `M ${p1.x} ${p1.y} C ${c1x} ${p1.y}, ${c2x} ${p2.y}, ${p2.x} ${p2.y}`;
+  }
+
+  function drawWires() {
+    wires.innerHTML = '';
+    const ns = 'http://www.w3.org/2000/svg';
+
+    REL.forEach(([from, to, sFrom, sTo, label], i) => {
+      const a = tableRect(from);
+      const b = tableRect(to);
+      if (!a || !b) return;
+      const p1 = point(a, sFrom);
+      const p2 = point(b, sTo);
+
+      const path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', pathFor(p1, p2));
+      path.setAttribute('data-from', from);
+      path.setAttribute('data-to', to);
+      path.setAttribute('data-rel', i);
+      wires.appendChild(path);
+
+      const dot1 = document.createElementNS(ns, 'circle');
+      dot1.setAttribute('cx', p1.x); dot1.setAttribute('cy', p1.y);
+      dot1.setAttribute('r', 2.5);
+      dot1.setAttribute('class', 'endpoint');
+      dot1.setAttribute('data-rel', i);
+      wires.appendChild(dot1);
+
+      const dot2 = document.createElementNS(ns, 'circle');
+      dot2.setAttribute('cx', p2.x); dot2.setAttribute('cy', p2.y);
+      dot2.setAttribute('r', 3);
+      dot2.setAttribute('class', 'endpoint');
+      dot2.setAttribute('data-rel', i);
+      wires.appendChild(dot2);
+
+      if (label) {
+        const mx = (p1.x + p2.x) / 2;
+        const my = (p1.y + p2.y) / 2 - 6;
+        const txt = document.createElementNS(ns, 'text');
+        txt.setAttribute('x', mx);
+        txt.setAttribute('y', my);
+        txt.setAttribute('text-anchor', 'middle');
+        txt.setAttribute('class', 'label');
+        txt.setAttribute('data-rel', i);
+        txt.textContent = label;
+        wires.appendChild(txt);
+      }
+    });
+  }
+
+  drawWires();
+  window.addEventListener('resize', drawWires);
+
+  // ============== HOVER HIGHLIGHT ==============
+  function relatedTo(name) {
+    const r = new Set();
+    const idx = new Set();
+    REL.forEach(([from, to], i) => {
+      if (from === name) { r.add(to); idx.add(i); }
+      if (to === name)   { r.add(from); idx.add(i); }
+    });
+    return { r, idx };
+  }
+
+  tables.forEach(t => {
+    t.addEventListener('mouseenter', () => {
+      const name = t.dataset.table;
+      const { r, idx } = relatedTo(name);
+
+      canvas.classList.add('hovering');
+      tables.forEach(x => {
+        x.classList.toggle('is-active',  x.dataset.table === name);
+        x.classList.toggle('is-related', r.has(x.dataset.table));
+      });
+      wires.querySelectorAll('path, circle, text').forEach(el => {
+        const isRel = idx.has(parseInt(el.getAttribute('data-rel'), 10));
+        el.classList.toggle('is-active', isRel);
+      });
+    });
+    t.addEventListener('mouseleave', () => {
+      canvas.classList.remove('hovering');
+      tables.forEach(x => x.classList.remove('is-active','is-related'));
+      wires.querySelectorAll('.is-active').forEach(el => el.classList.remove('is-active'));
+    });
+  });
+</script>
+
+</body>
+</html>

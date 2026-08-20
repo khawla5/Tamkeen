@@ -1,0 +1,17 @@
+export const opportunities = {
+  title: 'Discover Opportunities',
+  subtitle: 'Verified listings from trusted Saudi organizations — matched to your profile',
+  searchPlaceholder: 'Search by title, company, or skill...',
+  all: 'All',
+  jobs: 'Jobs',
+  training: 'Training',
+  coop: 'Co-op',
+  certifications: 'Certifications',
+  careerPaths: 'Career Paths',
+  partTimeConsulting: 'Part-Time & Consulting',
+  opportunitiesFound: 'opportunities found',
+  opportunityFound: 'opportunity found',
+  noResults: 'No opportunities found',
+  noResultsHint: 'Try adjusting your search or filters',
+  retireeTag: 'Retiree',
+}

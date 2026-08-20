@@ -1,0 +1,15 @@
+export const university = {
+  studentsAssessed: 'الطلاب المقيَّمون',
+  skillsRecordsComplete: 'السجلات المهارية المكتملة',
+  coopPlacements: 'التدريب التعاوني',
+  employmentRate: 'نسبة التوظيف بعد التخرج',
+  thisSemester: 'هذا الفصل',
+  connectedSystems: 'الأنظمة الوطنية المتصلة',
+  connected: 'متصل',
+  pending: 'قيد الربط',
+  moe: 'وزارة التعليم',
+  etec: 'هيئة تقويم التعليم والتدريب',
+  hrdf: 'هدف',
+  sdaia: 'سدايا',
+  laborObservatory: 'المرصد الوطني للعمل',
+}

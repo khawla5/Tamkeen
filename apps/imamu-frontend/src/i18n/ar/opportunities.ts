@@ -1,0 +1,17 @@
+export const opportunities = {
+  title: 'اكتشف الفرص',
+  subtitle: 'قوائم موثقة من مؤسسات سعودية موثوقة — مطابقة لملفك',
+  searchPlaceholder: 'ابحث بالعنوان أو الشركة أو المهارة...',
+  all: 'الكل',
+  jobs: 'وظائف',
+  training: 'تدريب',
+  coop: 'تعاوني',
+  certifications: 'شهادات',
+  careerPaths: 'مسارات مهنية',
+  partTimeConsulting: 'جزئي واستشارات',
+  opportunitiesFound: 'فرصة موجودة',
+  opportunityFound: 'فرصة موجودة',
+  noResults: 'لم يتم العثور على فرص',
+  noResultsHint: 'حاول تعديل البحث أو الفلاتر',
+  retireeTag: 'الخبير',
+}
