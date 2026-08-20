@@ -5,11 +5,11 @@ import type { Request } from 'express';
 import type { UserRole } from '@tamkeen/types';
 import { AuditAction, AuditReason } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
-import { REQUIRED_ROLES_KEY } from './auth.decorators';
+import { IS_PUBLIC_KEY, REQUIRED_ROLES_KEY } from './auth.decorators';
 import type { AuthenticatedUser } from './session.service';
 
 /**
- * Enforces role requirements declared with `@Roles(...)` (D-027).
+ * Enforces role requirements declared with `@Roles(...)` (D-027, D-062).
  *
  * Runs after SessionGuard, so `request.user` is already resolved. A denial is
  * audited: a signed-in user probing another portal's endpoints is exactly the
@@ -23,6 +23,29 @@ export class RolesGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    /*
+     * A public endpoint has no role requirement by definition, and this check
+     * has to come first.
+     *
+     * `@Roles(...)` is declared at *class* level so that a handler added later
+     * inherits it rather than being unguarded until someone remembers — which
+     * is the same fail-closed reasoning SessionGuard uses. But class-level
+     * metadata also reaches the handlers that opt out of authentication, and
+     * those have no user for a role to be checked against. Without this branch,
+     * marking a controller `@Roles('EMPLOYEE')` would silently take down its
+     * `@Public()` routes: the public certificate verification page (D-016) is
+     * one such route, and it is consulted by third parties who have no account
+     * here at all.
+     */
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true;
+    }
+
     const required = this.reflector.getAllAndOverride<UserRole[]>(REQUIRED_ROLES_KEY, [
       context.getHandler(),
       context.getClass(),

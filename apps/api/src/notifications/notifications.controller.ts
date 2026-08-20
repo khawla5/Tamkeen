@@ -2,12 +2,13 @@ import { Controller, Get, HttpCode, Post } from '@nestjs/common';
 
 import type { UnreadNotificationsView } from '@tamkeen/types';
 
-import { CurrentUser } from '../auth/auth.decorators';
+import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
 import { NotificationsService } from './notifications.service';
 
 /** The in-app indicator (§2). Authenticated, and scoped to the caller. */
 @Controller('notifications')
+@Roles('EMPLOYEE')
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 

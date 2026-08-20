@@ -3,7 +3,7 @@ import type { Request } from 'express';
 
 import type { AssessmentResultView, AssessmentView } from '@tamkeen/types';
 
-import { CurrentUser } from '../auth/auth.decorators';
+import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
 import { AssessmentService } from './assessment.service';
 import { SubmitAssessmentDto } from './assessment.dto';
@@ -13,6 +13,7 @@ import { SubmitAssessmentDto } from './assessment.dto';
  * SessionGuard is fail-closed, so nothing needs to opt in.
  */
 @Controller('assessment')
+@Roles('EMPLOYEE')
 export class AssessmentController {
   constructor(private readonly assessment: AssessmentService) {}
 

@@ -3,7 +3,7 @@ import type { Request } from 'express';
 
 import type { DashboardView, MyPathView } from '@tamkeen/types';
 
-import { CurrentUser } from '../auth/auth.decorators';
+import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
 import { AddPathCourseDto, SelectPathDto, SetPathCoursesDto } from './enrollment.dto';
 import { EnrollmentService } from './enrollment.service';
@@ -13,6 +13,7 @@ import { EnrollmentService } from './enrollment.service';
  * request in and the view out.
  */
 @Controller('my-path')
+@Roles('EMPLOYEE')
 export class EnrollmentController {
   constructor(private readonly enrollment: EnrollmentService) {}
 
@@ -68,6 +69,7 @@ export class EnrollmentController {
 }
 
 @Controller('dashboard')
+@Roles('EMPLOYEE')
 export class DashboardController {
   constructor(private readonly enrollment: EnrollmentService) {}
 

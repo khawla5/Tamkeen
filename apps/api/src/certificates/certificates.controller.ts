@@ -13,7 +13,7 @@ import type { Response } from 'express';
 
 import type { CertificateSummary, CertificateVerificationView } from '@tamkeen/types';
 
-import { CurrentUser, Public } from '../auth/auth.decorators';
+import { CurrentUser, Public, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
 import { CertificateVerificationService } from './certificate-verification.service';
 import { CertificatesService } from './certificates.service';
@@ -25,6 +25,7 @@ import { CertificatesService } from './certificates.service';
  * and is marked as such; everything else is scoped to the signed-in learner.
  */
 @Controller('certificates')
+@Roles('EMPLOYEE')
 export class CertificatesController {
   constructor(
     private readonly certificates: CertificatesService,
