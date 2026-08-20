@@ -1,8 +1,13 @@
 import { Module } from '@nestjs/common';
 
+import { AuditModule } from '../audit/audit.module';
 import { AppConfigModule } from '../config/app-config.module';
+import { MoodleModule } from '../moodle/moodle.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { EntityCourseManagementService } from './entity-course-management.service';
 import { EntityCoursesService } from './entity-courses.service';
+import { EntityDashboardService } from './entity-dashboard.service';
+import { EntityLearnersService } from './entity-learners.service';
 import { EntityProfileService } from './entity-profile.service';
 import { EntityScopeService } from './entity-scope.service';
 import { EntityController } from './entity.controller';
@@ -16,9 +21,16 @@ import { EntityController } from './entity.controller';
  * the second implementation that eventually disagrees with this one.
  */
 @Module({
-  imports: [PrismaModule, AppConfigModule],
+  imports: [PrismaModule, AppConfigModule, AuditModule, MoodleModule],
   controllers: [EntityController],
-  providers: [EntityScopeService, EntityCoursesService, EntityProfileService],
+  providers: [
+    EntityScopeService,
+    EntityCoursesService,
+    EntityCourseManagementService,
+    EntityLearnersService,
+    EntityDashboardService,
+    EntityProfileService,
+  ],
   exports: [EntityScopeService],
 })
 export class EntityModule {}

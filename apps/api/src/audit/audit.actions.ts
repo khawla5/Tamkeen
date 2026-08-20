@@ -66,6 +66,29 @@ export const AuditAction = {
    * claim a credential was issued once per sync run forever.
    */
   CERTIFICATE_ISSUED: 'CERTIFICATE_ISSUED',
+
+  // Entity portal (Phase 4)
+  /** An entity created a course shell — in the LMS and in our catalogue. */
+  ENTITY_COURSE_CREATED: 'ENTITY_COURSE_CREATED',
+  /** Product metadata changed: path membership, duration, objectives,
+   *  prerequisites, language. Recorded because it changes what learners are
+   *  offered without touching the LMS. */
+  ENTITY_COURSE_METADATA_UPDATED: 'ENTITY_COURSE_METADATA_UPDATED',
+  /** The course entered the learner catalogue. */
+  ENTITY_COURSE_PUBLISHED: 'ENTITY_COURSE_PUBLISHED',
+  /**
+   * The course left it. Audited separately from publishing, and with the
+   * resulting status, because §2/D-015 turns on what happened to the learners
+   * who already held it — an unpublish that degraded to HIDDEN_BUT_COMPLETABLE
+   * and one that retired the course outright are different events.
+   */
+  ENTITY_COURSE_UNPUBLISHED: 'ENTITY_COURSE_UNPUBLISHED',
+  /**
+   * A seamless-login handoff was minted for authoring (D-060). Audited for the
+   * same reason the learner one is: it is a credential that signs someone in
+   * somewhere else, and here it carries editing rights.
+   */
+  ENTITY_COURSE_AUTHOR_LAUNCHED: 'ENTITY_COURSE_AUTHOR_LAUNCHED',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];
@@ -104,6 +127,12 @@ export const AuditReason = {
   COURSE_COUNT_OUT_OF_RANGE: 'COURSE_COUNT_OUT_OF_RANGE',
   COURSE_NOT_IN_PATH: 'COURSE_NOT_IN_PATH',
   COURSE_NOT_AVAILABLE: 'COURSE_NOT_AVAILABLE',
+
+  // Phase 4 — the entity portal
+  /** Publishing was refused; the specific blockers go in the detail payload. */
+  COURSE_NOT_PUBLISHABLE: 'COURSE_NOT_PUBLISHABLE',
+  /** The LMS refused or could not be reached while creating a course shell. */
+  LMS_COURSE_CREATE_FAILED: 'LMS_COURSE_CREATE_FAILED',
 } as const;
 
 export type AuditReasonCode = (typeof AuditReason)[keyof typeof AuditReason];

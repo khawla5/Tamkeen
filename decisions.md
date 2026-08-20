@@ -5,6 +5,17 @@
 
 ---
 
+## D-066 — A course's RIASEC letter is derived from its paths, never authored beside them
+**Decision:** §4B.3 asks an entity to set "path(s) the course belongs to, its RIASEC letter (consistent with the path)". The entity sets **only the path membership**; the course's RIASEC letters are **derived** from the paths it belongs to and shown read-only. There is no `riasec_letter` column on `courses`, and the metadata endpoint rejects the field outright.
+
+**Why:** §3A makes the *path* the owner of the letter — "every path is tagged with exactly one primary RIASEC letter", and the gold recommendation compares a path's letter against the learner's Holland Code. A separately authored letter on the course would be a second source for the same fact, and the two can disagree: a course tagged `S` sitting inside an `E` path is a state the product has no rule for resolving, and nothing downstream would even notice, because the recommendation never reads a course's letter. The parenthetical "consistent with the path" is precisely the constraint that deriving satisfies **by construction** rather than by a validation someone has to write, remember and keep correct as paths change.
+
+It also survives change correctly. If an admin re-tags a path in Phase 5 (§4C.4), every course in it follows automatically; a stored copy would silently keep asserting the old letter until somebody noticed and rewrote it course by course.
+
+**Consequence:** a course in several paths carries several letters, which is the honest answer — D-003 already allows a course to belong to more than one path, and the learner-facing card has shown a list of paths since Phase 1. A course in no path has none, and cannot be published at all (`NO_PATH`), so the empty case never reaches a learner.
+
+**Rejected:** a `riasec_letter` column on `courses` validated against the path's on save (two sources of truth, kept in step by a check that only runs on one of the two edit paths — nothing re-validates when the *path* is re-tagged); asking the entity to pick a letter and inferring the path from it (backwards — a path is a curriculum, not a letter, and several paths share a letter).
+
 ## D-065 — The entity portal is its own route group, and sign-in routes by role
 **Decision:** Entity pages live under `apps/web/src/app/(entity)/`, a sibling of `(portal)` with its own `EntityProvider`. Sign-in reads the role off the session and sends an `ENTITY` to `/entity`, everyone else to `/`. Each provider redirects a caller who does not belong to it.
 **Why:** `PortalProvider` loads `dashboardApi.get()` — the *learner journey* dashboard — for every page beneath it, and `navForState()` derives the navigation from that journey. An entity has no journey: no assessment, no path, no certificates. Reusing the group would mean an entity account fetching a dashboard that describes a product they do not use, to render a nav computed from a state they can never be in. Two groups keeps each provider loading exactly what its portal needs, which is the same reasoning D-037 used to justify loading the session once.
