@@ -10,6 +10,8 @@ export interface AppShellProps {
   /** The single primary action for this page, if any (§3). */
   action?: ReactNode;
   items?: readonly NavItem[];
+  /** Nav keys carrying an unseen-items indicator (§2). */
+  indicators?: readonly string[];
   children: ReactNode;
 }
 
@@ -21,7 +23,13 @@ export interface AppShellProps {
  * child out on the right, so the rail sits on the reading-start edge without
  * any direction-specific CSS.
  */
-export function AppShell({ title, action, items = STEADY_STATE_NAV, children }: AppShellProps) {
+export function AppShell({
+  title,
+  action,
+  items = STEADY_STATE_NAV,
+  indicators,
+  children,
+}: AppShellProps) {
   const t = useTranslations('app');
   const tA11y = useTranslations('a11y');
 
@@ -47,10 +55,10 @@ export function AppShell({ title, action, items = STEADY_STATE_NAV, children }: 
 
         <nav aria-label={tA11y('primaryNav')} className="px-3 pb-4">
           <div className="hidden md:block">
-            <SidebarNav items={items} />
+            <SidebarNav items={items} indicators={indicators} />
           </div>
           <div className="md:hidden">
-            <SidebarNav items={items} orientation="horizontal" />
+            <SidebarNav items={items} indicators={indicators} orientation="horizontal" />
           </div>
         </nav>
       </aside>

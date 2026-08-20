@@ -51,8 +51,10 @@ export interface MyPathView {
   completedCount: number;
   totalCount: number;
   /**
-   * True when every chosen course is complete. The path certificate slot shows
-   * as unlocked — **issuing it is Phase 3**, so this only drives presentation.
+   * True when the path itself reached `COMPLETED` — every chosen course
+   * **passed**, not merely finished in the LMS. That is the same condition the
+   * path certificate is issued on, so an unlocked slot always has a certificate
+   * behind it.
    */
   pathCertificateUnlocked: boolean;
 }

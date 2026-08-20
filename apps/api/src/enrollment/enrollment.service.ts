@@ -337,9 +337,19 @@ export class EnrollmentService {
       courses,
       completedCount,
       totalCount: courses.length,
-      /* Presentation only — issuing the certificate is Phase 3. An empty path
-         must not read as "finished". */
-      pathCertificateUnlocked: courses.length > 0 && completedCount === courses.length,
+      /*
+       * Read from the path's own status rather than recounted here, because the
+       * two are not the same question. `completedCount` counts courses the LMS
+       * reports as finished, which includes ones the learner *failed* — a
+       * course can be completed and below the product threshold (D-042 §4). The
+       * path only reaches `COMPLETED` when every chosen course was **passed**,
+       * which is exactly when the certificate exists.
+       *
+       * Recounting statuses here would unlock the slot for a learner who
+       * finished everything and passed nothing, promising a certificate that
+       * was never issued.
+       */
+      pathCertificateUnlocked: userPath.status === 'COMPLETED',
     };
   }
 

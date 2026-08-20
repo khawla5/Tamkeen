@@ -52,15 +52,21 @@ export const STEADY_STATE_NAV: readonly NavItem[] = [
  * the nav is Dashboard, Courses and Profile only — My Path is not a destination
  * when there is no path.
  *
- * The second is ours: **Certificates and CV are omitted entirely until Phase 3
- * builds them.** A nav item leading to a 404, or to a page explaining that the
- * feature does not exist, is worse than its absence — it advertises something
- * the product cannot do and costs the user a click to find out.
+ * The second is ours: **a nav item appears only once the page behind it
+ * exists.** An item leading to a 404, or to a page explaining that the feature
+ * is not built, is worse than its absence — it advertises something the product
+ * cannot do and costs a click to find out. Certificates and the CV both have
+ * pages behind them now that Phase 3 has built them, which closes D-037.
+ *
+ * Certificates is shown to a learner with an active path even before they have
+ * earned one, deliberately. The gallery has a real empty state that says how
+ * the first certificate arrives, which is more useful than a menu item that
+ * materialises one day without explanation.
  */
 export function navForState(state: DashboardState): readonly NavItem[] {
   const keys: string[] =
     state === 'ACTIVE_PATH'
-      ? ['dashboard', 'courses', 'myPath', 'profile']
+      ? ['dashboard', 'courses', 'myPath', 'certificates', 'cv', 'profile']
       : ['dashboard', 'courses', 'profile'];
 
   return STEADY_STATE_NAV.filter((item) => keys.includes(item.key));

@@ -112,7 +112,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Compact tiles — everything shown is actionable (§4.2). */}
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Link
             href="/my-path"
             className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-gold"
@@ -124,6 +124,18 @@ export default function DashboardPage() {
             className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-gold"
           >
             {t('tileCourses')}
+          </Link>
+          <Link
+            href="/certificates"
+            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-gold"
+          >
+            {t('tileCertificates')}
+          </Link>
+          <Link
+            href="/cv"
+            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-gold"
+          >
+            {t('tileCv')}
           </Link>
         </div>
       </div>

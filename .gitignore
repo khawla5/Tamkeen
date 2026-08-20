@@ -49,3 +49,7 @@ playwright/.cache/
 
 # Phase 2 real-Moodle test pass — local run state, not shared
 spike/.real-pass-state.json
+
+# Rendered certificate PDFs (CERT_STORAGE_DIR). Real deployments point this
+# elsewhere and back it up; locally it is generated output.
+.storage/

@@ -30,10 +30,13 @@ export interface SidebarNavProps {
   items: readonly NavItem[];
   /** Horizontal strip for narrow viewports instead of the vertical rail. */
   orientation?: 'vertical' | 'horizontal';
+  /** Nav keys carrying an unseen-items indicator (§2). */
+  indicators?: readonly string[];
 }
 
-export function SidebarNav({ items, orientation = 'vertical' }: SidebarNavProps) {
+export function SidebarNav({ items, orientation = 'vertical', indicators }: SidebarNavProps) {
   const t = useTranslations('nav');
+  const tA11y = useTranslations('a11y');
   const pathname = usePathname();
 
   return (
@@ -46,6 +49,7 @@ export function SidebarNav({ items, orientation = 'vertical' }: SidebarNavProps)
         /* Exact match for the root so it isn't marked active on every route. */
         const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
         const Icon = ICONS[item.icon];
+        const hasIndicator = indicators?.includes(item.key) ?? false;
 
         return (
           <li key={item.key}>
@@ -69,6 +73,24 @@ export function SidebarNav({ items, orientation = 'vertical' }: SidebarNavProps)
             >
               <Icon aria-hidden="true" className="size-4 shrink-0" />
               <span>{t(item.key)}</span>
+              {/*
+                §2 allows "a light indicator", so it is a dot and not a count —
+                a number invites checking, which is the engagement nagging §2
+                rules out.
+
+                The dot is `aria-hidden` and paired with visually-hidden text,
+                because a bare coloured dot conveys nothing to a screen reader
+                and colour alone must never be the only signal (WCAG 1.4.1).
+              */}
+              {hasIndicator ? (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="ms-auto size-2 shrink-0 rounded-full bg-gold-light"
+                  />
+                  <span className="sr-only">{tA11y('newCertificates')}</span>
+                </>
+              ) : null}
             </Link>
           </li>
         );

@@ -101,30 +101,93 @@ export function passwordResetEmail(url: string, expiryMinutes: number): EmailCon
 /**
  * "You passed a course" (§2 notifications — transactional only).
  *
- * Short, Arabic-first, and it deliberately **does not mention a certificate**:
- * issuance is Phase 3, and promising an artefact that does not exist yet would
- * be a lie in the learner's inbox.
+ * **The certificate is folded into this message rather than sent as a second
+ * one.** Passing and being certified for it are one event to the learner, and
+ * §2 keeps notification minimal; two emails a second apart would read as a bug.
+ * `certificateUrl` is nullable because issuance can fail while the pass stands —
+ * in which case this says nothing about a certificate rather than linking to
+ * one that is not there. The reconciliation pass will issue it, and the
+ * in-app indicator will carry the news.
  *
  * The course title comes from our own catalogue, which is synced from the LMS —
  * so it is escaped before going into the HTML rather than trusted. A title is
  * authored by an entity in Phase 4, which makes it user-supplied content
  * arriving from another system.
  */
-export function coursePassedEmail(courseTitle: string, myPathUrl: string): EmailContent {
+export function coursePassedEmail(
+  courseTitle: string,
+  myPathUrl: string,
+  certificateUrl: string | null,
+): EmailContent {
   const heading = 'اجتزت الدورة بنجاح';
   const named = courseTitle.trim().length > 0 ? escapeHtml(courseTitle.trim()) : 'الدورة';
   const plain = courseTitle.trim().length > 0 ? courseTitle.trim() : 'الدورة';
+
+  /* One primary action per message (§3), so the certificate replaces the path
+     link when there is one rather than competing with it. */
+  const certified = certificateUrl !== null;
 
   return {
     subject: heading,
     html: layout(
       heading,
-      `<p style="margin:0;">تهانينا، لقد اجتزت «${named}» بنجاح.</p>
-       ${button(myPathUrl, 'عرض مساري')}`,
+      `<p style="margin:0;">تهانينا، لقد اجتزت «${named}» بنجاح${
+        certified ? '، وصدرت شهادتك' : ''
+      }.</p>
+       ${certified ? button(certificateUrl, 'عرض الشهادة') : button(myPathUrl, 'عرض مساري')}`,
     ),
-    text: [heading, '', `تهانينا، لقد اجتزت «${plain}» بنجاح.`, '', 'تابع تقدّمك:', myPathUrl].join(
-      '\n',
+    text: [
+      heading,
+      '',
+      `تهانينا، لقد اجتزت «${plain}» بنجاح${certified ? '، وصدرت شهادتك' : ''}.`,
+      '',
+      certified ? 'عرض الشهادة:' : 'تابع تقدّمك:',
+      certified ? certificateUrl : myPathUrl,
+    ].join('\n'),
+  };
+}
+
+/**
+ * "You finished your path" (§2 notifications — transactional only).
+ *
+ * **This one does get its own message**, unlike the course certificate folded
+ * into the pass email. Finishing a whole path is a distinct event from passing
+ * the last course in it, and it happens once per learner under the one-path
+ * rule (D-002) — folding it in would bury the larger award behind the smaller.
+ *
+ * `certificateUrl` is nullable for the same reason as the course email: the
+ * path is finished whether or not the render succeeded, and announcing a
+ * certificate that is not there would be worse than saying nothing about it.
+ */
+export function pathCompletedEmail(
+  pathName: string,
+  myPathUrl: string,
+  certificateUrl: string | null,
+): EmailContent {
+  const heading = 'أتممت مسارك بنجاح';
+  const named = pathName.trim().length > 0 ? escapeHtml(pathName.trim()) : 'مسارك';
+  const plain = pathName.trim().length > 0 ? pathName.trim() : 'مسارك';
+  const certified = certificateUrl !== null;
+
+  return {
+    subject: heading,
+    html: layout(
+      heading,
+      `<p style="margin:0;">تهانينا، لقد أتممت جميع دورات «${named}» بنجاح${
+        certified ? '، وصدرت شهادة إتمام المسار' : ''
+      }.</p>
+       ${certified ? button(certificateUrl, 'عرض شهادة المسار') : button(myPathUrl, 'عرض مساري')}`,
     ),
+    text: [
+      heading,
+      '',
+      `تهانينا، لقد أتممت جميع دورات «${plain}» بنجاح${
+        certified ? '، وصدرت شهادة إتمام المسار' : ''
+      }.`,
+      '',
+      certified ? 'عرض شهادة المسار:' : 'عرض مساري:',
+      certified ? certificateUrl : myPathUrl,
+    ].join('\n'),
   };
 }
 

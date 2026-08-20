@@ -163,9 +163,11 @@ describe('dashboard — ACTIVE_PATH', () => {
     setDashboard(ACTIVE);
     renderWithProviders(<DashboardPage />);
 
-    /* Certificates and CV are Phase 3; a tile for either would advertise
-       something the product cannot yet do. */
-    expect(screen.queryByText('شهاداتي')).not.toBeInTheDocument();
-    expect(screen.queryByText('السيرة الذاتية')).not.toBeInTheDocument();
+    /* §4.2 names My Path, Certificates and CV, and all three now have pages
+       behind them. Courses is ours — a learner mid-path still browses. */
+    expect(screen.getByRole('link', { name: 'مساري' })).toHaveAttribute('href', '/my-path');
+    expect(screen.getByRole('link', { name: 'الدورات' })).toHaveAttribute('href', '/courses');
+    expect(screen.getByRole('link', { name: 'شهاداتي' })).toHaveAttribute('href', '/certificates');
+    expect(screen.getByRole('link', { name: 'السيرة الذاتية' })).toHaveAttribute('href', '/cv');
   });
 });
