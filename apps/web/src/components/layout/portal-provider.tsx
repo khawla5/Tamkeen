@@ -1,11 +1,12 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
 import type { DashboardView } from '@tamkeen/types';
 
+import { LandingView } from '@/components/landing/landing-view';
 import { ErrorState, LoadingState } from '@/components/states';
 import {
   ApiError,
@@ -64,6 +65,7 @@ function isUnauthorized(error: unknown): boolean {
 
 export function PortalProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const t = useTranslations('portal');
 
   const session = useApiQuery(() => authApi.me(), []);
@@ -76,16 +78,30 @@ export function PortalProvider({ children }: { children: ReactNode }) {
 
   const unauthorized = isUnauthorized(session.error) || isUnauthorized(dashboard.error);
 
+  /*
+   * `/` is the one portal path a signed-out visitor is allowed to land on: it
+   * is also the public front page (`LandingView`, identical to `/landing`).
+   * Every other portal path still bounces to `/login` on a 401 — this does
+   * not loosen auth anywhere else, it only changes what an unauthenticated
+   * root request renders instead of redirecting.
+   */
+  const isPublicRoot = pathname === '/';
+  const shouldRedirect = unauthorized && !isPublicRoot;
+
   useEffect(() => {
-    if (unauthorized) {
+    if (shouldRedirect) {
       router.replace('/login');
     }
-  }, [unauthorized, router]);
+  }, [shouldRedirect, router]);
 
-  if (session.isLoading || dashboard.isLoading || unauthorized) {
-    /* The redirect is in flight during `unauthorized`; showing the loading state
-       rather than an error avoids a flash of "something went wrong" on what is
-       simply an expired session. */
+  if (unauthorized && isPublicRoot) {
+    return <LandingView />;
+  }
+
+  if (session.isLoading || dashboard.isLoading || shouldRedirect) {
+    /* The redirect is in flight during `shouldRedirect`; showing the loading
+       state rather than an error avoids a flash of "something went wrong" on
+       what is simply an expired session. */
     return (
       <div className="p-6">
         <LoadingState label={t('loadingLabel')} />

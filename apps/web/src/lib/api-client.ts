@@ -153,12 +153,21 @@ async function request<T>(path: string, method: string, body?: unknown): Promise
     return undefined as T;
   }
 
-  const parsed: unknown = await response.json();
+  /*
+   * Nest sends a genuinely empty body (0 bytes, not the string "null" and not
+   * "{}") when a handler returns `null` — "not assessed yet" and "no path yet"
+   * both do this. `response.json()` calls `JSON.parse` on that empty body and
+   * throws, which is what was actually reaching every caller as a generic
+   * fetch failure instead of the null case they were written to expect.
+   * Reading the raw text first and treating "" as `{}` restores the intended
+   * empty-body -> null normalisation below, without changing it.
+   */
+  const text = await response.text();
+  const parsed: unknown = text.length === 0 ? {} : JSON.parse(text);
 
   /*
-   * Nest serialises a `null` return as an empty object, so "not assessed yet"
-   * and "no path yet" arrive as `{}` rather than `null`. Normalising here means
-   * every caller can test for null instead of each one remembering to check
+   * Normalising Nest's empty-object-shaped "null" here means every caller can
+   * test for null instead of each one remembering to check
    * `Object.keys(...).length` — which is the sort of thing exactly one caller
    * forgets.
    *
