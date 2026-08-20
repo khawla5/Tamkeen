@@ -14,6 +14,8 @@ const badgeVariants = cva('inline-flex items-center rounded-full px-3 py-1 text-
     variant: {
       gold: 'border border-gold text-navy',
       navy: 'bg-navy-soft text-white',
+      /** Neutral chip for lists of equal-weight items — keeps gold scarce. */
+      soft: 'border border-border bg-surface text-navy-soft',
     },
   },
   defaultVariants: {
