@@ -91,10 +91,9 @@ describe('SiteHeader mobile menu', () => {
 
     const mobileNav = document.getElementById('mobile-nav');
     expect(mobileNav).not.toBeNull();
-    expect(within(mobileNav as HTMLElement).getByRole('link', { name: 'إنشاء حساب' })).toHaveAttribute(
-      'href',
-      '/register',
-    );
+    expect(
+      within(mobileNav as HTMLElement).getByRole('link', { name: 'إنشاء حساب' }),
+    ).toHaveAttribute('href', '/register');
 
     await user.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');

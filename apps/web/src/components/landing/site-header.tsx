@@ -37,10 +37,7 @@ export function SiteHeader() {
         </Link>
 
         <nav aria-label={tA11y('primaryNav')} className="hidden items-center gap-6 sm:flex">
-          <Link
-            href="/login"
-            className="text-sm font-medium text-foreground hover:text-navy-soft"
-          >
+          <Link href="/login" className="text-sm font-medium text-foreground hover:text-navy-soft">
             {tAuth('signInLink')}
           </Link>
           <Button asChild size="sm">
@@ -55,15 +52,27 @@ export function SiteHeader() {
           aria-controls="mobile-nav"
           onClick={() => setOpen((value) => !value)}
         >
-          {open ? <X aria-hidden="true" className="size-5" /> : <Menu aria-hidden="true" className="size-5" />}
+          {open ? (
+            <X aria-hidden="true" className="size-5" />
+          ) : (
+            <Menu aria-hidden="true" className="size-5" />
+          )}
           <span className="sr-only">{tA11y('primaryNav')}</span>
         </button>
       </div>
 
       {open && (
-        <nav id="mobile-nav" aria-label={tA11y('primaryNav')} className="border-t border-border sm:hidden">
+        <nav
+          id="mobile-nav"
+          aria-label={tA11y('primaryNav')}
+          className="border-t border-border sm:hidden"
+        >
           <div className="flex flex-col gap-3 px-4 py-4">
-            <Link href="/login" className="text-sm font-medium text-foreground" onClick={() => setOpen(false)}>
+            <Link
+              href="/login"
+              className="text-sm font-medium text-foreground"
+              onClick={() => setOpen(false)}
+            >
               {tAuth('signInLink')}
             </Link>
             <Button asChild size="sm" className="w-full">
