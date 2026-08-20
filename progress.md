@@ -6,22 +6,30 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 2 — Moodle integration — **COMPLETE, user approved the test, awaiting human review of the PR.**
-- **Last completed task:** The **full Phase 2 test pass** against a real Moodle — the whole loop, ending in an automatic, idempotent completion detection. All checks passed.
-- **Next task:** **Phase 3 — certificates + CV**, once the Phase 2 PR is merged. `onCoursePassed` in `CompletionSyncService` is the seam issuance plugs into, and it will need its own idempotency check.
-- **Active branch:** `phase-2-moodle-integration` (9 commits), off `phase-2-moodle-spike`, off `origin/main` @ `f25b644`. **Both branches pushed; PR opened, not merged** (D-008).
-- **Phase 1 is merged** (PR #2, `origin/main` @ `f25b644`).
+- **Current phase:** Phase 3 — certificates + CV — **COMPLETE, user approved the test, PR opened and awaiting human review.**
+- **Last completed task:** The **Phase 3 browser end-to-end pass** — certificate to gallery to download to public verification, and the CV builder through to a real English PDF export.
+- **Next task:** **Phase 4 — the entity / reviewer portal** (full spec in CLAUDE.md §4B; authoring model in §4A), once the Phase 3 PR is merged.
+- **Active branch:** `phase-3-certificates-cv` (13 commits), off `phase-3-arabic-pdf-spike`, off `origin/main` @ `dcb8aad`. **PR opened, not merged** (D-008).
+- **Phase 2 is merged** (PR #3, `origin/main` @ `dcb8aad`).
+- **Test totals:** 455 unit (api + web + types, 18 files) · 137 API integration against real PostgreSQL · 19 browser e2e in Chromium — **611 automated**, plus two real-Chromium verification scripts. Typecheck, lint and format clean.
 - **Open blockers / questions for the human:**
-  1. **Production Moodle version is 4.5 LTS, development is 5.2.2** (D-039). The adapter is version-agnostic, but **the seamless-login mechanism must be re-verified on a real 4.5** — and note 5.x moved the docroot to `public/`, so the plugin install path differs between the two versions.
-  2. **⚠ MINISTRY APPROVAL OF CUSTOM MOODLE PLUGINS IS UNCONFIRMED.** Seamless login uses `local_tamkeensso` (Option A) **for the pilot**; core Moodle provably cannot do this (D-044). **Approval MUST be confirmed before production — if refused, switch to Option B (OAuth2 IdP) during hardening.** The user is raising it with the ministry in parallel. This is the longest-lead dependency in the project.
-  3. **The dev Moodle's integration role needed four fixes the initial setup missed:** `moodle/role:assign`, the Allow-role-assignments matrix row, `gradereport/user:view`, and disabling the manual-enrolment welcome message. **The same list applies to the ministry's Moodle** — see the 2026-08-18 spike entry.
-  4. **`npm audit` reports 3 high advisories** for `deepmerge-ts` via `prisma` → `@prisma/config` — **accepted and deferred by decision (D-043), owned by the Phase 6 dependency review** alongside the D-022 pins. Not introduced by Phase 2 (traced; not from BullMQ). Prisma is deliberately **not** downgraded: npm's fix installs Prisma 6.x and breaks D-026. An `overrides` pin does not take effect. Exposure is low — Prisma's config loader, not the request path. **Phase 6 must re-check whether Prisma has bumped the pin upstream by then.**
-  5. **GitHub CLI is still not installed on the dev machine**, so PRs cannot be opened from the terminal.
-  6. **Ministry values still placeholders** (needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format.
+  1. **⚠ THE MINISTRY LOGO AND SEAL ARE STILL MISSING.** Certificates ship with a neutral placeholder mark and an empty signature block (name + title). The slot is sized and positioned, so dropping in the real artwork is not a layout change — but **no certificate should reach a real employee until this is supplied** (D-051).
+  2. **⚠ MINISTRY APPROVAL OF CUSTOM MOODLE PLUGINS IS STILL UNCONFIRMED.** Unchanged from Phase 2 and still the longest-lead dependency: seamless login uses `local_tamkeensso`, and if the ministry refuses custom PHP the fallback is the OAuth2-IdP route (D-044).
+  3. **Production Moodle is 4.5 LTS, development is 5.2.2** (D-039). The seamless-login mechanism must still be re-verified on a real 4.5.
+  4. **`CERT_STORAGE_DIR` must be set to an ABSOLUTE path in every deployment** (D-052). It defaults to a relative path, which resolves against the process's working directory — the browser suite caught downloads failing because the API and the tests disagreed about where the bytes were. For credentials this is not a detail.
+  5. **`npm audit` reports the same 3 high advisories** for `deepmerge-ts` via `prisma` → `@prisma/config` — accepted and deferred (D-043), owned by the Phase 6 dependency review. Puppeteer and qrcode added none.
+  6. **GitHub CLI is still not installed on the dev machine**, so PRs are opened from the compare URL rather than the terminal.
+  7. **Ministry values still placeholders** (needed before Phase 7): the real allowed email domain (currently `ministry.gov.example`) and the real employee-ID format.
 
 ---
 
 ## Deferred / owed (carried into later phases)
+- **The ministry logo, seal and signatory are not on the certificate.** A placeholder mark and an empty signature block hold their positions (D-051). **Phase 6/7** must drop in the real artwork before anything is issued to a real employee.
+- **`CERT_STORAGE_DIR` is relative by default and must be absolute in deployment** (D-052). **Phase 7** owns setting it, backing that directory up, and deciding on object storage.
+- **Jest cannot exercise the real PDF renderer.** Puppeteer 25 is ESM-only and Jest's CommonJS runtime cannot load it (D-055), so integration tests stub the renderer and assert the HTML contract. Real rendering is covered by the spike scripts and the browser e2e. **Phase 6** may revisit if Jest gains usable ESM support.
+- **The certificate browser e2e seeds its certificate rather than earning it.** The mock LMS cannot be told to report a pass over HTTP, and shipping a test-only endpoint that manufactures completions into a government system is the wrong trade. Issuance itself is covered by unit tests and `spike/pdf/verify-issuance.ts`. **Phase 7's acceptance test** against a real Moodle closes this properly.
+- **Certificates are not tagged/accessible PDFs.** Chromium emits untagged output, so Arabic extracts in visual order from naive extractors (the codepoints are correct and the CV's English body extracts perfectly). If the ministry wants PDF/UA, that is a **Phase 6** item.
+- **The CV ships one template and no gallery**, per §4.11. A fully-localised all-Arabic CV remains possible later (D-050); the section model does not preclude it.
 - **Profile is read-only.** §4.12 also lists change-password, email re-verification and a language switch. None is a Phase 1 deliverable; the page exists because §4.2 puts Profile in the pre-assessment nav and that link must lead somewhere real. **Phase 5/6** owns the rest.
 - **Certificates and CV are absent from the navigation** until **Phase 3** builds them (D-037). Deliberate: a nav item leading nowhere advertises what the product cannot do.
 - **A confirmed path can exist without its LMS enrolments.** Enrolment is best-effort after the commitment is recorded and is audited on failure; **Phase 2's sync job** owns reconciliation (D-036).
@@ -67,10 +75,59 @@
 - **Schema constraints carry the product rules — unique `user_paths.user_id`, weights as an enum table, `Restrict` from responses to the bank (D-035).**
 - **LMS provisioning is lazy at confirm; enrolment is best-effort after the commitment is recorded; live progress is read, never persisted (D-036).**
 - **Authenticated pages sit behind one `PortalProvider`; Certificates/CV stay out of the nav until Phase 3 builds them (D-037).**
+- **Course authoring uses Model 1 — entities author content in Moodle via handoff; the portals wrap only the product layer (D-046).**
+- **Each course is single-language as authored (Arabic OR English); no per-course bilingual requirement (D-047).**
+- **Admins edit assessment questions + weightings, NOT the core scoring algorithm (D-048).**
+- **Assessment edits freeze existing results — versioning; past results never mutate (D-049).**
+- **The CV is an ENGLISH document with Arabic proper nouns passed through as authored (D-050).** Supersedes the earlier "Arabic CV" wording; the Phase 3 PDF pipeline must prove English-body-with-inline-Arabic.
+- **Entity & super-admin portals now fully specified in CLAUDE.md §4A/4B/4C; Phase 4/5 deliverables updated accordingly.**
+- **The certificate face is austere: placeholder logo slot, both Hijri and Gregorian dates, no grade (D-051).**
+- **Certificates are rendered once and stored immutably; the CV renders on demand (D-052).**
+- **The verification id is public and stored unhashed; stored files are named by the row id (D-053).**
+- **Path completion requires every chosen course PASSED, not merely completed — correcting a Phase 2 defect (D-054).**
+- **Node 24 LTS replaces end-of-life Node 20; Puppeteer is imported lazily (D-055).**
+- **One CV renderer serves both the live preview and the PDF; `en` joins LOCALES for the CV only (D-056).**
+- **The CV stores only what the learner authored; certifications are re-read on every load (D-057).**
+- **The in-app notification is a dot, cleared by opening the gallery (D-058).**
 
 ---
 
 ## Log (newest first)
+
+### 2026-08-20 — Phase 3 complete; PR opened for review
+
+Branch `phase-3-certificates-cv` (off `phase-3-arabic-pdf-spike`, off `origin/main`). **Not merged** (human review gate, D-008). PR body in `.github/PR_BODY_phase-3.md`; `gh` is still not installed, so the PR is opened from the compare URL.
+
+**Test totals:** 455 unit · 137 API integration against real PostgreSQL · 19 browser e2e in Chromium — **611 automated**. Typecheck, lint and format clean.
+
+**Thirteen commits**, one per checkpoint plus the spike and the docs.
+
+**The phase rests on one claim: the Arabic PDF problem was solved before anything was built on it.** The spike proved letter shaping, lam-alef ligatures, bidi runs, an English document with inline Arabic, and a QR decodable at 72 dpi — then every later checkpoint reused that same pipeline. Nothing about Arabic rendering was discovered late.
+
+**What was built, in order:**
+
+```
+spike        four sample PDFs; QR decoded back out at 72/144/288 dpi
+course cert  issued at Phase 2's onCoursePassed seam, idempotent three ways
+path cert    new onPathCompleted seam — and a Phase 2 defect corrected
+verify       the one public route in the product; four fields, nothing more
+gallery      §4.10, plus the nav items D-037 had withheld
+notifications a dot, and the emails folded in rather than doubled
+cv           model + pre-fill, builder + live preview, English PDF export
+e2e          the whole thing through a real browser
+```
+
+**A defect found and fixed (D-054).** Phase 2 finished a path when every chosen course read `COMPLETED` — a status that comes from the LMS's completion signal alone. A learner could finish all five courses and pass none, and Phase 3 would have certified it. Both the path status and the certificate now gate on `completions.passed`. Proven against a real database: refused at 5/5 `COMPLETED` with one course at 45% against a threshold of 70, then issued once it passed.
+
+**Two things the work forced that were not in scope.** Node 20 is past end of life and was still pinned; Puppeteer's ESM-only packaging forced the question and it was overdue anyway (D-055). And `CERT_STORAGE_DIR` being relative meant the API and the browser suite resolved credential storage to different directories — caught by a 500 on download, and now flagged for deployment (D-052).
+
+**Two corrections worth recording.** A reported bidi defect in the CV's career line was not real — measured glyph positions put the full stop correctly to the right of the Arabic run, and the speculative `&lrm;` fix was reverted rather than left carrying a false rationale. And the API's copy of the Arabic RIASEC names had `C` as "التقليدي" against the catalogue's "التنظيمي"; the drift guard that now compares the two caught it on its first run.
+
+### [DATE] — Phase 4/5 portals specified + language decisions (planning, no code)
+- CLAUDE.md gained §4A (Model 1 authoring + cross-portal linking rules), §4B (Entity/reviewer portal full page spec), §4C (Super-admin portal full page spec). Phase 4 + Phase 5 in §7 rewritten to reference them and to fold in the deferred items they own (D-027 entity scoping, D-035 objectives/prerequisites editable, deferred Profile items).
+- Locked D-046 (Model 1 authoring), D-047 (single-language courses), D-048 (admins edit questions/weightings not the algorithm), D-049 (assessment-edit result freezing), D-050 (English CV with pass-through Arabic).
+- §4.11 CV spec changed from Arabic-first to English-document. NOTE for Phase 3: the CV is English with inline Arabic proper nouns — the PDF spike must cover that case, not only pure Arabic.
+- **Reminder:** Phase 2's PR is approved but still NOT merged (gh not installed; open/merge it on GitHub). Phase 3 must branch off a main that includes Phase 2.
 
 ### 2026-08-19 — Phase 2 complete; PR opened for review
 
@@ -264,7 +321,6 @@ Branch `phase-2-moodle-spike` off `origin/main` @ `f25b644`. One file, `spike/mo
 
 **Next:** on approval, branch `phase-2-moodle-integration` and build the real adapter against `describeLmsContract`, in the order: client + provisioning → catalogue sync → enrolment → completion sync → seamless login + player.
 
-
 ---
 ### 2026-08-19 — Public landing page built and verified (side-track, not phase-numbered)
 
@@ -280,6 +336,8 @@ Branch `phase-2-moodle-spike` off `origin/main` @ `f25b644`. One file, `spike/mo
 **Not done:** not pushed to `origin`, no PR opened — this repo's own rule is PR only after a **user-approved** test (D-008), and that approval hasn't happened in this session yet. `decisions.md` already carries D-024 (RTL-only, no locale toggle) and D-025 (gold fails AA as body text; border/icon-only) from the branch's first session.
 
 **Next:** get the user's sign-off on the live page, then push `feature/landing-page` and open the PR (never merge).
+
+---
 
 ### 2026-08-18 — CI failed on the Phase 1 PR; fixed
 

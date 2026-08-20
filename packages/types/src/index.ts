@@ -15,3 +15,9 @@ export * from './riasec';
 export * from './assessment';
 export * from './catalog';
 export * from './journey';
+
+/* Phase 3 — certificates and the CV. */
+export * from './certificates';
+export * from './notifications';
+export * from './cv';
+export * from './cv-document';

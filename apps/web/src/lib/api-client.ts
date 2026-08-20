@@ -17,6 +17,10 @@
 
 import type {
   AssessmentResultView,
+  CertificateSummary,
+  CvProfile,
+  CvView,
+  CertificateVerificationView,
   AssessmentSubmission,
   AssessmentView,
   CourseDetail,
@@ -27,6 +31,7 @@ import type {
   MyPathView,
   PathDetail,
   PathRecommendations,
+  UnreadNotificationsView,
 } from '@tamkeen/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -285,6 +290,56 @@ export const myPathApi = {
   confirm: () => api.post<MyPathView>('/api/my-path/confirm'),
 };
 
+export const cvApi = {
+  get: () => api.get<CvView>('/api/cv'),
+  /** PUT: §4.11 asks for one save, and the document is written whole. */
+  save: (profile: CvProfile) => api.put<CvView>('/api/cv', profile),
+  /**
+   * The export URL, not a fetch — the browser's own download handling beats
+   * streaming bytes through JavaScript to re-offer them as a blob, and the
+   * session cookie rides along as it does on any navigation.
+   */
+  exportUrl: () => `${API_URL}/api/cv/export`,
+};
+
+export const notificationsApi = {
+  unread: () => api.get<UnreadNotificationsView>('/api/notifications/unread'),
+  /** POST: it changes state, so it must not be prefetched or replayed. */
+  markCertificatesRead: () => api.post<void>('/api/notifications/certificates/read'),
+};
+
 export const dashboardApi = {
   get: () => api.get<DashboardView>('/api/dashboard'),
+};
+
+export const certificatesApi = {
+  /** The learner's own gallery (§4.10). */
+  list: () => api.get<CertificateSummary[]>('/api/certificates'),
+
+  /**
+   * The URL of the stored PDF.
+   *
+   * A URL rather than a fetch: the browser's own PDF viewer and its download
+   * handling are better than anything we would build, and streaming the bytes
+   * through JavaScript to re-offer them as a blob would only add a way to get
+   * it wrong. The session cookie rides along because it is a normal navigation.
+   */
+  fileUrl: (certificateId: string, disposition: 'inline' | 'attachment') =>
+    `${API_URL}/api/certificates/${certificateId}/file${
+      disposition === 'attachment' ? '?disposition=attachment' : ''
+    }`,
+
+  /**
+   * The public verification lookup (§2, D-016).
+   *
+   * The only call here that works without a session. It still goes through this
+   * client so it inherits one error shape and one place the API origin is
+   * configured — `credentials: 'include'` is harmless on a route that ignores
+   * the cookie, and diverging into a bare `fetch` would be a second way of
+   * talking to the API for no gain.
+   */
+  verify: (verificationId: string) =>
+    api.get<CertificateVerificationView>(
+      `/api/certificates/verify/${encodeURIComponent(verificationId)}`,
+    ),
 };

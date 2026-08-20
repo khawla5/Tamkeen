@@ -2,7 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { createTransport, type Transporter } from 'nodemailer';
 
 import { AppConfigService } from '../config/app-config.module';
-import { passwordResetEmail, verificationEmail, coursePassedEmail } from './email.templates';
+import {
+  passwordResetEmail,
+  verificationEmail,
+  coursePassedEmail,
+  pathCompletedEmail,
+} from './email.templates';
 
 /**
  * Transactional email (§2 notifications rule).
@@ -53,8 +58,38 @@ export class EmailService {
     await this.send(to, passwordResetEmail(url, minutes));
   }
 
-  async sendCoursePassed(to: string, courseTitle: string): Promise<void> {
-    await this.send(to, coursePassedEmail(courseTitle, `${this.config.get('APP_URL')}/my-path`));
+  async sendCoursePassed(
+    to: string,
+    courseTitle: string,
+    options: { certificateIssued: boolean } = { certificateIssued: false },
+  ): Promise<void> {
+    const appUrl = this.config.get('APP_URL');
+
+    await this.send(
+      to,
+      coursePassedEmail(
+        courseTitle,
+        `${appUrl}/my-path`,
+        options.certificateIssued ? `${appUrl}/certificates` : null,
+      ),
+    );
+  }
+
+  async sendPathCompleted(
+    to: string,
+    pathName: string,
+    options: { certificateIssued: boolean } = { certificateIssued: false },
+  ): Promise<void> {
+    const appUrl = this.config.get('APP_URL');
+
+    await this.send(
+      to,
+      pathCompletedEmail(
+        pathName,
+        `${appUrl}/my-path`,
+        options.certificateIssued ? `${appUrl}/certificates` : null,
+      ),
+    );
   }
 
   private async send(

@@ -20,9 +20,9 @@ import { cn } from '@/lib/utils';
  * My Path (§4.9).
  *
  * One progress bar, the chosen courses in order with their status, and the path
- * certificate as a locked slot at the bottom. Issuing that certificate is Phase
- * 3; the slot exists now so the goal is visible, and it says plainly that it is
- * locked rather than implying an action.
+ * certificate slot at the bottom. While locked it says so plainly rather than
+ * implying an action; once the path is complete it leads to the real
+ * certificate in the gallery.
  */
 export default function MyPathPage() {
   const t = useTranslations('myPath');
@@ -118,10 +118,21 @@ function PathRun({ path }: { path: MyPathView }) {
             {t('certificateHeading')}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col items-start gap-3">
           <p className="text-sm text-muted-foreground">
             {path.pathCertificateUnlocked ? t('certificateReady') : t('certificateLocked')}
           </p>
+          {/*
+            The slot now leads somewhere. `pathCertificateUnlocked` is the
+            path's own COMPLETED status, which is the same condition the
+            certificate is issued on — so an unlocked slot always has a real
+            certificate behind it rather than a promise.
+          */}
+          {path.pathCertificateUnlocked ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/certificates">{t('certificateOpen')}</Link>
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
     </div>
