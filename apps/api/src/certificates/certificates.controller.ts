@@ -1,20 +1,75 @@
-import { Controller, Get, Header, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { Response } from 'express';
 
-import type { CertificateVerificationView } from '@tamkeen/types';
+import type { CertificateSummary, CertificateVerificationView } from '@tamkeen/types';
 
-import { Public } from '../auth/auth.decorators';
+import { CurrentUser, Public } from '../auth/auth.decorators';
+import type { AuthenticatedUser } from '../auth/session.service';
 import { CertificateVerificationService } from './certificate-verification.service';
+import { CertificatesService } from './certificates.service';
 
 /**
  * §4.10 / §2 — certificates.
  *
- * For now this holds only the **public** verification route. The learner's own
- * gallery is authenticated and arrives with it.
+ * One public route and two authenticated ones. The public one is the exception
+ * and is marked as such; everything else is scoped to the signed-in learner.
  */
 @Controller('certificates')
 export class CertificatesController {
-  constructor(private readonly verification: CertificateVerificationService) {}
+  constructor(
+    private readonly certificates: CertificatesService,
+    private readonly verification: CertificateVerificationService,
+  ) {}
+
+  /** The gallery (§4.10). */
+  @Get()
+  list(@CurrentUser() user: AuthenticatedUser): Promise<CertificateSummary[]> {
+    return this.certificates.list(user.id);
+  }
+
+  /**
+   * The stored PDF — the same bytes that were rendered at issue time.
+   *
+   * **One route for both "view" and "download"**, differing only in
+   * `Content-Disposition`. They are the same resource; two endpoints would mean
+   * two places for the ownership check to be got wrong.
+   *
+   * `no-store` because the response is a personal document: a shared or proxied
+   * cache holding a ministry employee's certificate is exactly the kind of
+   * accidental disclosure §2 asks us to avoid.
+   */
+  @Get(':id/file')
+  @Header('Cache-Control', 'no-store, private')
+  @Header('X-Robots-Tag', 'noindex, nofollow')
+  async file(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) certificateId: string,
+    @Query('disposition') disposition: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const file = await this.certificates.getFile(user.id, certificateId);
+
+    /* Anything other than an explicit "attachment" renders in the browser's PDF
+       viewer, which is what "view" means on the gallery card. */
+    const asAttachment = disposition === 'attachment';
+
+    response.setHeader(
+      'Content-Disposition',
+      `${asAttachment ? 'attachment' : 'inline'}; filename="${file.filename}"`,
+    );
+
+    return new StreamableFile(file.bytes, { type: 'application/pdf' });
+  }
 
   /**
    * Confirms a certificate to a third party, without a login (D-016).

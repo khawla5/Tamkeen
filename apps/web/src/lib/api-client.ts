@@ -17,6 +17,7 @@
 
 import type {
   AssessmentResultView,
+  CertificateSummary,
   CertificateVerificationView,
   AssessmentSubmission,
   AssessmentView,
@@ -282,6 +283,22 @@ export const dashboardApi = {
 };
 
 export const certificatesApi = {
+  /** The learner's own gallery (§4.10). */
+  list: () => api.get<CertificateSummary[]>('/api/certificates'),
+
+  /**
+   * The URL of the stored PDF.
+   *
+   * A URL rather than a fetch: the browser's own PDF viewer and its download
+   * handling are better than anything we would build, and streaming the bytes
+   * through JavaScript to re-offer them as a blob would only add a way to get
+   * it wrong. The session cookie rides along because it is a normal navigation.
+   */
+  fileUrl: (certificateId: string, disposition: 'inline' | 'attachment') =>
+    `${API_URL}/api/certificates/${certificateId}/file${
+      disposition === 'attachment' ? '?disposition=attachment' : ''
+    }`,
+
   /**
    * The public verification lookup (§2, D-016).
    *

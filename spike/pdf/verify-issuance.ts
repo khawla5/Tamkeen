@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { AuditService } from '../../apps/api/src/audit/audit.service';
+import { hashPassword } from '../../apps/api/src/common/password';
 import { CertificateIssuanceService } from '../../apps/api/src/certificates/certificate-issuance.service';
 import { CertificateStorageService } from '../../apps/api/src/certificates/certificate-storage.service';
 import { PdfRendererService } from '../../apps/api/src/certificates/pdf-renderer.service';
@@ -32,6 +33,7 @@ const audit = new AuditService(prisma);
 const issuance = new CertificateIssuanceService(prisma, audit, config, storage, renderer);
 
 const SUFFIX = process.env.VERIFY_SUFFIX ?? 'c1';
+const FIXTURE_PASSWORD = 'a-sufficiently-long-password';
 const ROOT = resolve(config.get('CERT_STORAGE_DIR'));
 
 let failures = 0;
@@ -66,7 +68,9 @@ async function main(): Promise<void> {
     update: {},
     create: {
       email: `cert-verify-${SUFFIX}@ministry.gov.example`,
-      passwordHash: 'not-a-real-hash',
+      /* A real hash, so `KEEP=1` leaves an account that can actually sign in
+         and have its gallery looked at. */
+      passwordHash: await hashPassword(FIXTURE_PASSWORD),
       fullName: 'عبدالله بن محمد الدماطي',
       employeeId: `CERTV${SUFFIX.toUpperCase()}`,
       department: 'إدارة الموارد البشرية',
@@ -326,6 +330,11 @@ async function main(): Promise<void> {
     await prisma.course.deleteMany({ where: { moodleCourseId: { gte: 990000 } } });
     await prisma.path.delete({ where: { id: path.id } });
     console.log('\nfixtures removed (KEEP=1 to retain them)');
+  } else {
+    console.log(
+      `\nsign in as: cert-verify-${SUFFIX}@ministry.gov.example / ${FIXTURE_PASSWORD}\n` +
+        'to look at the gallery these certificates land in.',
+    );
   }
 
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);

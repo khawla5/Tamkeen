@@ -6,6 +6,7 @@ import { CertificateIssuanceService } from './certificate-issuance.service';
 import { CertificateStorageService } from './certificate-storage.service';
 import { CertificateVerificationService } from './certificate-verification.service';
 import { CertificatesController } from './certificates.controller';
+import { CertificatesService } from './certificates.service';
 import { PdfRendererService } from './pdf-renderer.service';
 
 /**
@@ -22,6 +23,7 @@ import { PdfRendererService } from './pdf-renderer.service';
     CertificateIssuanceService,
     CertificateStorageService,
     CertificateVerificationService,
+    CertificatesService,
     PdfRendererService,
   ],
   exports: [CertificateIssuanceService, CertificateStorageService, PdfRendererService],

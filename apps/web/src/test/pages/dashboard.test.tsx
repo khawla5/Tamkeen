@@ -163,9 +163,12 @@ describe('dashboard — ACTIVE_PATH', () => {
     setDashboard(ACTIVE);
     renderWithProviders(<DashboardPage />);
 
-    /* Certificates and CV are Phase 3; a tile for either would advertise
-       something the product cannot yet do. */
-    expect(screen.queryByText('شهاداتي')).not.toBeInTheDocument();
+    /* §4.2 names My Path, Certificates and CV. Certificates has a gallery
+       behind it now, so it is a real destination; the CV builder does not
+       exist yet, and a tile for it would advertise something the product
+       cannot do. */
+    expect(screen.getByRole('link', { name: 'مساري' })).toHaveAttribute('href', '/my-path');
+    expect(screen.getByRole('link', { name: 'شهاداتي' })).toHaveAttribute('href', '/certificates');
     expect(screen.queryByText('السيرة الذاتية')).not.toBeInTheDocument();
   });
 });

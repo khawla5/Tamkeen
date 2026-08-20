@@ -77,7 +77,8 @@
     "progressValue": "{completed} من {total} دورات مكتملة",
     "tileMyPath": "مساري",
     "tileCourses": "الدورات",
-    "viewMyPath": "عرض مساري"
+    "viewMyPath": "عرض مساري",
+    "tileCertificates": "شهاداتي"
   },
   "assessment": {
     "title": "التقييم",
@@ -187,15 +188,16 @@
     "start": "ابدأ الدورة",
     "continue": "تابع الدورة",
     "certificateHeading": "شهادة المسار",
-    "certificateLocked": "تُفتح شهادة المسار بعد إكمال جميع دوراتك.",
-    "certificateReady": "أكملت جميع الدورات. ستصدر شهادة المسار قريبًا.",
+    "certificateLocked": "تُفتح شهادة المسار بعد اجتياز جميع دوراتك.",
+    "certificateReady": "أتممت المسار وصدرت شهادتك.",
     "addMore": "إضافة دورة أخرى",
     "buildingTitle": "لم تؤكّد مسارك بعد",
     "buildingBody": "أكمل اختيار دوراتك وأكّد المسار لتبدأ.",
     "goToBuild": "متابعة اختيار الدورات",
     "emptyTitle": "لم تختر مسارًا بعد",
     "emptyBody": "اختر مسارك من صفحة النتائج لتظهر دوراتك هنا.",
-    "goToResults": "اختر مسارك"
+    "goToResults": "اختر مسارك",
+    "certificateOpen": "عرض الشهادة"
   },
   "profile": {
     "title": "الملف الشخصي",
@@ -326,5 +328,17 @@
     "notFoundTitle": "لم يتم العثور على هذه الشهادة",
     "notFoundBody": "تأكّد من الرابط كاملاً، أو أعد مسح رمز الاستجابة السريعة الموجود على الشهادة.",
     "privacyNote": "لا تُعرض هنا سوى البيانات اللازمة لتأكيد صحة الشهادة."
+  },
+  "certificates": {
+    "title": "شهاداتي",
+    "emptyTitle": "لا توجد شهادات بعد",
+    "emptyBody": "تصدر شهادتك تلقائياً بمجرد اجتيازك أول دورة في مسارك.",
+    "typeCourse": "شهادة دورة",
+    "typePath": "شهادة مسار",
+    "issuedOn": "صدرت في {date}",
+    "view": "عرض",
+    "download": "تنزيل",
+    "viewLabel": "عرض شهادة {title}",
+    "downloadLabel": "تنزيل شهادة {title}"
   }
 }
