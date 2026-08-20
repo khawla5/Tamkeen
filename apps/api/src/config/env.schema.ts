@@ -91,6 +91,22 @@ export const envSchema = z.object({
    * production bug for the sake of one constant.
    */
   MOODLE_STUDENT_ROLE_ID: z.coerce.number().int().positive().default(5),
+  /**
+   * The role an entity is enrolled with to author its own course (D-060).
+   * Moodle's stock `editingteacher` is 3, and the same per-instance caveat
+   * applies as for the student role — more sharply, in fact, since getting a
+   * teaching role wrong hands an outside organisation capabilities nobody
+   * intended.
+   */
+  MOODLE_TEACHER_ROLE_ID: z.coerce.number().int().positive().default(3),
+  /**
+   * Where courses an entity creates are filed (D-060).
+   *
+   * `core_course_create_courses` requires a category and every instance numbers
+   * them differently, so defaulting to 1 would put ministry courses under
+   * whatever that instance happens to call category one. Required in real mode.
+   */
+  MOODLE_COURSE_CATEGORY_ID: z.coerce.number().int().positive().default(1),
   /** Per-call ceiling. Moodle answered in 60–256 ms in the spike; 10s is a
    *  generous outage detector, not a normal-operation budget. */
   MOODLE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),

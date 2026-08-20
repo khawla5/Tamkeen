@@ -1,15 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 import type { LmsPort } from '../lms.port';
-import type {
-  EnrolInput,
-  LmsCourse,
-  LmsCourseId,
-  LmsCourseProgress,
-  LmsHealth,
-  LmsUserId,
-  LmsUserRef,
-  ProvisionUserInput,
+import {
+  LmsOperationError,
+  type CreateCourseInput,
+  type EnrolInput,
+  type LmsCourse,
+  type LmsCourseContentSummary,
+  type LmsCourseId,
+  type LmsCourseProgress,
+  type LmsHealth,
+  type LmsUserId,
+  type LmsUserRef,
+  type ProvisionUserInput,
 } from '../lms.types';
 import { MOCK_COURSES, MOCK_LMS_BASE_URL } from './mock-lms.data';
 
@@ -33,9 +36,30 @@ export class MockLmsService implements LmsPort {
 
   private readonly users = new Map<LmsUserId, LmsUserRef>();
   private readonly enrolments = new Set<string>();
+  /** Which of those enrolments carry editing capabilities (D-060). */
+  private readonly authorEnrolments = new Set<string>();
   private readonly progress = new Map<string, LmsCourseProgress>();
+  /** Courses an entity created this process, on top of the seeded catalogue. */
+  private readonly created: LmsCourse[] = [];
+  /** Moodle rejects a duplicate shortname; so does this. */
+  private readonly shortNames = new Set<string>();
+  /** What `simulateAuthoring` has been told about a course's contents. */
+  private readonly authoring = new Map<LmsCourseId, Omit<LmsCourseContentSummary, 'lmsCourseId'>>();
   /** Makes each stand-in handoff URL distinct; see `courseLaunchUrl`. */
   private launchCounter = 0;
+
+  /**
+   * Ids for created courses, from a range the seeded catalogue never uses.
+   *
+   * Unlike user ids — which are derived from the email so an account keeps its
+   * id across restarts (see `idFor`) — a course has no natural key to derive
+   * from, and Moodle's own ids are sequential. A counter is the faithful
+   * simulation here; the id is stored in our `courses` row at creation, so it
+   * does not need to survive a restart to be found again.
+   */
+  private nextCourseId(): LmsCourseId {
+    return 900_001 + this.created.length;
+  }
 
   private key(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
     return `${lmsUserId}:${lmsCourseId}`;
@@ -105,23 +129,107 @@ export class MockLmsService implements LmsPort {
     return Promise.resolve(null);
   }
 
+  /** The seeded catalogue plus anything an entity created this process. */
+  private get catalogue(): readonly LmsCourse[] {
+    return [...MOCK_COURSES, ...this.created];
+  }
+
   listCourses(): Promise<LmsCourse[]> {
     /* Copies, not references: a caller mutating a returned course must not
        corrupt the mock's state. A real adapter returns fresh objects anyway, so
        handing out shared references here would let a bug pass the mock and fail
        against Moodle. */
-    return Promise.resolve(MOCK_COURSES.map((course) => ({ ...course })));
+    return Promise.resolve(this.catalogue.map((course) => ({ ...course })));
   }
 
   getCourse(lmsCourseId: LmsCourseId): Promise<LmsCourse | null> {
-    const found = MOCK_COURSES.find((course) => course.lmsCourseId === lmsCourseId);
+    const found = this.catalogue.find((course) => course.lmsCourseId === lmsCourseId);
 
     return Promise.resolve(found ? { ...found } : null);
   }
 
+  /**
+   * Creates an empty course (§4B.3, D-060).
+   *
+   * **It arrives with nothing in it, and that is the honest simulation.** A real
+   * Moodle course created through `core_course_create_courses` has no activities
+   * and no completion criteria until somebody authors them, so
+   * `getCourseContentSummary` reports it as not completable — which is precisely
+   * the state the publish gate (D-061) has to refuse. A mock that handed back a
+   * ready-to-publish course would make that gate untestable and would be easier
+   * to satisfy than reality, which is the failure D-036 and D-045 each recorded
+   * once already.
+   *
+   * **Created visible.** Moodle's default is a visible course, and our own
+   * `publication` (D-059) is what keeps it out of the learner catalogue — so
+   * making the mock hide it would put the product rule in the wrong layer.
+   *
+   * **`async`, unlike its neighbours here, and the contract suite is what forced
+   * it.** A synchronous `throw` from a promise-returning method escapes a
+   * caller's `.catch()` entirely; the real adapter rejects, so a mock that threw
+   * would once again have been easier to satisfy than reality.
+   */
+  async createCourse(input: CreateCourseInput): Promise<LmsCourse> {
+    if (this.shortNames.has(input.shortName)) {
+      /* Moodle rejects a duplicate shortname, so the mock must too — otherwise
+         the collision is discovered for the first time in production. */
+      throw new LmsOperationError('CREATE_COURSE');
+    }
+
+    this.shortNames.add(input.shortName);
+
+    const course: LmsCourse = {
+      lmsCourseId: this.nextCourseId(),
+      title: input.title,
+      summary: input.summary,
+      durationMinutes: null,
+      visible: true,
+    };
+
+    this.created.push(course);
+
+    return { ...course };
+  }
+
+  getCourseContentSummary(lmsCourseId: LmsCourseId): Promise<LmsCourseContentSummary | null> {
+    if (!this.catalogue.some((course) => course.lmsCourseId === lmsCourseId)) {
+      return Promise.resolve(null);
+    }
+
+    const authored = this.authoring.get(lmsCourseId);
+
+    if (authored) {
+      return Promise.resolve({ lmsCourseId, ...authored });
+    }
+
+    /*
+     * A course the mock seeded is fully configured; one an entity just created
+     * is empty. The seeded catalogue has to report as completable because the
+     * Phase 1-3 journey tests take those courses through to a pass, and a course
+     * nobody can complete would make that impossible.
+     */
+    const isSeeded = MOCK_COURSES.some((course) => course.lmsCourseId === lmsCourseId);
+
+    return Promise.resolve({
+      lmsCourseId,
+      activityCount: isSeeded ? 3 : 0,
+      hasQuiz: isSeeded,
+      completionConfigured: isSeeded,
+    });
+  }
+
   enrol(input: EnrolInput): Promise<void> {
+    const key = this.key(input.lmsUserId, input.lmsCourseId);
+
     /* A Set makes this idempotent for free — re-enrolling is a no-op. */
-    this.enrolments.add(this.key(input.lmsUserId, input.lmsCourseId));
+    this.enrolments.add(key);
+
+    /* Recorded so a test can assert an author was enrolled *as an author*.
+       Re-enrolling with a wider role upgrades rather than being ignored, which
+       is what Moodle's manual enrolment does when a second role is assigned. */
+    if (input.role === 'AUTHOR') {
+      this.authorEnrolments.add(key);
+    }
 
     return Promise.resolve();
   }
@@ -237,10 +345,39 @@ export class MockLmsService implements LmsPort {
     });
   }
 
+  /**
+   * Stands in for an entity authoring content inside Moodle (D-046).
+   *
+   * Mock-only, like `simulateCompletion`: the real adapter cannot make an entity
+   * write a quiz, so this must never reach `LmsPort`. It exists because the
+   * publish gate (D-061) refuses a course with no completion criteria, and a
+   * test of the *successful* publish needs some way to say "the entity has now
+   * configured it" without a browser and a real Moodle.
+   */
+  simulateAuthoring(
+    lmsCourseId: LmsCourseId,
+    summary: Partial<Omit<LmsCourseContentSummary, 'lmsCourseId'>> = {},
+  ): void {
+    this.authoring.set(lmsCourseId, {
+      activityCount: summary.activityCount ?? 4,
+      hasQuiz: summary.hasQuiz ?? true,
+      completionConfigured: summary.completionConfigured ?? true,
+    });
+  }
+
+  /** Whether an enrolment carries editing capabilities. Mock-only. */
+  isAuthorEnrolment(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): boolean {
+    return this.authorEnrolments.has(this.key(lmsUserId, lmsCourseId));
+  }
+
   reset(): void {
     this.users.clear();
     this.enrolments.clear();
+    this.authorEnrolments.clear();
     this.progress.clear();
+    this.created.length = 0;
+    this.shortNames.clear();
+    this.authoring.clear();
     this.logger.debug('Mock LMS state reset');
   }
 }

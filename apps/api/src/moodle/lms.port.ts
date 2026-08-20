@@ -1,6 +1,8 @@
 import type {
+  CreateCourseInput,
   EnrolInput,
   LmsCourse,
+  LmsCourseContentSummary,
   LmsCourseId,
   LmsCourseProgress,
   LmsHealth,
@@ -58,8 +60,44 @@ export interface LmsPort {
   getCourse(lmsCourseId: LmsCourseId): Promise<LmsCourse | null>;
 
   /**
+   * Creates an empty course in the LMS and returns it (§4B.3, D-060).
+   *
+   * **The shell must exist in the LMS, not only in our database.** Our
+   * `courses.moodle_course_id` is non-null and unique, and catalogue sync
+   * withdraws any row the LMS stops returning — so a course row created without
+   * an LMS counterpart would be withdrawn on the next sync run, minutes after an
+   * entity created it. A database-only draft is not a lighter version of this;
+   * it is a row that self-destructs.
+   *
+   * It creates a course and nothing in it. Content — lectures, materials, the
+   * quiz and its questions — is authored by the entity **inside Moodle** through
+   * the seamless-login handoff (Model 1, D-046). There is deliberately no method
+   * here for writing activities: adding one would start rebuilding Moodle's
+   * authoring API through a boundary designed to hide it.
+   *
+   * Not idempotent, unlike `provisionUser` and `enrol`. There is no natural key
+   * to reconcile on — two courses may legitimately share a title — so a repeat
+   * call creates a second course. Callers must not retry it blindly.
+   */
+  createCourse(input: CreateCourseInput): Promise<LmsCourse>;
+
+  /**
+   * What the LMS holds inside a course (§4B.4, D-061).
+   *
+   * Read back so an entity can see, **before publishing**, whether the course is
+   * actually completable. Returns null when the course does not exist.
+   */
+  getCourseContentSummary(lmsCourseId: LmsCourseId): Promise<LmsCourseContentSummary | null>;
+
+  /**
    * Enrols a user in a course. Idempotent — enrolling an already-enrolled user
    * is a successful no-op, so confirming a path twice cannot fail halfway.
+   *
+   * `input.role` selects what they are enrolled *as*: a learner taking the
+   * course, or an author who needs Moodle's editing capabilities (D-060). It is
+   * expressed in our vocabulary because role ids are per-instance configuration
+   * the adapter resolves — a caller passing a number would encode one Moodle
+   * installation's numbering into the application layer.
    */
   enrol(input: EnrolInput): Promise<void>;
 
