@@ -18,15 +18,50 @@ export const PATH_MIN_COURSES = 5;
 export const PATH_MAX_COURSES = 10;
 
 /**
- * Our own course lifecycle (§6, D-015) — distinct from the LMS's `visible` flag.
+ * A course's effective visibility in our catalogue (§6, D-015) — **derived**,
+ * never authored (D-059). It is computed from the entity's `CoursePublication`
+ * decision and the LMS's own flags, so no single actor sets it.
  *
  * `HIDDEN_BUT_COMPLETABLE` is the rule that stops content being pulled out from
  * under a learner: a course already inside someone's confirmed path may leave the
  * catalogue for *new* selections but must stay completable for those enrolled.
+ *
+ * `DRAFT` is where a course sits between its LMS shell existing and its product
+ * metadata being finished. Invisible to learners exactly as `RETIRED` is, but
+ * reversibly so.
  */
-export const COURSE_STATUSES = ['AVAILABLE', 'HIDDEN_BUT_COMPLETABLE', 'RETIRED'] as const;
+export const COURSE_STATUSES = ['DRAFT', 'AVAILABLE', 'HIDDEN_BUT_COMPLETABLE', 'RETIRED'] as const;
 
 export type CourseStatus = (typeof COURSE_STATUSES)[number];
+
+/**
+ * The entity's publishing decision (§4B.3, D-059).
+ *
+ * Ours entirely — catalogue sync reads it as an input to the status derivation
+ * and may never write it. That is what makes an entity's decision to withdraw a
+ * course survive the next sync run.
+ */
+export const COURSE_PUBLICATIONS = ['DRAFT', 'PUBLISHED', 'UNPUBLISHED'] as const;
+
+export type CoursePublication = (typeof COURSE_PUBLICATIONS)[number];
+
+/**
+ * The single language a course was authored in (§4A, D-047).
+ *
+ * A course exists in one language as its entity wrote it; we do not maintain a
+ * bilingual title and summary per course. The app chrome stays Arabic-first
+ * regardless — this drives the `dir`/`lang` attributes on the elements that
+ * carry course text, without which an English title inside an RTL container
+ * has its punctuation rearranged.
+ */
+export const COURSE_LANGUAGES = ['AR', 'EN'] as const;
+
+export type CourseLanguage = (typeof COURSE_LANGUAGES)[number];
+
+/** The text direction a course's own title and summary must be rendered in. */
+export function directionForCourseLanguage(language: CourseLanguage | null): 'rtl' | 'ltr' {
+  return language === 'EN' ? 'ltr' : 'rtl';
+}
 
 /** The path a course belongs to, as shown on a course card (§4.6). */
 export interface CoursePathRef {
@@ -44,6 +79,9 @@ export interface CourseSummary {
   summary: string;
   durationMinutes: number | null;
   status: CourseStatus;
+  /** Which language the title and summary above are in (D-047). Null for a
+   *  course discovered in the LMS that no entity has claimed yet. */
+  language: CourseLanguage | null;
   paths: CoursePathRef[];
 }
 

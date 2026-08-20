@@ -66,6 +66,7 @@ function course(n: number, status: 'AVAILABLE' | 'HIDDEN_BUT_COMPLETABLE' = 'AVA
     summary: 'وصف مختصر للدورة.',
     durationMinutes: 120,
     status,
+    language: 'AR' as const,
     paths: [],
   };
 }

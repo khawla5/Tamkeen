@@ -7,10 +7,10 @@ import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import type { LmsCourse } from '../moodle/lms.types';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  effectiveCourseStatus,
   fieldsForPublishedCourse,
   isUsableCatalogue,
-  statusForVanishedCourse,
-  type CourseStatusValue,
+  type CoursePublicationValue,
 } from './catalog-mapping';
 
 export interface CatalogSyncResult {
@@ -102,10 +102,17 @@ export class CatalogSyncService implements OnApplicationBootstrap {
     }
 
     const existing = await this.prisma.course.findMany({
-      select: { id: true, moodleCourseId: true, status: true, durationMinutes: true },
+      select: {
+        id: true,
+        moodleCourseId: true,
+        publication: true,
+        durationMinutes: true,
+        lmsPresent: true,
+      },
     });
 
     const existingByLmsId = new Map(existing.map((row) => [row.moodleCourseId, row]));
+    const heldIds = await this.courseIdsHeldByLearners(existing.map((row) => row.id));
 
     let created = 0;
     let updated = 0;
@@ -114,26 +121,42 @@ export class CatalogSyncService implements OnApplicationBootstrap {
       const known = existingByLmsId.get(lmsCourse.lmsCourseId) ?? null;
       const fields = fieldsForPublishedCourse(
         lmsCourse,
-        known
-          ? { status: known.status as CourseStatusValue, durationMinutes: known.durationMinutes }
-          : null,
+        known ? { durationMinutes: known.durationMinutes } : null,
       );
+
+      /*
+       * A course the LMS has but we have never seen enters as a DRAFT owned by
+       * nobody. That is a legitimate state, not an error (D-040): an entity
+       * claims and publishes it, and until then it simply belongs to no path.
+       * Entering as DRAFT rather than AVAILABLE is a Phase 4 correction — a
+       * course with no path membership, no RIASEC letter and no objectives was
+       * never usable in the catalogue, so publishing it automatically only ever
+       * produced a card a learner could not act on.
+       */
+      const publication: CoursePublicationValue = known?.publication ?? 'DRAFT';
+
+      const status = effectiveCourseStatus({
+        publication,
+        lmsPresent: fields.lmsPresent,
+        lmsVisible: fields.lmsVisible,
+        heldByAnyLearner: known ? heldIds.has(known.id) : false,
+      });
 
       await this.prisma.course.upsert({
         where: { moodleCourseId: lmsCourse.lmsCourseId },
         create: {
           moodleCourseId: lmsCourse.lmsCourseId,
           ...fields,
-          /* A course the LMS has but we have never seen arrives with no product
-             metadata. That is a legitimate state, not an error: an entity
-             authors it in Phase 4, and until then the course simply belongs to
-             no path. The seed runner *does* refuse missing metadata, because it
-             is authoring a known catalogue rather than discovering one. */
+          status,
+          publication,
           objectives: [],
           prerequisites: null,
           lastSyncedAt: new Date(),
         },
-        update: { ...fields, lastSyncedAt: new Date() },
+        /* `publication` is absent from the update on purpose, and this is the
+           single most important line in the file: sync reads our publishing
+           decision but may never write it (D-059). */
+        update: { ...fields, status, lastSyncedAt: new Date() },
       });
 
       if (known) {
@@ -143,7 +166,7 @@ export class CatalogSyncService implements OnApplicationBootstrap {
       }
     }
 
-    const withdrawn = await this.withdrawVanished(lmsCourses, existing);
+    const withdrawn = await this.withdrawVanished(lmsCourses, existing, heldIds);
 
     await this.audit.record({
       action: AuditAction.LMS_CATALOG_SYNCED,
@@ -161,42 +184,49 @@ export class CatalogSyncService implements OnApplicationBootstrap {
   }
 
   /**
-   * Demotes rows the LMS no longer returns.
+   * Records that the LMS has stopped returning these courses.
    *
-   * Whether a course is *held by a user* decides its fate, so that is read from
-   * `user_path_courses` rather than assumed — a course nobody selected can
-   * retire cleanly, while one somebody is working through must stay completable.
+   * **Sync sets `lmsPresent: false` and nothing else about their fate.** What
+   * that means for a learner is `effectiveCourseStatus`'s decision, and it turns
+   * on whether anyone holds the course: one nobody selected retires cleanly,
+   * while one somebody is working through stays completable (§2/D-015).
+   *
+   * Rows are never deleted, and an entity's `publication` is not touched — a
+   * course that vanishes from the LMS has not been unpublished by anyone, and
+   * if it comes back the entity's decision is still there to honour.
    */
   private async withdrawVanished(
     lmsCourses: readonly LmsCourse[],
-    existing: ReadonlyArray<{ id: string; moodleCourseId: number; status: string }>,
+    existing: ReadonlyArray<{
+      id: string;
+      moodleCourseId: number;
+      publication: string;
+      lmsPresent: boolean;
+    }>,
+    heldIds: ReadonlySet<string>,
   ): Promise<number> {
     const present = new Set(lmsCourses.map((course) => course.lmsCourseId));
-    const vanished = existing.filter(
-      (row) => !present.has(row.moodleCourseId) && row.status !== 'RETIRED',
-    );
 
-    if (vanished.length === 0) {
-      return 0;
-    }
+    /* Already recorded as absent by an earlier run — idempotent, and the reason
+       this polls safely forever. */
+    const vanished = existing.filter((row) => !present.has(row.moodleCourseId) && row.lmsPresent);
 
-    const held = await this.prisma.userPathCourse.findMany({
-      where: { courseId: { in: vanished.map((row) => row.id) } },
-      select: { courseId: true },
-      distinct: ['courseId'],
-    });
-
-    const heldIds = new Set(held.map((row) => row.courseId));
     let withdrawn = 0;
 
     for (const row of vanished) {
-      const status = statusForVanishedCourse(heldIds.has(row.id));
+      const status = effectiveCourseStatus({
+        publication: row.publication as CoursePublicationValue,
+        lmsPresent: false,
+        /* Immaterial once absent, but passed honestly rather than guessed. */
+        lmsVisible: false,
+        heldByAnyLearner: heldIds.has(row.id),
+      });
 
-      if (status === row.status) {
-        continue; // Already demoted by an earlier run — idempotent.
-      }
+      await this.prisma.course.update({
+        where: { id: row.id },
+        data: { lmsPresent: false, status, lastSyncedAt: new Date() },
+      });
 
-      await this.prisma.course.update({ where: { id: row.id }, data: { status } });
       withdrawn += 1;
 
       await this.audit.record({
@@ -211,5 +241,33 @@ export class CatalogSyncService implements OnApplicationBootstrap {
     }
 
     return withdrawn;
+  }
+
+  /**
+   * Which of these courses any learner has selected.
+   *
+   * Read once per run rather than per course: the previous shape queried only
+   * the vanished subset, but the derivation now needs the answer for every row,
+   * and N queries against a catalogue of any size is the kind of thing that is
+   * fine until it is not.
+   *
+   * "Held" deliberately means *any* `user_path_courses` row, including one in a
+   * path still being built. §2 states the protection in terms of confirmed
+   * paths; counting building ones too is the safer direction of that same rule,
+   * and it never costs a learner anything — the worst case is that a course
+   * stays completable for someone who was going to drop it anyway.
+   */
+  private async courseIdsHeldByLearners(courseIds: string[]): Promise<Set<string>> {
+    if (courseIds.length === 0) {
+      return new Set();
+    }
+
+    const held = await this.prisma.userPathCourse.findMany({
+      where: { courseId: { in: courseIds } },
+      select: { courseId: true },
+      distinct: ['courseId'],
+    });
+
+    return new Set(held.map((row) => row.courseId));
   }
 }

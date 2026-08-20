@@ -139,6 +139,110 @@ async function seedSuperAdmin(): Promise<void> {
   }
 }
 
+/**
+ * A demonstration entity and one account for it (§4B, D-063).
+ *
+ * **This is a seam for Phase 5, not a substitute for it.** Creating entity
+ * accounts properly belongs to the super-admin portal (§4C.2); until that
+ * exists, the entity portal would be untestable — there would be no way to sign
+ * in as an entity at all. So the seed creates one, under exactly the discipline
+ * `seedSuperAdmin` already established: no known default password, generated and
+ * printed once in development, refused outright in production unless supplied.
+ *
+ * It also assigns ownership of a **subset** of the seeded catalogue to that
+ * entity, deliberately leaving the rest ownerless (D-063). An entity that owned
+ * everything would make a scoping bug invisible — every query would look correct
+ * because there is nothing it should have been excluding. The unowned remainder
+ * is what gives the scoping tests something real to fail against.
+ */
+async function seedDemoEntity(): Promise<void> {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const supplied = process.env.SEED_ENTITY_PASSWORD;
+
+  if (isProduction && !supplied) {
+    console.log('NODE_ENV=production without SEED_ENTITY_PASSWORD — skipping the demo entity.');
+    return;
+  }
+
+  const entity = await prisma.entity.upsert({
+    where: { key: 'demo-training-authority' },
+    create: {
+      key: 'demo-training-authority',
+      name: 'الهيئة الوطنية للتدريب',
+      contactName: 'إدارة البرامج التدريبية',
+      contactEmail: 'training@authority.gov.example',
+    },
+    update: {},
+    select: { id: true, name: true },
+  });
+
+  const email = process.env.SEED_ENTITY_EMAIL ?? 'entity@authority.gov.example';
+  const password = supplied ?? randomBytes(24).toString('base64url');
+
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, entityId: true, role: true },
+  });
+
+  if (existing) {
+    /* As with the super-admin: never touch the password or verification state of
+       an account already in use. Only repair the role and the entity link, so a
+       re-seed cannot leave an entity account that can sign in but sees nothing. */
+    if (existing.role !== UserRole.ENTITY || existing.entityId !== entity.id) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { role: UserRole.ENTITY, entityId: entity.id },
+      });
+      console.log(`Repaired entity account ${email}`);
+    } else {
+      console.log(`Entity account ${email} already exists — nothing to do.`);
+    }
+  } else {
+    await prisma.user.create({
+      data: {
+        email,
+        passwordHash: await hashPassword(password),
+        fullName: 'مسؤول الجهة التدريبية',
+        employeeId: process.env.SEED_ENTITY_EMPLOYEE_ID ?? 'ENT-0001',
+        department: entity.name,
+        role: UserRole.ENTITY,
+        entityId: entity.id,
+        status: UserStatus.ACTIVE,
+        /* Provisioned by an operator, not created through the self-registration
+           flow that email verification guards. */
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    console.log(`Created entity account ${email} for ${entity.name}`);
+
+    if (!supplied) {
+      console.log('');
+      console.log('  ┌─────────────────────────────────────────────────────────────');
+      console.log('  │ Generated entity password (shown once, not stored):');
+      console.log(`  │   ${password}`);
+      console.log('  │ Set SEED_ENTITY_PASSWORD to choose your own instead.');
+      console.log('  └─────────────────────────────────────────────────────────────');
+      console.log('');
+    }
+  }
+
+  /* Claim a slice of the catalogue, and only a slice. `moodleCourseId` is stable
+     across seeds, so re-running assigns the same courses rather than drifting. */
+  const owned = await prisma.course.updateMany({
+    where: { moodleCourseId: { in: DEMO_ENTITY_COURSE_IDS }, ownerEntityId: null },
+    data: { ownerEntityId: entity.id },
+  });
+
+  console.log(
+    `Entity ${entity.name} owns ${DEMO_ENTITY_COURSE_IDS.length} courses ` +
+      `(${owned.count} newly assigned); the rest stay ownerless for Phase 5.`,
+  );
+}
+
+/** A deliberately small slice — see `seedDemoEntity`. */
+const DEMO_ENTITY_COURSE_IDS = [101, 102, 103, 104, 105, 106, 107, 108];
+
 async function main(): Promise<void> {
   await seedSuperAdmin();
 
@@ -148,6 +252,9 @@ async function main(): Promise<void> {
     `Seeded ${counts.questions} questions (${counts.options} options), ` +
       `${counts.courses} courses, ${counts.paths} paths, ${counts.pathCourses} memberships.`,
   );
+
+  /* After the catalogue, because it claims courses the catalogue seed creates. */
+  await seedDemoEntity();
 }
 
 main()

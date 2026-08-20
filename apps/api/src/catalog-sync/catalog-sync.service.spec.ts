@@ -16,8 +16,11 @@ import { CatalogSyncService } from './catalog-sync.service';
 interface Row {
   id: string;
   moodleCourseId: number;
-  status: string;
+  /** Ours, and the thing sync must never write (D-059). */
+  publication: string;
   durationMinutes: number | null;
+  /** Whether the LMS still returns it — sync's to set, nobody else's. */
+  lmsPresent: boolean;
 }
 
 const lmsCourse = (overrides: Partial<LmsCourse> = {}): LmsCourse => ({
@@ -94,7 +97,15 @@ describe('CatalogSyncService', () => {
     it('counts a course we already hold as an update', async () => {
       const { service } = harness({
         courses: [lmsCourse({ lmsCourseId: 7 })],
-        rows: [{ id: 'c1', moodleCourseId: 7, status: 'AVAILABLE', durationMinutes: null }],
+        rows: [
+          {
+            id: 'c1',
+            moodleCourseId: 7,
+            publication: 'PUBLISHED',
+            durationMinutes: null,
+            lmsPresent: true,
+          },
+        ],
       });
 
       await expect(service.sync()).resolves.toMatchObject({ created: 0, updated: 1 });
@@ -105,7 +116,15 @@ describe('CatalogSyncService', () => {
          that has no opinion about them must not be able to erase them. */
       const { service, upserts } = harness({
         courses: [lmsCourse({ lmsCourseId: 7 })],
-        rows: [{ id: 'c1', moodleCourseId: 7, status: 'AVAILABLE', durationMinutes: 90 }],
+        rows: [
+          {
+            id: 'c1',
+            moodleCourseId: 7,
+            publication: 'PUBLISHED',
+            durationMinutes: 90,
+            lmsPresent: true,
+          },
+        ],
       });
 
       await service.sync();
@@ -116,10 +135,99 @@ describe('CatalogSyncService', () => {
       expect(update.durationMinutes).toBe(90);
     });
 
+    it('never writes `publication` — an entity decision sync may read but not change', async () => {
+      /*
+       * The Phase 4 defect, as a regression test (D-059). Sync used to recompute
+       * `status` from the LMS's `visible` flag, so an entity that hid a course
+       * had it flipped back to AVAILABLE by the next scheduled run — silently,
+       * minutes later, with their decision recorded nowhere. `publication` is
+       * where that decision now lives, and the update payload must not contain
+       * it under any circumstances.
+       */
+      const { service, upserts } = harness({
+        courses: [lmsCourse({ lmsCourseId: 7, visible: true })],
+        rows: [
+          {
+            id: 'c1',
+            moodleCourseId: 7,
+            publication: 'UNPUBLISHED',
+            durationMinutes: null,
+            lmsPresent: true,
+          },
+        ],
+      });
+
+      await service.sync();
+
+      expect(upserts[0]!.update).not.toHaveProperty('publication');
+    });
+
+    it('leaves an unpublished course out of the catalogue even when the LMS shows it', async () => {
+      /* The same rule seen from the other end: not merely "the column is not
+         written" but "the learner-visible outcome is right". */
+      const { service, upserts } = harness({
+        courses: [lmsCourse({ lmsCourseId: 7, visible: true })],
+        rows: [
+          {
+            id: 'c1',
+            moodleCourseId: 7,
+            publication: 'UNPUBLISHED',
+            durationMinutes: null,
+            lmsPresent: true,
+          },
+        ],
+      });
+
+      await service.sync();
+
+      expect(upserts[0]!.update.status).toBe('RETIRED');
+    });
+
+    it('keeps an unpublished course completable while a learner holds it', async () => {
+      const { service, upserts } = harness({
+        courses: [lmsCourse({ lmsCourseId: 7, visible: true })],
+        rows: [
+          {
+            id: 'c1',
+            moodleCourseId: 7,
+            publication: 'UNPUBLISHED',
+            durationMinutes: null,
+            lmsPresent: true,
+          },
+        ],
+        held: ['c1'],
+      });
+
+      await service.sync();
+
+      expect(upserts[0]!.update.status).toBe('HIDDEN_BUT_COMPLETABLE');
+    });
+
+    it('enters a course nobody has claimed as a DRAFT rather than publishing it', async () => {
+      /*
+       * A course discovered in the LMS has no path membership, no RIASEC letter
+       * and no objectives, so publishing it automatically only ever produced a
+       * catalogue card a learner could not act on. It waits for an entity.
+       */
+      const { service, upserts } = harness({ courses: [lmsCourse({ lmsCourseId: 7 })] });
+
+      await service.sync();
+
+      expect(upserts[0]!.create).toMatchObject({ publication: 'DRAFT', status: 'DRAFT' });
+    });
+
     it('is idempotent — a second identical run writes the same thing', async () => {
       const options = {
         courses: [lmsCourse({ lmsCourseId: 7 })],
-        rows: [{ id: 'c1', moodleCourseId: 7, status: 'AVAILABLE', durationMinutes: 30 }],
+        rows: [
+          {
+            id: 'c1',
+            moodleCourseId: 7,
+            publication: 'PUBLISHED',
+            durationMinutes: 30,
+            lmsPresent: true,
+          },
+        ],
       };
 
       const first = harness(options);
@@ -149,8 +257,20 @@ describe('CatalogSyncService', () => {
     const vanishing = {
       courses: [lmsCourse({ lmsCourseId: 7 })],
       rows: [
-        { id: 'c1', moodleCourseId: 7, status: 'AVAILABLE', durationMinutes: null },
-        { id: 'gone', moodleCourseId: 99, status: 'AVAILABLE', durationMinutes: null },
+        {
+          id: 'c1',
+          moodleCourseId: 7,
+          publication: 'PUBLISHED',
+          durationMinutes: null,
+          lmsPresent: true,
+        },
+        {
+          id: 'gone',
+          moodleCourseId: 99,
+          publication: 'PUBLISHED',
+          durationMinutes: null,
+          lmsPresent: true,
+        },
       ],
     };
 
@@ -176,8 +296,20 @@ describe('CatalogSyncService', () => {
       const { service, updates } = harness({
         courses: [lmsCourse({ lmsCourseId: 7 })],
         rows: [
-          { id: 'c1', moodleCourseId: 7, status: 'AVAILABLE', durationMinutes: null },
-          { id: 'gone', moodleCourseId: 99, status: 'RETIRED', durationMinutes: null },
+          {
+            id: 'c1',
+            moodleCourseId: 7,
+            publication: 'PUBLISHED',
+            durationMinutes: null,
+            lmsPresent: true,
+          },
+          {
+            id: 'gone',
+            moodleCourseId: 99,
+            publication: 'PUBLISHED',
+            durationMinutes: null,
+            lmsPresent: false,
+          },
         ],
       });
 
@@ -205,7 +337,15 @@ describe('CatalogSyncService', () => {
          out in one pass. */
       const { service, upserts, updates } = harness({
         courses: [],
-        rows: [{ id: 'c1', moodleCourseId: 7, status: 'AVAILABLE', durationMinutes: null }],
+        rows: [
+          {
+            id: 'c1',
+            moodleCourseId: 7,
+            publication: 'PUBLISHED',
+            durationMinutes: null,
+            lmsPresent: true,
+          },
+        ],
       });
 
       await expect(service.sync()).resolves.toMatchObject({
