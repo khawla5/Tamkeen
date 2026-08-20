@@ -48,7 +48,13 @@ export default function CourseContentPage() {
             </Button>
           </div>
 
-          <DataView isLoading={content.isLoading} error={content.error} onRetry={content.refetch}>
+          {/* First load only — the refresh button would otherwise replace the
+              read-back with a spinner every time it is pressed. */}
+          <DataView
+            isLoading={content.isLoading && content.data === undefined}
+            error={content.error}
+            onRetry={content.refetch}
+          >
             {content.data ? (
               <ContentSummary data={content.data} />
             ) : (

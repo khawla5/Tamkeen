@@ -224,14 +224,28 @@ describe('manage course', () => {
       expect(screen.queryByRole('textbox', { name: /هولاند/ })).not.toBeInTheDocument();
     });
 
-    it('confirms a save politely rather than interrupting', async () => {
+    it('confirms a save politely, and the confirmation survives the refetch', async () => {
+      /*
+       * The second half is the part that matters, and the browser suite is what
+       * found it. Saving refetches the course, and if the loading state
+       * unmounted the view on every refetch — not just the first load — the
+       * confirmation would vanish the instant it was earned, taking any
+       * half-typed field with it.
+       */
       const user = userEvent.setup();
       renderWithProviders(<ManageCoursePage />);
 
       await screen.findByLabelText('المدة بالدقائق');
       await user.click(screen.getByRole('button', { name: 'حفظ' }));
 
-      expect(await screen.findByText('تم حفظ البيانات')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(api.getCourse).toHaveBeenCalledTimes(2);
+      });
+
+      /* Still there after the refetch has settled, not merely at some point
+         during it. */
+      expect(screen.getByText('تم حفظ البيانات')).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: undefined })).not.toBeNull();
     });
   });
 

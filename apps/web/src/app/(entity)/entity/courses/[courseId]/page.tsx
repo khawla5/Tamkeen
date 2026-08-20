@@ -41,7 +41,21 @@ export default function ManageCoursePage() {
 
   return (
     <EntityPage title={t('manageTitle')}>
-      <DataView isLoading={course.isLoading} error={course.error} onRetry={course.refetch}>
+      {/*
+        `course.data === undefined` guards the loading state, so it appears on
+        the FIRST load only.
+
+        Without it, every refetch — and this page refetches after each save,
+        publish and withdrawal — unmounts the whole view and mounts it again.
+        That is not a flicker: the form beneath holds state, so the save
+        confirmation vanishes the instant it is earned, and anything half-typed
+        in another field goes with it. The browser suite caught exactly that.
+      */}
+      <DataView
+        isLoading={course.isLoading && course.data === undefined}
+        error={course.error}
+        onRetry={course.refetch}
+      >
         {course.data ? <ManageBody course={course.data} onChanged={course.refetch} /> : null}
       </DataView>
     </EntityPage>
