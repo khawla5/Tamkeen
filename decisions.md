@@ -5,6 +5,28 @@
 
 ---
 
+## D-068 — Every id the mock LMS hands out derives from a natural key, never from a counter
+**Decision:** `MockLmsService` derives user ids from the email and course ids from the shortname, both through the same FNV-1a helper. No id is produced by an in-memory counter. The property — that a fresh port instance does not reissue an id an earlier one gave out — is asserted in the **shared LMS contract**, not in the mock's own tests.
+
+**Why:** the mock's state dies with the process; the rows it seeded do not, and `users.moodle_user_id` and `courses.moodle_course_id` are both UNIQUE. A counter that restarts therefore hands a *new* record an id an *existing* row already holds, and the failure lands on the constraint — far from the mock, and looking nothing like its cause. This has now happened twice: once for user ids in Phase 2 (enrolment died after a restart), and once for course ids in Phase 4, where it surfaced as a 500 in the first test of the entity suite after an earlier run left a course behind. Fixing the second one the same way the first was fixed is the point of writing it down as a rule rather than as another patch.
+
+A real Moodle has this invariant for free, because its ids live in a database. That is precisely why the assertion belongs in the contract: it is a property of *the port*, which the real adapter satisfies without trying, and the mock only satisfies deliberately. Keeping it in the mock's own spec would let a future implementation quietly drop it.
+
+**Consequence:** ids are no longer sequential, so nothing may assume "the next created course is the previous id plus one". Nothing did. Two different natural keys could in principle hash into the same id; the space is a million wide against a handful of courses, and the caller already randomises the shortname per course, so this is not worth defending against in a mock.
+
+**Rejected:** seeding the counter from the database at construction (the mock would need Prisma, and an in-memory fake that reads the real database is no longer a fake); a random base per process (fixes the collision but makes the mock unreproducible run to run, which the contract suite depends on); cleaning the database before every run instead (treats the symptom, and the third occurrence would land on whoever forgot).
+
+## D-067 — Both providers correct a mis-routed account, and 403 is why the second one was missing
+**Decision:** `PortalProvider` redirects a signed-in non-`EMPLOYEE` to `/entity`, mirroring `EntityProvider`'s existing redirect of an `EMPLOYEE` to `/`. This makes real the claim D-065 already made — "each provider redirects a caller who does not belong to it" — which was only half true when it was written.
+
+**Why:** the learner provider treated *401* as "not signed in" and everything else as a data failure. That was correct until this phase applied `@Roles`, after which the journey dashboard answers **403** to an entity — signed in, just not entitled. Nothing above read that as a routing problem, so the page settled on the generic error card with a retry button that could never succeed: the one state §2B says no data view may rest in. The asymmetry was invisible because the entity side was written first and the learner side was never asked the question.
+
+The redirect stays a **courtesy, not a control**, exactly as D-065 says: the API refuses cross-portal reads regardless of what the browser renders (D-062). Nothing here loosens authorisation; it only replaces a dead end with a destination.
+
+**Consequence:** the check reads `session.data.role`, which exists only once someone is signed in, so the signed-out visitor is untouched and `/` still renders the public landing page for them. Both directions are asserted in the browser, and the root is asserted explicitly because it is also the landing page.
+
+**Rejected:** treating 403 like 401 and bouncing to `/login` (a signed-in user sent to a sign-in form they do not need, who signs in again and arrives back at the same page); rendering an "wrong portal" explanation with a link (a screen whose only content is a link is a redirect with extra steps, and §3 forbids the redundant UI); a server-side redirect (the session cookie belongs to the API origin — the same reason D-037 and D-065 rejected middleware).
+
 ## D-066 — A course's RIASEC letter is derived from its paths, never authored beside them
 **Decision:** §4B.3 asks an entity to set "path(s) the course belongs to, its RIASEC letter (consistent with the path)". The entity sets **only the path membership**; the course's RIASEC letters are **derived** from the paths it belongs to and shown read-only. There is no `riasec_letter` column on `courses`, and the metadata endpoint rejects the field outright.
 

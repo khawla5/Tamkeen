@@ -2,7 +2,9 @@
 
 Implements CLAUDE.md §4B in full, under the §4A authoring model. An entity creates a course, authors its content in Moodle through the existing handoff, sets the product metadata our app owns, publishes it into the learner catalogue, and reviews only its own learners — with data scoping and course-edit protection enforced server-side.
 
-Branch: `phase-4-entity-portal`, off `origin/main` @ `f2a6b4d`. Five commits, one per checkpoint.
+Branch: `phase-4-entity-portal`, off `origin/main` and merged up to `d2e0506` — the landing page (PR #5) landed while this branch sat unpushed and touches the same `ar.json` and `api-client.ts`, so it was merged in rather than left to GitHub: the suite backing this work should run against what it will actually land on.
+
+Five checkpoint commits, plus five from a verification pass that found four more defects (below).
 
 ---
 
@@ -46,14 +48,14 @@ Scope is a separate mechanism, in the service layer: `EntityScopeService` builds
 
 ## How it was tested
 
-**998 automated tests**, all passing. Typecheck, lint and format clean. **No new dependencies.**
+**1012 automated tests**, all passing. Typecheck, lint and format clean. **No new dependencies.**
 
 | suite                             | count |
 | --------------------------------- | ----- |
-| API unit                          | 529   |
-| Web component                     | 247   |
-| API integration (real PostgreSQL) | 190   |
-| Browser e2e (Chromium)            | 32    |
+| API unit                          | 530   |
+| Web component                     | 256   |
+| API integration (real PostgreSQL) | 192   |
+| Browser e2e (Chromium)            | 34    |
 
 The Phase 4 browser suite runs **three sessions**: an entity, a learner holding the borrowed course, and a learner holding nothing. The third exists because §2/D-015 says two things at once — a withdrawn course leaves the catalogue for new selections _and_ stays completable for whoever already holds it — and one learner can only prove half. The first draft of that test asserted the wrong half; the app was right and the test was wrong.
 
@@ -65,6 +67,20 @@ Three tests that were passing for the wrong reason were fixed rather than left: 
 
 **The contract suite earned its keep for the third time**, catching `MockLmsService.createCourse` throwing synchronously where the real adapter rejects, which would have escaped a caller's `.catch()` entirely.
 
+## The verification pass, and the four defects it found
+
+The phase was already green at 998 tests. A pass that set out to break it found four things, none of which those tests could see.
+
+**An entity on any learner page reached a dead end (D-067).** D-065 claimed "each provider redirects a caller who does not belong to it". It was half true — the entity portal returned a mis-routed employee, and the learner portal left a mis-routed entity on the generic error card with a retry that could never succeed, which is the one state §2B says no data view may rest in. The cause is this phase's own doing: applying `@Roles` made the journey dashboard answer **403** rather than 401, so nothing above it read the failure as a routing problem. Found by driving the merged build in a browser, not by a test. Both directions are now asserted, including on `/`, since that path is also the public landing page and the redirect must not disturb it.
+
+**The mock LMS reissued a course id after a restart (D-068).** It surfaced as a 500 in the _first_ test of the entity suite, nowhere near its cause. The mock's state dies with the process; the rows it seeded do not, and `courses.moodle_course_id` is UNIQUE — so any course outliving its process made the next creation collide. `idFor` had already fixed exactly this for user ids and explains why in its own comment; course ids kept the counter anyway. Both now derive from a natural key through one helper, and the property is pinned in the **shared LMS contract**, not the mock's own spec: the real adapter gets it free from Moodle's database, which is what makes it a property of the port. **Fourth time** the mock has been easier to satisfy than reality (D-036, D-045, D-060).
+
+**`published_at` asked the wrong question.** It was set only when the course was currently a `DRAFT`, so a course withdrawn before it was ever published reached `PUBLISHED` with no date — permanently, since the condition never comes true again. The endpoint allows that withdrawal and no screen offers it, but the state is reachable and was reproduced against a running API. It now asks whether the column is null, which is the fact it records. Nothing renders the field yet; §4C.5 will, and a column silently wrong until the screen that reads it exists is a defect delivered with a delay.
+
+**An e2e fixture blamed the wrong code.** It lends the test entity `MAX(moodle_course_id)` among unowned courses, meaning the last catalogue course — but created courses are numbered above the catalogue, so one left behind became the borrowed course instead, and the suite failed on the publish bridge, which was not at fault. Bounded below the created range, and proven with two consecutive full runs holding a created course in the database throughout.
+
+Also re-checked and correct: every controller carries `@Roles`; `courses.status` has exactly three writers and all go through `effectiveCourseStatus`; the migration backfill still reads 47 `AVAILABLE` + 1 `HIDDEN_BUT_COMPLETABLE` against the live database; the six entity pages render RTL Arabic with no console errors and no failed requests.
+
 ## "Done when" (CLAUDE.md §7, Phase 4)
 
 > An entity can create a course, author its content in Moodle via handoff, set its path + RIASEC + product metadata, publish it so it appears in the learner catalog, and review only its own learners' progress.
@@ -73,7 +89,7 @@ All satisfied, and each is exercised in the browser suite. Objectives and prereq
 
 ## Decisions recorded
 
-D-059 (publication/visibility split — revises D-040) · D-060 (shell in the LMS, `editingteacher`, plugin untouched) · D-061 (publish gate refuses) · D-062 (`@Roles` + scoping as a query filter) · D-063 (`entities` model, nullable ownership) · D-064 (what an entity may see about a learner) · D-065 (own route group, role-based routing) · D-066 (RIASEC derived from paths).
+D-059 (publication/visibility split — revises D-040) · D-060 (shell in the LMS, `editingteacher`, plugin untouched) · D-061 (publish gate refuses) · D-062 (`@Roles` + scoping as a query filter) · D-063 (`entities` model, nullable ownership) · D-064 (what an entity may see about a learner) · D-065 (own route group, role-based routing) · D-066 (RIASEC derived from paths) · **D-067** (both providers correct a mis-routed account; 403 is why the second was missing) · **D-068** (every mock LMS id derives from a natural key, never a counter).
 
 ## Needs a human before production
 
@@ -82,4 +98,6 @@ D-059 (publication/visibility split — revises D-040) · D-060 (shell in the LM
 - **Ministry approval of custom Moodle plugins is still unconfirmed** (D-044). Unchanged by this phase, deliberately.
 - **Entity accounts are created by a seed, not a screen** — §4C.2 gives the super-admin that in Phase 5.
 
-Progress entry: `progress.md` → "2026-08-20 — Phase 4 complete".
+Progress entries: `progress.md` → "2026-08-20 — Phase 4 complete" and "2026-08-22 — Phase 4 verification pass".
+
+One thing left open on purpose: eight API error codes have no Arabic entry (`CV_INVALID_DATE`, `CERTIFICATE_NOT_FOUND` among them). All are Phase 3's, all fall back to the generic Arabic message rather than a crash or a raw code, and none is Phase 4's to widen — **Phase 6**'s Arabic content QA owns them.

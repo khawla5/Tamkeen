@@ -6,12 +6,12 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 4 — the entity / reviewer portal — **COMPLETE, awaiting the user's test approval before the PR is opened.**
-- **Last completed task:** The **Phase 4 browser end-to-end pass** — an entity signs in to its own portal, creates a course, is refused publication with reasons, sets the product metadata, withdraws a published course and watches it leave the learner catalogue while staying completable for the learner holding it, publishes it again, and reviews that learner.
+- **Current phase:** Phase 4 — the entity / reviewer portal — **COMPLETE and verified; PR opened.**
+- **Last completed task:** The **Phase 4 verification pass** — the whole suite re-run against a `main` that had moved under the branch, four defects found and fixed (D-067, D-068, `published_at`, the e2e fixture), and the six entity pages checked in a real browser.
 - **Next task:** **Phase 5 — the super-admin portal** (full spec in CLAUDE.md §4C), once the Phase 4 PR is merged.
-- **Active branch:** `phase-4-entity-portal` (5 commits), off `origin/main` @ `f2a6b4d`. **PR not yet opened** (D-008 — the user approves the test first).
-- **Phase 3 is merged** (PR #4, `origin/main` @ `f2a6b4d`).
-- **Test totals:** 529 API unit · 247 web component · 190 API integration against real PostgreSQL · 32 browser e2e in Chromium — **998 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
+- **Active branch:** `phase-4-entity-portal`, off `origin/main` and **merged up to `d2e0506`** so the suite ran against what it will land on. **PR opened**, not merged (D-008).
+- **Phase 3 is merged** (PR #4). **The landing page is merged** (PR #5, `origin/main` @ `d2e0506`) — it landed after this branch was cut and touches the same `ar.json` and `api-client.ts`.
+- **Test totals:** 530 API unit · 256 web component · 192 API integration against real PostgreSQL · 34 browser e2e in Chromium — **1012 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
 - **Open blockers / questions for the human:**
   1. **⚠ THE MINISTRY LOGO AND SEAL ARE STILL MISSING.** Certificates ship with a neutral placeholder mark and an empty signature block (name + title). The slot is sized and positioned, so dropping in the real artwork is not a layout change — but **no certificate should reach a real employee until this is supplied** (D-051).
   2. **⚠ MINISTRY APPROVAL OF CUSTOM MOODLE PLUGINS IS STILL UNCONFIRMED.** Unchanged since Phase 2 and still the longest-lead dependency: seamless login uses `local_tamkeensso`, and if the ministry refuses custom PHP the fallback is the OAuth2-IdP route (D-044). Phase 4 deliberately did **not** enlarge that surface — the authoring handoff reuses the plugin unmodified (D-060).
@@ -56,6 +56,8 @@
 - **An entity's own record is read-only, and an entity cannot add a colleague to its organisation.** Who a ministry supplier is, and who speaks for them, is a contractual fact rather than a self-service setting — both belong to **Phase 5**'s user management (§4C.2).
 - **Course ordering within a path is not editable.** `path_courses.display_order` is set from the path's own order when a course is first attached and left alone thereafter; §4C.4 gives ordering to the admin in **Phase 5**.
 - **A course withdrawn from the LMS side is still only detectable by sync.** An entity sees `lms_present: false` reflected in the status, but nothing tells them *why* a course they published is no longer available. **Phase 6**'s sync-reliability work owns surfacing that.
+- **Eight API error codes have no Arabic copy** — `CERTIFICATE_NOT_FOUND`, `CERTIFICATE_FILE_UNAVAILABLE`, `CERTIFICATE_FILE_CORRUPT`, `COURSE_NOT_ENROLLED`, `CV_INVALID_DATE`, `CV_TOO_MANY_ENTRIES`, `ENTITY_NOT_FOUND`, `USER_NOT_FOUND`. `useErrorMessage` falls back to the generic Arabic message, so none reaches a user as a raw code, but the specific ones would help. **Phase 6**'s Arabic content QA owns them.
+- **`published_at` is written and nothing reads it.** Correct as of D-067's sibling fix, and asserted both ways; **Phase 5**'s §4C.5 course oversight is what will finally display it.
 
 ---
 
@@ -107,10 +109,39 @@
 - **An entity sees a learner's name, department, progress and grade — and nothing else (D-064).** No email, no employee ID, no Holland Code, no path, no certificates.
 - **The entity portal is its own route group, and sign-in routes by role (D-065).**
 - **A course's RIASEC letters are derived from its paths, never authored beside them (D-066).** §3A makes the path the owner of the letter, so a stored copy could contradict it and nothing downstream would notice.
+- **Both providers correct a mis-routed account, and 403 is why the second was missing (D-067).** Makes real the claim D-065 already made; the redirect stays a courtesy, never a control.
+- **Every id the mock LMS hands out derives from a natural key, never a counter (D-068).** The mock's state dies with the process, the rows do not, and both LMS id columns are UNIQUE. Asserted in the shared contract.
 
 ---
 
 ## Log (newest first)
+
+### 2026-08-22 — Phase 4 verification pass: four defects found, fixed, and the PR opened
+
+The phase was already written and green. This session tried to break it, and did — four times. **1012 automated tests** now pass: 530 API unit, 256 web component, 192 API integration against real PostgreSQL, 34 browser e2e in Chromium. Lint, format and typecheck clean.
+
+**`main` had moved.** The landing page merged as PR #5 while this branch sat unpushed, touching the same `ar.json` and `api-client.ts` this phase extends. Merged into the branch rather than left to GitHub: the merge was clean, but "the tests pass" means nothing if the suite never ran against what the code will actually land on.
+
+**Four defects, none of which the existing 998 tests could see.**
+
+| what | how it was found | why no test caught it |
+|---|---|---|
+| an entity on any learner page got a dead error card | driving the merged build in a browser | `@Roles` made the dashboard answer 403, not 401 — no suite asked what a non-employee sees on `/` (D-067) |
+| the mock reissued a course id after a restart | a 500 in the first test of the entity suite | the mock's state dies with the process; the rows do not, and `moodle_course_id` is UNIQUE (D-068) |
+| `published_at` never set on a course withdrawn while still a draft | reading the publish path, then reproducing it against a running API | nothing renders the column yet — §4C.5 will |
+| the e2e fixture borrowed a created course, not a catalogue one | the suite failed on the publish bridge, which was not at fault | `MAX(moodle_course_id)` is not the same question as "the last catalogue course" |
+
+**The one that mattered most was the cheapest to fix.** D-065 already claimed "each provider redirects a caller who does not belong to it". It was half true: the entity portal returned a mis-routed employee, and the learner portal left a mis-routed entity staring at a retry button that could never succeed — §2B's forbidden state, shipped, in the phase that created the role which reaches it. Applying `@Roles` is what turned the dashboard's answer from 401 into 403 and broke the assumption the provider rested on.
+
+**The mock was easier to satisfy than reality for the fourth time** (D-036, D-045, D-060, now D-068). Its own comment records fixing exactly this for user ids and explains why a counter cannot work across a restart; course ids kept the counter anyway. Both now derive from a natural key through one helper, and the property is asserted in the **shared contract** rather than the mock's own spec — the real adapter gets it free from Moodle's database, which is what makes it a property of the port.
+
+**`published_at` asked the wrong question.** It was set only when the course was currently a `DRAFT`, so a course withdrawn before it was ever published reached `PUBLISHED` with no date, permanently — the condition never comes true again. It now asks whether the column is null, which is the fact it records. Nothing reads it yet; that is the argument for fixing it now rather than in the phase that builds the screen.
+
+**A fixture that blamed the wrong code.** The e2e entity fixture lends out `MAX(moodle_course_id)` among unowned courses, meaning the last catalogue course. Created courses are numbered above the catalogue, so one left behind — by an aborted run, or by catalogue sync legitimately re-mirroring a course the LMS still holds — became the borrowed course instead, and the suite failed asserting a learner could see a draft that was never publishable. Bounded, and proven with two consecutive full runs holding a created course in the database throughout.
+
+**Also checked, and correct:** every controller carries `@Roles`; `courses.status` has exactly three writers and all go through `effectiveCourseStatus`; the migration backfill still reads 47 `AVAILABLE` + 1 `HIDDEN_BUT_COMPLETABLE` against the live database; the six entity pages render RTL Arabic with no console errors and no failed requests; unknown API error codes fall back to generic Arabic copy rather than surfacing a raw code.
+
+**One observation, not fixed:** eight API error codes have no Arabic entry (`CERTIFICATE_NOT_FOUND`, `CV_INVALID_DATE`, `CV_TOO_MANY_ENTRIES` among them). All are Phase 3's, all degrade to the generic message rather than to a crash or a raw code, and none is Phase 4's to widen. **Phase 6's Arabic content QA** owns them.
 
 ### 2026-08-20 — Phase 4 complete; awaiting the user's test approval
 
