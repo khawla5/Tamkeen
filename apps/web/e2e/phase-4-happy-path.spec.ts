@@ -279,4 +279,20 @@ test.describe('Phase 4 — the entity portal', () => {
 
     await expect(learnerPage).toHaveURL('http://localhost:3000/', { timeout: 15_000 });
   });
+
+  test('and an entity who types a learner page is sent back to theirs', async () => {
+    /*
+     * The return half of the same courtesy, and the one that actually broke.
+     * `@Roles` makes the journey dashboard answer 403 to an entity, not 401, so
+     * the learner provider did not read it as a session problem and settled on
+     * an error card offering a retry that could never succeed. Checked on the
+     * root as well, because that path is also the public landing page and the
+     * redirect must not disturb it.
+     */
+    for (const path of ['/courses', '/']) {
+      await entityPage.goto(path);
+
+      await expect(entityPage).toHaveURL('http://localhost:3000/entity', { timeout: 15_000 });
+    }
+  });
 });
