@@ -495,6 +495,63 @@ describe('Entity course lifecycle (e2e)', () => {
 
       await post(`/api/entity/courses/${course.id}/publish`, {}, otherSession).expect(404);
     });
+
+    /* `published_at` answers "published since when", so it is set at the first
+       publish and never moved afterwards. Nothing renders it yet — §4C.5's
+       oversight will — which is exactly why it is asserted here: a column that
+       is silently wrong until the screen that reads it is built is a defect
+       delivered with a delay. */
+    it('dates the first publish, and keeps that date through a withdrawal', async () => {
+      const course = await makePublishable(await createCourse());
+
+      await post(`/api/entity/courses/${course.id}/publish`, {}, session).expect(200);
+
+      const first = await prisma.course.findUniqueOrThrow({
+        where: { id: course.id },
+        select: { publishedAt: true },
+      });
+
+      expect(first.publishedAt).not.toBeNull();
+
+      await post(`/api/entity/courses/${course.id}/unpublish`, {}, session).expect(200);
+      await post(`/api/entity/courses/${course.id}/publish`, {}, session).expect(200);
+
+      const again = await prisma.course.findUniqueOrThrow({
+        where: { id: course.id },
+        select: { publishedAt: true },
+      });
+
+      expect(again.publishedAt).toEqual(first.publishedAt);
+    });
+
+    /* The endpoint does not refuse a withdrawal of something never published,
+       and the manage screen offers no such button — but the state is reachable,
+       and a course that reaches PUBLISHED with no date is published with nothing
+       saying since when. Asking `publishedAt is null` rather than
+       `publication === 'DRAFT'` is what keeps the two questions apart. */
+    it('still dates a publish that follows a withdrawal made while it was a draft', async () => {
+      const course = await createCourse();
+
+      await post(`/api/entity/courses/${course.id}/unpublish`, {}, session).expect(200);
+
+      const withdrawn = await prisma.course.findUniqueOrThrow({
+        where: { id: course.id },
+        select: { publication: true, publishedAt: true },
+      });
+
+      expect(withdrawn).toMatchObject({ publication: 'UNPUBLISHED', publishedAt: null });
+
+      await makePublishable(course);
+      await post(`/api/entity/courses/${course.id}/publish`, {}, session).expect(200);
+
+      const published = await prisma.course.findUniqueOrThrow({
+        where: { id: course.id },
+        select: { publication: true, status: true, publishedAt: true },
+      });
+
+      expect(published).toMatchObject({ publication: 'PUBLISHED', status: 'AVAILABLE' });
+      expect(published.publishedAt).not.toBeNull();
+    });
   });
 
   describe('publishing bridges to the learner catalogue (§4A)', () => {

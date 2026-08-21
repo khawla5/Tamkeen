@@ -387,14 +387,27 @@ export class EntityCourseManagementService {
       });
     }
 
+    /*
+     * Set once, on the first publish. Re-publishing after a withdrawal keeps the
+     * original date, which is what "published since" means to anyone reading it.
+     *
+     * The condition is `publishedAt is null`, not `publication === 'DRAFT'`,
+     * because those are not the same question. A course withdrawn before it was
+     * ever published sits at UNPUBLISHED with no date, and testing the
+     * publication would have left it dateless for good — published, with nothing
+     * saying since when. The column already records whether a first publish has
+     * happened, so it is the thing to ask.
+     */
+    const current = await this.prisma.course.findUniqueOrThrow({
+      where: { id: courseId },
+      select: { publishedAt: true },
+    });
+
     await this.prisma.course.update({
       where: { id: courseId },
       data: {
         publication: 'PUBLISHED',
-        /* Set once, on the first publish. Re-publishing after a withdrawal keeps
-           the original date, which is what "published since" means to anyone
-           reading it. */
-        publishedAt: detail.publication === 'DRAFT' ? new Date() : undefined,
+        publishedAt: current.publishedAt ?? new Date(),
       },
     });
 
