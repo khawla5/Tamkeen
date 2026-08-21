@@ -9,7 +9,7 @@
 - **Current phase:** Phase 4 — the entity / reviewer portal — **COMPLETE and verified; PR opened.**
 - **Last completed task:** The **Phase 4 verification pass** — the whole suite re-run against a `main` that had moved under the branch, four defects found and fixed (D-067, D-068, `published_at`, the e2e fixture), and the six entity pages checked in a real browser.
 - **Next task:** **Phase 5 — the super-admin portal** (full spec in CLAUDE.md §4C), once the Phase 4 PR is merged.
-- **Active branch:** `phase-4-entity-portal`, off `origin/main` and **merged up to `d2e0506`** so the suite ran against what it will land on. **PR opened**, not merged (D-008).
+- **Active branch:** `phase-4-entity-portal`, off `origin/main` and **merged up to `d2e0506`** so the suite ran against what it will land on. **PR #6 opened**, not merged (D-008).
 - **Phase 3 is merged** (PR #4). **The landing page is merged** (PR #5, `origin/main` @ `d2e0506`) — it landed after this branch was cut and touches the same `ar.json` and `api-client.ts`.
 - **Test totals:** 530 API unit · 256 web component · 192 API integration against real PostgreSQL · 34 browser e2e in Chromium — **1012 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
 - **Open blockers / questions for the human:**
