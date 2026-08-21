@@ -41,6 +41,15 @@ export interface SeededEntity {
   borrowedCourse: { id: string; title: string; moodleCourseId: number };
 }
 
+/**
+ * Where the LMS starts numbering courses created through the portal.
+ *
+ * Mirrors `MockLmsService.nextCourseId`. Duplicated rather than imported: this
+ * fixture talks to the database directly with `pg` and pulling in an API module
+ * would drag Nest into the Playwright process for one number.
+ */
+const CREATED_COURSE_ID_BASE = 900_001;
+
 async function withClient<T>(run: (client: Client) => Promise<T>): Promise<T> {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
@@ -93,14 +102,24 @@ export async function seedEntity(label: string): Promise<SeededEntity> {
      * The borrowed course, chosen from the *end* of the catalogue and from no
      * path the learner journey builds against, so lending it out cannot change
      * what another spec sees. Ownership is restored in `releaseEntity`.
+     *
+     * Bounded below the range the LMS assigns to courses created through the
+     * portal, because "the highest id" alone is not the same question as "the
+     * last catalogue course". A created course always outranks the catalogue,
+     * so a single stray one — from a run that died before `releaseEntity`, or
+     * from a course made by hand while developing — silently became the
+     * borrowed course, and the suite then failed asserting a learner could see
+     * a draft that was never publishable. The failure named the wrong culprit
+     * and cost a full run to trace.
      */
     const course = await client.query<{ id: string; title: string; moodle_course_id: number }>(
       `UPDATE courses SET owner_entity_id = $1
         WHERE moodle_course_id = (
-          SELECT MAX(moodle_course_id) FROM courses WHERE owner_entity_id IS NULL
+          SELECT MAX(moodle_course_id) FROM courses
+           WHERE owner_entity_id IS NULL AND moodle_course_id < $2
         )
       RETURNING id, title, moodle_course_id`,
-      [entityId],
+      [entityId, CREATED_COURSE_ID_BASE],
     );
 
     const borrowed = course.rows[0];
