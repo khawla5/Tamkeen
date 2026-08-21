@@ -17,6 +17,24 @@ import {
 import { MOCK_COURSES, MOCK_LMS_BASE_URL } from './mock-lms.data';
 
 /**
+ * FNV-1a, used to derive a stable id from a natural key.
+ *
+ * Not a security hash — just a well-spread deterministic one. It exists so that
+ * both of the mock's ids survive a process restart, which is the invariant a
+ * real Moodle has for free and which this mock has now had to learn twice.
+ */
+function fnv1a(value: string): number {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+
+  return hash;
+}
+
+/**
  * In-memory LMS, used until Phase 2 connects a real Moodle.
  *
  * It exists so Phase 1 can build the entire assessment → path → course flow
@@ -51,14 +69,21 @@ export class MockLmsService implements LmsPort {
   /**
    * Ids for created courses, from a range the seeded catalogue never uses.
    *
-   * Unlike user ids — which are derived from the email so an account keeps its
-   * id across restarts (see `idFor`) — a course has no natural key to derive
-   * from, and Moodle's own ids are sequential. A counter is the faithful
-   * simulation here; the id is stored in our `courses` row at creation, so it
-   * does not need to survive a restart to be found again.
+   * **Derived from the shortname, not counted** — and the reason is the same
+   * defect `idFor` below already records, found a second time in the same class.
+   * The counter restarted at 900_001 with every API process, but
+   * `courses.moodle_course_id` in our database does not and is UNIQUE. So any
+   * course row outliving the process that made it — an interrupted test run, a
+   * course created while developing — made the next `createCourse` hand out an
+   * id already taken, and creation died on the constraint with a 500.
+   *
+   * A real Moodle never reissues a course id. The shortname is the natural key
+   * it enforces uniqueness on, and the caller already generates a fresh random
+   * one per course (see `EntityCourseManagementService.create`), so deriving
+   * from it reproduces that invariant across restarts.
    */
-  private nextCourseId(): LmsCourseId {
-    return 900_001 + this.created.length;
+  private nextCourseId(shortName: string): LmsCourseId {
+    return 900_001 + (fnv1a(shortName) % 1_000_000);
   }
 
   private key(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
@@ -81,15 +106,8 @@ export class MockLmsService implements LmsPort {
    * hash, just a well-spread deterministic one.
    */
   private idFor(email: string): LmsUserId {
-    let hash = 0x811c9dc5;
-
-    for (let index = 0; index < email.length; index += 1) {
-      hash ^= email.charCodeAt(index);
-      hash = Math.imul(hash, 0x01000193) >>> 0;
-    }
-
     /* Offset so ids never collide with the small numbers used in fixtures. */
-    return 5001 + (hash % 1_000_000);
+    return 5001 + (fnv1a(email) % 1_000_000);
   }
 
   checkHealth(): Promise<LmsHealth> {
@@ -179,7 +197,7 @@ export class MockLmsService implements LmsPort {
     this.shortNames.add(input.shortName);
 
     const course: LmsCourse = {
-      lmsCourseId: this.nextCourseId(),
+      lmsCourseId: this.nextCourseId(input.shortName),
       title: input.title,
       summary: input.summary,
       durationMinutes: null,

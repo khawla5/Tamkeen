@@ -246,6 +246,26 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
         expect(summary?.completionConfigured).toBe(false);
       });
 
+      it('does not reissue an id to a course made by a later instance', async () => {
+        /*
+         * A restart must not hand a new course an id an existing one already
+         * holds. `courses.moodle_course_id` is UNIQUE, so when the mock counted
+         * from a fixed base on every process start, any course row outliving its
+         * process made the next creation fail on the constraint with a 500 —
+         * found for real while testing Phase 4.
+         *
+         * A second port stands in for the restart. The real adapter has this for
+         * free from Moodle's own database, which is precisely why it belongs in
+         * the contract rather than in the mock's own tests.
+         */
+        const first = await lms.createCourse(input());
+        const afterRestart = createPort();
+
+        const second = await afterRestart.createCourse(input());
+
+        expect(second.lmsCourseId).not.toBe(first.lmsCourseId);
+      });
+
       it('refuses a duplicate short name', async () => {
         /* Moodle enforces this, so an implementation that did not would let a
            collision be discovered for the first time in production. */
