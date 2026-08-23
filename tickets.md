@@ -19,7 +19,7 @@
 
 ---
 
-## TAM-101 — Auth shell: centred government template + DGA form primitives — **DONE** (`feature/tam-101-auth-shell`)
+## TAM-101 — Auth shell: centred government template + DGA form primitives — **DONE** (`feature/tam-101-102-auth-shell-login`)
 
 - **Labels:** `auth-ui-port`, `frontend`, `design-system`
 - **Priority:** High (blocks every other ticket in the epic)
@@ -29,7 +29,7 @@
 - **Acceptance met:** one `h1`; header/main/footer landmarks; pattern `aria-hidden`; no physical-direction classes, no retired tokens (tested); 9 `Field` accessibility tests unchanged and green.
 - **Open:** whether Platforms Code publishes an official login template (official site unreadable from here) — if it does, reconcile; the decorative lattice is below AA on purpose.
 
-## TAM-102 — Sign-in page restyle (wired) — **DONE** (`feature/tam-101-auth-shell`)
+## TAM-102 — Sign-in page restyle (wired) — **DONE** (`feature/tam-101-102-auth-shell-login`)
 
 - **Labels:** `auth-ui-port`, `frontend`
 - **Priority:** High
@@ -41,7 +41,7 @@
 
 - **Labels:** `auth-ui-port`, `frontend`
 - **Priority:** High
-- **Pre-requisite:** TAM-101 + TAM-102 (done). **Own branch:** `feature/tam-103-register-wizard` off `feature/tam-101-auth-shell`.
+- **Pre-requisite:** TAM-101 + TAM-102 (done). **Own branch:** `feature/tam-103-register-wizard` off `feature/tam-101-102-auth-shell-login`.
 - **Description:**
   Rebuild `/register` inside `AuthLayout` as a two-step wizard, keeping the reference's step-wizard feel but **deleting the role picker**: **Step 1** account (email, password, confirm password) → **Step 2** employee details (full name, employee ID, department). Arabic step indicator ("الخطوة 1 من 2", western digits). Per-step client validation; one server submit at the end; back preserves entered values. Server-side rules (restricted domain, employee-ID pattern, password policy) untouched.
   A server error on submit must return the user to the step containing the offending field, with the field-level Arabic error shown.
