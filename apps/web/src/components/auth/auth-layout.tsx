@@ -66,10 +66,13 @@ export function AuthLayout({
               link sits and where the page leads away to. */}
           <Link
             href="/landing"
+            aria-label={tAuth('backToLanding')}
             className="ms-auto flex items-center gap-1.5 text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
           >
-            <ArrowLeft aria-hidden="true" className="size-4" />
-            {tAuth('backToLanding')}
+            <ArrowLeft aria-hidden="true" className="size-5 sm:size-4" />
+            {/* On a phone the label would wrap into the logos; the arrow
+                carries the link, the aria-label carries the name. */}
+            <span className="hidden sm:inline">{tAuth('backToLanding')}</span>
           </Link>
         </div>
       </header>
