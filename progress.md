@@ -144,6 +144,16 @@
 
 ## Log (newest first)
 
+### 2026-08-23 — One loader for every navigation (TAM-122, D-093 — authored as D-072, renumbered at rebase)
+
+Branch `feature/navigation-loader`, off `feature/dga-alignment`. Moving between pages showed nothing for the few hundred milliseconds between the old page leaving and the new page's `LoadingState` arriving — long enough to click twice. `NavigationProgress` is now mounted once in the root layout: a top progress bar that starts at the click (a capture-phase listener, so it catches every internal link without wrapping `Link`), on back/forward, and on programmatic navigations through `useAppRouter()`, which replaces `useRouter` at all seven call sites so nothing can bypass it. It completes on the route change — the only honest signal the App Router gives. One polite announcement per navigation; the bar is decoration. `loading.tsx` files were rejected: with client-side fetching they would flash and hand over to `LoadingState`, two loaders for one wait. 292 web unit tests, typecheck, lint, prettier.
+
+### 2026-08-23 — TAM-106: the catalogue does not exist before the assessment (entry restored — dropped in PR #13's merge resolution)
+
+Branch `feature/tam-106-nav-gating`, off `feature/dga-alignment` — it touches nothing the auth stack touches. One branch in `navForState` and one redirect in `PortalProvider`, beside the 401 and wrong-portal redirects it already owns; the test that pinned the old three-item nav was updated rather than duplicated, and a new `PortalProvider` test covers the redirect, including that the loading state shows and the page never renders. The spec change is recorded (D-071, CLAUDE.md §4.2/§4.6), including the deliberate choice to leave the courses API open.
+
+**The e2e told the truth about the old rule:** two catalogue flows browsed the catalogue *before* the assessment — exactly what §4.2 used to permit — and had to become post-assessment flows. The journey now asserts two nav items and the bounce before the assessment, and الدورات appearing after it without a reload. One run failed at the pre-existing path-build counter step while the dev server was recompiling (46s run); two clean re-runs at 10s each say it is that step's race under load, not the gate — worth a look in the Phase 6 reliability pass.
+
 ### 2026-08-23 — Sub-phase 5.4: path management, and a flake chased to its cause
 
 §4C.4 built: create and edit paths, `path_courses` membership **and ordering** (owed since Phase 4), the attach picker, and retirement that cannot strand anybody. The 5-10 rule is printed on the page and has no control anywhere (D-074).

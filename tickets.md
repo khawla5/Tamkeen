@@ -394,3 +394,17 @@
 - **Description:**
   The TAM-105 pattern for the portal: an e2e spec that signs in, drives to every learner and entity page in a representative state, runs axe (WCAG 2.1 A/AA) and asserts no horizontal overflow at 360/768/1280; a keyboard walk of the shell (skip link → header actions → sidebar → page action). Screenshot review at the three widths; findings fixed or ticketed. Docs: decisions.md entry for the light sidebar and the portal shell; CLAUDE.md §4 page specs updated where the shell changed them; progress.md.
   **Acceptance:** gate green in CI; no open critical/high findings; docs updated.
+
+  Once the tokens are in and the public surfaces prove the direction, align the signed-in portal's **components and patterns** (sidebar/navigation, cards, forms, tables, empty/loading/error states, the recommended-path treatment, the status strip) to Platforms Code equivalents — colors will already have changed via TAM-115. Break this into per-surface tickets at that point; the currently written tickets (TAM-106–114) remain valid in behaviour and should be implemented against the new tokens, not blocked on this stub.
+
+---
+
+> **Epic label: `app-chrome`** — cross-cutting behaviour every page shares.
+
+## TAM-122 — One navigation loader across the app — **DONE** (`feature/navigation-loader`, off `feature/dga-alignment`)
+
+- **Labels:** `app-chrome`, `frontend`, `design-system`
+- **Priority:** Medium
+- **Pre-requisite:** none
+- **What shipped (2026-08-23):** `NavigationProgress` mounted once in the root layout — a 3px primary top bar that starts on any internal link click (capture phase, so `next/link` and plain anchors alike), on back/forward, and on programmatic `push`/`replace` through the new `useAppRouter()` (all seven call sites rewired; it is now the only router hook pages use); completes on the route change; one polite "جارٍ الانتقال…" status per navigation; reduced-motion collapses the animation. In-page data waits keep `LoadingState`. D-072 recorded; CLAUDE.md §3 notes the rule. 5 component tests (idle → active → complete; external/new-window/hash/modified clicks ignored; programmatic start; a11y shape).
+

@@ -147,6 +147,7 @@ These apply to **every** phase. A phase/task is not "done" until it meets all of
 - Prefer a single clear primary action per screen.
 - Context-dependent buttons: show only the one action that applies (e.g. a course shows *either* "أضف إلى مساري" *or* "ابدأ الدورة" *or* "مكتمل" — never all three).
 - Keep steady-state navigation to ~6 items. Flow pages (assessment, results) are not permanent nav.
+- **One navigation loader (D-093):** `NavigationProgress` in the root layout — a top progress bar for every page change, link or programmatic (`useAppRouter()` is the only router hook pages use). In-page data waits use `LoadingState` via `DataView`; never a second spinner for a navigation.
 
 ---
 

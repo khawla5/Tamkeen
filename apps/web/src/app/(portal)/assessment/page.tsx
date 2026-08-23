@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -51,7 +51,7 @@ function AssessmentFlow({ assessment }: { assessment: AssessmentView }) {
   const t = useTranslations('assessment');
   const tActions = useTranslations('actions');
   const translateError = useErrorMessage();
-  const router = useRouter();
+  const router = useAppRouter();
   const format = useFormat();
   const { refresh } = usePortal();
 

@@ -5,6 +5,15 @@
 
 ---
 
+## D-093 — One navigation loader for the whole app: a top progress bar, started at the click, completed by the route change
+**Decision:** `NavigationProgress`, mounted once in the root layout, is the loader for moving between pages: a 3px primary bar along the top edge that starts the instant a navigation starts and completes when the route has changed. It starts from a capture-phase click listener (every internal link, `next/link` or not, same-origin, not a new window, not a hash, not a modified click), from `popstate`, and from `startNavigation()`, which `useAppRouter()` — the only router hook pages use — calls on `push`/`replace`. It completes on the pathname/search change, the App Router's only honest "the new page is in" signal. One polite "جارٍ الانتقال…" per navigation for assistive technology; the bar itself is `aria-hidden`. In-page data loading keeps `LoadingState`; the bar never speaks for a fetch.
+
+**Why:** with client-side data fetching, a navigation often shows nothing for several hundred milliseconds — the old page is gone, the new page's `LoadingState` has not rendered yet — and a user clicks twice. A per-page solution would be inconsistent by construction; a per-link one (`useLinkStatus`) misses programmatic navigations, which are a third of ours. The bar is the pattern government portals and the web at large use for exactly this, and it costs no dependency.
+
+**Numbering note:** this decision was authored as D-072 on its feature branch, in parallel with Phase 5, whose merge claimed D-072–D-092 first; renumbered D-093 at rebase. Commit messages referencing D-072 for the loader mean this entry.
+
+**Rejected:** `loading.tsx` route files (they cover server-rendered segments, but these pages fetch on the client — the fallback would flash for a moment and then hand over to `LoadingState`, two loaders for one wait); a full-page overlay (blocks the page for a transition that usually takes under a second); a third-party progress library (this is 80 lines); wrapping `Link` (misses plain anchors and programmatic routes).
+
 ## D-092 — A provider never unmounts the page it is providing to
 
 **Decision:** the three portal providers gate their loading state on `isInitialLoad`, not `isLoading`, and `PreferenceProvider` always renders `FormatProvider` — resolving "no preference" to the *inherited* context rather than returning `children` bare.

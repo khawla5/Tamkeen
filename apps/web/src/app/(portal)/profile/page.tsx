@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -38,7 +38,7 @@ import { useApiMutation } from '@/lib/use-api';
 export default function ProfilePage() {
   const t = useTranslations('profile');
   const { user, refreshSession } = usePortal();
-  const router = useRouter();
+  const router = useAppRouter();
 
   const signOut = useApiMutation(() => authApi.logout());
 

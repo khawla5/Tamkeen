@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import localFont from 'next/font/local';
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 
 import { HTML_DIR, HTML_LANG, getFormatContext } from '@/i18n/config';
+import { NavigationProgress } from '@/components/layout/navigation-progress';
 import { FormatProvider } from '@/i18n/format-provider';
 
 import './globals.css';
@@ -45,7 +47,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang={HTML_LANG} dir={HTML_DIR} className={arabic.variable}>
       <body className="min-h-dvh font-sans antialiased">
         <NextIntlClientProvider>
-          <FormatProvider context={getFormatContext()}>{children}</FormatProvider>
+          <FormatProvider context={getFormatContext()}>
+            {/* useSearchParams inside needs a Suspense boundary or the whole
+                tree opts out of static rendering. */}
+            <Suspense fallback={null}>
+              <NavigationProgress />
+            </Suspense>
+            {children}
+          </FormatProvider>
         </NextIntlClientProvider>
       </body>
     </html>
