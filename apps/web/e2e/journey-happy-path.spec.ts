@@ -42,7 +42,22 @@ test.describe('Phase 1 journey', () => {
 
     // ── The assessment ────────────────────────────────────────────────────────
     await expect(page).toHaveURL(/\/assessment$/);
-    await completeAssessment(page);
+
+    /* D-073: the sidebar stays during the assessment, and leaving mid-way keeps
+       the answers — answer two, visit the profile, come back, still on the
+       third statement. */
+    await expect(nav.getByRole('link')).toHaveCount(2);
+    for (let i = 0; i < 2; i += 1) {
+      await page.getByRole('radio').last().check();
+      await page.getByRole('button', { name: 'التالي' }).click();
+    }
+    await expect(page.getByText('السؤال 3 من 30')).toBeVisible();
+    await nav.getByRole('link', { name: 'الملف الشخصي' }).click();
+    await expect(page).toHaveURL(/\/profile$/);
+    await page.goto('/assessment');
+    await expect(page.getByText('السؤال 3 من 30')).toBeVisible();
+
+    await completeAssessment(page, 3);
 
     // ── Results: the code, then gold paths ────────────────────────────────────
     await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });

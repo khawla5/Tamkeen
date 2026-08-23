@@ -210,6 +210,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - One-line intro + start. Questions one at a time or in small groups, progress indicator, back/next.
 - Each answer maps to one or more RIASEC dimensions (see §3A); scoring happens server-side.
 - **No score dump.** On finish, compute the ranked per-dimension profile + top-three **Holland Code**, then transition directly to Results & Path Selection.
+- **Shell and drafts (D-094):** the assessment renders inside the normal shell with the two-item pre-assessment nav (D-071); answers and the current question persist in `sessionStorage` (per tab, option ids only) so leaving mid-assessment and returning resumes in place; a changed bank discards the draft; submitting clears it.
 
 ### 4.4 Results & Path Selection (النتيجة والمسارات)
 - Top: the user's **Holland Code** (the three letters with their Arabic type names, e.g. اجتماعي / بحثي / فني) + a short plain-language description (2–3 sentences) of what the code means. Optionally a compact visual of the six-dimension ranking.

@@ -5,6 +5,15 @@
 
 ---
 
+## D-094 — The assessment keeps the sidebar, and a session draft makes leaving free
+**Decision:** the assessment page renders inside the normal shell, with the two-item pre-assessment nav (D-071); results and path build stay bare. Answers and the current question are written through to `sessionStorage` on every change, keyed to the assessment id and its question ids; the draft is restored on return within the browser session, discarded if the bank has changed, and cleared on submit so a retake (D-015) starts clean.
+
+**Why:** the original rule hid the rail on every flow page because a rail beside a step-by-step flow invites abandoning it. That holds for results and path build, which end in a decision. The assessment is different: its audience is the user with a two-item nav and a legitimate reason to check their profile mid-way, and thirty statements is long enough that being trapped is the worse experience. Letting them leave only works if leaving costs nothing — hence the draft. sessionStorage rather than the server: per tab, gone when the tab closes, holding option ids only (no text a person typed, no PII), and no new endpoint.
+
+**Rejected:** a leave-confirmation dialog (nags instead of solving); losing answers silently; a server-side draft (survives devices, but a new endpoint and table for a convenience the session already covers); showing the rail on results and path build too (those should end in a decision, not a wander).
+
+**Numbering note:** authored as D-073 on its feature branch, in parallel with Phase 5, whose merge claimed the number first; renumbered D-094 at rebase (as D-093's note explains).
+
 ## D-093 — One navigation loader for the whole app: a top progress bar, started at the click, completed by the route change
 **Decision:** `NavigationProgress`, mounted once in the root layout, is the loader for moving between pages: a 3px primary bar along the top edge that starts the instant a navigation starts and completes when the route has changed. It starts from a capture-phase click listener (every internal link, `next/link` or not, same-origin, not a new window, not a hash, not a modified click), from `popstate`, and from `startNavigation()`, which `useAppRouter()` — the only router hook pages use — calls on `push`/`replace`. It completes on the pathname/search change, the App Router's only honest "the new page is in" signal. One polite "جارٍ الانتقال…" per navigation for assistive technology; the bar itself is `aria-hidden`. In-page data loading keeps `LoadingState`; the bar never speaks for a fetch.
 
