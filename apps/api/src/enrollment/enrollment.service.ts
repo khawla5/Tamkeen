@@ -383,7 +383,9 @@ export class EnrollmentService {
       path: {
         id: myPath.pathId,
         name: myPath.pathName,
+        riasecLetter: myPath.riasecLetter,
         completedCount: myPath.completedCount,
+        inProgressCount: myPath.courses.filter((course) => course.status === 'IN_PROGRESS').length,
         totalCount: myPath.totalCount,
         nextCourse: next ? { id: next.id, courseId: next.courseId, title: next.title } : null,
       },

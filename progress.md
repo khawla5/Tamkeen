@@ -7,8 +7,8 @@
 
 ## Current status
 - **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **merged** (PR #13, with PR #12 merging TAM-106 before it). In parallel, the **design-direction workstream** (Platforms Code, D-069) continues on stacked feature branches off the old `feature/dga-alignment` line, now being rebased onto `main`.
-- **Last completed task (this workstream):** **TAM-107 — the assessment keeps the sidebar; a session draft makes leaving free** (`feature/tam-107-assessment-sidebar`, stacked on `feature/navigation-loader` — TAM-122, D-093). TAM-106 is merged; the auth epic (TAM-101–105) is merged.
-- **Next task:** **TAM-108** — the dashboard: Holland chips after the assessment, the status strip on an active path; then the rest of the stack (TAM-123, TAM-112) and the ticket backlog (TAM-109–121, 124–128).
+- **Last completed task (this workstream):** **TAM-108 — the dashboard's chips and status strip** (`feature/tam-108-dashboard`), which **closes the `assessment-gating` epic (106–108)**. Before that, **TAM-107 — the sidebar during the assessment + session drafts** (D-094); the stack sits on `feature/navigation-loader` (TAM-122, D-093). TAM-106 and the auth epic (TAM-101–105) are merged.
+- **Next task:** the rest of the stack (TAM-123, TAM-112), then the ticket backlog (TAM-109–121, 124–128).
 - **Phase 4 is merged** (PR #6). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
 - **Test totals (main, post-Phase 5):** 599 API unit · 403 web component · 515 API integration against real PostgreSQL · 84 browser e2e in Chromium — **1601 automated**, plus the real-Chromium verification scripts from Phase 3. **One transient integration failure is recorded in the 2026-08-24 entry and was never reproduced — read it before dismissing a similar one.**
 
@@ -142,6 +142,10 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — TAM-108: the dashboard speaks Arabic about the result, and says where you are
+
+Branch `feature/tam-108-dashboard`, on the TAM-107 branch. The assessed-no-path card showed the Holland Code as "SIA" — a storage key, not a result an employee can read. It now shows three chips with the Arabic type names in rank order, through a new shared `HollandCodeChips` so Results (TAM-114) cannot render the code differently. The active-path state gained a status strip — the path by name and type, and مكتملة / قيد التنفيذ / لم تبدأ — which needed two fields the dashboard payload did not carry: `riasecLetter` and `inProgressCount`, added server-side so the page renders one payload, and asserted in the API journey spec against a real database (a local `tamkeen_test` database now exists for that suite, matching CI). The strip is a labelled list with nothing clickable; the continue card stays the only action. 331 web unit tests, typecheck, lint; API unit + integration green.
 
 ### 2026-08-23 — TAM-107: the assessment keeps its sidebar; a draft makes leaving free
 
