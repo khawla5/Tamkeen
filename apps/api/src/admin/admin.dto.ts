@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsISO8601,
   IsInt,
   IsOptional,
   IsString,
@@ -494,4 +495,56 @@ export class UpdateSettingDto {
   @IsString()
   @MaxLength(2000)
   value!: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.8 — the audit trail
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class AdminAuditQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  action?: string;
+
+  @IsOptional()
+  @IsIn(['SUCCESS', 'FAILURE'])
+  outcome?: 'SUCCESS' | 'FAILURE';
+
+  @IsOptional()
+  @IsUUID()
+  actorUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  targetId?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  from?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  to?: string;
+
+  /**
+   * Cursor: the id to read before.
+   *
+   * A cursor rather than an offset because the log only grows — `OFFSET 20000`
+   * makes the database walk twenty thousand rows before it can skip them, on
+   * what will be the largest table in the system. Matched as digits rather than
+   * coerced to a number: `audit_log.id` is a bigint and a JSON number cannot
+   * carry one safely.
+   */
+  @IsOptional()
+  @Matches(/^[0-9]{1,19}$/)
+  before?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5000)
+  pageSize?: number;
 }

@@ -21,6 +21,9 @@ import type {
   AdminCoursePage,
   AdminCourseRow,
   AdminPathBounds,
+  AdminAuditPage,
+  AdminCertificateTemplateView,
+  AdminReports,
   AdminSettingsView,
   AdminPathDetail,
   AdminPathRow,
@@ -59,6 +62,7 @@ import type {
   EntityProfileView,
   EntityUnpublishResult,
   MyPathView,
+  NumberFormat,
   PathDetail,
   PathRecommendations,
   UnreadNotificationsView,
@@ -239,6 +243,8 @@ export interface CurrentUser {
   email: string;
   fullName: string;
   role: 'EMPLOYEE' | 'ENTITY' | 'SUPER_ADMIN';
+  /** The person's digits choice, or null to follow the system (§4.12). */
+  numberFormat: NumberFormat | null;
 }
 
 export const authApi = {
@@ -264,6 +270,14 @@ export const authApi = {
 
   forgotPassword: (email: string) =>
     api.post<{ status: string }>('/api/auth/forgot-password', { email }),
+
+  /** §4.12: change your own password, proving the current one. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post<void>('/api/auth/change-password', { currentPassword, newPassword }),
+
+  /** §4.12: which digits you read. Null follows the system default (D-018). */
+  setNumberFormat: (numberFormat: NumberFormat | null) =>
+    api.patch<void>('/api/auth/me/preferences', { numberFormat }),
 
   resetPassword: (token: string, password: string) =>
     api.post<{ status: string }>('/api/auth/reset-password', { token, password }),
@@ -655,4 +669,51 @@ export const adminApi = {
 
   /** Returns a knob to the environment's value. */
   resetSetting: (key: string) => api.delete<AdminSettingsView>(`/api/admin/settings/${key}`),
+
+  /**
+   * §4C.7 — the certificate face and a rendered preview of it.
+   *
+   * Read-only: the signature block is three settings, and `updateSetting` above
+   * is the one writer for those rows (D-072).
+   */
+  certificateTemplate: () =>
+    api.get<AdminCertificateTemplateView>('/api/admin/certificate-template'),
+
+  // §4C.8 — audit and reports
+  auditLog: (
+    filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE'; before?: string } = {},
+  ) => {
+    const query = new URLSearchParams();
+
+    if (filters.action) query.set('action', filters.action);
+    if (filters.outcome) query.set('outcome', filters.outcome);
+    if (filters.before) query.set('before', filters.before);
+
+    const suffix = query.toString();
+
+    return api.get<AdminAuditPage>(`/api/admin/audit${suffix ? `?${suffix}` : ''}`);
+  },
+
+  reports: () => api.get<AdminReports>('/api/admin/reports'),
+
+  /**
+   * Where the CSV exports live.
+   *
+   * Plain URLs rather than a fetch-and-blob: the session is an httpOnly cookie
+   * on the API's origin, so an ordinary link carries it and the browser handles
+   * the download — while a fetched blob would need the bytes in memory and a
+   * synthetic anchor to save them.
+   */
+  reportsCsvUrl: () => `${API_URL}/api/admin/reports.csv`,
+
+  auditCsvUrl: (filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE' } = {}) => {
+    const query = new URLSearchParams();
+
+    if (filters.action) query.set('action', filters.action);
+    if (filters.outcome) query.set('outcome', filters.outcome);
+
+    const suffix = query.toString();
+
+    return `${API_URL}/api/admin/audit.csv${suffix ? `?${suffix}` : ''}`;
+  },
 };

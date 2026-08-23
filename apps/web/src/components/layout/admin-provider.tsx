@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
 import { ErrorState, LoadingState } from '@/components/states';
+import { PreferenceProvider } from './preference-provider';
 import { ApiError, authApi, type CurrentUser } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 
@@ -87,5 +88,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  return <AdminContext.Provider value={{ user: session.data }}>{children}</AdminContext.Provider>;
+  return (
+    <AdminContext.Provider value={{ user: session.data }}>
+      {/* The person's digits choice, applied to everything below (§4.12). */}
+      <PreferenceProvider numberFormat={session.data.numberFormat}>{children}</PreferenceProvider>
+    </AdminContext.Provider>
+  );
 }

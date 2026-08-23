@@ -26,6 +26,17 @@ export const SETTING_KEYS = [
   'NUMBER_FORMAT',
   /** Which Moodle we talk to. Not a secret; the token is, and is not here. */
   'MOODLE_BASE_URL',
+  /**
+   * §4C.7's signature block (D-073).
+   *
+   * Settings rather than template code, so the ministry can name its signatory
+   * without a deployment — and settings rather than a `certificate_templates`
+   * table, because three strings do not need a table and issued certificates
+   * store their rendered bytes regardless (D-052).
+   */
+  'CERT_SIGNATORY_NAME',
+  'CERT_SIGNATORY_TITLE',
+  'CERT_ISSUING_BODY',
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];

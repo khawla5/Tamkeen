@@ -8,8 +8,10 @@ import { MoodleModule } from '../moodle/moodle.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SyncSchedulerModule } from '../sync-scheduler/sync-scheduler.module';
 import { AdminAssessmentService } from './admin-assessment.service';
+import { AdminAuditService } from './admin-audit.service';
 import { AdminCoursesService } from './admin-courses.service';
 import { AdminSettingsService } from './admin-settings.service';
+import { AdminTemplatesService } from './admin-templates.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminEntitiesService } from './admin-entities.service';
 import { AdminPathsService } from './admin-paths.service';
@@ -45,6 +47,8 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
     AdminPathsService,
     AdminCoursesService,
     AdminSettingsService,
+    AdminTemplatesService,
+    AdminAuditService,
   ],
 })
 export class AdminModule {}

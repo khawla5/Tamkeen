@@ -123,6 +123,16 @@ export const envSchema = z.object({
    * screen — could become that learner. Seconds, deliberately.
    */
   MOODLE_SSO_TTL_SECONDS: z.coerce.number().int().positive().max(300).default(60),
+  /**
+   * The certificate's signature block (§4C.7, D-073).
+   *
+   * Empty by default and deliberately so: the ministry has not supplied a
+   * signatory, and printing an invented one on a credential would be worse than
+   * printing none. The slot holds its position either way (D-051).
+   */
+  CERT_SIGNATORY_NAME: z.string().max(120).default(''),
+  CERT_SIGNATORY_TITLE: z.string().max(160).default(''),
+  CERT_ISSUING_BODY: z.string().max(160).default('الجهة المصدرة: وزارة الداخلية'),
   PASS_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
   COMPLETION_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5),
   /**

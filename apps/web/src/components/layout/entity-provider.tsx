@@ -7,6 +7,7 @@ import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import type { EntityProfileView } from '@tamkeen/types';
 
 import { ErrorState, LoadingState } from '@/components/states';
+import { PreferenceProvider } from './preference-provider';
 import { HOME_FOR_ROLE } from './portal-routes';
 import { ApiError, authApi, entityApi, type CurrentUser } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
@@ -113,7 +114,8 @@ export function EntityProvider({ children }: { children: ReactNode }) {
         refresh: entity.refetch,
       }}
     >
-      {children}
+      {/* The person's digits choice, applied to everything below (§4.12). */}
+      <PreferenceProvider numberFormat={session.data.numberFormat}>{children}</PreferenceProvider>
     </EntityContext.Provider>
   );
 }

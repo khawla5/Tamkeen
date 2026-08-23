@@ -10,6 +10,10 @@ const BASE: CertificateTemplateInput = {
   verificationId: 'k7Qz2Xr9TfLmA4vN8bYcJ1sWdEpHgU6oRt3iZnQxKvM',
   verificationUrl: 'https://tamkeen.gov.example/verify/k7Qz2Xr9TfLmA4vN8bYcJ1sWdEpHgU6oRt3iZnQxKvM',
   qrSvg: '<svg data-test="qr"></svg>',
+  /* The empty signatory is the shipping state: the ministry has not named one,
+     and printing an invented signature on a credential would be worse than
+     printing none (D-051, D-073). */
+  signatory: { name: '', title: '', issuingBody: 'الجهة المصدرة: وزارة الداخلية' },
 };
 
 /** What a reader of the printed certificate would actually see. */
@@ -116,5 +120,48 @@ describe('certificate template', () => {
 
       expect(orphan).not.toContain('class="context"');
     });
+  });
+});
+
+describe('the signature block (§4C.7)', () => {
+  it('prints the signatory the ministry named', () => {
+    const html = renderCertificateHtml({
+      ...BASE,
+      signatory: {
+        name: 'أحمد بن سالم القحطاني',
+        title: 'وكيل الوزارة للتطوير',
+        issuingBody: 'وزارة الداخلية',
+      },
+    });
+
+    expect(visibleText(html)).toContain('أحمد بن سالم القحطاني');
+    expect(visibleText(html)).toContain('وكيل الوزارة للتطوير');
+  });
+
+  it('falls back to a placeholder rather than an empty line', () => {
+    /* The block holds its position either way, so supplying a real signatory
+       later is not a layout change (D-051). */
+    expect(visibleText(renderCertificateHtml(BASE))).toContain('الاسم');
+  });
+
+  it('omits the title line entirely when there is no title', () => {
+    /* An empty line under a name reads as a missing field on a credential. */
+    const html = renderCertificateHtml({
+      ...BASE,
+      signatory: { name: 'اسم', title: '', issuingBody: 'وزارة الداخلية' },
+    });
+
+    expect(html).not.toContain('<div class="sign-title"></div>');
+  });
+
+  it('escapes a signatory name, which arrives from a settings form', () => {
+    const html = renderCertificateHtml({
+      ...BASE,
+      signatory: { name: '<script>x</script>', title: '', issuingBody: 'وزارة' },
+    });
+
+    /* Not quite XSS — the output is a PDF — but unescaped markup in a credential
+       could restyle or displace the text stating what was earned. */
+    expect(html).not.toContain('<script>x</script>');
   });
 });

@@ -492,3 +492,82 @@ export interface AdminSettingsView {
   settings: AdminSetting[];
   readOnly: Array<{ key: string; value: string }>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.7 — the certificate face
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * §4C.7's screen.
+ *
+ * The signature block is three *settings* — §4C.6 writes them, and this screen
+ * shows them beside a rendered preview so the effect is visible before anybody
+ * earns a certificate.
+ *
+ * `hasLogo` is false and will stay false until the ministry supplies its seal
+ * (D-073, and the first open blocker since Phase 3). The slot holds its position
+ * meanwhile, so dropping the artwork in later is not a layout change (D-051).
+ */
+export interface AdminCertificateTemplateView {
+  signatory: { name: string; title: string; issuingBody: string };
+  /** The real template with sample content — not a mock-up of it. */
+  previewHtml: string;
+  hasLogo: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.8 — audit and reports
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One audit entry, as the read-only trail shows it. */
+export interface AdminAuditRow {
+  /** `audit_log.id` is a bigint; it crosses the wire as a string. */
+  id: string;
+  occurredAt: string;
+  action: string;
+  outcome: 'SUCCESS' | 'FAILURE';
+  actorName: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  /**
+   * The structured detail, non-PII by construction (`AuditService` accepts only
+   * enumerated reason codes and scalar values). Shown because half its value is
+   * the reason a refusal happened, and a trail that hides that is a list of
+   * timestamps.
+   */
+  detail: Record<string, string | number | boolean> | null;
+}
+
+export interface AdminAuditPage {
+  rows: AdminAuditRow[];
+  /** Cursor for the next page — the id to read before. Null at the end. */
+  nextBefore: string | null;
+  /** Every action that appears in the log, for the filter. */
+  actions: string[];
+}
+
+/** System-wide reporting (§4C.8). Read-only, and exportable as CSV. */
+export interface AdminReports {
+  /** Learners at each stage, and the rate over those who committed. */
+  journey: AdminJourneyCounts;
+  /** Paths by how many learners chose them — "popular paths" in §4C.8. */
+  pathPopularity: Array<{
+    pathId: string;
+    name: string;
+    riasecLetter: RiasecLetter;
+    chosen: number;
+    completed: number;
+  }>;
+  /** Holland codes across the assessed population, newest result per person. */
+  codeDistribution: AdminCodeShare[];
+  /** Certificates issued, split by kind. */
+  certificates: { course: number; path: number; total: number };
+  /** Courses by pass rate, worst first — where learners are actually stuck. */
+  courseOutcomes: Array<{
+    courseId: string;
+    title: string;
+    enrolled: number;
+    passed: number;
+    passRate: number | null;
+  }>;
+}

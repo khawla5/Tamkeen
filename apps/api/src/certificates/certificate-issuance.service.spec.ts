@@ -8,6 +8,7 @@ import {
   CertificateNotEarnedError,
 } from './certificate-issuance.service';
 import type { CertificateStorageService } from './certificate-storage.service';
+import type { SettingsService } from '../settings/settings.service';
 import type { PdfRendererService } from './pdf-renderer.service';
 
 /**
@@ -194,8 +195,15 @@ function harness(options: Options = {}) {
     },
   } as unknown as PdfRendererService;
 
+  /* The signature block, read at issue time and then frozen into the stored
+     bytes (§4C.7, D-052). */
+  const settings = {
+    get: (key: string) =>
+      Promise.resolve(key === 'CERT_ISSUING_BODY' ? 'الجهة المصدرة: وزارة الداخلية' : ''),
+  } as unknown as SettingsService;
+
   return {
-    service: new CertificateIssuanceService(prisma, audit, config, storage, renderer),
+    service: new CertificateIssuanceService(prisma, audit, config, settings, storage, renderer),
     certificates,
     audits,
     notifications,
