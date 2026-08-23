@@ -111,6 +111,19 @@ export const AuditAction = {
   ADMIN_ENTITY_CREATED: 'ADMIN_ENTITY_CREATED',
   /** An organisation's details or status changed. */
   ADMIN_ENTITY_UPDATED: 'ADMIN_ENTITY_UPDATED',
+  /** An assessment edit was begun — a draft copied from the active version. */
+  ADMIN_ASSESSMENT_DRAFT_OPENED: 'ADMIN_ASSESSMENT_DRAFT_OPENED',
+  /** The draft was abandoned. Recorded because the work is gone. */
+  ADMIN_ASSESSMENT_DRAFT_DISCARDED: 'ADMIN_ASSESSMENT_DRAFT_DISCARDED',
+  /**
+   * A new assessment version became the one new takers receive (D-069/D-070).
+   *
+   * The single most consequential change an administrator can make: every
+   * Holland Code produced from this moment comes from a different instrument.
+   * Recorded on refusal too, with the blockers, so a rejected publish is
+   * explicable months later without reconstructing the bank as it stood.
+   */
+  ADMIN_ASSESSMENT_PUBLISHED: 'ADMIN_ASSESSMENT_PUBLISHED',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];
@@ -172,6 +185,11 @@ export const AuditReason = {
   JOURNEY_WOULD_BE_ORPHANED: 'JOURNEY_WOULD_BE_ORPHANED',
   /** The requested role is the one the account already has. */
   ROLE_UNCHANGED: 'ROLE_UNCHANGED',
+  /**
+   * A publish was refused because the proposed bank cannot be published; the
+   * specific blockers go in the detail payload (D-071).
+   */
+  BANK_NOT_PUBLISHABLE: 'BANK_NOT_PUBLISHABLE',
 } as const;
 
 export type AuditReasonCode = (typeof AuditReason)[keyof typeof AuditReason];

@@ -118,3 +118,108 @@ export async function releaseAdmin(admin: SeededAdmin): Promise<void> {
     await client.query(`DELETE FROM entities WHERE key LIKE $1`, [`${admin.prefix}%`]);
   });
 }
+
+/**
+ * The six scores and the version a person's newest result was taken under.
+ *
+ * Read straight from the database rather than scraped off the results page: the
+ * assertion this exists for is that publishing an edit changed *nothing* here,
+ * and a rendered page could show the same numbers while the row underneath had
+ * been repointed at a different version.
+ */
+export async function resultFor(email: string) {
+  return withClient(async (client) => {
+    const { rows } = await client.query<{
+      id: string;
+      assessment_version: number;
+      score_r: number;
+      score_i: number;
+      score_a: number;
+      score_s: number;
+      score_e: number;
+      score_c: number;
+      max_score: number;
+      code: string;
+      assessment_id: string;
+    }>(
+      `SELECT r.id, r.assessment_version, r.score_r, r.score_i, r.score_a,
+              r.score_s, r.score_e, r.score_c, r.max_score, r.code, r.assessment_id
+         FROM assessment_results r
+         JOIN users u ON u.id = r.user_id
+        WHERE u.email = $1
+        ORDER BY r.completed_at DESC
+        LIMIT 1`,
+      [email],
+    );
+
+    const row = rows[0];
+    if (!row) throw new Error(`No assessment result for ${email}`);
+
+    return {
+      id: row.id,
+      assessmentId: row.assessment_id,
+      assessmentVersion: row.assessment_version,
+      scores: {
+        R: row.score_r,
+        I: row.score_i,
+        A: row.score_a,
+        S: row.score_s,
+        E: row.score_e,
+        C: row.score_c,
+      },
+      maxScore: row.max_score,
+      code: row.code,
+    };
+  });
+}
+
+/** Which version new takers are currently served. */
+export async function activeAssessmentVersion(): Promise<number> {
+  return withClient(async (client) => {
+    const { rows } = await client.query<{ version: number }>(
+      `SELECT version FROM assessments WHERE key = 'riasec-core' AND status = 'ACTIVE'`,
+    );
+
+    if (!rows[0]) throw new Error('No active assessment');
+    return rows[0].version;
+  });
+}
+
+/**
+ * Returns the instrument to a single active version 1.
+ *
+ * The suite publishes a real second version against the shared development
+ * database, and leaving it in place would change what every later run — and
+ * every developer opening the app — is served. Results belonging to versions
+ * above 1 go first, because `assessment_results.assessment_id` is `Restrict`:
+ * they are the suite's own takers, created and removed within it.
+ *
+ * Version 1 is reactivated *before* the later ones are deleted, because the
+ * partial unique index permits only one ACTIVE row per key.
+ */
+export async function resetAssessmentVersions(): Promise<void> {
+  await withClient(async (client) => {
+    const { rows } = await client.query<{ id: string; version: number }>(
+      `SELECT id, version FROM assessments WHERE key = 'riasec-core' ORDER BY version ASC`,
+    );
+
+    if (rows.length <= 1) return;
+
+    const first = rows[0]!;
+    const later = rows.slice(1).map((row) => row.id);
+
+    await client.query(
+      `DELETE FROM assessment_responses
+        WHERE result_id IN (SELECT id FROM assessment_results WHERE assessment_id = ANY($1))`,
+      [later],
+    );
+    await client.query(`DELETE FROM assessment_results WHERE assessment_id = ANY($1)`, [later]);
+
+    await client.query(`UPDATE assessments SET status = 'RETIRED' WHERE key = 'riasec-core'`);
+    await client.query(
+      `UPDATE assessments SET status = 'ACTIVE', retired_at = NULL WHERE id = $1`,
+      [first.id],
+    );
+    await client.query(`DELETE FROM assessments WHERE id = ANY($1)`, [later]);
+  });
+}

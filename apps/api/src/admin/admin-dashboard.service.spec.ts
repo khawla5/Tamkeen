@@ -30,7 +30,8 @@ function harness(
     lmsReachable?: boolean;
     lastRuns?: Record<string, Date>;
     activity?: Array<{ id: bigint; action: string; actorName: string | null }>;
-    activeAssessment?: { version: number; createdAt: Date } | null;
+    activeAssessment?: { version: number; effectiveFrom: Date | null; createdAt: Date } | null;
+    draftCount?: number;
   } = {},
 ) {
   const results = options.results ?? [];
@@ -104,9 +105,14 @@ function harness(
       findFirst: () =>
         Promise.resolve(
           options.activeAssessment === undefined
-            ? { version: 1, createdAt: new Date('2026-08-01T00:00:00Z') }
+            ? {
+                version: 1,
+                effectiveFrom: new Date('2026-08-01T00:00:00Z'),
+                createdAt: new Date('2026-07-01T00:00:00Z'),
+              }
             : options.activeAssessment,
         ),
+      count: () => Promise.resolve(options.draftCount ?? 0),
     },
   } as unknown as PrismaService;
 
@@ -238,5 +244,33 @@ describe('AdminDashboardService', () => {
     const view = await harness({ activeAssessment: null }).get();
 
     expect(view.assessment).toBeNull();
+  });
+
+  it('reports the date the version took effect, not the date its row was made', async () => {
+    /* A draft copied today and published next week took effect next week. The
+       two dates differ by exactly the length of the edit, and §4C.3 promises the
+       effective one. */
+    const view = await harness().get();
+
+    expect(view.assessment?.effectiveFrom).toBe('2026-08-01T00:00:00.000Z');
+  });
+
+  it('falls back to the created date rather than crashing on a null effective date', async () => {
+    /* Unreachable for an ACTIVE row — publishing always stamps it — so this is
+       about the dashboard staying up rather than about the data being right. */
+    const view = await harness({
+      activeAssessment: {
+        version: 3,
+        effectiveFrom: null,
+        createdAt: new Date('2026-07-01T00:00:00Z'),
+      },
+    }).get();
+
+    expect(view.assessment?.effectiveFrom).toBe('2026-07-01T00:00:00.000Z');
+  });
+
+  it('flags an unfinished assessment edit, which is what waits on the administrator', async () => {
+    expect((await harness({ draftCount: 1 }).get()).assessment?.hasDraft).toBe(true);
+    expect((await harness({ draftCount: 0 }).get()).assessment?.hasDraft).toBe(false);
   });
 });

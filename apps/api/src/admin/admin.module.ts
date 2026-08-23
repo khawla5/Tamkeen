@@ -6,6 +6,7 @@ import { AppConfigModule } from '../config/app-config.module';
 import { EmailModule } from '../email/email.module';
 import { MoodleModule } from '../moodle/moodle.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AdminAssessmentService } from './admin-assessment.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminEntitiesService } from './admin-entities.service';
 import { AdminUsersService } from './admin-users.service';
@@ -22,6 +23,11 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
 @Module({
   imports: [PrismaModule, AppConfigModule, AuditModule, MoodleModule, EmailModule, AuthModule],
   controllers: [...ADMIN_CONTROLLERS],
-  providers: [AdminDashboardService, AdminUsersService, AdminEntitiesService],
+  providers: [
+    AdminDashboardService,
+    AdminUsersService,
+    AdminEntitiesService,
+    AdminAssessmentService,
+  ],
 })
 export class AdminModule {}

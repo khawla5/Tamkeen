@@ -270,21 +270,27 @@ export class AdminDashboardService {
    * on the administrator personally.
    */
   private async activeAssessment(): Promise<AdminDashboardView['assessment']> {
-    const active = await this.prisma.assessment.findFirst({
-      where: { isActive: true },
-      select: { version: true, createdAt: true },
-    });
+    const [active, draft] = await Promise.all([
+      this.prisma.assessment.findFirst({
+        where: { status: 'ACTIVE' },
+        select: { version: true, effectiveFrom: true, createdAt: true },
+      }),
+      this.prisma.assessment.count({ where: { status: 'DRAFT' } }),
+    ]);
 
     if (!active) {
       return null;
     }
 
-    /* 5.3 replaces this with the draft row it introduces. Until then the honest
-       answer is "no edit in flight", not an absent field the UI must guess at. */
     return {
       version: active.version,
-      effectiveFrom: active.createdAt.toISOString(),
-      hasDraft: false,
+      /* `effectiveFrom` is null only for a row that was never published, which
+         an ACTIVE one cannot be — the fallback exists so a corrupt row renders
+         a date rather than crashing the whole dashboard. */
+      effectiveFrom: (active.effectiveFrom ?? active.createdAt).toISOString(),
+      /* An unfinished edit is the one thing on this page waiting on the
+         administrator personally, so it is worth a click from here (§4C.1). */
+      hasDraft: draft > 0,
     };
   }
 }

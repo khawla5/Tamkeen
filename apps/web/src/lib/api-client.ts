@@ -16,6 +16,9 @@
  */
 
 import type {
+  AdminAssessmentDraft,
+  AdminAssessmentOverview,
+  AdminAssessmentVersion,
   AdminDashboardView,
   AdminEntityRow,
   AdminInviteResult,
@@ -23,6 +26,7 @@ import type {
   AdminUserDetail,
   AdminUserPage,
   AdminUserRow,
+  RiasecLetter,
   UserRole,
   AssessmentResultView,
   CertificateSummary,
@@ -215,6 +219,11 @@ export const api = {
      a time, and a PUT would silently clear whatever the caller did not
      resend. */
   patch: <T>(path: string, body?: unknown) => request<T>(path, 'PATCH', body),
+  /* Used only where something is genuinely removed. Nothing a *learner* touches
+     is deletable — §2 forbids it for courses, D-033 for results — so this exists
+     for the admin portal's drafts, which are the one thing in the product with
+     no history worth keeping. */
+  delete: <T>(path: string) => request<T>(path, 'DELETE'),
 };
 
 export interface CurrentUser {
@@ -512,4 +521,47 @@ export const adminApi = {
       status?: 'ACTIVE' | 'SUSPENDED';
     },
   ) => api.patch<AdminEntityRow>(`/api/admin/entities/${entityId}`, patch),
+
+  // §4C.3 — the assessment
+  assessmentOverview: () => api.get<AdminAssessmentOverview>('/api/admin/assessment'),
+
+  /**
+   * The draft bank, weights included.
+   *
+   * The one call in this client that receives RIASEC weightings. It answers only
+   * to a SUPER_ADMIN session; the learner's `assessmentApi.getActive()` returns
+   * the same questions with the weights stripped (D-034), and an integration
+   * test greps that response to keep it that way.
+   */
+  assessmentDraft: () => api.get<AdminAssessmentDraft>('/api/admin/assessment/draft'),
+
+  createAssessmentDraft: () => api.post<AdminAssessmentDraft>('/api/admin/assessment/draft', {}),
+
+  discardAssessmentDraft: () => api.delete<void>('/api/admin/assessment/draft'),
+
+  updateAssessmentDraft: (patch: { title?: string; description?: string }) =>
+    api.patch<AdminAssessmentDraft>('/api/admin/assessment/draft', patch),
+
+  addDraftQuestion: (input: { text: string; letter: RiasecLetter }) =>
+    api.post<AdminAssessmentDraft>('/api/admin/assessment/draft/questions', input),
+
+  updateDraftQuestion: (questionId: string, patch: { text?: string }) =>
+    api.patch<AdminAssessmentDraft>(`/api/admin/assessment/draft/questions/${questionId}`, patch),
+
+  removeDraftQuestion: (questionId: string) =>
+    api.delete<AdminAssessmentDraft>(`/api/admin/assessment/draft/questions/${questionId}`),
+
+  reorderDraft: (questionIds: string[]) =>
+    api.patch<AdminAssessmentDraft>('/api/admin/assessment/draft/order', { questionIds }),
+
+  updateDraftOption: (
+    optionId: string,
+    patch: { label?: string; weights?: Partial<Record<RiasecLetter, number>> },
+  ) => api.patch<AdminAssessmentDraft>(`/api/admin/assessment/draft/options/${optionId}`, patch),
+
+  publishAssessment: () =>
+    api.post<AdminAssessmentVersion>('/api/admin/assessment/draft/publish', {}),
+
+  assessmentVersion: (assessmentId: string) =>
+    api.get<AdminAssessmentDraft>(`/api/admin/assessment/versions/${assessmentId}`),
 };

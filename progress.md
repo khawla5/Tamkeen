@@ -6,17 +6,17 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **in progress, sub-phase 5.2 of 5.9 complete.**
-- **Last completed task:** **Sub-phase 5.2 — User Management (§4C.2).** Account list and detail, suspend/reactivate, role change with three lockout guards, and **provisioning by invitation** — which closes the entity-account seam Phase 4 left open. Also fixed a pre-existing dead end: an unverified account could complete a password reset and still be refused at sign-in.
-- **Next task:** **Sub-phase 5.3 — Assessment Management (§4C.3)** — the draft/publish editor over copy-on-write versioning (D-069/D-070), with the balance guard at publish (D-071).
+- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **in progress, sub-phase 5.3 of 5.9 complete.**
+- **Last completed task:** **Sub-phase 5.3 — Assessment Management (§4C.3).** Copy-on-write versioning in the schema, the draft-then-publish editor, the balance guard at publish, and the read-only history — with existing results proven frozen through a real browser.
+- **Next task:** **Sub-phase 5.4 — Path Management (§4C.4)** — create/edit paths, `path_courses` membership and ordering, and retirement that cannot strand a confirmed learner.
 - **Active branch:** `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd`, which contains Phases 0-4. No PR yet — one PR covers the whole of Phase 5 (D-008).
 - **Phase 4 is merged** (PR #6, `origin/main` @ `f1f0dcd`). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
-- **Test totals:** 556 API unit · 290 web component · 268 API integration against real PostgreSQL · 40 browser e2e in Chromium — **1154 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
+- **Test totals:** 573 API unit · 308 web component · 341 API integration against real PostgreSQL · 52 browser e2e in Chromium — **1274 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
 
 ### Phase 5 sub-phase tracker
 - [x] **5.1 Admin foundation + Dashboard** (§4C.1) — RBAC, route group, shell, integration health
 - [x] **5.2 User Management** (§4C.2) — employees + entities, suspend/activate, **entity-account creation**
-- [ ] **5.3 Assessment Management** (§4C.3) — draft/publish, balance guard, copy-on-write versioning
+- [x] **5.3 Assessment Management** (§4C.3) — draft/publish, balance guard, copy-on-write versioning
 - [ ] **5.4 Path Management** (§4C.4) — paths, `path_courses` membership + ordering, safe retirement
 - [ ] **5.5 Course Oversight** (§4C.5) — global catalogue, ownership assignment, intervention
 - [ ] **5.6 System Settings** (§4C.6) — `settings` table, one `SettingsService`, env fallback
@@ -49,7 +49,7 @@
 - **My Path reads live LMS progress but never persists it.** Writing `completions` is **Phase 2's** job; two writers on those rows would be a race (D-036).
 - **`courseUrl` points at the mock (`localhost:8080`) and does not resolve.** Expected until **Phase 2** stands up Moodle and the seamless handoff.
 - **The optional `enrollments` table (§6) is still not built**, now deliberately: `user_path_courses.enrolledAt` answers the only question anything asks, and a table whose sole consumer is a hypothetical debugger is speculative schema (D-041).
-- **The balance rule must survive Phase 5's assessment editor.** `isBalancedBank` fails CI if an edit unbalances the bank; **Phase 5** must either keep it balanced or move ranking to normalised percentages (D-032).
+- ~~The balance rule must survive Phase 5's assessment editor.~~ **Closed in sub-phase 5.3** — `assessBank` refuses an unbalanced publish server-side, expressed over attainable maxima rather than question counts, and the seeded bank is still asserted balanced in CI (D-071).
 - **Rate limiting is in-process** — per-instance counters, so horizontal scaling multiplies the effective limit. **Phase 7** must swap in a shared store when deployment topology is decided. Per-account lockout is in the database and unaffected. (D-028)
 - **`deepmerge-ts` carries 3 high advisories** through `prisma` → `@prisma/config`, accepted and deferred (D-043). **Phase 6** must re-check whether Prisma bumped the pin upstream; do not downgrade Prisma to silence it (D-026).
 - **`postcss` / `sharp` are pinned via npm `overrides`** to clear 3 high CVEs while holding Next 15. Each Next upgrade must re-check the pins. **Phase 6** dependency review owns this, and should consider dropping the `sharp` pin by disabling `next/image` optimisation entirely. (D-022)
@@ -129,10 +129,32 @@
 - **The super-admin keeps unscoped API access to entity data but has its own screens (D-075); reports export as CSV with a BOM (D-076).**
 - **An administrator provisions accounts by invitation and never sees a password (D-077).** Redeeming a reset token now also verifies the address, which closes a dead end that already existed.
 - **Two lockouts are guarded, and converting a learner who holds a record is refused (D-078).**
+- **Two integration suites share one assessment, and an advisory lock serialises them (D-079).**
+- **The seed bootstraps the assessment; it does not maintain it (D-080).**
 
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — Sub-phase 5.3: the assessment editor, and results that stay frozen
+
+§4C.3 built: the version overview, the draft-then-publish editor over copy-on-write versioning, question text and order, per-dimension option weights, per-dimension question counts, the publish gate, and the read-only history. The largest and most consequential piece of Phase 5 — every Holland Code the product issues after a publish comes from a different instrument.
+
+**Test totals: 573 API unit · 308 web component · 341 API integration · 52 browser e2e — 1274 automated.** Typecheck, lint and format clean. No new dependencies.
+
+**The schema change is where D-069 became real.** `assessments.key` stopped being unique — several rows share `riasec-core` and differ by version — and `is_active` was replaced by a three-state `status`, because keeping both would be the D-059 mistake in a new place. Two things the schema language cannot say are written by hand in the migration: **partial unique indexes** giving at most one ACTIVE and one DRAFT per instrument, so two concurrent publishes cannot both retire the old version and both insert a live one; and the **backfill**, which marks the existing row ACTIVE rather than taking the DRAFT default. Phase 4 learned that lesson on `courses.publication` — a defaulted enum on a backfill is a silent withdrawal of live content, and here it would have made the whole product answer `ASSESSMENT_NOT_FOUND`. Verified against the live database: one row, `riasec-core` v1, ACTIVE, with an effective date.
+
+**Copy-on-write turned two guarantees into properties rather than promises.** A draft is a full copy, so no `assessment_responses` row can ever reference a draft's questions — which is why the draft is freely editable and freely deletable while the `Restrict` that protects published banks has nothing to refuse. And there is no code path in the whole service that touches `assessment_results`: D-049 holds not because the code is careful but because there is nothing to be careful about. The integration suite checks the strong form — the same row, the same six scores, the same code, still pointing at version 1, and **the question text a historical response resolves to is still the text that was asked**. That last one is the half a scores-only guarantee misses: edit in place and a row claims version 1 while reading as version 2's wording.
+
+**The balance guard refuses; adjacency warns** (D-071), and the editor tries to make balance easy rather than only reporting failure. Adding a question asks for a *dimension* and copies the bank's own agreement levels, so growing five items per dimension to six is six clicks rather than a weighting exercise — and the full weight editor is still one click away on every option, because D-048 promises it. When the bank is unbalanced the panel prints what each dimension can attain: "الاجتماعي ٢٤ / الواقعي ٢٠" says which dimension to even up, where "غير متوازن" sends somebody to count questions by hand.
+
+**Balance is expressed over attainable maxima, not question counts** — and a unit test proves why that matters. A bank with one item per dimension passes any count-based check while a strongly Enterprising taker scores twice what a strongly Realistic one can, because the weights differ. The same definition also *permits* a ministry to rescale the whole instrument to 0-8, which a count-based rule would have had no opinion about.
+
+**The seed stopped maintaining and became a bootstrap.** `seedAssessment` used to upsert the bank by key on every run. After 5.3 that would overwrite a published ministry version with whatever wording shipped in the code — data loss dressed as a convenience. It now writes only while version 1 is the only version there is, and says so when it stands back. D-032 always claimed the bank was seeded data "precisely so Phase 5 can edit it without a deploy"; this is the other half of that sentence.
+
+**The one genuinely hard test problem this phase created.** Every integration suite namespaces its rows by a per-run id and they run in parallel against one database. The assessment cannot be namespaced — §4.3 has *one* instrument and `getActive` finds the one ACTIVE row — so publishing a version mid-run made `journey.e2e-spec.ts` fail eight tests with `ASSESSMENT_NOT_FOUND`. **That refusal is correct product behaviour**: a taker whose instrument was replaced mid-attempt must not be scored against a bank they never saw. So the fix serialises the two suites with a Postgres advisory lock rather than weakening either assertion — held on its own connection, released by the server if a worker dies, and costing four seconds of wall clock across the whole run.
+
+**Three smaller decisions worth knowing.** The weights DTO names all six letters explicitly rather than accepting a `Record<string, number>`, because a record would let `{ "X": 4 }` past validation and leave the enum column to answer 500 — the DTO is the outermost gate and naming the six is the only shape in which it can say no. Reordering takes the complete order rather than a move-up/move-down, so the result is what the administrator arranged rather than a replay of their clicks, and it writes negative orders first because `display_order` would otherwise collide with itself mid-shuffle. And an option's weights are replaced wholesale rather than merged, because "this option now contributes to S only" has to be expressible and a merge cannot say it.
 
 ### 2026-08-23 — Sub-phase 5.2: user management, and Phase 4's provisioning seam closed
 
@@ -602,7 +624,7 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - [x] **Phase 2 — Moodle integration** (spike first; web services, provisioning, catalog sync, enrollment, scheduled completion sync + pass threshold + shared-course reuse, seamless login, course player) — **merged** (PR #3, `origin/main` @ `dcb8aad`)
 - [x] **Phase 3 — Certificates + CV** (idempotent course/path certs, Arabic PDF solved, verification page + QR, gallery, CV builder + English PDF export) — **merged** (PR #4, `origin/main` @ `f2a6b4d`)
 - [x] **Phase 4 — Entity / reviewer portal** (entity accounts + server-side data scoping, course creation in the LMS, authoring handoff, product metadata, publish gate + course-edit protection, learner review) — **merged** (PR #6, `origin/main` @ `f1f0dcd`)
-- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **in progress on `phase-5-admin-portal`; 5.2 of 5.9 done** (sub-phase tracker in Current Status)
+- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **in progress on `phase-5-admin-portal`; 5.3 of 5.9 done** (sub-phase tracker in Current Status)
 - [ ] **Phase 6 — Hardening** (Arabic QA, RTL PDF polish, security review, sync reliability + load, a11y, states)
 - [ ] **Phase 7 — Deployment, acceptance & launch** (deploy app+Moodle, seed data, full end-to-end acceptance, docs/handover, sign-off)
 

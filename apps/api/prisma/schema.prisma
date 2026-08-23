@@ -322,18 +322,55 @@ enum UserPathCourseStatus {
   COMPLETED
 }
 
-/// The assessment itself. One exists in Phase 1; Phase 5 may version it.
+/// Where a version of the assessment sits in its life (D-070).
+///
+/// Exactly one DRAFT and one ACTIVE may exist per `key`, enforced by two partial
+/// unique indexes the migration adds by hand — Prisma cannot express a `WHERE`
+/// on a unique index, and a rule this important should be the database's rather
+/// than a service's good intentions (the D-035 discipline).
+///
+/// RETIRED is not deletion. A retired version keeps every question and option a
+/// past response points at, which is the whole mechanism behind D-049's promise
+/// that results are frozen as taken.
+enum AssessmentStatus {
+  /// Being edited. Never served to a taker; freely editable, because no
+  /// response can reference a draft's rows.
+  DRAFT
+  /// The version new takers receive.
+  ACTIVE
+  /// Superseded by a later version. Kept forever.
+  RETIRED
+}
+
+/// One version of the assessment (§4C.3, D-069).
+///
+/// **Copy-on-write.** Editing never mutates a live bank: publishing an edit
+/// inserts a *new* row at `version + 1` with its own copy of every question,
+/// option and weight, and retires the previous one. `assessment_results` keep
+/// pointing at the version they were scored against, and `Restrict` on that
+/// relation means the instrument behind any result still exists — which is what
+/// makes "frozen as taken" literally true rather than only true of the numbers.
+///
+/// So `key` is no longer unique on its own: several rows share `riasec-core` and
+/// differ by version.
 model Assessment {
   id String @id @default(uuid()) @db.Uuid
 
-  /// Stable identifier for seeding and idempotent re-seeding.
-  key         String  @unique
-  /// Bumped when the bank is edited. Results record the version they were
-  /// scored against, so an old result stays interpretable after an edit.
-  version     Int     @default(1)
+  /// Stable identifier for the *instrument*, shared by all its versions.
+  key         String
+  /// 1 for the seeded bank; each published edit is the next integer.
+  version     Int    @default(1)
   title       String
   description String
-  isActive    Boolean @default(true) @map("is_active")
+
+  status AssessmentStatus @default(DRAFT)
+
+  /// When this version became the one new takers receive. Null while DRAFT —
+  /// §4C.3 must show a version *and an effective date*, and a draft has no date
+  /// because it is not in effect.
+  effectiveFrom DateTime? @map("effective_from")
+  /// When a later version superseded it. Null unless RETIRED.
+  retiredAt     DateTime? @map("retired_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -341,6 +378,8 @@ model Assessment {
   questions AssessmentQuestion[]
   results   AssessmentResult[]
 
+  @@unique([key, version])
+  @@index([key, status])
   @@map("assessments")
 }
 

@@ -243,3 +243,94 @@ export interface AdminRegistrationPolicyView {
   employeeIdPattern: string;
   passwordMinLength: number;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.3 — assessment management
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AssessmentVersionStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
+
+/**
+ * One option as the *editor* sees it — weights included.
+ *
+ * This is the one shape in the whole product that carries a RIASEC weighting
+ * across the wire, and it exists only behind `@Roles('SUPER_ADMIN')`. D-034 is
+ * explicit that no weight may reach a taker: an assessment whose scoring key is
+ * visible in a network response is one a person can steer toward whichever
+ * result they already wanted, which would make every gold recommendation
+ * downstream theatre. An integration test greps the *learner* endpoint for these
+ * field names precisely because this type now exists.
+ */
+export interface AdminAssessmentOption {
+  id: string;
+  key: string;
+  label: string;
+  order: number;
+  /** Points per dimension. An absent letter contributes nothing. */
+  weights: Partial<Record<RiasecLetter, number>>;
+}
+
+export interface AdminAssessmentQuestion {
+  id: string;
+  key: string;
+  text: string;
+  order: number;
+  options: AdminAssessmentOption[];
+}
+
+/** Why a proposed version cannot be published, or should not be without thought. */
+export interface AdminBankReadiness {
+  /** Refusals. Publishing with any of these is impossible (D-071). */
+  blockers: string[];
+  /** Advisory. Publishing proceeds; the editor says so first. */
+  warnings: string[];
+  /** What each dimension could attain — how the editor names the imbalance. */
+  attainable: Record<RiasecLetter, number>;
+  balanced: boolean;
+}
+
+/** A version in the history list (§4C.3's "version + effective date"). */
+export interface AdminAssessmentVersion {
+  id: string;
+  version: number;
+  status: AssessmentVersionStatus;
+  title: string;
+  effectiveFrom: string | null;
+  retiredAt: string | null;
+  questionCount: number;
+  /** How many people were scored against this version. Never mutated (D-049). */
+  resultCount: number;
+}
+
+/** §4C.3's landing state: what is live, what is being edited, what came before. */
+export interface AdminAssessmentOverview {
+  active: AdminAssessmentVersion | null;
+  draft: AdminAssessmentVersion | null;
+  history: AdminAssessmentVersion[];
+}
+
+/** The draft bank, with weights, as only an administrator may see it. */
+export interface AdminAssessmentDraft {
+  id: string;
+  key: string;
+  version: number;
+  title: string;
+  description: string;
+  questions: AdminAssessmentQuestion[];
+  readiness: AdminBankReadiness;
+  /** The version this draft was copied from, for "what am I changing". */
+  basedOnVersion: number | null;
+}
+
+/**
+ * The six dimensions, as the editor's question-creation shortcut offers them.
+ *
+ * Adding a question one dimension at a time is what keeps a balanced bank
+ * balanced: going from five items per dimension to six means adding six
+ * questions, one per letter, and the editor should make that the easy path
+ * rather than something to reconstruct from the imbalance report.
+ */
+export interface AdminAddQuestionInput {
+  text: string;
+  letter: RiasecLetter;
+}

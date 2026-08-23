@@ -3,6 +3,7 @@
 import {
   Award,
   BookOpen,
+  ClipboardList,
   FileText,
   LayoutDashboard,
   Route,
@@ -26,6 +27,7 @@ const ICONS: Record<NavIconName, LucideIcon> = {
   cv: FileText,
   profile: User,
   learners: Users,
+  assessment: ClipboardList,
 };
 
 export interface SidebarNavProps {

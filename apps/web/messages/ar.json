@@ -68,7 +68,8 @@
     "entityLearners": "المتدربون",
     "entityProfile": "بيانات الجهة",
     "adminDashboard": "الرئيسية",
-    "adminUsers": "الحسابات"
+    "adminUsers": "الحسابات",
+    "adminAssessment": "التقييم"
   },
   "actions": {
     "retry": "إعادة المحاولة",
@@ -368,7 +369,17 @@
     "ENTITY_KEY_INVALID": "المعرّف يقبل الحروف اللاتينية والأرقام والشرطات فقط.",
     "EMAIL_ALREADY_REGISTERED": "هذا البريد مسجَّل لحساب آخر.",
     "EMPLOYEE_ID_ALREADY_REGISTERED": "هذا الرقم الوظيفي مسجَّل لحساب آخر.",
-    "ACCOUNT_ALREADY_ACTIVE": "فُعّل هذا الحساب من قبل. استخدم «نسيت كلمة المرور» بدلًا من الدعوة."
+    "ACCOUNT_ALREADY_ACTIVE": "فُعّل هذا الحساب من قبل. استخدم «نسيت كلمة المرور» بدلًا من الدعوة.",
+    "ASSESSMENT_DRAFT_EXISTS": "توجد مسودة قيد التعديل بالفعل.",
+    "ASSESSMENT_NO_DRAFT": "لا توجد مسودة قيد التعديل.",
+    "ASSESSMENT_QUESTION_NOT_IN_DRAFT": "هذا السؤال ليس ضمن المسودة.",
+    "ASSESSMENT_OPTION_NOT_IN_DRAFT": "هذا الخيار ليس ضمن المسودة. لا يمكن تعديل إصدار منشور.",
+    "ASSESSMENT_ORDER_INCOMPLETE": "يجب أن يشمل الترتيب كل أسئلة المسودة مرة واحدة.",
+    "ASSESSMENT_NO_TEMPLATE_QUESTION": "لا يوجد سؤال في المسودة لنسخ درجات الموافقة منه.",
+    "BANK_UNBALANCED": "الأبعاد الستة غير متساوية في أعلى درجة يمكن بلوغها. أضف أو احذف أسئلة بالتساوي بين الأبعاد قبل النشر.",
+    "BANK_TOO_FEW_QUESTIONS": "عدد الأسئلة أقل مما يكفي لترتيب الأبعاد الستة.",
+    "BANK_QUESTION_WITHOUT_OPTIONS": "يوجد سؤال بأقل من خيارين.",
+    "BANK_DIMENSIONLESS_OPTION": "يوجد خيار لا يضيف درجة إلى أي بُعد."
   },
   "player": {
     "title": "محتوى الدورة",
@@ -641,7 +652,10 @@
       "ADMIN_USER_STATUS_CHANGED": "تغيير حالة حساب",
       "ADMIN_USER_ROLE_CHANGED": "تغيير دور حساب",
       "ADMIN_ENTITY_CREATED": "إنشاء جهة",
-      "ADMIN_ENTITY_UPDATED": "تعديل جهة"
+      "ADMIN_ENTITY_UPDATED": "تعديل جهة",
+      "ADMIN_ASSESSMENT_DRAFT_OPENED": "بدء تعديل التقييم",
+      "ADMIN_ASSESSMENT_DRAFT_DISCARDED": "حذف مسودة التقييم",
+      "ADMIN_ASSESSMENT_PUBLISHED": "نشر إصدار من التقييم"
     },
     "usersTitle": "إدارة الحسابات",
     "tabAccounts": "الحسابات",
@@ -714,6 +728,67 @@
     "entitiesEmpty": "لا توجد جهات بعد",
     "entitiesEmptyHint": "أضف الجهة الموردة للدورات لتتمكن من إنشاء حساب يمثّلها.",
     "suspendEntity": "إيقاف الجهة",
-    "reactivateEntity": "إعادة تفعيل الجهة"
+    "reactivateEntity": "إعادة تفعيل الجهة",
+    "assessmentTitle": "إدارة التقييم",
+    "assessmentMissing": "لا يوجد تقييم مفعّل. شغّل بذرة البيانات لإنشاء الإصدار الأول.",
+    "riasec": {
+      "R": "الواقعي",
+      "I": "البحثي",
+      "A": "الفني",
+      "S": "الاجتماعي",
+      "E": "المبادِر",
+      "C": "التنظيمي"
+    },
+    "versionLabel": "الإصدار {version}",
+    "versionStatus": {
+      "DRAFT": "مسودة",
+      "ACTIVE": "المعمول به",
+      "RETIRED": "سابق"
+    },
+    "effectiveFrom": "ساري منذ",
+    "questionCount": "عدد الأسئلة",
+    "scoredCount": "نتائج صادرة عنه",
+    "historyHeading": "الإصدارات السابقة",
+    "editHeading": "تعديل التقييم",
+    "editFrozenNotice": "التعديل ينشئ إصدارًا جديدًا يُطبَّق على من يبدأ التقييم لاحقًا. نتائج من أكملوا التقييم لا تتغيّر ولا يُعاد احتسابها.",
+    "startEdit": "بدء التعديل",
+    "backToOverview": "رجوع",
+    "draftHeading": "مسودة الإصدار {version}",
+    "draftCount": "{count} سؤالًا",
+    "addQuestion": "إضافة سؤال",
+    "addQuestionHint": "يأخذ السؤال الجديد نفس درجات الموافقة المستخدمة في البنك، محسوبة على البُعد الذي تختاره.",
+    "addQuestionAction": "إضافة",
+    "questionText": "نص السؤال",
+    "questionDimension": "البُعد",
+    "saveQuestion": "حفظ النص",
+    "removeQuestion": "حذف السؤال",
+    "moveUp": "تحريك لأعلى",
+    "moveDown": "تحريك لأسفل",
+    "showWeights": "عرض الأوزان",
+    "hideWeights": "إخفاء الأوزان",
+    "optionLabel": "نص الخيار",
+    "saveOption": "حفظ",
+    "bankReady": "البنك متوازن وجاهز للنشر.",
+    "bankReadyHint": "تتساوى الأبعاد الستة في أعلى درجة يمكن بلوغها، فالمقارنة بينها عادلة.",
+    "bankBlockedTitle": "لا يمكن النشر",
+    "bankWarningTitle": "تنبيه قبل النشر",
+    "bankWarningHint": "يمكنك النشر رغم ذلك؛ هذا تنبيه وليس منعًا.",
+    "attainableHeading": "أعلى درجة يمكن بلوغها في كل بُعد:",
+    "bankBlocker": {
+      "BANK_UNBALANCED": "الأبعاد الستة غير متساوية في أعلى درجة يمكن بلوغها، وهذا يجعل النمط المهني ناتجًا عن تركيب البنك لا عن إجابات الموظف. أضف أو احذف أسئلة بالتساوي بين الأبعاد.",
+      "BANK_TOO_FEW_QUESTIONS": "عدد الأسئلة أقل مما يكفي لترتيب الأبعاد الستة.",
+      "BANK_QUESTION_WITHOUT_OPTIONS": "يوجد سؤال بأقل من خيارين.",
+      "BANK_DIMENSIONLESS_OPTION": "يوجد خيار لا يضيف درجة إلى أي بُعد، فاختياره لا يختلف عن ترك السؤال بلا إجابة."
+    },
+    "bankWarning": {
+      "BANK_ADJACENT_DIMENSIONS": "يتتابع سؤالان أو أكثر على البُعد نفسه. التتابع يجعل الأسئلة تُقرأ كقسم واحد وقد يدفع الموظف إلى الإجابة عليها بالنمط ذاته."
+    },
+    "publishVersion": "نشر الإصدار",
+    "publishConfirm": "نشر",
+    "publishBody": "سيصبح الإصدار {version} هو التقييم المعمول به لكل من يبدأ التقييم بعد الآن.",
+    "publishFrozenNotice": "النتائج الصادرة عن الإصدارات السابقة تبقى كما هي، ولا يُعاد احتسابها.",
+    "discardDraft": "حذف المسودة",
+    "discardConfirm": "حذف المسودة",
+    "discardBody": "ستفقد كل التعديلات غير المنشورة. التقييم المعمول به لا يتأثر."
   }
 }

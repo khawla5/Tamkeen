@@ -34,7 +34,10 @@ export class AssessmentService {
   /** The active assessment, in presentation order, with no weights attached. */
   async getActive(): Promise<AssessmentView> {
     const assessment = await this.prisma.assessment.findFirst({
-      where: { isActive: true },
+      /* The one version new takers receive (D-069). A draft is never served: an
+         edit in progress must not reach anybody, and a partial unique index
+         guarantees there is at most one ACTIVE row to find. */
+      where: { status: 'ACTIVE' },
       select: {
         id: true,
         version: true,
@@ -112,7 +115,14 @@ export class AssessmentService {
     }
 
     const assessment = await this.prisma.assessment.findFirst({
-      where: { id: dto.assessmentId, isActive: true },
+      /*
+       * Still pinned to the ACTIVE version, and to the id the client was
+       * served. A submission that arrives mid-publish therefore scores against
+       * the version it was *given* or is refused — never against a bank the
+       * taker never saw, which is the one way a copy-on-write publish could
+       * corrupt a result.
+       */
+      where: { id: dto.assessmentId, status: 'ACTIVE' },
       select: {
         id: true,
         version: true,

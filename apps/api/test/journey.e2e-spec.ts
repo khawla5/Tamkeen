@@ -23,6 +23,7 @@ import {
 } from '@tamkeen/types';
 
 import { AppModule } from '../src/app.module';
+import { AssessmentLock } from './assessment-lock';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -59,12 +60,19 @@ describe('Phase 1 journey (e2e)', () => {
   let prisma: PrismaService;
   let emails: EmailCapture;
 
+  /* Held for the whole suite: §4C.3's editor publishes a new assessment
+     version, and a taker part way through the old one is then correctly
+     refused. Serialising the two suites keeps both assertions honest — see
+     assessment-lock.ts. */
+  const lock = new AssessmentLock();
+
   /** questionId → the dimension it feeds, read from the database. */
   let questionLetter: Map<string, RiasecLetter>;
   /** questionId → option ids ordered by their weight, 0 through 4. */
   let optionsByWeight: Map<string, string[]>;
 
   beforeAll(async () => {
+    await lock.acquire();
     emails = new EmailCapture();
     process.env.RATE_LIMIT_ENABLED = 'false';
 
@@ -134,7 +142,7 @@ describe('Phase 1 journey (e2e)', () => {
           .map((option) => option.id),
       );
     }
-  }, 90_000);
+  }, 240_000);
 
   afterAll(async () => {
     const created = await prisma.user.findMany({
@@ -149,6 +157,7 @@ describe('Phase 1 journey (e2e)', () => {
     }
 
     await app.close();
+    await lock.release();
   }, 60_000);
 
   const server = () => app.getHttpServer() as unknown as App;

@@ -1,3 +1,4 @@
+import { AdminAssessmentController } from './admin-assessment.controller';
 import { AdminUsersController } from './admin-users.controller';
 import { AdminController } from './admin.controller';
 
@@ -20,4 +21,4 @@ import { AdminController } from './admin.controller';
  * **Anything added here must carry `@Roles('SUPER_ADMIN')` at class level.**
  * The suite proves it, rather than trusting it.
  */
-export const ADMIN_CONTROLLERS = [AdminController, AdminUsersController];
+export const ADMIN_CONTROLLERS = [AdminController, AdminUsersController, AdminAssessmentController];
