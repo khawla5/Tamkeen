@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthLayout } from '@/components/auth/auth-layout';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -41,16 +41,16 @@ export default function ForgotPasswordPage() {
 
   if (sent) {
     return (
-      <AuthCard title={t('forgotSentTitle')} subtitle={t('forgotSentBody')}>
-        <Button asChild variant="outline">
+      <AuthLayout title={t('forgotSentTitle')} subtitle={t('forgotSentBody')}>
+        <Button asChild size="lg" className="w-full">
           <Link href="/login">{t('signInLink')}</Link>
         </Button>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard title={t('forgotTitle')} subtitle={t('forgotSubtitle')}>
+    <AuthLayout title={t('forgotTitle')} subtitle={t('forgotSubtitle')}>
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field id="email" label={t('email')} required>
           {(props) => (
@@ -66,14 +66,17 @@ export default function ForgotPasswordPage() {
           )}
         </Field>
 
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" size="lg" disabled={submitting} className="w-full">
           {submitting ? t('submitting') : t('forgotSubmit')}
         </Button>
 
-        <Link href="/login" className="self-start text-sm text-muted-foreground underline">
+        <Link
+          href="/login"
+          className="self-center text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
+        >
           {t('signInLink')}
         </Link>
       </form>
-    </AuthCard>
+    </AuthLayout>
   );
 }
