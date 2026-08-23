@@ -5,11 +5,13 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Suspense, useState } from 'react';
 
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthLayout } from '@/components/auth/auth-layout';
 import { useErrorMessage } from '@/components/auth/use-error-message';
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
+import { useFormat } from '@/i18n/format-provider';
 import { authApi } from '@/lib/api-client';
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth-constants';
 
@@ -19,6 +21,7 @@ function ResetPassword() {
      codes are raised by every module (D-024). */
   const tErrors = useTranslations('errors');
   const translateError = useErrorMessage();
+  const { number } = useFormat();
   const token = useSearchParams().get('token');
 
   const [password, setPassword] = useState('');
@@ -56,27 +59,26 @@ function ResetPassword() {
 
   if (done) {
     return (
-      <AuthCard title={t('resetSuccessTitle')} subtitle={t('resetSuccessBody')}>
-        <Button asChild>
+      <AuthLayout title={t('resetSuccessTitle')} subtitle={t('resetSuccessBody')}>
+        <Button asChild size="lg" className="w-full">
           <Link href="/login">{t('submitSignIn')}</Link>
         </Button>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard title={t('resetTitle')} subtitle={t('resetSubtitle')}>
+    <AuthLayout title={t('resetTitle')} subtitle={t('resetSubtitle')}>
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field
           id="password"
           label={t('newPassword')}
-          hint={t('passwordHint', { min: PASSWORD_MIN_LENGTH })}
+          hint={t('passwordHint', { min: number(PASSWORD_MIN_LENGTH) })}
           required
         >
           {(props) => (
-            <Input
+            <PasswordInput
               {...props}
-              type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="new-password"
@@ -91,9 +93,8 @@ function ResetPassword() {
           error={fieldError ? tErrors(fieldError) : undefined}
         >
           {(props) => (
-            <Input
+            <PasswordInput
               {...props}
-              type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               autoComplete="new-password"
@@ -101,17 +102,13 @@ function ResetPassword() {
           )}
         </Field>
 
-        {formError ? (
-          <p role="alert" className="text-sm font-medium text-destructive">
-            {formError}
-          </p>
-        ) : null}
+        {formError ? <Alert tone="error">{formError}</Alert> : null}
 
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" size="lg" disabled={submitting} className="w-full">
           {submitting ? t('submitting') : t('resetSubmit')}
         </Button>
       </form>
-    </AuthCard>
+    </AuthLayout>
   );
 }
 

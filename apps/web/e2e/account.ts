@@ -24,12 +24,15 @@ export interface Account {
   department: string;
 }
 
+/** A department from the registration dropdown (DEPARTMENTS in auth-constants). */
+export const DEPARTMENT = 'تقنية المعلومات';
+
 export function accountFor(label: string): Account {
   return {
     email: `pw-${RUN_ID}-${label}@ministry.gov.example`,
     employeeId: `PW-${RUN_ID}-${label}`.slice(0, 20),
     fullName: 'أحمد الموظف',
-    department: 'تقنية المعلومات',
+    department: DEPARTMENT,
   };
 }
 
@@ -39,12 +42,14 @@ export async function register(page: Page, account: Account): Promise<void> {
   /* Labels, not CSS selectors: if getByLabel cannot find a field, the
      label/input association is broken and the form is inaccessible — so these
      locators double as an accessibility assertion. */
-  await page.getByLabel('الاسم الكامل').fill(account.fullName);
+  /* Two-step wizard (TAM-103): account, then employee. */
   await page.getByLabel('البريد الإلكتروني').fill(account.email);
-  await page.getByLabel('الرقم الوظيفي').fill(account.employeeId);
-  await page.getByLabel('الإدارة').fill(account.department);
   await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
   await page.getByLabel('تأكيد كلمة المرور').fill(PASSWORD);
+  await page.getByRole('button', { name: 'التالي' }).click();
+  await page.getByLabel('الاسم الكامل').fill(account.fullName);
+  await page.getByLabel('الرقم الوظيفي').fill(account.employeeId);
+  await page.getByLabel('الإدارة').selectOption(account.department);
 
   await page.getByRole('button', { name: 'إنشاء الحساب' }).click();
   await expect(page.getByRole('heading', { name: 'تحقّق من بريدك الإلكتروني' })).toBeVisible();
@@ -60,7 +65,7 @@ export async function verify(page: Page, account: Account): Promise<void> {
 export async function signIn(page: Page, account: Account): Promise<void> {
   await page.goto('/login');
   await page.getByLabel('البريد الإلكتروني').fill(account.email);
-  await page.getByLabel('كلمة المرور').fill(PASSWORD);
+  await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
   await expect(page).toHaveURL('http://localhost:3000/');

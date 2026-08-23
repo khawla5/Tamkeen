@@ -197,7 +197,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 ### 4.1 Registration & Sign-in (التسجيل / تسجيل الدخول)
 - **Registration:** email, password, confirm password, full name, employee ID, department. Email verification link on submit. Minimal fields only.
 - **Sign-in:** email + password, "forgot password". Nothing else.
-- Single-column, centered, RTL, Arabic-first. No social login.
+- Single-column, centered, RTL, Arabic-first. No social login. **Built as `AuthLayout` (D-070):** owner header (emblem + logo + a visible exit to the landing page), one centred card with the emblem over the form, footer strip, decorative lattice. Registration is a two-step wizard (account → employee) with the department as a closed list. Forms use the shared Platforms Code primitives (`Input`, `Field`, `PasswordInput`, `Select`, `Alert`); axe (WCAG 2.1 A/AA) over the five pages is an e2e gate.
 - After first sign-in → Dashboard (pre-assessment state).
 
 ### 4.2 Dashboard (الرئيسية) — two states

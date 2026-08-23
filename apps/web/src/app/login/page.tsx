@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthLayout } from '@/components/auth/auth-layout';
 import { useErrorMessage } from '@/components/auth/use-error-message';
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { ApiError, authApi } from '@/lib/api-client';
 
 /**
@@ -74,13 +76,16 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthCard
+    <AuthLayout
       title={t('signInTitle')}
       subtitle={t('signInSubtitle')}
       footer={
         <span>
           {t('noAccount')}{' '}
-          <Link href="/register" className="font-medium text-foreground underline">
+          <Link
+            href="/register"
+            className="font-medium text-primary-700 underline-offset-4 hover:underline"
+          >
             {t('registerLink')}
           </Link>
         </span>
@@ -103,9 +108,8 @@ export default function LoginPage() {
 
         <Field id="password" label={t('password')} required>
           {(props) => (
-            <Input
+            <PasswordInput
               {...props}
-              type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
@@ -114,33 +118,29 @@ export default function LoginPage() {
         </Field>
 
         {error ? (
-          <div role="alert" className="flex flex-col items-start gap-2">
-            <p className="text-sm font-medium text-destructive">{error}</p>
+          <Alert tone="error">
+            {error}
             {unverified ? (
-              <Button type="button" variant="outline" size="sm" onClick={onResend}>
+              <Button type="button" variant="secondary" size="sm" onClick={onResend}>
                 {t('resendVerification')}
               </Button>
             ) : null}
-          </div>
+          </Alert>
         ) : null}
 
-        {resent ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('resendSent')}
-          </p>
-        ) : null}
-
-        <Button type="submit" disabled={submitting}>
-          {submitting ? t('submitting') : t('submitSignIn')}
-        </Button>
+        {resent ? <Alert tone="success">{t('resendSent')}</Alert> : null}
 
         <Link
           href="/forgot-password"
-          className="self-start text-sm text-muted-foreground underline"
+          className="self-start text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
         >
           {t('forgotPasswordLink')}
         </Link>
+
+        <Button type="submit" size="lg" disabled={submitting} className="w-full">
+          {submitting ? t('submitting') : t('submitSignIn')}
+        </Button>
       </form>
-    </AuthCard>
+    </AuthLayout>
   );
 }

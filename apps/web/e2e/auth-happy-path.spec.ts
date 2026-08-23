@@ -1,7 +1,26 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-import { PASSWORD, RUN_ID, accountFor, signedInEmployee } from './account';
+import { DEPARTMENT, PASSWORD, RUN_ID, accountFor, signedInEmployee } from './account';
 import { assertMailpitReachable, tokenFromEmail } from './mailpit';
+
+/**
+ * Registration is a two-step wizard (TAM-103): account, then employee. The
+ * helper drives it in that order; the labels are the same ones the form has
+ * always had, so getByLabel keeps doubling as the accessibility assertion.
+ */
+async function fillRegistration(
+  page: Page,
+  account: { fullName: string; email: string; employeeId: string; department: string },
+  confirmPassword = PASSWORD,
+) {
+  await page.getByLabel('البريد الإلكتروني').fill(account.email);
+  await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
+  await page.getByLabel('تأكيد كلمة المرور').fill(confirmPassword);
+  await page.getByRole('button', { name: 'التالي' }).click();
+  await page.getByLabel('الاسم الكامل').fill(account.fullName);
+  await page.getByLabel('الرقم الوظيفي').fill(account.employeeId);
+  await page.getByLabel('الإدارة').selectOption(account.department);
+}
 
 /**
  * Finds the alert region carrying a given message.
@@ -39,12 +58,7 @@ test.describe('Authentication happy path', () => {
     /* Labels, not CSS selectors: if getByLabel cannot find the field, the
        label/input association is broken and the form is inaccessible — so these
        locators double as an accessibility assertion. */
-    await page.getByLabel('الاسم الكامل').fill(account.fullName);
-    await page.getByLabel('البريد الإلكتروني').fill(account.email);
-    await page.getByLabel('الرقم الوظيفي').fill(account.employeeId);
-    await page.getByLabel('الإدارة').fill(account.department);
-    await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
-    await page.getByLabel('تأكيد كلمة المرور').fill(PASSWORD);
+    await fillRegistration(page, account);
 
     await page.getByRole('button', { name: 'إنشاء الحساب' }).click();
 
@@ -61,7 +75,7 @@ test.describe('Authentication happy path', () => {
     // ── Sign in ───────────────────────────────────────────────────────────────
     await page.goto('/login');
     await page.getByLabel('البريد الإلكتروني').fill(account.email);
-    await page.getByLabel('كلمة المرور').fill(PASSWORD);
+    await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
     await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
     /* Signing in lands on the dashboard, and the session cookie is set. */
@@ -80,18 +94,13 @@ test.describe('Authentication happy path', () => {
     const account = accountFor('unverified');
 
     await page.goto('/register');
-    await page.getByLabel('الاسم الكامل').fill(account.fullName);
-    await page.getByLabel('البريد الإلكتروني').fill(account.email);
-    await page.getByLabel('الرقم الوظيفي').fill(account.employeeId);
-    await page.getByLabel('الإدارة').fill(account.department);
-    await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
-    await page.getByLabel('تأكيد كلمة المرور').fill(PASSWORD);
+    await fillRegistration(page, account);
     await page.getByRole('button', { name: 'إنشاء الحساب' }).click();
     await expect(page.getByRole('heading', { name: 'تحقّق من بريدك الإلكتروني' })).toBeVisible();
 
     await page.goto('/login');
     await page.getByLabel('البريد الإلكتروني').fill(account.email);
-    await page.getByLabel('كلمة المرور').fill(PASSWORD);
+    await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
     await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
     /* Announced as an alert, in Arabic, with the option to resend — the password
@@ -104,12 +113,7 @@ test.describe('Authentication happy path', () => {
     const account = accountFor('wrongpw');
 
     await page.goto('/register');
-    await page.getByLabel('الاسم الكامل').fill(account.fullName);
-    await page.getByLabel('البريد الإلكتروني').fill(account.email);
-    await page.getByLabel('الرقم الوظيفي').fill(account.employeeId);
-    await page.getByLabel('الإدارة').fill(account.department);
-    await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
-    await page.getByLabel('تأكيد كلمة المرور').fill(PASSWORD);
+    await fillRegistration(page, account);
     await page.getByRole('button', { name: 'إنشاء الحساب' }).click();
     await expect(page.getByRole('heading', { name: 'تحقّق من بريدك الإلكتروني' })).toBeVisible();
 
@@ -119,7 +123,7 @@ test.describe('Authentication happy path', () => {
 
     await page.goto('/login');
     await page.getByLabel('البريد الإلكتروني').fill(account.email);
-    await page.getByLabel('كلمة المرور').fill('an-incorrect-password');
+    await page.getByLabel('كلمة المرور', { exact: true }).fill('an-incorrect-password');
     await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
     await expect(alertWithText(page, 'البريد الإلكتروني أو كلمة المرور غير صحيحة')).toBeVisible();
@@ -133,18 +137,20 @@ test.describe('Authentication happy path', () => {
   test('registration is refused for a non-ministry email domain (D-017)', async ({ page }) => {
     await page.goto('/register');
 
-    await page.getByLabel('الاسم الكامل').fill('شخص خارجي');
     /* A prefix of an allowed domain — the exact shape that slipped through when
        the allow-list was mis-typed as a string (D-029). */
-    await page.getByLabel('البريد الإلكتروني').fill(`pw-${RUN_ID}-outsider@ministry.gov`);
-    await page.getByLabel('الرقم الوظيفي').fill(`PW-${RUN_ID}-out`.slice(0, 20));
-    await page.getByLabel('الإدارة').fill('خارجي');
-    await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
-    await page.getByLabel('تأكيد كلمة المرور').fill(PASSWORD);
+    await fillRegistration(page, {
+      fullName: 'شخص خارجي',
+      email: `pw-${RUN_ID}-outsider@ministry.gov`,
+      employeeId: `PW-${RUN_ID}-out`.slice(0, 20),
+      department: DEPARTMENT,
+    });
 
     await page.getByRole('button', { name: 'إنشاء الحساب' }).click();
 
+    /* The server refuses on the email, so the wizard returns to step 1. */
     await expect(alertWithText(page, 'غير مسجّل ضمن نطاقات الوزارة')).toBeVisible();
+    await expect(page.getByLabel('البريد الإلكتروني')).toBeVisible();
   });
 
   test('mismatched passwords are caught in the browser, before any request', async ({ page }) => {
@@ -158,16 +164,15 @@ test.describe('Authentication happy path', () => {
     });
 
     await page.goto('/register');
-    await page.getByLabel('الاسم الكامل').fill(account.fullName);
     await page.getByLabel('البريد الإلكتروني').fill(account.email);
-    await page.getByLabel('الرقم الوظيفي').fill(account.employeeId);
-    await page.getByLabel('الإدارة').fill(account.department);
     await page.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
     await page.getByLabel('تأكيد كلمة المرور').fill('something-else-entirely');
 
-    await page.getByRole('button', { name: 'إنشاء الحساب' }).click();
+    /* The wizard refuses to advance — the employee step never appears. */
+    await page.getByRole('button', { name: 'التالي' }).click();
 
     await expect(alertWithText(page, 'كلمتا المرور غير متطابقتين')).toBeVisible();
+    await expect(page.getByLabel('الاسم الكامل')).toHaveCount(0);
     expect(registerCalled, 'no request should be sent for a client-side error').toBe(false);
   });
 });
@@ -192,7 +197,7 @@ test.describe('Arabic-first shell', () => {
     await page.goto('/');
 
     await expect(page).toHaveURL('/');
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('مسارك المهني');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('منصة تمكين');
   });
 
   test('an unauthenticated visitor at any other portal path is sent to sign in, not left on an error', async ({
