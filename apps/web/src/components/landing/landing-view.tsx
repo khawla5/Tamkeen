@@ -2,13 +2,11 @@
 
 import { useTranslations } from 'next-intl';
 
-import { CtaSection } from '@/components/landing/cta-section';
+import { FaqSection } from '@/components/landing/faq-section';
 import { HeroSection } from '@/components/landing/hero-section';
-import { ProblemSection } from '@/components/landing/problem-section';
+import { AboutSection } from '@/components/landing/about-section';
 import { SiteFooter } from '@/components/landing/site-footer';
 import { SiteHeader } from '@/components/landing/site-header';
-import { StepsSection } from '@/components/landing/steps-section';
-import { TrustSection } from '@/components/landing/trust-section';
 
 /**
  * The public marketing page's content, extracted so it can be mounted in two
@@ -21,7 +19,7 @@ export function LandingView() {
   const tA11y = useTranslations('a11y');
 
   return (
-    <div className="min-h-dvh bg-cream">
+    <div className="min-h-dvh bg-background">
       {/* First focusable element — WCAG 2.4.1, same pattern as AppShell. */}
       <a
         href="#main-content"
@@ -34,10 +32,8 @@ export function LandingView() {
 
       <main id="main-content">
         <HeroSection />
-        <ProblemSection />
-        <StepsSection />
-        <TrustSection />
-        <CtaSection />
+        <AboutSection />
+        <FaqSection />
       </main>
 
       <SiteFooter />

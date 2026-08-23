@@ -3,8 +3,11 @@
 import { Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+
 import { useState } from 'react';
 
+import { Logo } from '@/components/brand/logo';
+import { MinistryEmblem } from '@/components/brand/ministry-emblem';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -19,25 +22,32 @@ import { Button } from '@/components/ui/button';
  * something different for the same action.
  */
 export function SiteHeader() {
-  const tLanding = useTranslations('landing');
   const tAuth = useTranslations('auth');
   const tA11y = useTranslations('a11y');
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-cream/95 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
+      <div className="mx-auto flex h-20 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         {/*
           Not "/" — that path is the authenticated dashboard
           (`app/(portal)/page.tsx`). This page lives at `/landing` precisely
           so the two never collide.
         */}
-        <Link href="/landing" className="text-lg font-bold text-navy">
-          {tLanding('brand')}
-        </Link>
+        {/* Owner before product: the ministry emblem leads, the platform follows. */}
+        <div className="flex items-center gap-3">
+          <MinistryEmblem height={60} priority />
+          <span aria-hidden="true" className="h-10 w-px bg-border" />
+          <Link href="/landing" className="flex items-center">
+            <Logo height={46} priority />
+          </Link>
+        </div>
 
         <nav aria-label={tA11y('primaryNav')} className="hidden items-center gap-6 sm:flex">
-          <Link href="/login" className="text-sm font-medium text-foreground hover:text-navy-soft">
+          <Link
+            href="/login"
+            className="text-sm font-medium text-foreground hover:text-neutral-700"
+          >
             {tAuth('signInLink')}
           </Link>
           <Button asChild size="sm">
