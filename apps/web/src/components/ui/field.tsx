@@ -1,3 +1,4 @@
+import { AlertCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -32,7 +33,7 @@ export function Field({ id, label, error, hint, required = false, children }: Fi
   const describedBy = [errorId, hintId].filter(Boolean).join(' ') || undefined;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       {/*
         The required marker is a SIBLING of the label, not a child of it.
         Nested inside, its text becomes part of the label — an e2e test caught
@@ -41,15 +42,16 @@ export function Field({ id, label, error, hint, required = false, children }: Fi
         prevent that, because the label's text content is what gets used.
         The requirement itself is conveyed by the input's `required` attribute.
       */}
-      <div className="flex items-center gap-1">
-        <label htmlFor={id} className="text-sm font-medium text-foreground">
-          {label}
-        </label>
+      {/* Platforms Code puts the required mark BEFORE the label text. */}
+      <div className="flex items-center gap-1 text-sm leading-5 font-semibold">
         {required ? (
-          <span aria-hidden="true" className="text-destructive">
+          <span aria-hidden="true" className="text-danger">
             *
           </span>
         ) : null}
+        <label htmlFor={id} className="text-foreground">
+          {label}
+        </label>
       </div>
 
       {children({
@@ -60,7 +62,7 @@ export function Field({ id, label, error, hint, required = false, children }: Fi
       })}
 
       {hint ? (
-        <p id={hintId} className="text-xs text-muted-foreground">
+        <p id={hintId} className="text-sm leading-5 text-neutral-500">
           {hint}
         </p>
       ) : null}
@@ -68,7 +70,12 @@ export function Field({ id, label, error, hint, required = false, children }: Fi
       {error ? (
         /* Announced when it appears, so a screen-reader user learns why the
            submission failed without hunting for the message. */
-        <p id={errorId} role="alert" className={cn('text-xs font-medium text-destructive')}>
+        <p
+          id={errorId}
+          role="alert"
+          className={cn('flex items-center gap-2 text-sm leading-5 text-danger')}
+        >
+          <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
           {error}
         </p>
       ) : null}

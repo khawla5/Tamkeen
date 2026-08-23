@@ -350,6 +350,9 @@
     "signingOut": "جارٍ تسجيل الخروج…"
   },
   "auth": {
+    "backToLanding": "العودة إلى الصفحة الرئيسية",
+    "showPassword": "إظهار كلمة المرور",
+    "hidePassword": "إخفاء كلمة المرور",
     "registerTitle": "إنشاء حساب",
     "registerSubtitle": "التسجيل متاح لموظفي الوزارة فقط.",
     "signInTitle": "تسجيل الدخول",

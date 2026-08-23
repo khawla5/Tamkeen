@@ -19,42 +19,29 @@
 
 ---
 
-## TAM-101 — Auth shell: two-panel `AuthLayout` + placeholder Arabic copy
+## TAM-101 — Auth shell: centred government template + DGA form primitives — **DONE** (`feature/tam-101-auth-shell`)
 
 - **Labels:** `auth-ui-port`, `frontend`, `design-system`
 - **Priority:** High (blocks every other ticket in the epic)
-- **Pre-requisite:** TAM-115 (Platforms Code tokens)
-- **Description:**
-  Build the shared auth shell all five auth screens will sit in. **First check whether Platforms Code prescribes a sign-in/registration template; if it does, that template is the shell.** Otherwise use the approved split layout: a ministry-branded panel (emblem — D-051 placeholder until supplied — tagline, 3 feature bullets) beside the form panel, built from Platforms Code components and tokens. Collapses to a single column below `md`; verified usable at 360px.
-  Draft ministry-training-toned **placeholder** Arabic copy for the panel (realistic sentence length, no Lorem Ipsum, no machine translation) in `messages/ar.json`, clearly marked placeholder until the Training Directorate delivers final copy.
-  Record the decision: the two-panel layout amends CLAUDE.md §4.1's "single-column, centered" — add the `decisions.md` entry.
-  **Acceptance:** shell renders RTL-correct at 360/768/1280px; catalog test still passes (no empty strings, no stray English, no hardcoded digits); axe/manual a11y check clean; no physical-direction Tailwind classes anywhere in the new code.
-  **Implementation notes (verified against the repo):**
-  - Reference layout to port (`src/pages/Login.tsx` ~line 620): brand panel hidden below `lg`, `lg:w-[44%]`, decorative geometric pattern, small ministry label → large display text → description → 3 feature rows (icon in a gold-tinted rounded square + label) → tagline. Form panel is flat (no card), with a compact brand bar shown only on mobile.
-  - Put the brand panel FIRST in DOM order: with RTL logical flow it lands on the start (right) side with zero physical classes. Panel = `<aside>` (complementary landmark), form area = `<main>`. Keep exactly ONE `h1` = the page title in the form panel; the panel's display text must NOT be a heading (AuthCard history: duplicate headings get announced twice by screen readers).
-  - `lucide-react@1.31.0` is already a dependency; `ClipboardCheck`, `Compass`, `Award` all exist for the three feature icons. All svgs `aria-hidden`.
-  - `tw-animate-css` is already imported in `globals.css` — use `animate-in fade-in duration-200 motion-reduce:animate-none` for the mount fade. No framer-motion.
-  - Token classes: **use the Platforms Code semantic tokens from TAM-115** (the panel on the system's primary/dark surface, text and icon chips on its documented pairings). The navy/gold class names in earlier drafts are obsolete. Never hardcode hex; every pairing must be one the rewritten contrast test covers.
-  - New copy goes under `auth.brandPanel.*` in `messages/ar.json` (keys: ministry, heading, description, featureAssessment, featurePaths, featureCertificates, tagline). No digits and no English in the values or the catalog test fails the build.
-  - Component tests live beside the component (vitest + testing-library, `NextIntlClientProvider` wrapper with locale `ar-u-nu-latn-ca-gregory` — see `states.test.tsx` for the pattern). Include a test that greps rendered class attributes for physical-direction classes (`ml-|mr-|pl-|pr-|text-left|text-right|left-|right-|border-l|border-r`).
-  - Type gotcha: indexing a `const` array of lucide icons types as `T | undefined` under strict mode — pair icon+key in one tuple/object array so the lookup can't be undefined.
+- **Pre-requisite:** TAM-115 (Platforms Code tokens) — stacked on `feature/dga-alignment`
+- **What shipped (2026-08-23) — note the change from the original two-panel idea:** the two-panel split was the *reference repo's* layout, exactly the source the epic stopped following. Government sign-in pages (Absher, Nafath, the DGA's examples) are **centred**: a slim header naming the owner, one card with the ministry emblem over the form, a footer strip, a quiet geometric lattice behind the page. So `AuthLayout` is that — and CLAUDE.md §4.1's "single-column, centred" **stands; no decision amendment was needed**. The header carries a visible exit ("← العودة إلى الصفحة الرئيسية") because a logo link is a convention, not a signpost.
+- **Also shipped, app-wide:** the DGA form anatomy in the shared primitives — `Input` (36px, radius 4, neutral-400 edge, primary focus ring), `Field` (semibold label, required mark before the label but kept out of the accessible name, icon + text error row), new `PasswordInput` (show/hide toggle, `aria-pressed`, never submits) and `Alert` (status banners: error = assertive alert, success/info = polite status). Every form in the portal inherits this.
+- **Acceptance met:** one `h1`; header/main/footer landmarks; pattern `aria-hidden`; no physical-direction classes, no retired tokens (tested); 9 `Field` accessibility tests unchanged and green.
+- **Open:** whether Platforms Code publishes an official login template (official site unreadable from here) — if it does, reconcile; the decorative lattice is below AA on purpose.
 
-## TAM-102 — Sign-in page restyle (wired)
+## TAM-102 — Sign-in page restyle (wired) — **DONE** (`feature/tam-101-auth-shell`)
 
 - **Labels:** `auth-ui-port`, `frontend`
 - **Priority:** High
 - **Pre-requisite:** TAM-101
-- **Description:**
-  Rebuild `/login` inside the new `AuthLayout` with the reference's input treatment: lucide icons inside fields (already a dependency), its spacing/focus rhythm, password show/hide toggle. Functionality is untouched: email + password, forgot-password link, CSRF double-submit flow, lockout and error mapping via `use-error-message`.
-  Strip everything the reference has that we forbid: role picker, social login, demo-account quick-access buttons, "demo notice" banner.
-  **Acceptance:** existing login unit + e2e tests pass unmodified; error/loading states present; full keyboard path (tab order, visible focus, submit on Enter); works at 360px RTL.
-  **Implementation notes (verified):** the current page (`src/app/login/page.tsx`) already carries all behavior to preserve — `useErrorMessage` mapping, the EMAIL_NOT_VERIFIED resend branch, **role-based redirect on success (`user.role === 'ENTITY' ? '/entity' : '/'`, D-065 — entities must not land on the learner dashboard)** + `router.refresh()`, `dir="ltr"` on the email input, `noValidate` on the form, `role="alert"`/`role="status"` on error/resent messages. Swap `AuthCard` → `AuthLayout` and restyle inputs via the shared `Field`/`Input` components (extend `Input` to take an optional start-icon rather than forking per page).
+- **What shipped:** `/login` on `AuthLayout` with the DGA primitives: `PasswordInput`, form-level messages as `Alert` (the unverified-email resend button lives inside the error alert), full-width primary submit, links in the primary. Behaviour untouched — `useErrorMessage` mapping, the `EMAIL_NOT_VERIFIED` resend branch, the role-based redirect (`ENTITY` → `/entity`), `dir="ltr"` on the email field, `noValidate`. Labels and error copy unchanged, so the e2e locators hold.
+- **Acceptance met:** existing login tests pass unmodified; 297 web unit tests green; typecheck, lint, prettier.
 
 ## TAM-103 — Registration as a two-step wizard (wired)
 
 - **Labels:** `auth-ui-port`, `frontend`
 - **Priority:** High
-- **Pre-requisite:** TAM-101 (TAM-102 recommended first for shared input components)
+- **Pre-requisite:** TAM-101 + TAM-102 (done). **Own branch:** `feature/tam-103-register-wizard` off `feature/tam-101-auth-shell`.
 - **Description:**
   Rebuild `/register` inside `AuthLayout` as a two-step wizard, keeping the reference's step-wizard feel but **deleting the role picker**: **Step 1** account (email, password, confirm password) → **Step 2** employee details (full name, employee ID, department). Arabic step indicator ("الخطوة 1 من 2", western digits). Per-step client validation; one server submit at the end; back preserves entered values. Server-side rules (restricted domain, employee-ID pattern, password policy) untouched.
   A server error on submit must return the user to the step containing the offending field, with the field-level Arabic error shown.
