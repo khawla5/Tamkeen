@@ -26,9 +26,17 @@ test.describe('Phase 1 journey', () => {
     // ── The dashboard starts near-empty, with one action ──────────────────────
     await expect(page.getByRole('heading', { name: 'ابدأ بتقييم ميولك المهنية' })).toBeVisible();
 
-    /* §4.2: before the assessment the nav is Dashboard, Courses and Profile. */
+    /* §4.2 (D-071): before the assessment the nav is Dashboard and Profile —
+       two items, nothing else to wander into. */
     const nav = page.getByRole('navigation', { name: 'التنقل الرئيسي' });
+    await expect(nav.getByRole('link')).toHaveCount(2);
+    await expect(nav.getByRole('link', { name: 'الدورات' })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'مساري' })).toHaveCount(0);
+
+    /* And the URL agrees with the nav: the catalogue bounces to the dashboard. */
+    await page.goto('/courses');
+    await expect(page).toHaveURL('http://localhost:3000/');
+    await expect(page.getByRole('heading', { name: 'ابدأ بتقييم ميولك المهنية' })).toBeVisible();
 
     await page.getByRole('link', { name: 'ابدأ التقييم' }).click();
 
@@ -58,6 +66,14 @@ test.describe('Phase 1 journey', () => {
 
     /* The retake entry point exists while nothing is committed (D-015). */
     await expect(page.getByRole('link', { name: 'إعادة التقييم' })).toBeVisible();
+
+    /* Courses joined the nav the moment the assessment was done — no reload,
+       the portal state refreshed on submit. Results is a bare flow page, so
+       read the nav from the dashboard. */
+    await page.goto('/');
+    await expect(nav.getByRole('link', { name: 'الدورات' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'مساري' })).toHaveCount(0);
+    await page.goto('/results');
 
     // ── Build the path ────────────────────────────────────────────────────────
     await page.getByRole('link', { name: 'استعرض المسار' }).first().click();
@@ -179,10 +195,16 @@ test.describe('Phase 1 journey', () => {
     await expect(page.getByRole('button', { name: 'تأكيد المسار' })).toHaveCount(0);
   });
 
-  test('the catalogue is browsable before the assessment, with no action offered', async ({
+  test('the catalogue is browsable once assessed, before any path, with no action offered', async ({
     page,
   }) => {
     await signedInEmployee(page, 'browse');
+
+    /* D-071: the catalogue opens after the assessment, not before. */
+    await page.goto('/assessment');
+    await completeAssessment(page);
+    await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
+    await page.goto('/');
 
     await page.getByRole('link', { name: 'الدورات' }).click();
     await expect(page).toHaveURL(/\/courses$/);
@@ -202,6 +224,10 @@ test.describe('Phase 1 journey', () => {
 
   test('search and filters narrow the catalogue', async ({ page }) => {
     await signedInEmployee(page, 'filter');
+
+    await page.goto('/assessment');
+    await completeAssessment(page);
+    await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
 
     await page.goto('/courses');
     await expect(page.getByText('47 دورة')).toBeVisible();

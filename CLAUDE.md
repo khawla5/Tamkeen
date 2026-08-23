@@ -201,7 +201,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - After first sign-in → Dashboard (pre-assessment state).
 
 ### 4.2 Dashboard (الرئيسية) — two states
-- **Pre-assessment:** near-empty. One card briefly explaining the assessment (~20–30 questions, few minutes) + single primary button **"ابدأ التقييم"**. No empty widgets. Nav at this stage: Dashboard, Courses, Profile only.
+- **Pre-assessment:** near-empty. One card briefly explaining the assessment (~20–30 questions, few minutes) + single primary button **"ابدأ التقييم"**. No empty widgets. Nav at this stage: **Dashboard and Profile only** (D-071 — Courses appears once the assessment is done; a pre-assessment visit to any `/courses*` URL redirects to the dashboard).
 - **Post-assessment, no path chosen:** main card says **"اختر مسارك"**, links to Results & Path Selection.
 - **Post-assessment, path active:** "continue where you left off" card (next course/quiz, one primary button) + active path progress bar ("X من Y دورات مكتملة") + compact tiles to My Path, Certificates, CV. Everything shown must be actionable.
 
@@ -222,7 +222,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - **Confirm = hard commitment** (Arabic confirmation dialog: one path, cannot switch). On confirm: lock path + course set, fire Moodle enrollment, go to My Path.
 
 ### 4.6 Courses catalog (الدورات)
-- Global browse of all courses (available even pre-assessment). Filters: path-type/category, duration; plus search.
+- Global browse of all courses, **available once the assessment is done** (D-071; before that the catalogue is neither in the nav nor reachable by URL — the new user's one action is the assessment). The courses API itself stays open: reading catalogue data leaks nothing and every mutation is server-gated behind a confirmed path. Filters: path-type/category, duration; plus search.
 - Card: title, short description, category, duration, path(s) it belongs to. Click → Course detail.
 
 ### 4.7 Course detail (صفحة الدورة)
