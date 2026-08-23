@@ -225,7 +225,7 @@
   - Reuse the `auth_tokens` single-use hashed-token infrastructure and the existing verify-email page/endpoint shape with a new token type (`EMAIL_CHANGE`); store the pending address as `users.pending_email` (it is not a secret, but it must not become the login before confirmation).
   - The verification email is a *reuse* of the locked "email verification" notification type, not a new type.
 
-## TAM-112 — Sign-out in the sidebar footer
+## TAM-112 — Sign-out in the sidebar footer — **absorbed by TAM-117** (the shell's header carries sign-out)
 
 - **Labels:** `profile`, `frontend`
 - **Priority:** Low
@@ -324,10 +324,73 @@
   **Acceptance:** the page passes the Platforms Code checklist the implementer extracted (attached to the PR); emblem slot present; product preview present; no gold-fill/white-text anywhere; AA contrast across all text; keyboard + screen-reader pass; 360px RTL; `landing.test.tsx` updated; the landing e2e (signed-out `/` shows the page, CTAs route to `/register` and `/login`) still green.
   **Implementation notes (verified):** `app/landing/page.tsx` renders `LandingView` unconditionally; `/` renders the same view for signed-out visitors via `PortalProvider` and routes signed-in users by role (learner `/`, entity `/entity`) — keep that wiring. Messages are under `landing.*` in `ar.json` with `{min}`/`{max}` interpolations for the 5–10 rule — keep them interpolated, never hardcode the numbers. The Next.js dev overlay badge ("N" circles) is not part of the page.
 
-## TAM-117 — Portal alignment to Platforms Code (follow-up epic stub)
+---
 
-- **Labels:** `dga-alignment`, `frontend`
-- **Priority:** Low (placeholder — to be broken down after TAM-115/116 land)
-- **Pre-requisite:** TAM-115, TAM-116, and the auth epic re-based on Platforms Code
+> **Epic label: `portal-dga`** — the signed-in experience (learner portal and entity portal) on Platforms Code: shell, shared components, every page, then a gate. Replaces the TAM-117 stub. **Why now:** the tokens (TAM-115) recoloured the portal, and the auth pages (TAM-101–105) put the DGA *form anatomy* into the shared `Input`/`Field`/`Select`/`Alert` — so the portal is already half-aligned by construction. What remains is the shell, the non-form components, and the page-level patterns. Shared rules: logical properties only; one primary action per screen (§3); loading/empty/error states on every data view (§2B); WCAG 2.1 AA gated by axe, not reviewed by eye; the behaviour tickets already written (TAM-107, 108, 109–114) are implemented **on top of** this epic's components, never blocked on it — if one lands first it uses the new tokens, and this epic restyles it.
+> **Source of truth:** the official Platforms Code site/Figma; the community registry's Navigation Menu, Breadcrumb, Card, Table, Tabs, Tag, Tooltip, Skeleton and Sonner definitions are the practical reference for component anatomy (unofficial — reconcile with the official spec where they differ).
+> **Branching:** `feature/tam-117-portal-shell` off `feature/tam-106-nav-gating`; each following ticket stacks on the previous.
+
+## TAM-117 — Portal shell on Platforms Code: header bar, light sidebar, page frame, footer
+
+- **Labels:** `portal-dga`, `frontend`, `design-system`
+- **Priority:** High (every portal page sits in it)
+- **Pre-requisite:** TAM-106 (the nav gating lives in the shell's nav list)
 - **Description:**
-  Once the tokens are in and the public surfaces prove the direction, align the signed-in portal's **components and patterns** (sidebar/navigation, cards, forms, tables, empty/loading/error states, the recommended-path treatment, the status strip) to Platforms Code equivalents — colors will already have changed via TAM-115. Break this into per-surface tickets at that point; the currently written tickets (TAM-106–114) remain valid in behaviour and should be implemented against the new tokens, not blocked on this stub.
+  Rebuild `AppShell` (and the entity portal's `EntityPage` frame, which mirrors it) the way a government application is framed:
+  1. **A top header bar** — ministry emblem + Tamkeen logo on the start edge (the same lockup as the landing header and `AuthLayout`), the signed-in user's name and a sign-out action on the end edge (this absorbs TAM-112's "sign-out in the shell"; TAM-112 is closed by this ticket), on a white surface with a hairline bottom border.
+  2. **A light sidebar** — white/neutral-50 ground, Platforms Code navigation-menu anatomy: each item an icon + label row, the active item marked with a primary start-edge bar and primary text (`aria-current="page"` as today), hover on neutral-100. **This replaces the dark `neutral-900` rail**, which is a leftover of the navy era: Platforms Code applications use light navigation with the primary as the active indicator, and a dark rail next to white content is the one place the portal still looks like the old brand. Below `md` the sidebar becomes the existing horizontal strip, restyled the same way.
+  3. **The page frame** — `PortalPage`'s title row as a DGA page header (title, optional single action on the end edge, optional breadcrumb for nested pages such as a course inside the catalogue), content on the neutral-50 ground with white cards.
+  4. **A slim footer strip** — © وزارة الداخلية · classification — on every shell page, matching the auth footer.
+  The certificates indicator (the dot on شهاداتي) and the skip link are kept; `navForState` and its gating are untouched.
+  **Acceptance:**
+  - Learner and entity portals share one shell implementation (the entity frame is a configuration of it, not a copy).
+  - Sidebar: light ground, primary active bar, `aria-current="page"` preserved; all nav tests (`nav-items.test.ts`, `sidebar-nav.test.tsx`, `portal-provider.test.tsx`) green unchanged.
+  - Header shows the lockup and the user's name; sign-out works from every page (the logout call + "navigate regardless" already in `profile/page.tsx`, extracted to a shared hook — TAM-112's content).
+  - No physical-direction classes (grep), no hex literals; the skip link remains the first focusable element (e2e already asserts this).
+  - axe clean on the dashboard in all three states (the e2e gate arrives fully in TAM-121, but this ticket runs it on the shell).
+  **Implementation notes (verified):** shell is `src/components/layout/app-shell.tsx` (`<aside class="bg-neutral-900 md:w-64">`, brand lockup on a white tile — the tile exists *because* the rail is dark; it goes when the rail is light); nav rendering is `sidebar-nav.tsx` (active state at its `cn(...)` around line 62, indicator dot line 91); the page frame is `portal-page.tsx` (`PortalPage`, with `chrome="bare"` for flow pages — keep that prop, TAM-107 changes which pages use it); the entity frame is `entity-page.tsx` + `entity-nav-items.ts`. The user's name comes from `usePortal().user` / `EntityProvider`. The landing header (`components/landing/site-header.tsx`) already has the exact lockup markup to reuse.
+
+## TAM-118 — Shared portal components on Platforms Code: Card, Badge/Tag, Progress, Table, Skeleton, states, Textarea, Tabs, toasts
+
+- **Labels:** `portal-dga`, `frontend`, `design-system`
+- **Priority:** High
+- **Pre-requisite:** TAM-117
+- **Description:**
+  Bring the remaining shared primitives to the Platforms Code anatomy, the way `Input`/`Field`/`Select`/`Alert`/`Button` already are, so the page sweep (TAM-119/120) is mostly composition rather than styling:
+  - `Card` — DGA card: white, neutral-300 hairline, radius 8 (the system's card radius, replacing the 16 the landing uses for its hero panels), header/content spacing per the system; a `variant` for the "selected/recommended" treatment (primary edge) so `PathCard` and the path-build course cards stop hand-rolling it.
+  - `Badge` → the DGA **Tag** anatomy (status tags: neutral, primary, success, warning, danger — the `-50` fill with the status text colour); `Badge`'s `primary`/`dark`/`soft`/`onColor` variants map onto it.
+  - `Progress` — DGA progress bar (track neutral-200, fill primary, 8px, labelled) — used by the dashboard, My Path, path build.
+  - **`Table`** (new) — DGA table anatomy (header row on neutral-50, semibold 14px, hairline rows, hover) for the entity learners/courses lists, which are hand-built today.
+  - `Skeleton` + `LoadingState`/`EmptyState`/`ErrorState` — the same tokens; `ErrorState` on the `Alert` error tone; `EmptyState` as a quiet centred block with one action.
+  - `Textarea` — the `Input` anatomy at multi-line.
+  - **`Tabs`** (new, extracted from the landing explorer's tablist) for pages that switch views (the entity course page's sections).
+  - **Toasts** — the DGA registry uses Sonner for transient confirmations ("تم الحفظ"); add `sonner` only if a page in TAM-119/120 needs a transient confirmation that the `Alert` can't serve — otherwise don't.
+  **Acceptance:** every primitive has a component test for its semantics (not its classes); `states.test.tsx` green; contrast test extended with any new pairing a primitive introduces; no page in the portal imports a one-off card/badge/progress implementation after TAM-119/120.
+  **Implementation notes (verified):** `src/components/ui/{card,badge,progress,skeleton,textarea}.tsx` and `src/components/states/*` are the whole inventory — there is no table or tabs primitive yet (`entity/learners` and `entity/courses` lay out rows by hand; the landing `about-section.tsx` owns a bespoke tablist worth extracting). `--radius-card` in `globals.css` is 1rem today; the system's card radius is 8 — change the token, not the call sites.
+
+## TAM-119 — Learner portal page sweep on the new shell and components
+
+- **Labels:** `portal-dga`, `frontend`
+- **Priority:** High
+- **Pre-requisite:** TAM-117, TAM-118
+- **Description:**
+  Walk the eleven learner pages and compose each on the new shell/components, removing any bespoke styling the primitives now cover, and applying the DGA page patterns: page header with the single action, cards for units of content, the status Tag for course/path states, the progress bar for progress, `Table` where rows are tabular. Pages: dashboard (three states — TAM-108's chips and status strip land on these components), assessment (with TAM-107's sidebar), results (TAM-113/114's structure), path build, courses catalogue, course detail, course player, My Path, certificates gallery, CV builder, profile (TAM-109–111's sections).
+  **Acceptance:** every page renders inside the shell with a DGA page header; every data view keeps explicit loading/empty/error states; context-dependent single actions unchanged (§3); all page tests green; no new hex, no physical classes; every page passes axe (TAM-121 gate run per page as it lands).
+
+## TAM-120 — Entity portal page sweep
+
+- **Labels:** `portal-dga`, `frontend`
+- **Priority:** Medium
+- **Pre-requisite:** TAM-117, TAM-118
+- **Description:**
+  The six entity pages (dashboard, my courses, manage course, course content, learners, entity profile) on the shared shell (entity configuration) and the new `Table`, status Tags and page headers. Scoping and behaviour (D-027's entity scoping, D-066/067 guards) untouched; the entity e2e fixtures keep their locators.
+  **Acceptance:** as TAM-119, for the entity pages; `entity-*.test.tsx` green.
+
+## TAM-121 — Portal a11y and layout gate (axe at three widths), epic close-out
+
+- **Labels:** `portal-dga`, `qa`, `docs`
+- **Priority:** Medium
+- **Pre-requisite:** TAM-119, TAM-120
+- **Description:**
+  The TAM-105 pattern for the portal: an e2e spec that signs in, drives to every learner and entity page in a representative state, runs axe (WCAG 2.1 A/AA) and asserts no horizontal overflow at 360/768/1280; a keyboard walk of the shell (skip link → header actions → sidebar → page action). Screenshot review at the three widths; findings fixed or ticketed. Docs: decisions.md entry for the light sidebar and the portal shell; CLAUDE.md §4 page specs updated where the shell changed them; progress.md.
+  **Acceptance:** gate green in CI; no open critical/high findings; docs updated.
