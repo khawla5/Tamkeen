@@ -124,6 +124,22 @@ export const AuditAction = {
    * explicable months later without reconstructing the bank as it stood.
    */
   ADMIN_ASSESSMENT_PUBLISHED: 'ADMIN_ASSESSMENT_PUBLISHED',
+  /** A study path was created (§4C.4). Always inactive to begin with. */
+  ADMIN_PATH_CREATED: 'ADMIN_PATH_CREATED',
+  /** A path's content changed — name, description, duration, letter, order. */
+  ADMIN_PATH_UPDATED: 'ADMIN_PATH_UPDATED',
+  /**
+   * A path became offerable to learners, or stopped being.
+   *
+   * Audited apart from an ordinary edit because these are the two moments that
+   * change what the whole workforce is offered, and a retirement records how
+   * many people were part way through choosing it when the decision was made.
+   */
+  ADMIN_PATH_ACTIVATED: 'ADMIN_PATH_ACTIVATED',
+  ADMIN_PATH_RETIRED: 'ADMIN_PATH_RETIRED',
+  /** A course joined or left a path's membership. */
+  ADMIN_PATH_COURSE_ATTACHED: 'ADMIN_PATH_COURSE_ATTACHED',
+  ADMIN_PATH_COURSE_DETACHED: 'ADMIN_PATH_COURSE_DETACHED',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];
@@ -190,6 +206,13 @@ export const AuditReason = {
    * specific blockers go in the detail payload (D-071).
    */
   BANK_NOT_PUBLISHABLE: 'BANK_NOT_PUBLISHABLE',
+  /**
+   * A path was refused activation, or an edit that would have left an active
+   * path with fewer selectable courses than a learner needs to confirm (§2).
+   */
+  PATH_NOT_OFFERABLE: 'PATH_NOT_OFFERABLE',
+  /** A course could not leave a path because learners hold it through it. */
+  COURSE_HELD_BY_LEARNERS: 'COURSE_HELD_BY_LEARNERS',
 } as const;
 
 export type AuditReasonCode = (typeof AuditReason)[keyof typeof AuditReason];

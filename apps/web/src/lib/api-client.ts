@@ -17,6 +17,10 @@
 
 import type {
   AdminAssessmentDraft,
+  AdminAttachableCourse,
+  AdminPathBounds,
+  AdminPathDetail,
+  AdminPathRow,
   AdminAssessmentOverview,
   AdminAssessmentVersion,
   AdminDashboardView,
@@ -564,4 +568,47 @@ export const adminApi = {
 
   assessmentVersion: (assessmentId: string) =>
     api.get<AdminAssessmentDraft>(`/api/admin/assessment/versions/${assessmentId}`),
+
+  // §4C.4 — study paths
+  listPaths: () => api.get<AdminPathRow[]>('/api/admin/paths'),
+
+  /** The 5-10 rule. Read-only: there is no endpoint that writes it (D-074). */
+  pathBounds: () => api.get<AdminPathBounds>('/api/admin/paths/bounds'),
+
+  getPath: (pathId: string) => api.get<AdminPathDetail>(`/api/admin/paths/${pathId}`),
+
+  /** Courses not already in the path — drafts and hidden ones included. */
+  attachableCourses: (pathId: string, q?: string) =>
+    api.get<AdminAttachableCourse[]>(
+      `/api/admin/paths/${pathId}/attachable${q ? `?q=${encodeURIComponent(q)}` : ''}`,
+    ),
+
+  createPath: (input: {
+    key: string;
+    name: string;
+    description: string;
+    riasecLetter: RiasecLetter;
+    typicalDurationMinutes?: number;
+  }) => api.post<AdminPathDetail>('/api/admin/paths', input),
+
+  updatePath: (
+    pathId: string,
+    patch: {
+      name?: string;
+      description?: string;
+      riasecLetter?: RiasecLetter;
+      typicalDurationMinutes?: number;
+      displayOrder?: number;
+      isActive?: boolean;
+    },
+  ) => api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}`, patch),
+
+  attachPathCourse: (pathId: string, courseId: string) =>
+    api.post<AdminPathDetail>(`/api/admin/paths/${pathId}/courses`, { courseId }),
+
+  detachPathCourse: (pathId: string, courseId: string) =>
+    api.delete<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/${courseId}`),
+
+  reorderPathCourses: (pathId: string, courseIds: string[]) =>
+    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/order`, { courseIds }),
 };

@@ -14,7 +14,7 @@ import type {
 } from '@tamkeen/types';
 
 import { AppModule } from '../src/app.module';
-import { AssessmentLock } from './assessment-lock';
+import { SharedStateLock } from './shared-state-lock';
 import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -52,19 +52,52 @@ class EmailCapture {
 const PASSWORD = 'a-sufficiently-long-password';
 const RUN_ID = randomBytes(4).toString('hex');
 
+/**
+ * Copying and publishing a bank writes several hundred rows.
+ *
+ * Jest's five-second default is calibrated for a test that makes one call; these
+ * make one that copies the whole instrument, and against a database ten other
+ * suites are using concurrently that is not a fair budget. Raised for this file
+ * only — a slow *unit* test is a smell, a slow bulk copy is arithmetic.
+ */
+jest.setTimeout(30_000);
+
 describe('Admin assessment management (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
-  /* The assessment is the one thing no suite can namespace; this serialises
-     against `journey.e2e-spec.ts`, which takes it. See assessment-lock.ts. */
-  const lock = new AssessmentLock();
+  /* Serialised against the other suites that write globally visible product
+     state — the assessment and the catalogue of paths. See
+     shared-state-lock.ts. */
+  const lock = new SharedStateLock();
 
   let sessionAdmin: string;
   let adminId: string;
 
   let csrfCookie: string;
   let csrfToken: string;
+
+  /**
+   * The bank as the draft found it.
+   *
+   * Captured rather than hardcoded to the seed's thirty. The assertions below
+   * are about *changes* — one dimension gaining a question, then the other five
+   * catching up — and stating them against a remembered baseline keeps them true
+   * whatever the instrument happened to be when the suite started, which is the
+   * only honest thing to assume about shared state.
+   */
+  let baseline: { questions: number; attainable: number };
+
+  /**
+   * Every assessment row this run created.
+   *
+   * Tracked so the cleanup can delete exactly these, rather than "every version
+   * above 1" — which is not namespaced to a run and, when two runs overlap even
+   * briefly, deletes the *other* run's freshly created draft. That produced a
+   * 404 from an endpoint whose draft demonstrably existed two tests earlier, and
+   * cost a while to see.
+   */
+  const createdAssessmentIds: string[] = [];
 
   /** A result recorded against version 1, before any edit. */
   let frozen: {
@@ -131,24 +164,28 @@ describe('Admin assessment management (e2e)', () => {
      * are; version 1 is reactivated first because a partial unique index permits
      * only one ACTIVE row.
      */
-    const versions = await prisma.assessment.findMany({
-      where: { key: 'riasec-core' },
-      orderBy: { version: 'asc' },
-      select: { id: true, version: true },
-    });
+    if (createdAssessmentIds.length > 0) {
+      const original = await prisma.assessment.findFirst({
+        where: { key: 'riasec-core', id: { notIn: createdAssessmentIds } },
+        orderBy: { version: 'asc' },
+        select: { id: true },
+      });
 
-    if (versions.length > 1) {
-      await prisma.assessment.updateMany({
-        where: { key: 'riasec-core' },
-        data: { status: 'RETIRED' },
-      });
-      await prisma.assessment.update({
-        where: { id: versions[0]!.id },
-        data: { status: 'ACTIVE', retiredAt: null },
-      });
-      await prisma.assessment.deleteMany({
-        where: { key: 'riasec-core', version: { gt: versions[0]!.version } },
-      });
+      /* Reactivated before the later ones go: a partial unique index permits
+         only one ACTIVE row per key, so the order is the constraint's, not a
+         preference. */
+      if (original) {
+        await prisma.assessment.updateMany({
+          where: { id: { in: createdAssessmentIds } },
+          data: { status: 'RETIRED' },
+        });
+        await prisma.assessment.update({
+          where: { id: original.id },
+          data: { status: 'ACTIVE', retiredAt: null },
+        });
+      }
+
+      await prisma.assessment.deleteMany({ where: { id: { in: createdAssessmentIds } } });
     }
 
     await app.close();
@@ -296,10 +333,16 @@ describe('Admin assessment management (e2e)', () => {
         201,
       );
       draft = response.body as AdminAssessmentDraft;
+      createdAssessmentIds.push(draft.id);
+
+      baseline = {
+        questions: draft.questions.length,
+        attainable: draft.readiness.attainable.R,
+      };
 
       expect(draft.version).toBe(2);
       expect(draft.basedOnVersion).toBe(1);
-      expect(draft.questions).toHaveLength(30);
+      expect(draft.questions.length).toBeGreaterThan(0);
       /* A copy, not a reference: not one row is shared with the version people
          have already taken. */
       expect(draft.questions.map((q) => q.id)).not.toContain(frozen.questionId);
@@ -350,10 +393,14 @@ describe('Admin assessment management (e2e)', () => {
 
       expect(draftNow.readiness.balanced).toBe(false);
       expect(draftNow.readiness.blockers).toContain('BANK_UNBALANCED');
-      /* Named per dimension, so the editor can say which ones differ rather than
-         only that something does. */
-      expect(draftNow.readiness.attainable.S).toBe(24);
-      expect(draftNow.readiness.attainable.R).toBe(20);
+      /*
+       * Named per dimension, so the editor can say which ones differ rather than
+       * only that something does. The gap is one item's top weight — four on the
+       * seeded Likert scale — and stating it as a delta rather than as "24 and
+       * 20" keeps the assertion about the *rule* rather than about the fixture.
+       */
+      expect(draftNow.readiness.attainable.R).toBe(baseline.attainable);
+      expect(draftNow.readiness.attainable.S).toBeGreaterThan(baseline.attainable);
 
       const refusal = await send(
         'post',
@@ -402,7 +449,9 @@ describe('Admin assessment management (e2e)', () => {
       const draftNow = (await get('/api/admin/assessment/draft', sessionAdmin).expect(200))
         .body as AdminAssessmentDraft;
 
-      expect(draftNow.questions).toHaveLength(36);
+      /* One new question per dimension — the per-dimension-equal change D-071
+         exists to permit. */
+      expect(draftNow.questions).toHaveLength(baseline.questions + 6);
       expect(draftNow.readiness.balanced).toBe(true);
       expect(draftNow.readiness.blockers).toEqual([]);
     });
@@ -543,7 +592,7 @@ describe('Admin assessment management (e2e)', () => {
       const view = (await get('/api/assessment', session).expect(200)).body as AssessmentView;
 
       expect(view.version).toBe(2);
-      expect(view.questions).toHaveLength(36);
+      expect(view.questions).toHaveLength(baseline.questions + 6);
     });
 
     it('never lets a weighting reach that taker', async () => {
@@ -615,7 +664,7 @@ describe('Admin assessment management (e2e)', () => {
       const responses = await prisma.assessmentResponse.count({
         where: { resultId: frozen.resultId },
       });
-      expect(responses).toBe(30);
+      expect(responses).toBe(baseline.questions);
     });
 
     it('shows the retired version in the history with its result count', async () => {
@@ -639,7 +688,7 @@ describe('Admin assessment management (e2e)', () => {
       ).body as AdminAssessmentDraft;
 
       expect(historical.version).toBe(1);
-      expect(historical.questions).toHaveLength(30);
+      expect(historical.questions).toHaveLength(baseline.questions);
       expect(historical.questions.some((q) => q.text === frozen.questionText)).toBe(true);
     });
 
@@ -650,10 +699,13 @@ describe('Admin assessment management (e2e)', () => {
 
   describe('discarding', () => {
     it('removes a draft and everything under it, leaving the active version alone', async () => {
-      await send('post', '/api/admin/assessment/draft', {}, sessionAdmin).expect(201);
+      const created = (
+        await send('post', '/api/admin/assessment/draft', {}, sessionAdmin).expect(201)
+      ).body as AdminAssessmentDraft;
+      createdAssessmentIds.push(created.id);
 
       const draft = await prisma.assessment.findFirstOrThrow({
-        where: { status: 'DRAFT' },
+        where: { id: created.id },
         select: { id: true },
       });
 

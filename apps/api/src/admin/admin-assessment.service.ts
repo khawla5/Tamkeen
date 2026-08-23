@@ -148,52 +148,70 @@ export class AdminAssessmentService {
       throw new NotFoundException('ASSESSMENT_NOT_FOUND');
     }
 
-    const draftId = await this.prisma.$transaction(async (tx) => {
-      const draft = await tx.assessment.create({
-        data: {
-          key: active.key,
-          version: active.version + 1,
-          title: active.title,
-          description: active.description,
-          status: 'DRAFT',
-        },
-        select: { id: true },
-      });
-
-      for (const question of active.questions) {
-        const created = await tx.assessmentQuestion.create({
+    const draftId = await this.prisma.$transaction(
+      async (tx) => {
+        const draft = await tx.assessment.create({
           data: {
-            assessmentId: draft.id,
-            /* Keys are carried over, so a question that survives an edit is
-               recognisably the same question across versions even though the
-               row is new. */
-            key: question.key,
-            displayOrder: question.displayOrder,
-            text: question.text,
+            key: active.key,
+            version: active.version + 1,
+            title: active.title,
+            description: active.description,
+            status: 'DRAFT',
           },
           select: { id: true },
         });
 
-        for (const option of question.options) {
-          await tx.assessmentOption.create({
+        /*
+         * One round trip per question, with its options and their weights
+         * nested inside it.
+         *
+         * Written as three nested loops first, which is 30 + 150 statements for
+         * the seeded bank — and slow enough under load to exhaust Prisma's
+         * five-second interactive-transaction budget, which surfaced as an
+         * intermittent failure with nothing wrong in it. Nesting the writes lets
+         * the driver send each question and its 25-odd descendant rows together,
+         * so the copy is 30 statements and the transaction is short.
+         */
+        for (const question of active.questions) {
+          await tx.assessmentQuestion.create({
             data: {
-              questionId: created.id,
-              key: option.key,
-              displayOrder: option.displayOrder,
-              label: option.label,
-              weights: {
-                create: option.weights.map((weight) => ({
-                  dimension: weight.dimension,
-                  points: weight.points,
+              assessmentId: draft.id,
+              /* Keys are carried over, so a question that survives an edit is
+                 recognisably the same question across versions even though the
+                 row is new. */
+              key: question.key,
+              displayOrder: question.displayOrder,
+              text: question.text,
+              options: {
+                create: question.options.map((option) => ({
+                  key: option.key,
+                  displayOrder: option.displayOrder,
+                  label: option.label,
+                  weights: {
+                    create: option.weights.map((weight) => ({
+                      dimension: weight.dimension,
+                      points: weight.points,
+                    })),
+                  },
                 })),
               },
             },
+            select: { id: true },
           });
         }
-      }
 
-      return draft.id;
-    });
+        return draft.id;
+      },
+      /*
+       * Room for a large bank on a loaded database. Prisma's default is five
+       * seconds, which is a sensible ceiling for a request-path transaction and
+       * the wrong one for copying an instrument: the work is bounded by the
+       * ministry's question count, not by anything a caller controls, and a
+       * partial copy is not a state this rolls back *to* — it rolls back to no
+       * draft at all, which means an administrator's edit simply never opened.
+       */
+      { timeout: 30_000 },
+    );
 
     await this.audit.record({
       action: AuditAction.ADMIN_ASSESSMENT_DRAFT_OPENED,

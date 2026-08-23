@@ -1,3 +1,4 @@
+import type { CourseStatus } from './catalog';
 import type { RiasecLetter } from './riasec';
 import type { UserRole } from './roles';
 
@@ -333,4 +334,82 @@ export interface AdminAssessmentDraft {
 export interface AdminAddQuestionInput {
   text: string;
   letter: RiasecLetter;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.4 — path management
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How many learners a path is carrying, by stage.
+ *
+ * The three numbers answer different questions and are never summed on screen.
+ * `building` are people who have chosen the path but not committed — the only
+ * group a retirement inconveniences. `active` and `completed` hold it under
+ * D-002 and are unaffected by anything an administrator does here: My Path,
+ * their courses and their certificates all read through `user_paths` and never
+ * consult `paths.is_active`.
+ */
+export interface AdminPathLearners {
+  building: number;
+  active: number;
+  completed: number;
+}
+
+/** A course attached to a path, as the admin manages it. */
+export interface AdminPathCourseRow {
+  id: string;
+  moodleCourseId: number;
+  title: string;
+  status: CourseStatus;
+  displayOrder: number;
+  /** Which organisation supplies it; null for the seeded catalogue (D-063). */
+  ownerEntityName: string | null;
+  /**
+   * How many learners hold this course *through this path*.
+   *
+   * Non-zero means detaching it would leave those learners with a selection the
+   * build rules no longer recognise, so the server refuses. Shown so the refusal
+   * is predictable rather than discovered.
+   */
+  heldByLearners: number;
+}
+
+export interface AdminPathDetail extends AdminPathRow {
+  description: string;
+  typicalDurationMinutes: number | null;
+  courses: AdminPathCourseRow[];
+  learners: AdminPathLearners;
+  /** Why this path may not be offered to learners, if it may not (§4C.4). */
+  blockers: string[];
+  /** How many of its courses a learner could select right now. */
+  selectableCourses: number;
+}
+
+/**
+ * The 5-10 rule, reported so the admin screens can explain themselves.
+ *
+ * Read-only everywhere (D-074): §2 lists it among the non-negotiable product
+ * rules, and a knob here is how a floor of five quietly becomes a floor of
+ * three under delivery pressure.
+ */
+export interface AdminPathBounds {
+  min: number;
+  max: number;
+}
+
+/**
+ * A course an administrator could attach to a path (§4C.4).
+ *
+ * Deliberately not the learner catalogue's `CourseSummary`: attaching is an
+ * administrative act, so the list includes drafts and hidden courses — which a
+ * learner must never see — and names the supplying organisation, which no
+ * learner-facing shape carries.
+ */
+export interface AdminAttachableCourse {
+  id: string;
+  moodleCourseId: number;
+  title: string;
+  status: CourseStatus;
+  ownerEntityName: string | null;
 }

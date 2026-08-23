@@ -5,6 +5,27 @@
 
 ---
 
+## D-083 — Catalogue sync tolerates a row that vanished under it
+**Decision:** `withdrawVanished` uses `updateMany` and skips the counter and the audit entry when it matches nothing, instead of `update`, which throws.
+**Why:** the list of vanished courses is gathered in one query and walked one row at a time. A reconciliation job that crashes because the thing it was about to reconcile is gone is reconciling badly — and the throw abandons every course after it in the list, so one missing row silently stops the run half way. There is nothing to withdraw from a row that is not there, and skipping the audit keeps the trail from claiming a course was withdrawn when no course was.
+**Where it bit:** nothing in the product deletes a course (D-040 forbids it), so in production this is defensive. In the integration suites it is not: several create and remove courses of their own, and a sync running while one of them cleaned up failed a *different* suite roughly one run in five, with a Prisma error naming a line that had nothing wrong with it.
+**Rejected:** serialising every course-touching suite behind the shared lock (a two-minute CI tax to work around a job that should not be brittle); leaving it and re-running CI (a flake that fails an unrelated suite is worse than a red build, because it teaches people to re-run).
+
+## D-082 — Retiring a path removes it from new selections and strands nobody
+**Decision:** `paths.is_active` governs *offering*, not access. A retired path stays fully usable to anyone who has already chosen it: My Path and certificates never consulted the flag, and `getDetail` — the build page — now resolves a retired path for the learner whose `user_paths` row points at it. `confirm` continues not to check the flag, so someone part way through choosing may still commit. A path is never deleted.
+**Why:** §4C.4 has to let the ministry stop offering a path, and D-002 makes an existing choice permanent. Those two were already reconciled for the *confirmed* learner and not for the one still building: a plain `isActive: true` filter turned a retirement into a 404 on their build page, while `confirm` never checked the flag at all — so they could still commit to a path they could no longer see. That is the §2/D-015 stranding rule wearing different clothes, and it gets the same answer courses got: hidden from new selections, untouched for whoever holds it.
+**Why commitment is still allowed:** refusing at the gate would strand somebody who had already picked five courses, for a decision taken after they picked them. Retirement means "not offered to anyone who has not already chosen it" — bounded, and it drains as those learners finish.
+**Also decided:** no delete endpoint. `user_paths.path_id` is `Restrict` and a path certificate names the path on a document somebody holds, so removing a path anyone ever chose would falsify a credential.
+**Made visible:** the detail screen prints how many learners are *building* against how many have committed, because the building count is the only group a retirement inconveniences and the decision should be made knowing it. The retirement audit entry records that number.
+**Rejected:** refusing retirement while anyone is building (one indecisive learner blocks the ministry indefinitely); cascading a retirement into those learners' selections (destroys work they did under the old rules).
+
+## D-081 — An active path always offers at least five selectable courses
+**Decision:** activating a path is refused when fewer than `PATH_MIN_COURSES` of its courses are selectable, and so is any detach that would drop an active path below that floor. Creation always produces an inactive path.
+**Why:** §2 requires five to ten courses to confirm, so a path offering four is one nobody can ever complete — and that is invisible from every screen. The learner reaches the build page, selects everything there is, and the confirm button stays disabled with nothing to act on. Nothing logs it and nothing alerts; the path just sits in the catalogue looking like a choice. The only place to catch it is where the path becomes offerable.
+**Why "selectable" means AVAILABLE only:** `HIDDEN_BUT_COMPLETABLE` is the D-015 state — still completable by whoever holds it, gone from new selections — so counting it would report a path as offerable on the strength of courses nobody new can choose, which is the exact trap the count exists to avoid.
+**Why the ceiling is not checked:** ten is the most a learner may *select*, not the most a path may *offer*. A path of thirty from which five are chosen is what §4.5 describes.
+**Rejected:** warning instead of refusing (the cost falls on a learner who cannot tell what went wrong); checking only at activation (the floor would then hold for one instant and never again).
+
 ## D-080 — The seed bootstraps the assessment; it does not maintain it
 **Decision:** `seedAssessment` writes version 1 only while version 1 is the *only* version of the instrument. Once an administrator has published an edit through §4C.3, the seed reports that the content is the ministry's and leaves every row alone.
 **Why:** the seed upserted the bank by key on every run, which was right while the code owned the wording. After D-069 it would overwrite a published ministry version with whatever draft text shipped in the repository — on `npm run db:seed`, in a deployment script, in CI against a real database. That is data loss dressed as a convenience, and the loss is a career instrument the ministry authored.

@@ -69,7 +69,8 @@
     "entityProfile": "بيانات الجهة",
     "adminDashboard": "الرئيسية",
     "adminUsers": "الحسابات",
-    "adminAssessment": "التقييم"
+    "adminAssessment": "التقييم",
+    "adminPaths": "المسارات"
   },
   "actions": {
     "retry": "إعادة المحاولة",
@@ -379,7 +380,13 @@
     "BANK_UNBALANCED": "الأبعاد الستة غير متساوية في أعلى درجة يمكن بلوغها. أضف أو احذف أسئلة بالتساوي بين الأبعاد قبل النشر.",
     "BANK_TOO_FEW_QUESTIONS": "عدد الأسئلة أقل مما يكفي لترتيب الأبعاد الستة.",
     "BANK_QUESTION_WITHOUT_OPTIONS": "يوجد سؤال بأقل من خيارين.",
-    "BANK_DIMENSIONLESS_OPTION": "يوجد خيار لا يضيف درجة إلى أي بُعد."
+    "BANK_DIMENSIONLESS_OPTION": "يوجد خيار لا يضيف درجة إلى أي بُعد.",
+    "PATH_KEY_TAKEN": "هذا المعرّف مستخدم لمسار آخر.",
+    "PATH_KEY_INVALID": "المعرّف يقبل الحروف اللاتينية والأرقام والشرطات فقط.",
+    "PATH_TOO_FEW_COURSES": "عدد الدورات المتاحة في هذا المسار أقل من الحد الأدنى الذي يحتاجه الموظف لتأكيد مساره.",
+    "COURSE_HELD_BY_LEARNERS": "لا يمكن إزالة هذه الدورة لأن موظفين اختاروها ضمن هذا المسار. إزالتها ستمنعهم من حفظ اختيارهم أو تأكيده.",
+    "COURSE_ALREADY_IN_PATH": "هذه الدورة مضافة إلى المسار بالفعل.",
+    "PATH_ORDER_INCOMPLETE": "يجب أن يشمل الترتيب كل دورات المسار مرة واحدة."
   },
   "player": {
     "title": "محتوى الدورة",
@@ -655,7 +662,13 @@
       "ADMIN_ENTITY_UPDATED": "تعديل جهة",
       "ADMIN_ASSESSMENT_DRAFT_OPENED": "بدء تعديل التقييم",
       "ADMIN_ASSESSMENT_DRAFT_DISCARDED": "حذف مسودة التقييم",
-      "ADMIN_ASSESSMENT_PUBLISHED": "نشر إصدار من التقييم"
+      "ADMIN_ASSESSMENT_PUBLISHED": "نشر إصدار من التقييم",
+      "ADMIN_PATH_CREATED": "إنشاء مسار",
+      "ADMIN_PATH_UPDATED": "تعديل مسار",
+      "ADMIN_PATH_ACTIVATED": "عرض مسار",
+      "ADMIN_PATH_RETIRED": "إيقاف عرض مسار",
+      "ADMIN_PATH_COURSE_ATTACHED": "إضافة دورة إلى مسار",
+      "ADMIN_PATH_COURSE_DETACHED": "إزالة دورة من مسار"
     },
     "usersTitle": "إدارة الحسابات",
     "tabAccounts": "الحسابات",
@@ -789,6 +802,59 @@
     "publishFrozenNotice": "النتائج الصادرة عن الإصدارات السابقة تبقى كما هي، ولا يُعاد احتسابها.",
     "discardDraft": "حذف المسودة",
     "discardConfirm": "حذف المسودة",
-    "discardBody": "ستفقد كل التعديلات غير المنشورة. التقييم المعمول به لا يتأثر."
+    "discardBody": "ستفقد كل التعديلات غير المنشورة. التقييم المعمول به لا يتأثر.",
+    "pathsTitle": "إدارة المسارات",
+    "pathsEmpty": "لا توجد مسارات بعد",
+    "pathsEmptyHint": "أنشئ مسارًا، أضف إليه دوراته، ثم اعرضه على الموظفين.",
+    "pathBoundsNotice": "يختار الموظف بين {min} و{max} دورات لتأكيد مساره. هذا الحد ثابت في النظام ولا يُعدَّل من هنا.",
+    "pathCreate": "إنشاء مسار",
+    "pathCreateAction": "إنشاء",
+    "pathCreateHint": "يُنشأ المسار غير معروض على الموظفين. أضف دوراته أولًا ثم اعرضه.",
+    "pathManageTitle": "إدارة المسار",
+    "pathKey": "المعرّف",
+    "pathName": "اسم المسار",
+    "pathDescription": "وصف المسار",
+    "pathLetter": "النمط المهني",
+    "pathLetterHint": "هذا ما يجعل المسار «موصى به» لمن يظهر هذا النمط ضمن أعلى ثلاثة أنماط لديه.",
+    "pathDuration": "المدة التقديرية (بالدقائق)",
+    "pathSave": "حفظ التعديلات",
+    "pathSaved": "حُفظت تعديلات المسار.",
+    "pathNotOffered": "غير معروض",
+    "pathSummary": "{courses} دورة · {learners} موظفًا أكّدوا هذا المسار",
+    "pathCourses": "دورات المسار ({count})",
+    "pathNoCourses": "لا توجد دورات في هذا المسار بعد.",
+    "pathAddCourse": "إضافة دورة",
+    "pathAddCourseAction": "إضافة",
+    "pathAddCourseHint": "تظهر هنا الدورات غير المضافة إلى المسار، بما فيها المسوّدات.",
+    "pathCourseToAdd": "الدورة",
+    "pathChooseCourse": "اختر دورة",
+    "pathNoCourseToAdd": "لا توجد دورات يمكن إضافتها",
+    "pathRemoveCourse": "إزالة الدورة من المسار",
+    "pathCourseAdded": "أُضيفت الدورة إلى المسار.",
+    "pathCourseRemoved": "أُزيلت الدورة من المسار.",
+    "pathCourseUnowned": "بلا جهة",
+    "pathCourseHeld": "يحتفظ بها {count} من الموظفين",
+    "pathOrderSaved": "حُفظ ترتيب الدورات.",
+    "pathBlocker": {
+      "PATH_TOO_FEW_COURSES": "عدد الدورات المتاحة في هذا المسار أقل من الحد الأدنى الذي يحتاجه الموظف لتأكيد مساره، فلا يمكن عرضه."
+    },
+    "pathLearnersBuilding": "يختارون دوراتهم",
+    "pathLearnersBuildingHint": "هؤلاء وحدهم من يتأثر بإيقاف عرض المسار.",
+    "pathLearnersActive": "مسارهم قيد التنفيذ",
+    "pathLearnersCommittedHint": "أكّدوا المسار، ولا يتأثرون بأي تغيير هنا.",
+    "pathLearnersCompleted": "أكملوا المسار",
+    "pathOfferHeading": "عرض المسار على الموظفين",
+    "pathOfferedHint": "المسار معروض حاليًا ويمكن للموظفين اختياره.",
+    "pathNotOfferedHint": "المسار غير معروض. من اختاره أو أكّده سابقًا يواصل كما هو.",
+    "pathActivate": "عرض المسار",
+    "pathRetire": "إيقاف العرض",
+    "pathActivated": "أصبح المسار معروضًا على الموظفين.",
+    "pathRetired": "أُوقف عرض المسار على الموظفين الجدد.",
+    "courseStatus": {
+      "DRAFT": "مسوّدة",
+      "AVAILABLE": "متاحة",
+      "HIDDEN_BUT_COMPLETABLE": "مخفية عن الاختيار",
+      "RETIRED": "متوقفة"
+    }
   }
 }

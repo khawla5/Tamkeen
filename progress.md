@@ -6,18 +6,18 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **in progress, sub-phase 5.3 of 5.9 complete.**
-- **Last completed task:** **Sub-phase 5.3 — Assessment Management (§4C.3).** Copy-on-write versioning in the schema, the draft-then-publish editor, the balance guard at publish, and the read-only history — with existing results proven frozen through a real browser.
-- **Next task:** **Sub-phase 5.4 — Path Management (§4C.4)** — create/edit paths, `path_courses` membership and ordering, and retirement that cannot strand a confirmed learner.
+- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **in progress, sub-phase 5.4 of 5.9 complete.**
+- **Last completed task:** **Sub-phase 5.4 — Path Management (§4C.4).** Create/edit paths, `path_courses` membership and ordering, the five-course floor, and retirement that strands nobody — plus a one-in-five integration flake chased to four separate causes and fixed at each.
+- **Next task:** **Sub-phase 5.5 — Course Oversight (§4C.5)** — the global catalogue across every entity, ownership assignment for the unowned courses, and intervention under course-edit protection.
 - **Active branch:** `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd`, which contains Phases 0-4. No PR yet — one PR covers the whole of Phase 5 (D-008).
 - **Phase 4 is merged** (PR #6, `origin/main` @ `f1f0dcd`). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
-- **Test totals:** 573 API unit · 308 web component · 341 API integration against real PostgreSQL · 52 browser e2e in Chromium — **1274 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
+- **Test totals:** 579 API unit · 324 web component · 400 API integration against real PostgreSQL · 52 browser e2e in Chromium — **1355 automated**, plus the real-Chromium verification scripts from Phase 3. The integration suite was run five consecutive times, all green. Typecheck, lint and format clean.
 
 ### Phase 5 sub-phase tracker
 - [x] **5.1 Admin foundation + Dashboard** (§4C.1) — RBAC, route group, shell, integration health
 - [x] **5.2 User Management** (§4C.2) — employees + entities, suspend/activate, **entity-account creation**
 - [x] **5.3 Assessment Management** (§4C.3) — draft/publish, balance guard, copy-on-write versioning
-- [ ] **5.4 Path Management** (§4C.4) — paths, `path_courses` membership + ordering, safe retirement
+- [x] **5.4 Path Management** (§4C.4) — paths, `path_courses` membership + ordering, safe retirement
 - [ ] **5.5 Course Oversight** (§4C.5) — global catalogue, ownership assignment, intervention
 - [ ] **5.6 System Settings** (§4C.6) — `settings` table, one `SettingsService`, env fallback
 - [ ] **5.7 Certificate Templates** (§4C.7) — signatory fields, future issuances only
@@ -66,7 +66,7 @@
 - **The successful-publish path is proven in integration, not in the browser.** The mock reports a newly created course as having no completion criteria — the honest simulation, since a real Moodle course is empty until someone authors it — and `simulateAuthoring` lives in the API process, out of Playwright's reach. So the browser proves the *refusal* on a course it creates through the UI, and proves publish/withdraw on a seeded course the mock considers completable. **Phase 7** closes this against a real Moodle.
 - ~~Entity accounts are created by a seed, not by a screen.~~ **Closed in sub-phase 5.2** — the super-admin provisions an organisation and its accounts from §4C.2, by invitation, and never sees a password (D-077).
 - ~~An entity's own record is read-only, and an entity cannot add a colleague to its organisation.~~ **Closed in sub-phase 5.2** — the super-admin edits an organisation and adds accounts to it. An entity still cannot do either itself, which is the point: who a ministry supplier is, and who speaks for them, is a contractual fact rather than a self-service setting.
-- **Course ordering within a path is not editable.** `path_courses.display_order` is set from the path's own order when a course is first attached and left alone thereafter; §4C.4 gives ordering to the admin in **Phase 5**.
+- ~~Course ordering within a path is not editable.~~ **Closed in sub-phase 5.4** — §4C.4 edits `path_courses.display_order` by submitting the complete order, which decides how the build screen offers courses and how My Path numbers them.
 - **A course withdrawn from the LMS side is still only detectable by sync.** An entity sees `lms_present: false` reflected in the status, but nothing tells them *why* a course they published is no longer available. **Phase 6**'s sync-reliability work owns surfacing that.
 - **Eight API error codes have no Arabic copy** — `CERTIFICATE_NOT_FOUND`, `CERTIFICATE_FILE_UNAVAILABLE`, `CERTIFICATE_FILE_CORRUPT`, `COURSE_NOT_ENROLLED`, `CV_INVALID_DATE`, `CV_TOO_MANY_ENTRIES`, `ENTITY_NOT_FOUND`, `USER_NOT_FOUND`. `useErrorMessage` falls back to the generic Arabic message, so none reaches a user as a raw code, but the specific ones would help. **Phase 6**'s Arabic content QA owns them.
 - **`published_at` is written and nothing reads it.** Correct as of D-067's sibling fix, and asserted both ways; **Phase 5**'s §4C.5 course oversight is what will finally display it.
@@ -131,10 +131,41 @@
 - **Two lockouts are guarded, and converting a learner who holds a record is refused (D-078).**
 - **Two integration suites share one assessment, and an advisory lock serialises them (D-079).**
 - **The seed bootstraps the assessment; it does not maintain it (D-080).**
+- **An active path always offers at least five selectable courses (D-081).**
+- **Retiring a path removes it from new selections and strands nobody (D-082).**
+- **Catalogue sync tolerates a row that vanished under it (D-083).**
 
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — Sub-phase 5.4: path management, and a flake chased to its cause
+
+§4C.4 built: create and edit paths, `path_courses` membership **and ordering** (owed since Phase 4), the attach picker, and retirement that cannot strand anybody. The 5-10 rule is printed on the page and has no control anywhere (D-074).
+
+**Test totals: 579 API unit · 324 web component · 400 API integration · 52 browser e2e — 1355 automated.** Typecheck, lint and format clean. No new dependencies. **The integration suite was run five consecutive times, all green**, which is the only claim worth making about a suite that was intermittently failing an hour earlier.
+
+**Two rules that make a forbidden state unreachable rather than guarded against.**
+
+`PATH_TOO_FEW_COURSES` (D-081) refuses to *offer* a path with fewer than five selectable courses, and refuses any detach that would drop an active one below the floor. The failure it prevents is invisible from every screen: the learner reaches the build page, selects all four courses there are, and the confirm button stays disabled with nothing to act on. Nothing logs it, nothing alerts, and the path sits in the catalogue looking like a choice. Creation therefore always produces an *inactive* path — an empty path could not be offered anyway, so accepting `isActive: true` at creation would mean either refusing every creation or admitting one nobody can confirm.
+
+`COURSE_HELD_BY_LEARNERS` refuses to detach a course learners hold *through this path*. Nothing cascades, so a confirmed learner would keep seeing it — what breaks is everyone still building, whose next save is refused with `COURSE_NOT_IN_PATH` about a course they chose from that very screen. Scoped to the path deliberately: a course may belong to several (D-003), and a learner holding it through another one is not stranded.
+
+**A stranding that already existed, found by reading rather than by a test.** D-002 reconciles retirement with commitment for the *confirmed* learner — My Path and certificates read through `user_paths` and never consulted `paths.is_active`. Nobody had reconciled it for the learner still **building**: a plain `isActive: true` filter turned a retirement into a 404 on their build page, while `confirm` never checked the flag at all, so they could still commit to a path they could no longer see. Retirement now means what it means for courses (§2/D-015): hidden from new selections, untouched for whoever already chose it (D-082). The integration suite asserts it against the *learner's* endpoint, not by reasoning about the query.
+
+**The detail screen prints the numbers the decision turns on.** Learners building, active and completed are shown separately and never summed: only the building count is affected by a retirement, and the retirement audit entry records it. An administrator retiring a path knowing "three people are part way through choosing this" is making a different decision from one taken blind.
+
+**A one-in-five flake, chased to three separate causes rather than re-run.** It failed different suites on different runs, which is the shape of shared state rather than of a bug.
+
+| cause | what it broke | fix |
+|---|---|---|
+| cleanup keyed on `version > 1`, not namespaced to the run | one run's `afterAll` deleted the *next* run's fresh draft, so an endpoint 404'd on a draft that demonstrably existed two tests earlier | track the ids this run created and delete exactly those |
+| a course created here does not exist in the LMS, so every catalogue sync correctly withdrew it | the five-course-floor assertions, by the product working as designed | borrow catalogue courses instead — they are in the LMS, so sync leaves them alone |
+| the draft copy made ~180 sequential statements inside one transaction | Prisma's five-second interactive-transaction budget under parallel load, surfacing as a timeout with nothing wrong in it | nest options and weights inside each question's create — 30 statements — and give the copy an explicit budget |
+
+**And one that was not mine.** `withdrawVanished` used `update`, which throws when the row is gone, abandoning every course after it in the list. Several suites create and remove courses of their own, so a sync running during another suite's cleanup failed a *third* suite. It is now `updateMany` with the count checked, so a vanished row is skipped without being counted or audited (D-083). Nothing in the product deletes a course, so this is defensive in production — but a reconciliation job that crashes because the world changed under it is reconciling badly, and this one is the Phase 6 sync-reliability item arriving early.
+
+**A brittle assertion removed on the way.** `journey.e2e-spec.ts` asserted `paths` had length 12 — the seed's count stated as though it were a product rule. The rule is "every *offered* path comes back, recommended or not"; it now counts against the database, and stops breaking the moment another suite legitimately offers a thirteenth.
 
 ### 2026-08-23 — Sub-phase 5.3: the assessment editor, and results that stay frozen
 
@@ -624,7 +655,7 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - [x] **Phase 2 — Moodle integration** (spike first; web services, provisioning, catalog sync, enrollment, scheduled completion sync + pass threshold + shared-course reuse, seamless login, course player) — **merged** (PR #3, `origin/main` @ `dcb8aad`)
 - [x] **Phase 3 — Certificates + CV** (idempotent course/path certs, Arabic PDF solved, verification page + QR, gallery, CV builder + English PDF export) — **merged** (PR #4, `origin/main` @ `f2a6b4d`)
 - [x] **Phase 4 — Entity / reviewer portal** (entity accounts + server-side data scoping, course creation in the LMS, authoring handoff, product metadata, publish gate + course-edit protection, learner review) — **merged** (PR #6, `origin/main` @ `f1f0dcd`)
-- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **in progress on `phase-5-admin-portal`; 5.3 of 5.9 done** (sub-phase tracker in Current Status)
+- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **in progress on `phase-5-admin-portal`; 5.4 of 5.9 done** (sub-phase tracker in Current Status)
 - [ ] **Phase 6 — Hardening** (Arabic QA, RTL PDF polish, security review, sync reliability + load, a11y, states)
 - [ ] **Phase 7 — Deployment, acceptance & launch** (deploy app+Moodle, seed data, full end-to-end acceptance, docs/handover, sign-off)
 

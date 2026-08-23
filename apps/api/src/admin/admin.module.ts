@@ -9,6 +9,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AdminAssessmentService } from './admin-assessment.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminEntitiesService } from './admin-entities.service';
+import { AdminPathsService } from './admin-paths.service';
 import { AdminUsersService } from './admin-users.service';
 import { ADMIN_CONTROLLERS } from './admin.controllers';
 
@@ -28,6 +29,7 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
     AdminUsersService,
     AdminEntitiesService,
     AdminAssessmentService,
+    AdminPathsService,
   ],
 })
 export class AdminModule {}

@@ -308,3 +308,98 @@ export class ReorderDraftDto {
   @IsUUID(undefined, { each: true })
   questionIds!: string[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.4 — path management
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class CreatePathDto {
+  /** Stable slug, as `Path.key` already is. */
+  @IsString()
+  @MinLength(2)
+  @MaxLength(64)
+  @Matches(/^[a-z0-9][a-z0-9-]*$/i, { message: 'PATH_KEY_INVALID' })
+  key!: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  name!: string;
+
+  @IsString()
+  @MinLength(10)
+  @MaxLength(2000)
+  description!: string;
+
+  @IsIn(RIASEC_LETTERS)
+  riasecLetter!: RiasecLetter;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  /* A year of full-time study, as an upper bound on a typo rather than a
+     product rule. */
+  @Max(525_600)
+  typicalDurationMinutes?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  displayOrder?: number;
+
+  /* No `isActive`: a path is created empty, and an empty path is one no learner
+     could confirm. Activation is a second, deliberate step. */
+}
+
+export class UpdatePathDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(10)
+  @MaxLength(2000)
+  description?: string;
+
+  @IsOptional()
+  @IsIn(RIASEC_LETTERS)
+  riasecLetter?: RiasecLetter;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(525_600)
+  typicalDurationMinutes?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  displayOrder?: number;
+
+  /** Whether learners are offered it. Refused when the path is not offerable. */
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class AttachCourseDto {
+  @IsUUID()
+  courseId!: string;
+}
+
+export class ReorderPathCoursesDto {
+  /** The complete order. A partial one is refused by the service. */
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsUUID(undefined, { each: true })
+  courseIds!: string[];
+}
