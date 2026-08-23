@@ -32,8 +32,8 @@
 An **Arabic-first** internal web platform for a government **Ministry of Internal Affairs**. Ministry employees:
 1. Take a short **Holland (RIASEC) career assessment** (~20–30 questions).
 2. Receive a **Holland Code** result — a ranked profile whose **top three letters** form the code (e.g. "SIA"). See §4A for the RIASEC framework.
-3. Every **career path is tagged with a primary RIASEC letter**. Paths whose letter appears in the user's top-three code are shown as **recommended (gold)**, ranked by how high that letter sits in the user's profile.
-4. **Choose one path** — they may pick a recommended (gold) path or any other path. **A user commits to exactly one path and cannot switch it** once confirmed.
+3. Every **career path is tagged with a primary RIASEC letter**. Paths whose letter appears in the user's top-three code are shown as **recommended** (highlighted — the primary border plus a "موصى به" badge, D-069; historically called "gold"), ranked by how high that letter sits in the user's profile.
+4. **Choose one path** — they may pick a recommended path or any other path. **A user commits to exactly one path and cannot switch it** once confirmed.
 5. **Build** their path by selecting **between 5 and 10 courses** from the courses belonging to that path.
 6. Work through the courses. Each course's content and quiz live in **Moodle** (integrated LMS).
 7. Passing a course's quiz (at/above the product-defined threshold) earns a **course certificate**.
@@ -43,7 +43,7 @@ An **Arabic-first** internal web platform for a government **Ministry of Interna
 There are also (later phases) an **entity/reviewer portal** (organizations that author courses in Moodle and review learners) and a **super-admin portal**. The current focus is the **main user (employee) portal**.
 
 ### Core hierarchy
-`Holland assessment → Holland Code (top-3 RIASEC letters) → Paths tagged by RIASEC letter (gold if letter ∈ user's code, else free choice) → 5–10 Courses → Quizzes → Certificates (course + path)`
+`Holland assessment → Holland Code (top-3 RIASEC letters) → Paths tagged by RIASEC letter (recommended if letter ∈ user's code, else free choice) → 5–10 Courses → Quizzes → Certificates (course + path)`
 
 ### The Moodle mental model
 **Your app is the experience/logic layer; Moodle is the learning engine.**
@@ -64,7 +64,7 @@ There are also (later phases) an **entity/reviewer portal** (organizations that 
 - **Course changed/unpackaged after selection (LOCKED):** entities may edit courses, but a course that is **part of any user's confirmed path may not be deleted/unpublished** — it can only be superseded/hidden from *new* selections. Users mid-path keep the version they enrolled in until they complete it. The catalog distinguishes "available to add" from "still completable if already enrolled."
 - **Registration policy (LOCKED, confirm with ministry):** default assumption is **ministry-provisioned / restricted registration** — either accounts are pre-created by admins, or self-registration is gated by an allowed email domain and/or a valid employee ID. Do NOT ship open public registration. (If the ministry wants pure admin-provisioning, that's a settings toggle.)
 - **Digits & dates (LOCKED):** UI uses **Arabic (Hijri optional) date presentation and Western Arabic numerals (0-9) by default**, with a single locale switch point so Arabic-Indic numerals (٠-٩) can be enabled without code changes. Pick one default in Phase 0 and keep it consistent everywhere (UI, certificates, CV, PDFs).
-- **Gold = recommendation, not restriction.** Recommended paths are highlighted in gold and sorted first, but every other path is fully selectable.
+- **Recommendation, not restriction.** Recommended paths are highlighted (primary border + "موصى به" badge — D-069 retired the gold treatment) and sorted first, but every other path is fully selectable.
 - **Certificate issuance is idempotent.** Because completion is polled, always check "already issued?" before creating a certificate. No duplicates.
 - **Pass threshold is a product setting** in your system config, evaluated against Moodle's returned grade. Do not hardcode it into Moodle.
 - **Email/password auth only.** No social login. Email verification on registration. This is an internal ministry system — treat security seriously (hashed passwords, secure sessions, least-privilege Moodle integration token).
@@ -99,8 +99,8 @@ These apply to **every** phase. A phase/task is not "done" until it meets all of
 
 **Testing (this is what "the test" in the git rules means):**
 - **Backend:** unit tests for business logic (RIASEC scoring, 5–10 rule, pass-threshold evaluation, idempotent certificate issuance, path-commit locking) + integration tests for API endpoints. The **Moodle module is tested against the mock**, and the mock must implement the **same interface/contract** as the real Moodle module so the swap in Phase 2 changes only the implementation, not callers.
-- **Frontend:** component tests for the key flows (assessment, results/gold ranking, path build counter, dashboard states) + at least one end-to-end happy-path test per phase's user-visible flow.
-- **RIASEC scoring must have explicit test cases** covering ties, a clear top-three, and the gold-matching + ranking logic — this is core product correctness.
+- **Frontend:** component tests for the key flows (assessment, results/recommendation ranking, path build counter, dashboard states) + at least one end-to-end happy-path test per phase's user-visible flow.
+- **RIASEC scoring must have explicit test cases** covering ties, a clear top-three, and the recommendation-matching + ranking logic — this is core product correctness.
 - Do not open a PR with failing or skipped tests. CI runs lint + typecheck + tests on every PR.
 
 **Definition of Done (per task):**
@@ -122,23 +122,25 @@ These apply to **every** phase. A phase/task is not "done" until it meets all of
 
 ## 3. Brand & UI system
 
-**Colors (use these exactly; define as design tokens/CSS variables in Phase 0):**
+**Design system (LOCKED — D-069): the DGA's Platforms Code (كود المنصات), adopted in full.** Source of truth: `design.dga.gov.sa` and the official Figma library. The runtime tokens live in `apps/web/src/app/globals.css`; the data mirror and the AA proof live in `apps/web/src/lib/tokens.ts` / `contrast.test.ts`. Only the scale steps the UI consumes are declared — add a step there deliberately, never an ad-hoc hex in a component.
 
-| Token | Hex |
-|---|---|
-| Primary Navy | `#222E42` |
-| Secondary Navy | `#2E3A50` |
-| Primary Gold | `#A8863C` |
-| Background Cream | `#F4F3F1` |
-| White | `#FFFFFF` |
-| Light Gold | `#C9A85C` |
-| Muted Blue | `#5E6B85` |
+| Role | Token(s) | Hex |
+|---|---|---|
+| Primary (actions, links, focus, active nav) | `primary-600` · hover `primary-700` · dark `primary-800` | `#1B8354` · `#166A45` · `#14573A` |
+| Primary tints | `primary-50` / `100` / `200` | `#F3FCF6` / `#DFF6E7` / `#B8EACB` |
+| Recommended / achievement (same accent) | `primary-600` edge · `primary-700` text · `primary-50` fill with `primary-800` | `#1B8354` · `#166A45` · `#F3FCF6` / `#14573A` |
+| Button states | primary `600 → 700 → 900`; destructive `danger-600 → danger → danger-900` | `#1B8354 → #166A45 → #104631`; `#D92C20 → #B42318 → #7A2619` |
+| Display text · paragraph · secondary text | `neutral-800` · `neutral-700` · `neutral-500` | `#1F2A37` · `#384250` · `#6C727E` |
+| Dark surface (sidebar, footer) · nested | `neutral-900` · `neutral-800` | `#111927` · `#1F2A37` |
+| Page ground · card · border | `neutral-50` · `surface` · `neutral-300` | `#F9FAFB` · `#FFFFFF` · `#D2D6DB` |
+| Status (text/border, with a `-50` fill each) | `success` · `info` · `warning` · `danger` | `#067647` · `#175CD3` · `#B54707` · `#B42318` |
 
 **Usage guidance:**
-- Primary Navy for top-level surfaces / headers / sidebar; Secondary Navy for nested surfaces.
-- **Gold (`#A8863C`) is reserved for the recommended-path highlight and primary "achievement" accents** (certificates, key CTAs sparingly). Light Gold for hover/secondary gold states. Don't overuse gold or it stops signaling "recommended."
-- Cream is the app background; White for cards/content surfaces.
-- Muted Blue for secondary text, borders, and quiet UI.
+- Primary green for every action, link, focus ring and the active nav item; the dark neutral for top-level dark surfaces (sidebar, footer), never green as a large surface.
+- **One accent.** Platforms Code's gold secondary is deliberately NOT used. The recommended-path highlight is the `primary-600` border **plus the "موصى به" badge** (never colour alone — WCAG 1.4.1); achievements (certificates, the path seal) use the primary and its deep step. Keep the highlight scarce so it keeps signaling "recommended".
+- **Buttons follow Platforms Code's state model** (default → hovered → pressed) — see `components/ui/button.tsx`; no gold/achievement button variant exists.
+- Neutral-50 is the app ground; white for cards and content surfaces; neutral-300 for hairline borders (controls identify themselves by label and focus ring, not by border).
+- Typeface: IBM Plex Sans Arabic (Platforms Code's own; self-hosted, D-023). Radius scale 4 / 8 / 16 / 24 — cards on 16.
 
 **UI principles (hard rules):**
 - **No redundant UIs. No unnecessary information or buttons.** Every screen shows only what is actionable now.
@@ -171,10 +173,10 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 ### Path tagging
 - **Every path is tagged with exactly one primary RIASEC letter** (its `riasec_letter`). This is set when the path is defined (and, in later phases, editable by admins/entities).
 
-### Recommendation rule (how gold works — LOCKED)
-- A path is shown as **recommended (gold)** if its `riasec_letter` **appears in the user's top-three Holland Code**.
-- Gold paths are **ranked by how high their letter sits in the user's profile** (paths tagged with the user's #1 letter come first, then #2, then #3).
-- All other paths (letters outside the top three) are still shown, normally styled, and **fully selectable** — gold is recommendation, not restriction.
+### Recommendation rule (how the recommendation highlight works — LOCKED)
+- A path is shown as **recommended** if its `riasec_letter` **appears in the user's top-three Holland Code**.
+- Recommended paths are **ranked by how high their letter sits in the user's profile** (paths tagged with the user's #1 letter come first, then #2, then #3).
+- All other paths (letters outside the top three) are still shown, normally styled, and **fully selectable** — the highlight is recommendation, not restriction. The treatment is the primary-600 border plus the "موصى به" badge (§3, D-069); "gold" in older decisions refers to this same highlight under the retired palette.
 - The user still commits to **exactly one** path (see §2).
 
 > If the product later wants stricter matching (only the single #1 letter) or looser matching, that is a change to this rule and must be recorded in `decisions.md`.
@@ -184,6 +186,13 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 ## 4. Pages of the main user portal (content spec)
 
 > Build these in the user portal. Each entry lists purpose and required content. Do not add content beyond what's needed.
+
+### 4.0 Public landing page (الصفحة الرئيسية العامة) — `/landing`, and `/` for signed-out visitors
+- The only page an unauthenticated visitor sees besides auth. **Structure (LOCKED with the 2026-08-23 rebuild): Hero → "عن المنصة" explorer → FAQ → Footer.** No marketing sections (problem/trust/CTA strips were removed as such), no stats, no feature pills.
+- **Hero:** ministry eyebrow, one-line title, one sentence, "إنشاء حساب" + "كيف تعمل المنصة" (jumps to the explorer), the BR-101 eligibility line; on the deep-green ground (`primary-deep`) with the ministry emblem above the Kingdom's map (13 named regions, decorative, animated, hover never touches `fill`).
+- **Explorer:** Absher-style — four stage tabs (التقييم المهني / المسار التدريبي / الدورات / الشهادات والسيرة الذاتية), each stage's steps as a list, the selected step explained from the BRD's functional requirements with the single action "إنشاء حساب". A real `tablist`; steps are `aria-current` buttons.
+- **FAQ:** six native `<details>`, answers are locked product rules only. **Footer:** identity (emblem + logo, الوزارة، الإدارة العامة للتدريب), the three real links (#about, /register, /login), policy names as plain text until their pages exist, © + classification.
+- **Copy rules:** formal institutional register, specific nouns, no slogans, no symmetrical triplets; every number interpolated from config/constants. All copy is placeholder until الإدارة العامة للتدريب signs it off.
 
 ### 4.1 Registration & Sign-in (التسجيل / تسجيل الدخول)
 - **Registration:** email, password, confirm password, full name, employee ID, department. Email verification link on submit. Minimal fields only.
@@ -203,9 +212,9 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 
 ### 4.4 Results & Path Selection (النتيجة والمسارات)
 - Top: the user's **Holland Code** (the three letters with their Arabic type names, e.g. اجتماعي / بحثي / فني) + a short plain-language description (2–3 sentences) of what the code means. Optionally a compact visual of the six-dimension ranking.
-- All paths as cards. **Paths whose `riasec_letter` is in the user's top-three code are rendered in gold** (gold border/accent + "موصى به" badge) and **sorted by the user's letter ranking** (#1 letter's paths first). All other paths shown normally below, fully selectable.
+- All paths as cards. **Paths whose `riasec_letter` is in the user's top-three code are rendered as recommended** (primary border + "موصى به" badge, D-069) and **sorted by the user's letter ranking** (#1 letter's paths first). All other paths shown normally below, fully selectable.
 - Each card: name, its RIASEC type, one-line description, number of courses available, typical duration.
-- User must actively choose (gold is highlight, not default selection).
+- User must actively choose (the highlight is a recommendation, not a default selection).
 
 ### 4.5 Path detail / build (تفاصيل المسار)
 - Path description at top, then the courses belonging to that path as selectable cards (title, short description, duration, "أضف" toggle).
@@ -252,7 +261,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - A course an entity PUBLISHES (with its path + RIASEC tag + product metadata) is exactly what appears in the learner's Courses catalog and path-build screen. Publishing is the bridge entity portal → user portal.
 - Paths and the assessment configured in the super-admin portal drive what learners see in Results & Path Selection and path building.
 - Course-edit protection (§2, D-015/D-040) is enforced across portals: a course in any user's confirmed path cannot be deleted/unpublished, only hidden from NEW selections (`HIDDEN_BUT_COMPLETABLE`) while enrolled learners finish; retired only when nobody holds it.
-- All three portals share one backend, one design system (navy/gold, RTL), one RBAC model (employee / entity / super-admin), and one audit log.
+- All three portals share one backend, one design system (Platforms Code, RTL — D-069), one RBAC model (employee / entity / super-admin), and one audit log.
 
 ---
 
@@ -358,7 +367,7 @@ View the audit log (who/what/when) and system-wide reports: completion rates, po
 - `users` — email, password_hash, full_name, employee_id, department, email_verified, **`moodle_user_id`**.
 - `assessments`, `assessment_questions`, `assessment_options`, `assessment_responses` — the test, its questions, and each user's answers. **Each option maps to one or more RIASEC dimensions** (store the dimension weighting per option) so scoring can tally per dimension.
 - `assessment_results` — per user: the **full ranked per-dimension RIASEC scores** (all six: R, I, A, S, E, C), the derived **Holland Code** (top-three ordered letters), and timestamp. Store all six, not just the code.
-- `paths` — your path definitions: name_ar, description, typical duration, and **`riasec_letter`** (the single primary RIASEC letter the path is tagged with; drives gold recommendation).
+- `paths` — your path definitions: name_ar, description, typical duration, and **`riasec_letter`** (the single primary RIASEC letter the path is tagged with; drives the recommendation highlight).
 - `courses` — thin mirror: **`moodle_course_id`**, cached title/description/duration + product metadata (path membership, ordering, **status: available / hidden-but-completable / retired**). Synced from Moodle.
 - `path_courses` — many-to-many linking paths↔courses (a course may belong to multiple paths).
 - `user_paths` — the user's single chosen path: user_id, path_id, status (building/active/completed), chosen_at. **Effectively one active record per user.** Enforces 5–10 at confirm.
@@ -387,8 +396,8 @@ View the audit log (who/what/when) and system-wide reports: completion rates, po
 
 **Phase 1 — Assessment (RIASEC) + path core.**
 *Goal:* the product's identity — the full Holland flow end to end against the mock.
-*Deliverables:* the **RIASEC assessment content** (~20–30 questions authored with each option mapped to its RIASEC dimension weighting — see §3A); the **scoring engine** (per-dimension tally → ranked profile → top-three **Holland Code**), persisted with all six scores; the **Assessment** flow pages; **Results & Path Selection** with **gold recommendation + ranking** by the user's letter order; **paths tagged by `riasec_letter`**; **Courses catalog** + **Course detail** reading from the mock; **Path build** with the **5–10 rule** and **single-path hard commitment** (confirmation dialog); the **Dashboard's three states** (pre-assessment / assessed-no-path / active-path); **My Path** run view (statuses fed by the mock); **assessment-retake handling** (retake allowed only before path commitment, hidden after — §2).
-*Done when:* a user can take the assessment, get a correct Holland Code, see correctly-gold-highlighted-and-ranked paths, pick one, build a 5–10 course path, confirm it, and see it in My Path — entirely against the mock.
+*Deliverables:* the **RIASEC assessment content** (~20–30 questions authored with each option mapped to its RIASEC dimension weighting — see §3A); the **scoring engine** (per-dimension tally → ranked profile → top-three **Holland Code**), persisted with all six scores; the **Assessment** flow pages; **Results & Path Selection** with **recommendation highlight + ranking** by the user's letter order; **paths tagged by `riasec_letter`**; **Courses catalog** + **Course detail** reading from the mock; **Path build** with the **5–10 rule** and **single-path hard commitment** (confirmation dialog); the **Dashboard's three states** (pre-assessment / assessed-no-path / active-path); **My Path** run view (statuses fed by the mock); **assessment-retake handling** (retake allowed only before path commitment, hidden after — §2).
+*Done when:* a user can take the assessment, get a correct Holland Code, see correctly-highlighted-and-ranked recommended paths, pick one, build a 5–10 course path, confirm it, and see it in My Path — entirely against the mock.
 
 **Phase 2 — Moodle integration proper.**
 *Goal:* replace the mock with a real Moodle and prove the learning loop.
