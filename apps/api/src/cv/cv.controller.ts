@@ -3,7 +3,7 @@ import type { Response } from 'express';
 
 import type { CvView } from '@tamkeen/types';
 
-import { CurrentUser } from '../auth/auth.decorators';
+import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
 import { CvExportService } from './cv-export.service';
 import { SaveCvDto } from './cv.dto';
@@ -11,6 +11,7 @@ import { CvService } from './cv.service';
 
 /** The CV builder (§4.11). Always the caller's own CV — there is no id here. */
 @Controller('cv')
+@Roles('EMPLOYEE')
 export class CvController {
   constructor(
     private readonly cv: CvService,

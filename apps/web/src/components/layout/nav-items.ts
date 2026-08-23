@@ -16,6 +16,8 @@ export const NAV_ICONS = [
   'certificates',
   'cv',
   'profile',
+  /* Phase 4 — the entity portal's Learners/Review destination (§4B.5). */
+  'learners',
 ] as const;
 
 export type NavIconName = (typeof NAV_ICONS)[number];

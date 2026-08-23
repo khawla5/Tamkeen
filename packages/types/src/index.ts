@@ -21,3 +21,6 @@ export * from './certificates';
 export * from './notifications';
 export * from './cv';
 export * from './cv-document';
+
+/* Phase 4 — the entity / reviewer portal. */
+export * from './entity';

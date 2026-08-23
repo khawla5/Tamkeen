@@ -88,17 +88,33 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const isPublicRoot = pathname === '/';
   const shouldRedirect = unauthorized && !isPublicRoot;
 
+  /*
+   * An entity or an admin who reached a learner page — by typing it, or by a
+   * bookmark from before their account changed. `EntityProvider` already sends
+   * a mis-routed employee the other way; this is the return half, and without
+   * it the journey dashboard answers 403 rather than 401, so nothing above
+   * treats it as a session problem and the page settles on an error card whose
+   * retry can never succeed.
+   *
+   * The signed-out visitor is unaffected: this reads `session.data`, which only
+   * exists once someone is signed in, so `/` still renders the public landing
+   * page for everyone else.
+   */
+  const wrongPortal = session.data !== undefined && session.data.role !== 'EMPLOYEE';
+
   useEffect(() => {
     if (shouldRedirect) {
       router.replace('/login');
+    } else if (wrongPortal) {
+      router.replace('/entity');
     }
-  }, [shouldRedirect, router]);
+  }, [shouldRedirect, wrongPortal, router]);
 
   if (unauthorized && isPublicRoot) {
     return <LandingView />;
   }
 
-  if (session.isLoading || dashboard.isLoading || shouldRedirect) {
+  if (session.isLoading || dashboard.isLoading || shouldRedirect || wrongPortal) {
     /* The redirect is in flight during `shouldRedirect`; showing the loading
        state rather than an error avoids a flash of "something went wrong" on
        what is simply an expired session. */

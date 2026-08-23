@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { CatalogSyncModule } from './catalog-sync/catalog-sync.module';
 import { CertificatesModule } from './certificates/certificates.module';
 import { CvModule } from './cv/cv.module';
+import { EntityModule } from './entity/entity.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CompletionSyncModule } from './completion-sync/completion-sync.module';
 import { SyncSchedulerModule } from './sync-scheduler/sync-scheduler.module';
@@ -76,6 +77,8 @@ import { PrismaModule } from './prisma/prisma.module';
     CertificatesModule,
     NotificationsModule,
     CvModule,
+    /* Phase 4. */
+    EntityModule,
   ],
   providers: [
     /*

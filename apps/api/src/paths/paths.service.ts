@@ -104,6 +104,7 @@ export class PathsService {
                 summary: true,
                 durationMinutes: true,
                 status: true,
+                language: true,
               },
             },
           },
@@ -147,6 +148,7 @@ export class PathsService {
         summary: entry.course.summary,
         durationMinutes: entry.course.durationMinutes,
         status: entry.course.status,
+        language: entry.course.language,
         /* The build page already knows which path it is; repeating it on every
            card would be the redundant UI §3 forbids. */
         paths: [],

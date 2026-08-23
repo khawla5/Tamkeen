@@ -26,8 +26,18 @@ import type {
   CourseDetail,
   CourseLaunchView,
   CoursePlayerView,
+  CourseLanguage,
+  CoursePublication,
   CourseSummary,
   DashboardView,
+  EntityAuthorLaunchView,
+  EntityCourseContentView,
+  EntityCourseDetail,
+  EntityCourseSummary,
+  EntityDashboardView,
+  EntityLearnerRow,
+  EntityProfileView,
+  EntityUnpublishResult,
   MyPathView,
   PathDetail,
   PathRecommendations,
@@ -193,6 +203,10 @@ export const api = {
   get: <T>(path: string) => request<T>(path, 'GET'),
   post: <T>(path: string, body?: unknown) => request<T>(path, 'POST', body),
   put: <T>(path: string, body?: unknown) => request<T>(path, 'PUT', body),
+  /* PATCH rather than PUT for the entity metadata form: it saves one section at
+     a time, and a PUT would silently clear whatever the caller did not
+     resend. */
+  patch: <T>(path: string, body?: unknown) => request<T>(path, 'PATCH', body),
 };
 
 export interface CurrentUser {
@@ -341,5 +355,71 @@ export const certificatesApi = {
   verify: (verificationId: string) =>
     api.get<CertificateVerificationView>(
       `/api/certificates/verify/${encodeURIComponent(verificationId)}`,
+    ),
+};
+
+/**
+ * The entity / reviewer portal (§4B).
+ *
+ * Note what these calls do **not** take: no entity id anywhere. The server
+ * resolves the caller's organisation from their session and filters every query
+ * to it (D-062), so there is nothing for a client to pass — and nothing for a
+ * modified client to pass in order to reach another entity's rows.
+ */
+export const entityApi = {
+  profile: () => api.get<EntityProfileView | null>('/api/entity/me'),
+  dashboard: () => api.get<EntityDashboardView>('/api/entity/dashboard'),
+
+  listCourses: (filters: { q?: string; publication?: CoursePublication } = {}) => {
+    const query = new URLSearchParams();
+
+    /* Only send what is set: the API rejects unknown and malformed parameters,
+       so an empty `q=` would be a 400 rather than "no filter". */
+    if (filters.q) query.set('q', filters.q);
+    if (filters.publication) query.set('publication', filters.publication);
+
+    const suffix = query.toString();
+
+    return api.get<EntityCourseSummary[]>(`/api/entity/courses${suffix ? `?${suffix}` : ''}`);
+  },
+
+  createCourse: (input: { title: string; summary: string; language?: CourseLanguage }) =>
+    api.post<EntityCourseDetail>('/api/entity/courses', input),
+
+  getCourse: (courseId: string) => api.get<EntityCourseDetail>(`/api/entity/courses/${courseId}`),
+
+  updateCourse: (
+    courseId: string,
+    patch: {
+      pathIds?: string[];
+      durationMinutes?: number | null;
+      objectives?: string[];
+      prerequisites?: string | null;
+      language?: CourseLanguage;
+    },
+  ) => api.patch<EntityCourseDetail>(`/api/entity/courses/${courseId}`, patch),
+
+  content: (courseId: string) =>
+    api.get<EntityCourseContentView | null>(`/api/entity/courses/${courseId}/content`),
+
+  publish: (courseId: string) =>
+    api.post<EntityCourseDetail>(`/api/entity/courses/${courseId}/publish`),
+
+  unpublish: (courseId: string) =>
+    api.post<EntityUnpublishResult>(`/api/entity/courses/${courseId}/unpublish`),
+
+  /**
+   * Mints the authoring handoff (D-060).
+   *
+   * A POST that returns a URL rather than a link the page could render: the URL
+   * carries a live, single-use credential, so it must not sit in the DOM from
+   * the moment the page loads (D-045). Called on the click, used immediately.
+   */
+  authorLaunch: (courseId: string) =>
+    api.post<EntityAuthorLaunchView>(`/api/entity/courses/${courseId}/author-launch`),
+
+  learners: (courseId?: string) =>
+    api.get<EntityLearnerRow[]>(
+      `/api/entity/learners${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`,
     ),
 };

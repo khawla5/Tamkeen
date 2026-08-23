@@ -8,7 +8,7 @@ import type {
   CourseSummary,
 } from '@tamkeen/types';
 
-import { CurrentUser } from '../auth/auth.decorators';
+import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
 import { CoursePlayerService } from './course-player.service';
 import { CourseQueryDto } from './courses.dto';
@@ -22,6 +22,7 @@ import { CoursesService } from './courses.service';
  * ministry system; there is no anonymous browsing of it.
  */
 @Controller('courses')
+@Roles('EMPLOYEE')
 export class CoursesController {
   constructor(
     private readonly courses: CoursesService,

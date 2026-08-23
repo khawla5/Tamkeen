@@ -51,6 +51,13 @@ model User {
   role   UserRole   @default(EMPLOYEE)
   status UserStatus @default(ACTIVE)
 
+  /// Which organisation an ENTITY account acts for (D-063). Null for every other
+  /// role, and the scope resolver treats a null on an ENTITY account as a hard
+  /// failure rather than as "unscoped" — a half-provisioned entity must see
+  /// nothing, not everything (D-062).
+  entityId String? @map("entity_id") @db.Uuid
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Restrict)
+
   /// Null until the user follows the verification link. Stored as a timestamp
   /// rather than a boolean so "when" is auditable, not just "whether".
   emailVerifiedAt DateTime? @map("email_verified_at")
@@ -86,6 +93,7 @@ model User {
   userPath          UserPath?
 
   @@index([role])
+  @@index([entityId])
   @@map("users")
 }
 
@@ -240,15 +248,63 @@ enum RiasecDimension {
   C
 }
 
-/// A course's lifecycle in *our* catalogue — not the LMS's `visible` flag.
+/// A course's *effective* visibility in our catalogue — derived, never authored.
+///
+/// Phase 4 stopped anything writing this directly (D-059). It is computed by
+/// `effectiveCourseStatus` from three inputs that each have exactly one writer:
+/// our `publication` (the entity's decision), and `lmsVisible` / `lmsPresent`
+/// (the LMS's facts), plus whether any learner holds the course. Before that
+/// split, a sync run recomputed this column from the LMS's `visible` flag and so
+/// silently undid an entity's decision to hide a course.
 ///
 /// HIDDEN_BUT_COMPLETABLE is the rule from §2/D-015 that stops content being
-/// pulled out from under a learner: a course inside someone's confirmed path may
-/// leave the catalogue for new selections while enrolled users finish it.
+/// pulled out from under a learner: a course inside someone's path may leave the
+/// catalogue for new selections while enrolled users finish it. The derivation
+/// makes that structural — no combination of inputs hides a held course from the
+/// learner holding it.
+///
+/// DRAFT is invisible to learners exactly as RETIRED is, but *reversibly*: it is
+/// where a course sits between its Moodle shell being created and its product
+/// metadata being finished. RETIRED is an end state and could not serve.
 enum CourseStatus {
+  DRAFT
   AVAILABLE
   HIDDEN_BUT_COMPLETABLE
   RETIRED
+}
+
+/// The entity's publishing decision (D-059). **Ours**, never written by
+/// catalogue sync, which reads it only as an input to the derivation above.
+///
+/// This column is what makes course-edit protection durable: an entity that
+/// unpublishes a course records it here, where no LMS signal can reach it.
+enum CoursePublication {
+  /// Shell exists in the LMS; product metadata incomplete. Not in the catalogue.
+  DRAFT
+  /// The entity has published it. Whether learners can see it now additionally
+  /// depends on the LMS still holding and showing it.
+  PUBLISHED
+  /// Withdrawn by the entity. Degrades to HIDDEN_BUT_COMPLETABLE rather than
+  /// RETIRED while any learner still holds it — §2/D-015.
+  UNPUBLISHED
+}
+
+/// The language a course was authored in (D-047).
+///
+/// A course exists in ONE language as its entity wrote it; we do not require or
+/// maintain a bilingual title and summary per course. Recorded because the app
+/// chrome is Arabic-first and RTL: an English title rendered inside an RTL
+/// container needs `dir="ltr"` on that element or its punctuation migrates.
+/// So this is not decoration — it is what stops the catalogue mangling text.
+enum CourseLanguage {
+  AR
+  EN
+}
+
+/// Whether an entity account may still act (D-063).
+enum EntityStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 /// BUILDING is a distinct state from ACTIVE because selecting courses is
@@ -450,17 +506,52 @@ model Course {
   summary         String
   durationMinutes Int?   @map("duration_minutes")
 
-  /// Ours, not the LMS's.
-  status CourseStatus @default(AVAILABLE)
+  /// **Derived, not authored** (D-059). Recomputed by `effectiveCourseStatus`
+  /// from `publication`, `lmsVisible`, `lmsPresent` and whether any learner
+  /// holds the course. Nothing assigns it directly — every writer goes through
+  /// that one function, so the sync job and an entity action cannot disagree
+  /// about what a given combination means.
+  status CourseStatus @default(DRAFT)
+
+  /// **Ours** (D-059). The entity's publishing decision, which catalogue sync
+  /// may read but must never write. A course created by an entity starts DRAFT;
+  /// the 48 seeded courses and anything discovered in the LMS start PUBLISHED,
+  /// because they predate the notion of a draft and were already in the
+  /// catalogue.
+  publication CoursePublication @default(DRAFT)
+
+  /// **The LMS's**, and the only two course fields sync may set besides title
+  /// and summary. `lmsVisible` is Moodle's own visibility flag; `lmsPresent` is
+  /// whether Moodle still returns the course at all. Two facts rather than one
+  /// because they mean different things: a hidden course may reappear next week,
+  /// a vanished one has been deleted, and only the second may lead to RETIRED.
+  lmsVisible Boolean @default(true) @map("lms_visible")
+  lmsPresent Boolean @default(true) @map("lms_present")
 
   /// Product metadata the LMS has no first-class field for, authored on our
-  /// side and edited by entities in Phase 4. Deliberately not added to the LMS
-  /// port: inventing a Moodle field for them would make the Phase 2 adapter
+  /// side and edited by entities (§4B.3, D-035). Deliberately not added to the
+  /// LMS port: inventing a Moodle field for them would make the Phase 2 adapter
   /// responsible for data Moodle does not model.
   objectives    String[]
   prerequisites String?
 
+  /// The single language this course was authored in (D-047). Nullable because
+  /// a course discovered in the LMS has not been through an entity yet, and
+  /// guessing from the characters in a title would be wrong often enough to
+  /// matter. Publishing requires it to be set.
+  language CourseLanguage?
+
+  /// Which entity supplies this course (D-063). **Nullable**: the seeded
+  /// catalogue and anything the LMS holds that no entity authored have no
+  /// owner, which is a legitimate state — such a course is simply one no entity
+  /// may manage, and the super-admin owns it in Phase 5.
+  ownerEntityId String? @map("owner_entity_id") @db.Uuid
+  ownerEntity   Entity? @relation(fields: [ownerEntityId], references: [id], onDelete: Restrict)
+
   lastSyncedAt DateTime? @map("last_synced_at")
+  /// When the entity first published it. Kept for the entity dashboard and the
+  /// audit trail; publication state itself lives in `publication`.
+  publishedAt  DateTime? @map("published_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -470,7 +561,49 @@ model Course {
   certificates    Certificate[]
 
   @@index([status])
+  @@index([ownerEntityId])
   @@map("courses")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4 — entities (the organisations that supply courses)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// An organisation that authors courses in the LMS and reviews its learners
+/// (§4B, D-063).
+///
+/// **The organisation owns the courses, not the person who created them.**
+/// Several accounts may belong to one entity, and hanging `courses.owner` off a
+/// user id would orphan a catalogue the day that person leaves — which for a
+/// ministry supplier is a routine event, not an edge case.
+///
+/// Deleting an entity is not modelled: `courses.ownerEntityId` is `Restrict`, so
+/// an entity with courses cannot be removed. Suspension is the operational
+/// answer, and it keeps the audit trail intact.
+model Entity {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Stable identifier for seeding and idempotent re-seeding, as `Path.key` and
+  /// `Assessment.key` already do.
+  key String @unique
+
+  name String
+
+  /// A contact for the organisation, not a person's account. Kept minimal per
+  /// §4B.6 — this is an address the ministry already has from procurement, not
+  /// new PII collected from an individual.
+  contactName  String @default("") @map("contact_name")
+  contactEmail String @default("") @map("contact_email")
+
+  status EntityStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users   User[]
+  courses Course[]
+
+  @@map("entities")
 }
 
 /// Paths ↔ courses. A course may belong to several paths (D-003), which is why

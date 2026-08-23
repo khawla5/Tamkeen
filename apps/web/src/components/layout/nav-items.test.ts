@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { STEADY_STATE_NAV, navForState } from './nav-items';
+import { ENTITY_NAV } from './entity-nav-items';
+import { NAV_ICONS, STEADY_STATE_NAV, navForState } from './nav-items';
 
 /**
  * Which navigation a learner sees, and — the part that keeps being wrong — which
@@ -80,5 +81,43 @@ describe('navForState', () => {
       const shown = keys(state);
       expect(shown).toEqual(canonical.filter((key) => shown.includes(key)));
     }
+  });
+});
+
+describe('the entity portal navigation (§4B)', () => {
+  it('has exactly the four destinations §4B names', () => {
+    expect(ENTITY_NAV.map((item) => item.key)).toEqual([
+      'entityDashboard',
+      'entityCourses',
+      'entityLearners',
+      'entityProfile',
+    ]);
+  });
+
+  it('shares no destination with the learner portal', () => {
+    /*
+     * The two lists are separate rather than one being a filtered view of the
+     * other (D-065). An entity has no assessment, no path, no certificates and
+     * no CV, so a shared list would imply a relationship that does not exist.
+     */
+    const learnerHrefs = new Set(STEADY_STATE_NAV.map((item) => item.href));
+
+    for (const item of ENTITY_NAV) {
+      expect(learnerHrefs.has(item.href)).toBe(false);
+    }
+  });
+
+  it('uses only declared icon names', () => {
+    /* The icon is a *name* crossing the server/client boundary, so an undeclared
+       one fails at render rather than at compile time. */
+    for (const item of ENTITY_NAV) {
+      expect(NAV_ICONS).toContain(item.icon);
+    }
+  });
+
+  it('offers no "add a course" destination', () => {
+    /* Creating a course is the single primary action on two screens (§3), not a
+       fifth place to navigate to. */
+    expect(ENTITY_NAV.some((item) => item.href.includes('new'))).toBe(false);
   });
 });

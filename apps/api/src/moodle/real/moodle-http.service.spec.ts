@@ -14,6 +14,10 @@ const EMAIL = 'ahmad.ali@ministry.gov.example';
 const USERNAME = deriveMoodleUsername(EMAIL);
 
 const STUDENT_ROLE_ID = 5;
+/* Deliberately not Moodle's stock 3 and 1: a hardcoded default in the adapter
+   would still pass a test that used the stock numbers (D-060). */
+const TEACHER_ROLE_ID = 17;
+const COURSE_CATEGORY_ID = 42;
 const SSO_SECRET = 'a-test-secret-that-is-long-enough-000000';
 
 type Handler = (wsfunction: string, params: Record<string, unknown>) => unknown;
@@ -39,7 +43,15 @@ function serviceWith(handler: Handler) {
   } as unknown as MoodleWsClient;
 
   return {
-    service: new MoodleHttpService('http://moodle.test', client, STUDENT_ROLE_ID, SSO_SECRET, 60),
+    service: new MoodleHttpService(
+      'http://moodle.test',
+      client,
+      STUDENT_ROLE_ID,
+      TEACHER_ROLE_ID,
+      COURSE_CATEGORY_ID,
+      SSO_SECRET,
+      60,
+    ),
     calls,
   };
 }
@@ -376,8 +388,217 @@ describe('MoodleHttpService', () => {
       expect(calls[0]!.params).toMatchObject({ field: 'id', value: 5 });
     });
   });
+  describe('createCourse', () => {
+    const input = { title: 'إدارة المخاطر', summary: 'وصف', shortName: 'risk-101' };
+
+    /** Answers creation, then the read-back `getCourse` does. */
+    const created =
+      (id: number): Handler =>
+      (wsfunction) => {
+        if (wsfunction === 'core_course_create_courses') {
+          return [{ id, shortname: 'risk-101' }];
+        }
+
+        return { courses: [{ id, fullname: 'إدارة المخاطر', summary: 'وصف', visible: 1 }] };
+      };
+
+    it('files the course in the configured category rather than guessing one', async () => {
+      /* Moodle demands a category and numbers them per-instance; defaulting to 1
+         would file ministry courses under whatever that instance calls category
+         one (D-060). */
+      const { service, calls } = serviceWith(created(77));
+
+      await service.createCourse(input);
+
+      const create = calls.find((call) => call.wsfunction === 'core_course_create_courses')!;
+      expect((create.params.courses as Array<Record<string, unknown>>)[0]).toMatchObject({
+        categoryid: COURSE_CATEGORY_ID,
+        shortname: 'risk-101',
+        fullname: 'إدارة المخاطر',
+      });
+    });
+
+    it('switches completion on at creation', async () => {
+      /* `enablecompletion` is the prerequisite for configuring any criterion at
+         all. Without it the entity has to find a setting they do not know they
+         need — though it does not by itself make the course completable, which
+         is why the publish gate reads the content summary (D-061). */
+      const { service, calls } = serviceWith(created(77));
+
+      await service.createCourse(input);
+
+      const create = calls.find((call) => call.wsfunction === 'core_course_create_courses')!;
+      expect((create.params.courses as Array<Record<string, unknown>>)[0]).toMatchObject({
+        enablecompletion: 1,
+      });
+    });
+
+    it('reads the course back rather than echoing the input', async () => {
+      /*
+       * Moodle normalises what it stores, and our `courses` row mirrors what the
+       * LMS holds rather than what we asked for. Echoing the input would make
+       * the two disagree from the first moment, and the next sync run would
+       * "correct" a row nobody had changed.
+       */
+      const { service, calls } = serviceWith((wsfunction) => {
+        if (wsfunction === 'core_course_create_courses') {
+          return [{ id: 77 }];
+        }
+
+        return { courses: [{ id: 77, fullname: 'العنوان كما خزّنه مودل', visible: 1 }] };
+      });
+
+      const course = await service.createCourse(input);
+
+      expect(course.title).toBe('العنوان كما خزّنه مودل');
+      expect(calls.map((call) => call.wsfunction)).toContain('core_course_get_courses_by_field');
+    });
+
+    it('refuses a response with no usable course id', async () => {
+      /* A 200 with no id is not success: a course row pointing at nothing would
+         be withdrawn by the next sync and is unreachable in the meantime. */
+      const { service } = serviceWith(() => [{}]);
+
+      await expect(service.createCourse(input)).rejects.toBeInstanceOf(LmsOperationError);
+    });
+
+    it('refuses when the created course cannot be read back', async () => {
+      const { service } = serviceWith((wsfunction) => {
+        if (wsfunction === 'core_course_create_courses') {
+          return [{ id: 77 }];
+        }
+
+        return { courses: [] };
+      });
+
+      await expect(service.createCourse(input)).rejects.toBeInstanceOf(LmsOperationError);
+    });
+
+    it('reports a refusal as an operation error, not as an outage', async () => {
+      /* An outage is retried; a refusal needs a human (D-039). A duplicate
+         shortname is the latter. */
+      const { service } = serviceWith((wsfunction) => {
+        if (wsfunction === 'core_course_create_courses') {
+          throw new MoodleWsError('core_course_create_courses', 'shortnametaken');
+        }
+        return null;
+      });
+
+      await expect(service.createCourse(input)).rejects.toBeInstanceOf(LmsOperationError);
+    });
+
+    it('carries no Moodle error code out of the module', async () => {
+      /* D-030: the errorcode is LMS vocabulary and stays in the log. */
+      const { service } = serviceWith((wsfunction) => {
+        if (wsfunction === 'core_course_create_courses') {
+          throw new MoodleWsError('core_course_create_courses', 'shortnametaken');
+        }
+        return null;
+      });
+
+      await expect(service.createCourse(input)).rejects.toThrow('LMS_CREATE_COURSE_REJECTED');
+    });
+  });
+
+  describe('getCourseContentSummary', () => {
+    const contents =
+      (modules: Array<Record<string, unknown>>, enablecompletion = 1): Handler =>
+      (wsfunction) => {
+        if (wsfunction === 'core_course_get_contents') {
+          return [{ modules }];
+        }
+
+        return { courses: [{ id: 5, fullname: 'دورة', visible: 1, enablecompletion }] };
+      };
+
+    it('returns null for a course the LMS does not have', async () => {
+      const { service } = serviceWith(() => ({ courses: [] }));
+
+      await expect(service.getCourseContentSummary(5)).resolves.toBeNull();
+    });
+
+    it('counts activities across sections and spots a quiz', async () => {
+      const { service } = serviceWith(
+        contents([
+          { modname: 'page', completion: 1 },
+          { modname: 'quiz', completion: 2 },
+        ]),
+      );
+
+      await expect(service.getCourseContentSummary(5)).resolves.toMatchObject({
+        activityCount: 2,
+        hasQuiz: true,
+      });
+    });
+
+    it('reports a course with no completion criteria as not configured', async () => {
+      /*
+       * The D-042 failure, caught before publication rather than after. A course
+       * whose activities all have `completion: 0` reports `completed: false`
+       * forever, so nobody on it can pass and no certificate can ever issue —
+       * with nothing in any log to explain it.
+       */
+      const { service } = serviceWith(
+        contents([
+          { modname: 'quiz', completion: 0 },
+          { modname: 'page', completion: 0 },
+        ]),
+      );
+
+      await expect(service.getCourseContentSummary(5)).resolves.toMatchObject({
+        completionConfigured: false,
+      });
+    });
+
+    it('reports completion switched off at course level as not configured', async () => {
+      /* Both halves matter: criteria on the activities are useless when course
+         completion is disabled outright. */
+      const { service } = serviceWith(contents([{ modname: 'quiz', completion: 2 }], 0));
+
+      await expect(service.getCourseContentSummary(5)).resolves.toMatchObject({
+        completionConfigured: false,
+      });
+    });
+
+    it('reports a properly configured course as completable', async () => {
+      const { service } = serviceWith(contents([{ modname: 'quiz', completion: 2 }], 1));
+
+      await expect(service.getCourseContentSummary(5)).resolves.toMatchObject({
+        completionConfigured: true,
+        hasQuiz: true,
+      });
+    });
+
+    it('tolerates a section with no modules', async () => {
+      const { service } = serviceWith((wsfunction) => {
+        if (wsfunction === 'core_course_get_contents') {
+          return [{}, { modules: [] }];
+        }
+        return { courses: [{ id: 5, fullname: 'دورة', visible: 1, enablecompletion: 1 }] };
+      });
+
+      await expect(service.getCourseContentSummary(5)).resolves.toMatchObject({
+        activityCount: 0,
+        completionConfigured: false,
+      });
+    });
+  });
+
   describe('enrol', () => {
     const input = { lmsUserId: 4, lmsCourseId: 2 };
+
+    it('enrols an author with the teacher role', async () => {
+      /* An entity authoring its own course needs Moodle's editing capabilities
+         (D-060), and the role id is configuration for the same reason the
+         student one is — we do not control the ministry's Moodle. */
+      const { service, calls } = serviceWith(() => null);
+
+      await service.enrol({ ...input, role: 'AUTHOR' });
+
+      expect(calls[0]!.params.enrolments).toEqual([
+        { roleid: TEACHER_ROLE_ID, userid: 4, courseid: 2 },
+      ]);
+    });
 
     it('enrols with the configured role rather than a hardcoded one', async () => {
       /* Role ids are per-instance and we do not control the ministry's Moodle;

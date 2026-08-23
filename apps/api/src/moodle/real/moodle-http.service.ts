@@ -4,8 +4,10 @@ import type { LmsPort } from '../lms.port';
 import {
   LmsOperationError,
   LmsUnavailableError,
+  type CreateCourseInput,
   type EnrolInput,
   type LmsCourse,
+  type LmsCourseContentSummary,
   type LmsCourseId,
   type LmsCourseProgress,
   type LmsHealth,
@@ -61,7 +63,24 @@ interface MoodleCourse {
   visible?: number | boolean;
   /** "site" marks the front page, which is not a course. */
   format?: string;
+  /** Present only for a token holding the capability; see readCompletionEnabled. */
+  enablecompletion?: number | boolean;
   customfields?: Array<{ shortname?: string; value?: unknown }>;
+}
+
+interface MoodleCreatedCourse {
+  id?: number;
+  shortname?: string;
+}
+
+interface MoodleCourseModule {
+  modname?: string;
+  /** COMPLETION_TRACKING_*: 0 none, 1 manual, 2 automatic. */
+  completion?: number;
+}
+
+interface MoodleCourseSection {
+  modules?: MoodleCourseModule[];
 }
 
 interface MoodleCoursesByField {
@@ -108,6 +127,11 @@ export class MoodleHttpService implements LmsPort {
     /** Configurable: role ids are per-instance and we do not control the
      *  ministry's Moodle (D-039). */
     private readonly studentRoleId: number,
+    /** `editingteacher`, for an entity authoring its own course (D-060). */
+    private readonly authorRoleId: number,
+    /** Where created courses are filed. Moodle demands one and numbers them
+     *  per-instance, so guessing is not an option (D-060). */
+    private readonly courseCategoryId: number,
     /** Shared with the `local_tamkeensso` plugin. Server-side only. */
     private readonly ssoSecret: string,
     private readonly ssoTtlSeconds: number,
@@ -281,6 +305,158 @@ export class MoodleHttpService implements LmsPort {
     return course && !isSiteCourse(course) ? toLmsCourse(course) : null;
   }
 
+  /**
+   * Creates an empty course (§4B.3, D-060).
+   *
+   * **`categoryid` is required configuration, not a guess.** Moodle demands a
+   * category and every instance numbers them differently; defaulting to 1 would
+   * file ministry courses under whatever that instance happens to call category
+   * one. `MOODLE_COURSE_CATEGORY_ID` is validated at boot in real mode.
+   *
+   * **Created with completion switched on but no criteria.** `enablecompletion`
+   * is the prerequisite for configuring any criterion at all, and a course
+   * created without it forces the entity to find a setting they do not know they
+   * need. It does *not* make the course completable on its own — criteria are
+   * still absent — which is why the publish gate reads the content summary
+   * rather than trusting this flag (D-061).
+   *
+   * Not idempotent, per the port: there is no natural key to reconcile on, so a
+   * blind retry creates a second course. The shortname collision below is the
+   * only protection, and it is Moodle's rather than ours.
+   */
+  async createCourse(input: CreateCourseInput): Promise<LmsCourse> {
+    let created: MoodleCreatedCourse | undefined;
+
+    try {
+      const courses = await this.client.call<MoodleCreatedCourse[]>('core_course_create_courses', {
+        courses: [
+          {
+            fullname: input.title,
+            shortname: input.shortName,
+            categoryid: this.courseCategoryId,
+            summary: input.summary,
+            summaryformat: 1,
+            enablecompletion: 1,
+            /* Visible in Moodle; whether a learner sees it in *our* catalogue is
+               `publication`'s business (D-059), not the LMS's. */
+            visible: 1,
+          },
+        ],
+      });
+
+      created = courses[0];
+    } catch (error) {
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Course creation failed: ${error instanceof MoodleWsError ? error.errorcode : 'unknown'}`,
+      );
+      throw new LmsOperationError('CREATE_COURSE');
+    }
+
+    if (!created?.id) {
+      /* A 200 with no usable id is not success. Returning a course with id 0
+         would put a row in our catalogue pointing at nothing. */
+      this.logger.error('core_course_create_courses returned no usable course id');
+      throw new LmsOperationError('CREATE_COURSE');
+    }
+
+    /*
+     * Read the course back rather than synthesising it from the input.
+     *
+     * Moodle normalises what it stores — it may trim a name or rewrite a summary
+     * — and our `courses` row is a mirror of what the LMS holds, not of what we
+     * asked for. Returning our own input would make the two disagree from the
+     * first moment, and the next sync run would silently "correct" a row nobody
+     * had changed.
+     */
+    const course = await this.getCourse(created.id);
+
+    if (!course) {
+      this.logger.error(`Course ${created.id} was created but could not be read back`);
+      throw new LmsOperationError('CREATE_COURSE');
+    }
+
+    return course;
+  }
+
+  /**
+   * What the LMS holds inside a course (§4B.4, D-061).
+   *
+   * Two reads, because Moodle splits the answer. `core_course_get_contents`
+   * gives the activities; whether *course completion* is configured lives on the
+   * course record and in its criteria, which `core_completion_get_course_
+   * completion_status` reports per user — so the presence of criteria is read
+   * from `enablecompletion` plus the activity-level completion settings that
+   * `get_contents` returns on each module.
+   *
+   * **A failure here is not fatal.** It is consulted to decide whether to allow
+   * a publish, and an unreadable course must not be publishable — so the caller
+   * treats null as "cannot confirm", which refuses. That is the safe direction.
+   */
+  async getCourseContentSummary(lmsCourseId: LmsCourseId): Promise<LmsCourseContentSummary | null> {
+    const course = await this.getCourse(lmsCourseId);
+
+    if (!course) {
+      return null;
+    }
+
+    const completionEnabled = await this.readCompletionEnabled(lmsCourseId);
+
+    let sections: MoodleCourseSection[];
+
+    try {
+      sections = await this.client.call<MoodleCourseSection[]>('core_course_get_contents', {
+        courseid: lmsCourseId,
+      });
+    } catch (error) {
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Course contents read failed: ${
+          error instanceof MoodleWsError ? error.errorcode : 'unknown'
+        }`,
+      );
+      throw new LmsOperationError('SYNC');
+    }
+
+    const modules = (sections ?? []).flatMap((section) => section.modules ?? []);
+
+    /*
+     * `completion` on a module is Moodle's COMPLETION_TRACKING_*: 0 none,
+     * 1 manual, 2 automatic. Anything above 0 is a criterion a learner can
+     * actually satisfy — which is the thing whose absence D-042 found makes a
+     * course permanently incompletable.
+     */
+    const hasCriterion = modules.some((module) => (module.completion ?? 0) > 0);
+
+    return {
+      lmsCourseId,
+      activityCount: modules.length,
+      hasQuiz: modules.some((module) => module.modname === 'quiz'),
+      /* Both halves, deliberately: completion switched on with no criterion is
+         the same silent dead end as completion switched off. */
+      completionConfigured: completionEnabled && hasCriterion,
+    };
+  }
+
+  /**
+   * Whether course completion is switched on.
+   *
+   * Read through the same `..._by_field` call the catalogue uses, because
+   * `core_course_get_courses` omits `enablecompletion` for a least-privilege
+   * token exactly as it omits `visible` (D-038).
+   */
+  private async readCompletionEnabled(lmsCourseId: LmsCourseId): Promise<boolean> {
+    const payload = await this.catalogueCall({ field: 'id', value: lmsCourseId });
+
+    return Boolean((payload.courses ?? [])[0]?.enablecompletion);
+  }
+
   private async catalogueCall(params: Record<string, unknown>): Promise<MoodleCoursesByField> {
     try {
       return await this.client.call<MoodleCoursesByField>(
@@ -322,7 +498,7 @@ export class MoodleHttpService implements LmsPort {
       await this.client.call('enrol_manual_enrol_users', {
         enrolments: [
           {
-            roleid: this.studentRoleId,
+            roleid: input.role === 'AUTHOR' ? this.authorRoleId : this.studentRoleId,
             userid: input.lmsUserId,
             courseid: input.lmsCourseId,
           },

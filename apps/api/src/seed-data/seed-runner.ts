@@ -1,7 +1,7 @@
 import type { LmsPort } from '../moodle/lms.port';
 import type { PrismaClient } from '../../generated/prisma';
 import { ASSESSMENT_QUESTIONS, ASSESSMENT_SEED, LIKERT_LEVELS } from './assessment';
-import { fieldsForPublishedCourse } from '../catalog-sync/catalog-mapping';
+import { effectiveCourseStatus, fieldsForPublishedCourse } from '../catalog-sync/catalog-mapping';
 import { COURSE_METADATA, SEED_PATHS } from './catalog';
 
 /**
@@ -124,10 +124,16 @@ export async function seedAssessment(
  * Mirrors the LMS catalogue into `courses`, then lays our paths and membership
  * on top.
  *
- * The LMS's `visible` maps to our `status`: a course the LMS is no longer
- * showing becomes HIDDEN_BUT_COMPLETABLE rather than disappearing, which is the
- * §2/D-015 rule — it leaves the catalogue for new selections while anyone
- * already enrolled finishes it.
+ * Seeded courses are **published**, unlike ones merely discovered in the LMS
+ * (D-059). The seed is authoring a known catalogue with its metadata in hand —
+ * paths, objectives, prerequisites, language — so there is nothing a draft would
+ * be waiting for. Sync, which discovers courses no entity has claimed, enters
+ * them as drafts for exactly the opposite reason.
+ *
+ * Status itself is derived, never assigned: `effectiveCourseStatus` combines
+ * that publication decision with the LMS's flags, so a course the LMS is no
+ * longer showing becomes HIDDEN_BUT_COMPLETABLE rather than disappearing —
+ * the §2/D-015 rule.
  */
 async function seedCatalog(
   prisma: PrismaClient,
@@ -151,33 +157,47 @@ async function seedCatalog(
       throw new Error(`No seeded metadata for LMS course ${lmsCourse.lmsCourseId}.`);
     }
 
-    /* The same rule the catalogue sync applies, from the same function — a
+    /* The same rules the catalogue sync applies, from the same functions — a
        seeded database and a synced one must not describe a course differently.
        Passing `null` as the existing row is right here: the seed authors the
        catalogue rather than reconciling with one. */
-    const { status, durationMinutes, title, summary } = fieldsForPublishedCourse(lmsCourse, null);
+    const { lmsVisible, lmsPresent, durationMinutes, title, summary } = fieldsForPublishedCourse(
+      lmsCourse,
+      null,
+    );
+
+    /* `heldByAnyLearner: false` is safe despite re-seeding a live database. The
+       seed only ever describes courses the LMS currently returns, so
+       `lmsPresent` is true and the flag cannot affect the outcome — the held
+       branches are reachable only for an absent or unpublished course. */
+    const status = effectiveCourseStatus({
+      publication: 'PUBLISHED',
+      lmsPresent,
+      lmsVisible,
+      heldByAnyLearner: false,
+    });
+
+    const fields = {
+      title,
+      summary,
+      durationMinutes,
+      lmsVisible,
+      lmsPresent,
+      status,
+      publication: 'PUBLISHED' as const,
+      /* The seeded catalogue is Arabic, and the seed is the one place that
+         genuinely knows so (D-047). Sync leaves it null rather than inferring a
+         language from the characters in a title. */
+      language: 'AR' as const,
+      objectives: metadata.objectives,
+      prerequisites: metadata.prerequisites,
+      lastSyncedAt: syncedAt,
+    };
 
     const course = await prisma.course.upsert({
       where: { moodleCourseId: lmsCourse.lmsCourseId },
-      create: {
-        moodleCourseId: lmsCourse.lmsCourseId,
-        title,
-        summary,
-        durationMinutes,
-        status,
-        objectives: metadata.objectives,
-        prerequisites: metadata.prerequisites,
-        lastSyncedAt: syncedAt,
-      },
-      update: {
-        title,
-        summary,
-        durationMinutes,
-        status,
-        objectives: metadata.objectives,
-        prerequisites: metadata.prerequisites,
-        lastSyncedAt: syncedAt,
-      },
+      create: { moodleCourseId: lmsCourse.lmsCourseId, ...fields, publishedAt: syncedAt },
+      update: fields,
       select: { id: true },
     });
 

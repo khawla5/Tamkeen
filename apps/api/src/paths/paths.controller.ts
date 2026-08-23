@@ -2,11 +2,12 @@ import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
 
 import type { PathDetail, PathRecommendations } from '@tamkeen/types';
 
-import { CurrentUser } from '../auth/auth.decorators';
+import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
 import { PathsService } from './paths.service';
 
 @Controller('paths')
+@Roles('EMPLOYEE')
 export class PathsController {
   constructor(private readonly paths: PathsService) {}
 

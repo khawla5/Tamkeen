@@ -191,6 +191,126 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
       });
     });
 
+    describe('createCourse', () => {
+      const input = (
+        overrides: Partial<{ title: string; summary: string; shortName: string }> = {},
+      ) => ({
+        title: 'دورة جديدة',
+        summary: 'وصف الدورة',
+        shortName: `contract-${Math.random().toString(36).slice(2, 10)}`,
+        ...overrides,
+      });
+
+      it('returns a course with a usable id', async () => {
+        const course = await lms.createCourse(input());
+
+        expect(typeof course.lmsCourseId).toBe('number');
+        expect(course.lmsCourseId).toBeGreaterThan(0);
+      });
+
+      it('carries the title and summary it was given', async () => {
+        const course = await lms.createCourse(input({ title: 'إدارة المخاطر' }));
+
+        expect(course.title).toBe('إدارة المخاطر');
+      });
+
+      it('makes the course findable through getCourse', async () => {
+        /* The whole reason the shell lives in the LMS rather than only in our
+           database (D-060): catalogue sync must be able to see it, or it would
+           withdraw the row on its next run. */
+        const created = await lms.createCourse(input());
+
+        await expect(lms.getCourse(created.lmsCourseId)).resolves.toMatchObject({
+          lmsCourseId: created.lmsCourseId,
+        });
+      });
+
+      it('includes the new course in the catalogue', async () => {
+        const created = await lms.createCourse(input());
+        const catalogue = await lms.listCourses();
+
+        expect(catalogue.map((course) => course.lmsCourseId)).toContain(created.lmsCourseId);
+      });
+
+      it('creates a course that is not yet completable', async () => {
+        /*
+         * The property the publish gate depends on (D-061). A newly created
+         * course has no activities and no completion criteria until an entity
+         * authors them in Moodle, so it must report as not completable — a
+         * course that arrived ready to publish would make the gate untestable
+         * and would let a real entity publish a dead end.
+         */
+        const created = await lms.createCourse(input());
+        const summary = await lms.getCourseContentSummary(created.lmsCourseId);
+
+        expect(summary?.completionConfigured).toBe(false);
+      });
+
+      it('does not reissue an id to a course made by a later instance', async () => {
+        /*
+         * A restart must not hand a new course an id an existing one already
+         * holds. `courses.moodle_course_id` is UNIQUE, so when the mock counted
+         * from a fixed base on every process start, any course row outliving its
+         * process made the next creation fail on the constraint with a 500 —
+         * found for real while testing Phase 4.
+         *
+         * A second port stands in for the restart. The real adapter has this for
+         * free from Moodle's own database, which is precisely why it belongs in
+         * the contract rather than in the mock's own tests.
+         */
+        const first = await lms.createCourse(input());
+        const afterRestart = createPort();
+
+        const second = await afterRestart.createCourse(input());
+
+        expect(second.lmsCourseId).not.toBe(first.lmsCourseId);
+      });
+
+      it('refuses a duplicate short name', async () => {
+        /* Moodle enforces this, so an implementation that did not would let a
+           collision be discovered for the first time in production. */
+        const shortName = `contract-dup-${Math.random().toString(36).slice(2, 10)}`;
+
+        await lms.createCourse(input({ shortName }));
+
+        await expect(lms.createCourse(input({ shortName }))).rejects.toThrow();
+      });
+    });
+
+    describe('getCourseContentSummary', () => {
+      it('returns null for a course that does not exist', async () => {
+        await expect(lms.getCourseContentSummary(99_999_999)).resolves.toBeNull();
+      });
+
+      it('reports counts and flags rather than course content', async () => {
+        /*
+         * Deliberately a summary, not a content tree. We do not render Moodle's
+         * material (D-000/D-045), so a richer shape would be data with no
+         * consumer — and modelling Moodle's module structure here would leak the
+         * schema across the boundary D-030 exists to hold.
+         */
+        const summary = await lms.getCourseContentSummary(101);
+
+        expect(summary).toMatchObject({
+          lmsCourseId: 101,
+          activityCount: expect.any(Number) as number,
+          hasQuiz: expect.any(Boolean) as boolean,
+          completionConfigured: expect.any(Boolean) as boolean,
+        });
+      });
+
+      it('leaks no Moodle field names', async () => {
+        const summary = await lms.getCourseContentSummary(101);
+
+        expect(Object.keys(summary ?? {}).sort()).toEqual([
+          'activityCount',
+          'completionConfigured',
+          'hasQuiz',
+          'lmsCourseId',
+        ]);
+      });
+    });
+
     describe('enrol', () => {
       it('enrols a user in a course', async () => {
         const user = await lms.provisionUser({
@@ -222,6 +342,43 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
         await expect(lms.enrol(input)).resolves.not.toThrow();
 
         expect(await lms.isEnrolled(user.lmsUserId, course!.lmsCourseId)).toBe(true);
+      });
+
+      it('enrols an author, and an author is still enrolled', async () => {
+        /*
+         * `role` selects what a user is enrolled *as* (D-060). Whatever an
+         * implementation does with it, an author must satisfy `isEnrolled` —
+         * otherwise the launch path, which checks enrolment before minting a
+         * handoff, would refuse an entity entry to its own course.
+         */
+        const user = await lms.provisionUser({
+          email: 'author@authority.gov.example',
+          fullName: 'مؤلف',
+          externalUserId: 'ext-author',
+        });
+        const [course] = await lms.listCourses();
+
+        await lms.enrol({
+          lmsUserId: user.lmsUserId,
+          lmsCourseId: course!.lmsCourseId,
+          role: 'AUTHOR',
+        });
+
+        expect(await lms.isEnrolled(user.lmsUserId, course!.lmsCourseId)).toBe(true);
+      });
+
+      it('treats an absent role as LEARNER', async () => {
+        /* Every Phase 1-3 caller omits it, and they all meant a learner. */
+        const user = await lms.provisionUser({
+          email: 'default-role@ministry.gov.example',
+          fullName: 'متعلم',
+          externalUserId: 'ext-default-role',
+        });
+        const [course] = await lms.listCourses();
+
+        await expect(
+          lms.enrol({ lmsUserId: user.lmsUserId, lmsCourseId: course!.lmsCourseId }),
+        ).resolves.not.toThrow();
       });
     });
 

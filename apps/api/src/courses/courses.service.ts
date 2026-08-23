@@ -75,6 +75,7 @@ export class CoursesService {
         summary: true,
         durationMinutes: true,
         status: true,
+        language: true,
         pathCourses: {
           where: { path: { isActive: true } },
           orderBy: { path: { displayOrder: 'asc' } },
@@ -90,6 +91,7 @@ export class CoursesService {
       summary: course.summary,
       durationMinutes: course.durationMinutes,
       status: course.status,
+      language: course.language,
       paths: course.pathCourses.map((entry) => ({
         id: entry.path.id,
         name: entry.path.name,
@@ -110,6 +112,7 @@ export class CoursesService {
         summary: true,
         durationMinutes: true,
         status: true,
+        language: true,
         objectives: true,
         prerequisites: true,
         pathCourses: {
@@ -146,6 +149,7 @@ export class CoursesService {
       summary: course.summary,
       durationMinutes: course.durationMinutes,
       status: course.status,
+      language: course.language,
       objectives: course.objectives,
       prerequisites: course.prerequisites,
       paths: course.pathCourses.map((entry) => ({
