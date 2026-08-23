@@ -6,6 +6,7 @@ import {
   passwordResetEmail,
   verificationEmail,
   coursePassedEmail,
+  invitationEmail,
   pathCompletedEmail,
 } from './email.templates';
 
@@ -56,6 +57,26 @@ export class EmailService {
     const url = `${this.config.get('APP_URL')}/reset-password?token=${encodeURIComponent(token)}`;
 
     await this.send(to, passwordResetEmail(url, minutes));
+  }
+
+  /**
+   * The invitation for an administrator-provisioned account (§4C.2).
+   *
+   * Redeemed on the same `/reset-password` page as an ordinary reset, because
+   * it is the same token type doing the same job — setting a password the
+   * server has never seen. Only the wording differs, and it has to: a reset
+   * notice arriving at an address that never had an account reads as phishing.
+   */
+  async sendInvitation(
+    to: string,
+    fullName: string,
+    token: string,
+    options: { isEntity: boolean },
+  ): Promise<void> {
+    const minutes = this.config.get('PASSWORD_RESET_TTL_MINUTES');
+    const url = `${this.config.get('APP_URL')}/reset-password?token=${encodeURIComponent(token)}`;
+
+    await this.send(to, invitationEmail(url, fullName, minutes, options.isEntity));
   }
 
   async sendCoursePassed(

@@ -17,6 +17,13 @@
 
 import type {
   AdminDashboardView,
+  AdminEntityRow,
+  AdminInviteResult,
+  AdminRegistrationPolicyView,
+  AdminUserDetail,
+  AdminUserPage,
+  AdminUserRow,
+  UserRole,
   AssessmentResultView,
   CertificateSummary,
   CvProfile,
@@ -435,4 +442,74 @@ export const entityApi = {
  */
 export const adminApi = {
   dashboard: () => api.get<AdminDashboardView>('/api/admin/dashboard'),
+
+  // §4C.2 — users and organisations
+  listUsers: (
+    filters: {
+      q?: string;
+      role?: UserRole;
+      status?: 'ACTIVE' | 'SUSPENDED';
+      entityId?: string;
+      unverified?: boolean;
+      page?: number;
+    } = {},
+  ) => {
+    const query = new URLSearchParams();
+
+    /* Only what is set. The API rejects unknown and malformed parameters, so an
+       empty `q=` would be a 400 rather than "no filter". */
+    if (filters.q) query.set('q', filters.q);
+    if (filters.role) query.set('role', filters.role);
+    if (filters.status) query.set('status', filters.status);
+    if (filters.entityId) query.set('entityId', filters.entityId);
+    if (filters.unverified) query.set('unverified', 'true');
+    if (filters.page && filters.page > 1) query.set('page', String(filters.page));
+
+    const suffix = query.toString();
+
+    return api.get<AdminUserPage>(`/api/admin/users${suffix ? `?${suffix}` : ''}`);
+  },
+
+  getUser: (userId: string) => api.get<AdminUserDetail>(`/api/admin/users/${userId}`),
+
+  /** Provisions an account. Returns an invitation, never a password. */
+  createUser: (input: {
+    email: string;
+    fullName: string;
+    employeeId: string;
+    department: string;
+    role: UserRole;
+    entityId?: string;
+  }) => api.post<AdminInviteResult>('/api/admin/users', input),
+
+  reinvite: (userId: string) =>
+    api.post<AdminInviteResult>(`/api/admin/users/${userId}/invite`, {}),
+
+  setUserStatus: (userId: string, status: 'ACTIVE' | 'SUSPENDED') =>
+    api.patch<AdminUserRow>(`/api/admin/users/${userId}/status`, { status }),
+
+  setUserRole: (userId: string, role: UserRole, entityId?: string) =>
+    api.patch<AdminUserRow>(`/api/admin/users/${userId}/role`, { role, entityId }),
+
+  registrationPolicy: () => api.get<AdminRegistrationPolicyView>('/api/admin/registration-policy'),
+
+  listEntities: (q?: string) =>
+    api.get<AdminEntityRow[]>(`/api/admin/entities${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+
+  createEntity: (input: {
+    key: string;
+    name: string;
+    contactName?: string;
+    contactEmail?: string;
+  }) => api.post<AdminEntityRow>('/api/admin/entities', input),
+
+  updateEntity: (
+    entityId: string,
+    patch: {
+      name?: string;
+      contactName?: string;
+      contactEmail?: string;
+      status?: 'ACTIVE' | 'SUSPENDED';
+    },
+  ) => api.patch<AdminEntityRow>(`/api/admin/entities/${entityId}`, patch),
 };

@@ -6,16 +6,16 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **in progress, sub-phase 5.1 of 5.9 complete.**
-- **Last completed task:** **Sub-phase 5.1 — admin foundation + Dashboard (§4C.1).** The `admin` API module behind `@Roles('SUPER_ADMIN')`, the `(admin)` route group with its own provider and frame, and the §4C.1 dashboard. Also fixed a live routing defect: a super-admin signing in was sent into the *entity* portal.
-- **Next task:** **Sub-phase 5.2 — User Management (§4C.2)**, including entity-account creation (the seam Phase 4 left).
+- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **in progress, sub-phase 5.2 of 5.9 complete.**
+- **Last completed task:** **Sub-phase 5.2 — User Management (§4C.2).** Account list and detail, suspend/reactivate, role change with three lockout guards, and **provisioning by invitation** — which closes the entity-account seam Phase 4 left open. Also fixed a pre-existing dead end: an unverified account could complete a password reset and still be refused at sign-in.
+- **Next task:** **Sub-phase 5.3 — Assessment Management (§4C.3)** — the draft/publish editor over copy-on-write versioning (D-069/D-070), with the balance guard at publish (D-071).
 - **Active branch:** `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd`, which contains Phases 0-4. No PR yet — one PR covers the whole of Phase 5 (D-008).
 - **Phase 4 is merged** (PR #6, `origin/main` @ `f1f0dcd`). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
-- **Test totals:** 540 API unit · 271 web component · 198 API integration against real PostgreSQL · 34 browser e2e in Chromium — **1043 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
+- **Test totals:** 556 API unit · 290 web component · 268 API integration against real PostgreSQL · 40 browser e2e in Chromium — **1154 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
 
 ### Phase 5 sub-phase tracker
 - [x] **5.1 Admin foundation + Dashboard** (§4C.1) — RBAC, route group, shell, integration health
-- [ ] **5.2 User Management** (§4C.2) — employees + entities, suspend/activate, **entity-account creation**
+- [x] **5.2 User Management** (§4C.2) — employees + entities, suspend/activate, **entity-account creation**
 - [ ] **5.3 Assessment Management** (§4C.3) — draft/publish, balance guard, copy-on-write versioning
 - [ ] **5.4 Path Management** (§4C.4) — paths, `path_courses` membership + ordering, safe retirement
 - [ ] **5.5 Course Oversight** (§4C.5) — global catalogue, ownership assignment, intervention
@@ -64,8 +64,8 @@
 - **`MOODLE_TEACHER_ROLE_ID` and `MOODLE_COURSE_CATEGORY_ID` are Moodle's stock values, not the ministry's.** Both are per-instance and unverified. **Phase 7** must confirm them against the real instance before an entity creates a course there — a wrong teacher role hands an outside organisation capabilities nobody intended (D-060).
 - **`core_course_create_courses` and `core_course_get_contents` have not run against a real Moodle.** They are covered by the contract suite and the mock; the Phase 2 spike predates them. **Phase 7's acceptance test** exercises them for the first time in anger, and D-039's 4.5-vs-5.2 re-verification now covers them too.
 - **The successful-publish path is proven in integration, not in the browser.** The mock reports a newly created course as having no completion criteria — the honest simulation, since a real Moodle course is empty until someone authors it — and `simulateAuthoring` lives in the API process, out of Playwright's reach. So the browser proves the *refusal* on a course it creates through the UI, and proves publish/withdraw on a seeded course the mock considers completable. **Phase 7** closes this against a real Moodle.
-- **Entity accounts are created by a seed, not by a screen.** §4C.2 gives the super-admin that screen in **Phase 5**; until then the seam is `prisma/seed.ts`, under the same no-known-default-password discipline as the super-admin account.
-- **An entity's own record is read-only, and an entity cannot add a colleague to its organisation.** Who a ministry supplier is, and who speaks for them, is a contractual fact rather than a self-service setting — both belong to **Phase 5**'s user management (§4C.2).
+- ~~Entity accounts are created by a seed, not by a screen.~~ **Closed in sub-phase 5.2** — the super-admin provisions an organisation and its accounts from §4C.2, by invitation, and never sees a password (D-077).
+- ~~An entity's own record is read-only, and an entity cannot add a colleague to its organisation.~~ **Closed in sub-phase 5.2** — the super-admin edits an organisation and adds accounts to it. An entity still cannot do either itself, which is the point: who a ministry supplier is, and who speaks for them, is a contractual fact rather than a self-service setting.
 - **Course ordering within a path is not editable.** `path_courses.display_order` is set from the path's own order when a course is first attached and left alone thereafter; §4C.4 gives ordering to the admin in **Phase 5**.
 - **A course withdrawn from the LMS side is still only detectable by sync.** An entity sees `lms_present: false` reflected in the status, but nothing tells them *why* a course they published is no longer available. **Phase 6**'s sync-reliability work owns surfacing that.
 - **Eight API error codes have no Arabic copy** — `CERTIFICATE_NOT_FOUND`, `CERTIFICATE_FILE_UNAVAILABLE`, `CERTIFICATE_FILE_CORRUPT`, `COURSE_NOT_ENROLLED`, `CV_INVALID_DATE`, `CV_TOO_MANY_ENTRIES`, `ENTITY_NOT_FOUND`, `USER_NOT_FOUND`. `useErrorMessage` falls back to the generic Arabic message, so none reaches a user as a raw code, but the specific ones would help. **Phase 6**'s Arabic content QA owns them.
@@ -123,10 +123,44 @@
 - **A course's RIASEC letters are derived from its paths, never authored beside them (D-066).** §3A makes the path the owner of the letter, so a stored copy could contradict it and nothing downstream would notice.
 - **Both providers correct a mis-routed account, and 403 is why the second was missing (D-067).** Makes real the claim D-065 already made; the redirect stays a courtesy, never a control.
 - **Every id the mock LMS hands out derives from a natural key, never a counter (D-068).** The mock's state dies with the process, the rows do not, and both LMS id columns are UNIQUE. Asserted in the shared contract.
+- **Assessment versioning is copy-on-write; the old bank is kept (D-069).** Draft-then-publish, with the balance guard at publish and adjacency only warned about (D-070, D-071).
+- **The product knobs move to a `settings` table with env as fallback; secrets stay in the environment (D-072).**
+- **Certificate template settings are text-only until the ministry supplies artwork (D-073); the 5-10 bounds stay hardcoded (D-074).**
+- **The super-admin keeps unscoped API access to entity data but has its own screens (D-075); reports export as CSV with a BOM (D-076).**
+- **An administrator provisions accounts by invitation and never sees a password (D-077).** Redeeming a reset token now also verifies the address, which closes a dead end that already existed.
+- **Two lockouts are guarded, and converting a learner who holds a record is refused (D-078).**
 
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — Sub-phase 5.2: user management, and Phase 4's provisioning seam closed
+
+§4C.2 built: the account list with search across name, email and employee id; the per-account view; suspend/reactivate and role change; **provisioning accounts and creating organisations**. An entity used to exist only if `prisma/seed.ts` created one, so onboarding a ministry supplier needed a developer with database access — that is now a screen.
+
+**Test totals: 556 API unit · 290 web component · 268 API integration · 40 browser e2e — 1154 automated.** Typecheck, lint and format clean. No new dependencies.
+
+**No password reaches the administrator, and the tests are written so a regression cannot hide.** An account is created with a hash of 32 random bytes that nothing retains, and an invitation goes to the address; the person chooses their own password from the link. The obvious alternative — generate one and show it once, as `prisma/seed.ts` does — produces a credential two people know, relayed over whatever channel the admin then uses, which in a ministry is a chat message. The seed does it that way because a terminal has no mailbox to send to; a portal does. Both the integration and browser suites assert the *absence* against the whole serialised response and the whole rendered page rather than against named fields, because a later refactor adding `temporaryPassword` would satisfy every other assertion in either file.
+
+**A dead end that already existed, found while making the invitation work.** `requestPasswordReset` accepts an unverified account, but `resetPassword` never set `emailVerifiedAt` — so it was possible to register, skip verification, use "forgot password", set a new password, and still be refused at sign-in with `EMAIL_NOT_VERIFIED`, having just proved control of the mailbox. Redeeming a token emailed to an address *is* what verification asserts, so the reset now sets the timestamp when it is null (`??`, never overwriting — the original is when the address was first proven). This is also what makes an invited account work at all, since it has never seen a verification email.
+
+**Two lockouts, and they are not the same failure.** Refusing self-modification stops an administrator suspending themselves mid-session, where the screen that would undo it is the one they just lost. Refusing to remove the last *active* administrator stops the ministry losing the portal entirely — and no amount of individual care prevents that one: two administrators can each demote the other, one after the other, and neither has done anything wrong. Both live in `account-changes.ts` as pure functions over gathered facts, on the same reasoning as `checkRegistrationPolicy` and `publishBlockers`: every rule here prevents a lockout or an orphaned record, which are exactly the cases an integration test reaches only by arranging the disaster first.
+
+**A third refusal the schema does not enforce.** Converting an EMPLOYEE who holds a result, a path or a certificate is refused. Their record survives — `user_paths.pathId` is `Restrict` and certificates are immutable — but every screen that reads it is `@Roles('EMPLOYEE')`, so the person could no longer reach their own training history while their certificate stayed publicly verifiable in their name. The ministry case this resembles, an employee seconded to run a supplier account, is properly served by a second account.
+
+**Suspension revokes sessions, and the reason is not the obvious one.** `SessionService.resolve` already refuses a suspended owner on every request, so the suspension takes effect either way. What revoking prevents is the *reactivation*: without it, restoring an account silently hands back every session that was live when it was suspended — including whichever one may have been the reason for suspending it. A role change revokes for a different reason: a demotion would otherwise keep resolving against the old role until the session expired, which is precisely the window that matters.
+
+**A defect the audit test caught.** `Object.keys(dto)` on a class-validator DTO returns every declared optional, because `transform: true` instantiates the class and absent fields exist as `undefined` own properties. The entity-update trail therefore claimed all four fields changed on every edit — worse than recording nothing, because a reviewer would stop believing the payload. Now filtered on `!== undefined`.
+
+**`ADMIN_CONTROLLERS` replaced the single controller.** 5.1's RBAC suite reflected routes off one class; §4C is roughly forty endpoints across eight pages, and one file holding all of them makes the boundary between "users" and "settings" a matter of scrolling. The suite now enumerates the same array `AdminModule` registers, so a controller added later is covered the moment it is routable — **46 RBAC assertions across 11 routes**, with no second place to remember. Each denial is still checked for `INSUFFICIENT_ROLE` rather than only for a 403, since a CSRF refusal is indistinguishable from outside.
+
+**Administrative provisioning bypasses D-017 deliberately.** The domain and employee-id gate governs *self*-registration; the whole point of `admin-only` mode is that an administrator is the gate. It also has to: an entity contact is by definition not at a ministry address and could never be provisioned otherwise. Uniqueness is still the database's, and the browser suite provisions to `@authority.example` to prove it.
+
+**The Phase 4 refetch defect, written a second time.** Saving from the admin user panel triggered a refetch, `useApiQuery` set `isLoading` on every refetch, and `DataView` swapped to its loading state — unmounting the confirmation the administrator had just earned. Phase 4 hit exactly this on the entity manage screen and fixed it by writing `isLoading && data === undefined` at the call site. Two occurrences of a rule nobody can be expected to remember is enough: the hook now exposes **`isInitialLoad`**, documented as what `DataView` almost always wants, so a third occurrence needs a deliberate choice rather than a forgotten one. Only the browser suite could see it — the component test passes because a mocked fetch resolves before React can render the loading state.
+
+**Two smaller things the browser found.** The entity dashboard has computed `entityName` since Phase 4 and rendered it nowhere; harmless while an account's organisation was fixed at seeding, and no longer, because §4C.2 lets an administrator move an account between organisations — so "whose courses am I looking at" is now a question the screen has to answer. And Next.js renders its own `role="alert"` route announcer at the document root, which makes every unscoped alert assertion ambiguous; the e2e scopes to the dialog rather than weakening the assertion.
+
+**One state the database has no column for.** An account created but never activated looks identical to a working one on `status` alone, and "why can this person not sign in" is the question this screen is most often asked — so the list renders a third badge, بانتظار التفعيل, derived from a null `email_verified_at`. Suspension outranks it: an account that was cut off is not waiting for anything.
 
 ### 2026-08-23 — Phase 5 planned; sub-phase 5.1: the admin foundation and the §4C.1 dashboard
 
@@ -568,7 +602,7 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - [x] **Phase 2 — Moodle integration** (spike first; web services, provisioning, catalog sync, enrollment, scheduled completion sync + pass threshold + shared-course reuse, seamless login, course player) — **merged** (PR #3, `origin/main` @ `dcb8aad`)
 - [x] **Phase 3 — Certificates + CV** (idempotent course/path certs, Arabic PDF solved, verification page + QR, gallery, CV builder + English PDF export) — **merged** (PR #4, `origin/main` @ `f2a6b4d`)
 - [x] **Phase 4 — Entity / reviewer portal** (entity accounts + server-side data scoping, course creation in the LMS, authoring handoff, product metadata, publish gate + course-edit protection, learner review) — **merged** (PR #6, `origin/main` @ `f1f0dcd`)
-- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **in progress on `phase-5-admin-portal`; 5.1 of 5.9 done** (sub-phase tracker in Current Status)
+- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **in progress on `phase-5-admin-portal`; 5.2 of 5.9 done** (sub-phase tracker in Current Status)
 - [ ] **Phase 6 — Hardening** (Arabic QA, RTL PDF polish, security review, sync reliability + load, a11y, states)
 - [ ] **Phase 7 — Deployment, acceptance & launch** (deploy app+Moodle, seed data, full end-to-end acceptance, docs/handover, sign-off)
 

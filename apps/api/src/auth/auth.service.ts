@@ -353,7 +353,14 @@ export class AuthService {
 
     const token = await this.prisma.authToken.findUnique({
       where: { tokenHash: hashToken(rawToken) },
-      select: { id: true, userId: true, type: true, expiresAt: true, consumedAt: true },
+      select: {
+        id: true,
+        userId: true,
+        type: true,
+        expiresAt: true,
+        consumedAt: true,
+        user: { select: { emailVerifiedAt: true } },
+      },
     });
 
     const invalid =
@@ -377,6 +384,7 @@ export class AuthService {
       throw new UnauthorizedException('TOKEN_INVALID');
     }
 
+    const existing = token.user;
     const passwordHash = await hashPassword(newPassword);
 
     await this.prisma.$transaction([
@@ -386,7 +394,28 @@ export class AuthService {
       }),
       this.prisma.user.update({
         where: { id: token.userId },
-        data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null },
+        data: {
+          passwordHash,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          /*
+           * Redeeming a token that was emailed to an address proves control of
+           * that address — which is exactly what verification asserts, so an
+           * unverified account is verified here rather than left in a state it
+           * can no longer leave.
+           *
+           * Without this there is a dead end reachable today: register, never
+           * verify, use "forgot password", set a new password, and still be
+           * refused at sign-in with EMAIL_NOT_VERIFIED — having just proved the
+           * mailbox is yours. It is also what makes §4C.2's invitation work,
+           * since an invited account has never verified anything.
+           *
+           * `??` and not an overwrite: the original verification timestamp is
+           * when the address was first proven, and a later reset must not
+           * rewrite that piece of history.
+           */
+          emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
+        },
       }),
     ]);
 

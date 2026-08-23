@@ -1,4 +1,5 @@
 import type { RiasecLetter } from './riasec';
+import type { UserRole } from './roles';
 
 /**
  * The super-admin portal (CLAUDE.md §4C).
@@ -136,4 +137,109 @@ export interface AdminPathRow {
   committedLearners: number;
   isActive: boolean;
   displayOrder: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.2 — user management
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AdminUserStatus = 'ACTIVE' | 'SUSPENDED';
+
+/**
+ * One row of the user list.
+ *
+ * Carries the email and employee id, which no other portal's contract does.
+ * That is the point of this screen and also its risk: §2 treats both as PII, so
+ * they appear here, behind `@Roles('SUPER_ADMIN')`, and nowhere else — not in a
+ * URL, not in an audit payload, not in a log line.
+ */
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  fullName: string;
+  employeeId: string;
+  department: string;
+  role: UserRole;
+  status: AdminUserStatus;
+  /** Null until they follow the invitation or verification link. */
+  emailVerifiedAt: string | null;
+  lastLoginAt: string | null;
+  /** The organisation an ENTITY account acts for; null for every other role. */
+  entity: { id: string; name: string } | null;
+}
+
+/** A page of users, with the total so the UI can say how many matched. */
+export interface AdminUserPage {
+  rows: AdminUserRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * What an administrator sees about one person (§4C.2's "path/assessment/
+ * certificate status").
+ *
+ * A summary, not a second copy of the learner's own screens: the Holland Code
+ * without the six scores, the path with its progress but not its course list,
+ * and a certificate count rather than the certificates. An administrator asks
+ * "where is this person up to and is anything stuck", and that is answerable
+ * without reproducing the journey in the admin portal.
+ */
+export interface AdminUserDetail extends AdminUserRow {
+  createdAt: string;
+  /** Whether an LMS account has been provisioned yet (lazy, per D-036). */
+  hasLmsAccount: boolean;
+  assessment: { code: string; completedAt: string; attempts: number } | null;
+  path: {
+    name: string;
+    status: 'BUILDING' | 'ACTIVE' | 'COMPLETED';
+    confirmedAt: string | null;
+    coursesChosen: number;
+    coursesPassed: number;
+  } | null;
+  certificateCount: number;
+  /** Live sessions right now — the answer to "is this suspension effective?" */
+  activeSessions: number;
+}
+
+/** An organisation and the two counts that say whether it can be removed. */
+export interface AdminEntityRow {
+  id: string;
+  key: string;
+  name: string;
+  contactName: string;
+  contactEmail: string;
+  status: 'ACTIVE' | 'SUSPENDED';
+  accountCount: number;
+  courseCount: number;
+  createdAt: string;
+}
+
+/**
+ * The result of provisioning an account.
+ *
+ * **No password, ever** (§4C.2: "no raw password access"). The account is
+ * created with a hash of random bytes that nothing keeps, and an invitation is
+ * emailed; the person sets their own password from the link. So what comes back
+ * is confirmation that the invitation went out, not a credential to relay.
+ */
+export interface AdminInviteResult {
+  user: AdminUserRow;
+  invitationSentTo: string;
+  invitationExpiresAt: string;
+}
+
+/**
+ * The restricted-registration rules in force (D-017), read-only here.
+ *
+ * §4C.6 makes them editable in sub-phase 5.6; this exists in 5.2 because an
+ * administrator looking at "why can this person not register" needs the answer
+ * on the screen where they are asking the question.
+ */
+export interface AdminRegistrationPolicyView {
+  mode: 'restricted' | 'admin-only';
+  allowedEmailDomains: string[];
+  employeeIdPattern: string;
+  passwordMinLength: number;
 }

@@ -7,7 +7,7 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import { AdminController } from '../src/admin/admin.controller';
+import { ADMIN_CONTROLLERS } from '../src/admin/admin.controllers';
 import { AppModule } from '../src/app.module';
 import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
@@ -47,41 +47,49 @@ interface AdminRoute {
   path: string;
 }
 
-/** Every route Nest will register for the admin controller. */
+const VERBS: Record<number, AdminRoute['method']> = {
+  [RequestMethod.GET]: 'get',
+  [RequestMethod.POST]: 'post',
+  [RequestMethod.PATCH]: 'patch',
+  [RequestMethod.PUT]: 'put',
+  [RequestMethod.DELETE]: 'delete',
+};
+
+/**
+ * Every route Nest will register for every admin controller.
+ *
+ * Driven off `ADMIN_CONTROLLERS`, the same array `AdminModule` registers, so a
+ * controller added in a later sub-phase is covered the moment it is routable.
+ */
 function adminRoutes(): AdminRoute[] {
-  const base = Reflect.getMetadata(PATH_METADATA, AdminController) as string;
-  const prototype = AdminController.prototype as unknown as Record<string, unknown>;
+  return ADMIN_CONTROLLERS.flatMap((controller) => {
+    const base = Reflect.getMetadata(PATH_METADATA, controller) as string;
+    const prototype = controller.prototype as unknown as Record<string, unknown>;
 
-  const methodNames = Object.getOwnPropertyNames(prototype).filter(
-    (name) => name !== 'constructor' && typeof prototype[name] === 'function',
-  );
+    const methodNames = Object.getOwnPropertyNames(prototype).filter(
+      (name) => name !== 'constructor' && typeof prototype[name] === 'function',
+    );
 
-  const verbs: Record<number, AdminRoute['method']> = {
-    [RequestMethod.GET]: 'get',
-    [RequestMethod.POST]: 'post',
-    [RequestMethod.PATCH]: 'patch',
-    [RequestMethod.PUT]: 'put',
-    [RequestMethod.DELETE]: 'delete',
-  };
+    return methodNames.flatMap((name) => {
+      const handler = prototype[name] as object;
+      const suffix = Reflect.getMetadata(PATH_METADATA, handler) as string | undefined;
+      const verb = Reflect.getMetadata(METHOD_METADATA, handler) as number | undefined;
 
-  return methodNames.flatMap((name) => {
-    const handler = prototype[name] as object;
-    const suffix = Reflect.getMetadata(PATH_METADATA, handler) as string | undefined;
-    const verb = Reflect.getMetadata(METHOD_METADATA, handler) as number | undefined;
+      if (suffix === undefined || verb === undefined || VERBS[verb] === undefined) {
+        return [];
+      }
 
-    if (suffix === undefined || verb === undefined || verbs[verb] === undefined) {
-      return [];
-    }
+      /* Route params are filled with a well-formed uuid so that a ParseUUIDPipe
+         cannot answer 400 before the guard answers 403 — though in practice
+         guards run first, and a test relying on that ordering would be testing
+         Nest rather than us. */
+      const path = `/api/${base}/${suffix}`
+        .replace(/\/+/g, '/')
+        .replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000')
+        .replace(/\/$/, '');
 
-    /* Route params are filled with a well-formed uuid so that a ParseUUIDPipe
-       cannot answer 400 before the guard answers 403 — though in practice guards
-       run first, and a test that relied on that ordering would be testing Nest. */
-    const path = `/api/${base}/${suffix}`
-      .replace(/\/+/g, '/')
-      .replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000')
-      .replace(/\/$/, '');
-
-    return [{ method: verbs[verb]!, path }];
+      return [{ method: VERBS[verb]!, path }];
+    });
   });
 }
 
@@ -169,8 +177,12 @@ describe('Admin portal RBAC (e2e)', () => {
   function call(route: AdminRoute, session?: string) {
     const cookies = [csrfCookie, ...(session ? [session] : [])].join('; ');
 
-    return request(server())
-      [route.method](route.path)
+    /* `const agent = …; agent[verb](…)` rather than chaining off the call:
+       prettier breaks the chain before the computed access, and a line starting
+       with `[` reads to the parser as an index into the previous line. */
+    const agent = request(server());
+
+    return agent[route.method](route.path)
       .set('Cookie', cookies)
       .set('X-CSRF-Token', csrfToken)
       .send({});

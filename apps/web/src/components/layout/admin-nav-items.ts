@@ -21,4 +21,5 @@ import type { NavItem } from './nav-items';
  */
 export const ADMIN_NAV: readonly NavItem[] = [
   { key: 'adminDashboard', href: '/admin', icon: 'dashboard' },
+  { key: 'adminUsers', href: '/admin/users', icon: 'learners' },
 ];

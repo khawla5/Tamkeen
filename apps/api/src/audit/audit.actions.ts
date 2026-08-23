@@ -89,6 +89,28 @@ export const AuditAction = {
    * somewhere else, and here it carries editing rights.
    */
   ENTITY_COURSE_AUTHOR_LAUNCHED: 'ENTITY_COURSE_AUTHOR_LAUNCHED',
+
+  // Super-admin portal (Phase 5)
+  /**
+   * An administrator provisioned an account (§4C.2). The role is recorded in the
+   * detail payload; the email and employee id are not — they are PII, and the
+   * target id resolves to both for anyone entitled to see them.
+   */
+  ADMIN_USER_CREATED: 'ADMIN_USER_CREATED',
+  /** An invitation was (re-)sent to an account that has not set a password. */
+  ADMIN_USER_INVITED: 'ADMIN_USER_INVITED',
+  /**
+   * An account was suspended or reactivated. Audited separately from a role
+   * change because they answer different questions in an incident review:
+   * "who cut this person off, and when" against "who gave them this access".
+   */
+  ADMIN_USER_STATUS_CHANGED: 'ADMIN_USER_STATUS_CHANGED',
+  /** An account's role changed, or an entity account moved organisation. */
+  ADMIN_USER_ROLE_CHANGED: 'ADMIN_USER_ROLE_CHANGED',
+  /** An organisation was created (§4C.2 fills Phase 4's provisioning seam). */
+  ADMIN_ENTITY_CREATED: 'ADMIN_ENTITY_CREATED',
+  /** An organisation's details or status changed. */
+  ADMIN_ENTITY_UPDATED: 'ADMIN_ENTITY_UPDATED',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];
@@ -133,6 +155,23 @@ export const AuditReason = {
   COURSE_NOT_PUBLISHABLE: 'COURSE_NOT_PUBLISHABLE',
   /** The LMS refused or could not be reached while creating a course shell. */
   LMS_COURSE_CREATE_FAILED: 'LMS_COURSE_CREATE_FAILED',
+
+  /* Phase 5 — refused administrative changes. Every one of these is a lockout
+     or an integrity failure that was prevented, which makes them the entries a
+     security review most wants to be able to find. */
+  /** An administrator tried to change their own status or role. */
+  SELF_MODIFICATION_REFUSED: 'SELF_MODIFICATION_REFUSED',
+  /** The change would have left the system with no active administrator. */
+  LAST_ACTIVE_ADMIN: 'LAST_ACTIVE_ADMIN',
+  /** An ENTITY account was asked for without an organisation to act for. */
+  ENTITY_REQUIRED: 'ENTITY_REQUIRED',
+  /** An organisation was supplied for a role that cannot belong to one. */
+  ENTITY_NOT_ALLOWED: 'ENTITY_NOT_ALLOWED',
+  /** The role change would have stranded a learner's result, path or
+   *  certificates behind a role that cannot reach them. */
+  JOURNEY_WOULD_BE_ORPHANED: 'JOURNEY_WOULD_BE_ORPHANED',
+  /** The requested role is the one the account already has. */
+  ROLE_UNCHANGED: 'ROLE_UNCHANGED',
 } as const;
 
 export type AuditReasonCode = (typeof AuditReason)[keyof typeof AuditReason];
