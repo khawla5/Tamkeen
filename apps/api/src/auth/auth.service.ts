@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 
 import { AuditAction, AuditReason } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
@@ -429,6 +429,76 @@ export class AuthService {
       targetType: 'User',
       targetId: token.userId,
     });
+  }
+
+  /**
+   * Changes a signed-in user's own password (§4.12, owed since Phase 1).
+   *
+   * **The current password is required, and that is the whole security of it.**
+   * A session cookie is enough to *be* the user, so without this check anyone
+   * who reached an unlocked machine could set a new password and own the account
+   * permanently — while the real owner discovers it at the next sign-in. Asking
+   * for what they already know costs a legitimate user one field.
+   *
+   * Every *other* session is revoked afterwards, and this one is kept. Changing
+   * a password is what somebody does when they think it has been seen, so the
+   * point is to evict whoever else is holding one — and signing the user out of
+   * the tab they are looking at, immediately after they proved themselves, would
+   * make the safe action feel like a failure.
+   */
+  async changePassword(
+    userId: string,
+    sessionId: string,
+    currentPassword: string,
+    newPassword: string,
+    context: SessionContext,
+  ): Promise<void> {
+    if (newPassword.length < this.config.get('PASSWORD_MIN_LENGTH')) {
+      throw new BadRequestException('PASSWORD_TOO_SHORT');
+    }
+
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+
+    if (!(await verifyPassword(user.passwordHash, currentPassword))) {
+      await this.audit.record({
+        action: AuditAction.AUTH_PASSWORD_CHANGED,
+        outcome: 'FAILURE',
+        actorUserId: userId,
+        ipAddress: context.ipAddress,
+        reason: AuditReason.BAD_PASSWORD,
+      });
+
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
+
+    if (await verifyPassword(user.passwordHash, newPassword)) {
+      /* Refused rather than accepted as a no-op: somebody who believes they have
+         changed their password and has not is worse off than somebody told they
+         did not. */
+      throw new BadRequestException('PASSWORD_UNCHANGED');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await hashPassword(newPassword) },
+    });
+
+    await this.sessions.revokeAllForUserExcept(userId, sessionId);
+
+    await this.audit.record({
+      action: AuditAction.AUTH_PASSWORD_CHANGED,
+      outcome: 'SUCCESS',
+      actorUserId: userId,
+      ipAddress: context.ipAddress,
+    });
+  }
+
+  /** Stores, or clears, the person's digits preference (§4.12, D-018). */
+  async setNumberFormat(userId: string, numberFormat: string | null): Promise<void> {
+    await this.prisma.user.update({ where: { id: userId }, data: { numberFormat } });
   }
 
   /** Increments the failure counter and locks the account at the threshold. */

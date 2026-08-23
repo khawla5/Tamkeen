@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Patch,
   HttpCode,
   HttpStatus,
   Post,
@@ -18,6 +19,8 @@ import {
   RegisterDto,
   RequestPasswordResetDto,
   ResendVerificationDto,
+  ChangePasswordDto,
+  UpdatePreferencesDto,
   ResetPasswordDto,
   VerifyEmailDto,
 } from './auth.dto';
@@ -153,7 +156,27 @@ export class AuthController {
       email: user.email,
       fullName: user.fullName,
       role: user.role,
+      /* Null means "follow whatever §4C.6 has set", so the ministry can change
+         the default for everyone without overwriting anybody's choice. */
+      numberFormat: user.numberFormat ?? null,
     };
+  }
+
+  /**
+   * The person's own digits preference (§4.12, D-018).
+   *
+   * A *preference*, not a language switch. The interface is Arabic-only, so a
+   * language selector would be a control that does nothing — but which digits
+   * somebody reads is a real difference, and D-018 built the single switch point
+   * this writes to.
+   */
+  @Patch('me/preferences')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async setPreferences(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdatePreferencesDto,
+  ): Promise<void> {
+    await this.auth.setNumberFormat(user.id, dto.numberFormat ?? null);
   }
 
   @Public()
@@ -169,6 +192,27 @@ export class AuthController {
     /* Always the same response — an unknown address must be indistinguishable
        from a known one. */
     return { status: 'RESET_EMAIL_SENT' };
+  }
+
+  /**
+   * Changes the signed-in user's own password (§4.12).
+   *
+   * Not `@Public()`, and throttled like the rest of auth: the current password
+   * is checked here, so an unthrottled endpoint would be a password oracle for
+   * anyone holding a stolen session.
+   */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+    @Req() request: Request,
+  ): Promise<void> {
+    await this.auth.changePassword(user.id, user.sessionId, dto.currentPassword, dto.newPassword, {
+      ipAddress: request.ip ?? null,
+      userAgent: request.get('user-agent') ?? null,
+    });
   }
 
   @Public()

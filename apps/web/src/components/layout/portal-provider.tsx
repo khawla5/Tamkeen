@@ -8,6 +8,7 @@ import type { DashboardView } from '@tamkeen/types';
 
 import { LandingView } from '@/components/landing/landing-view';
 import { ErrorState, LoadingState } from '@/components/states';
+import { PreferenceProvider } from './preference-provider';
 import { HOME_FOR_ROLE } from './portal-routes';
 import {
   ApiError,
@@ -44,6 +45,14 @@ export interface PortalValue {
   unreadCertificates: number;
   /** Re-reads the dashboard, e.g. after confirming a path changes the nav. */
   refresh: () => void;
+  /**
+   * Re-reads the session.
+   *
+   * Distinct from `refresh`, which re-reads the *journey*. §4.12 changes the
+   * person's digits preference, which lives on the session — refetching the
+   * dashboard would leave the new choice unapplied until a reload.
+   */
+  refreshSession: () => void;
   /** Re-reads the indicator after the gallery marks certificates seen. */
   refreshNotifications: () => void;
 }
@@ -149,10 +158,12 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         dashboard: dashboard.data,
         unreadCertificates: notifications.data?.certificates ?? 0,
         refresh: dashboard.refetch,
+        refreshSession: session.refetch,
         refreshNotifications: notifications.refetch,
       }}
     >
-      {children}
+      {/* The person's digits choice, applied to everything below (§4.12). */}
+      <PreferenceProvider numberFormat={session.data.numberFormat}>{children}</PreferenceProvider>
     </PortalContext.Provider>
   );
 }

@@ -72,6 +72,15 @@ model User {
   /// many API instances are running. Per-IP throttling is separate and is held
   /// outside the database (in-process for now, a shared store once the
   /// deployment scales — D-028), so request IPs are not accumulated at rest.
+  /// Which digits this person sees (§4.12, D-018).
+  ///
+  /// Null means "follow the system default", which is what §4C.6 sets — so the
+  /// ministry can change the default for everyone and anyone who has expressed
+  /// a preference keeps theirs. A per-user *language* is deliberately absent:
+  /// the UI is Arabic-only, and a selector offering English would be a control
+  /// that does nothing.
+  numberFormat String? @map("number_format")
+
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime? @map("locked_until")
   lastLoginAt         DateTime? @map("last_login_at")
