@@ -70,7 +70,8 @@
     "adminDashboard": "الرئيسية",
     "adminUsers": "الحسابات",
     "adminAssessment": "التقييم",
-    "adminPaths": "المسارات"
+    "adminPaths": "المسارات",
+    "adminCourses": "الدورات"
   },
   "actions": {
     "retry": "إعادة المحاولة",
@@ -386,7 +387,8 @@
     "PATH_TOO_FEW_COURSES": "عدد الدورات المتاحة في هذا المسار أقل من الحد الأدنى الذي يحتاجه الموظف لتأكيد مساره.",
     "COURSE_HELD_BY_LEARNERS": "لا يمكن إزالة هذه الدورة لأن موظفين اختاروها ضمن هذا المسار. إزالتها ستمنعهم من حفظ اختيارهم أو تأكيده.",
     "COURSE_ALREADY_IN_PATH": "هذه الدورة مضافة إلى المسار بالفعل.",
-    "PATH_ORDER_INCOMPLETE": "يجب أن يشمل الترتيب كل دورات المسار مرة واحدة."
+    "PATH_ORDER_INCOMPLETE": "يجب أن يشمل الترتيب كل دورات المسار مرة واحدة.",
+    "COURSE_CANNOT_RETURN_TO_DRAFT": "لا يمكن إعادة دورة منشورة إلى حالة الإعداد. استخدم سحب الدورة بدلًا من ذلك."
   },
   "player": {
     "title": "محتوى الدورة",
@@ -668,7 +670,8 @@
       "ADMIN_PATH_ACTIVATED": "عرض مسار",
       "ADMIN_PATH_RETIRED": "إيقاف عرض مسار",
       "ADMIN_PATH_COURSE_ATTACHED": "إضافة دورة إلى مسار",
-      "ADMIN_PATH_COURSE_DETACHED": "إزالة دورة من مسار"
+      "ADMIN_PATH_COURSE_DETACHED": "إزالة دورة من مسار",
+      "ADMIN_COURSE_INTERVENED": "تدخّل في دورة"
     },
     "usersTitle": "إدارة الحسابات",
     "tabAccounts": "الحسابات",
@@ -855,6 +858,32 @@
       "AVAILABLE": "متاحة",
       "HIDDEN_BUT_COMPLETABLE": "مخفية عن الاختيار",
       "RETIRED": "متوقفة"
-    }
+    },
+    "coursesTitle": "الإشراف على الدورات",
+    "coursesSearchPlaceholder": "عنوان الدورة",
+    "coursesOwnership": "الجهة الموردة",
+    "coursesUnownedOnly": "بلا جهة",
+    "coursesUnownedNotice": "{count} دورة بلا جهة موردة. هذه الدورات لا تظهر في أي بوابة جهة، وإدارتها من هنا فقط.",
+    "coursesEmpty": "لا توجد دورات مطابقة",
+    "coursesEmptyHint": "جرّب تعديل البحث أو إزالة عوامل التصفية.",
+    "resultCountCourses": "{count} دورة",
+    "columnCourse": "الدورة",
+    "columnPublication": "قرار النشر",
+    "columnHeld": "متدربون يحتفظون بها",
+    "columnPublishedAt": "تاريخ النشر",
+    "coursePublication": {
+      "DRAFT": "تحت الإعداد",
+      "PUBLISHED": "منشورة",
+      "UNPUBLISHED": "مسحوبة"
+    },
+    "lmsState": "حالة الدورة في منصة التعلم",
+    "lmsShown": "ظاهرة",
+    "lmsHidden": "مخفية في منصة التعلم",
+    "lmsAbsent": "غير موجودة في منصة التعلم",
+    "coursesHeldNotice": "يحتفظ بهذه الدورة متدربون. سحبها يخفيها عن الاختيارات الجديدة فقط، ويبقيها متاحة لمن اختارها حتى يكملها.",
+    "coursesOwnerHint": "الجهة المسؤولة عن محتوى الدورة ومراجعة متدربيها.",
+    "coursesSaveOwner": "حفظ الجهة",
+    "coursesHide": "سحب الدورة",
+    "coursesRestore": "إعادة نشر الدورة"
   }
 }

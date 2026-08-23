@@ -18,6 +18,8 @@
 import type {
   AdminAssessmentDraft,
   AdminAttachableCourse,
+  AdminCoursePage,
+  AdminCourseRow,
   AdminPathBounds,
   AdminPathDetail,
   AdminPathRow,
@@ -44,6 +46,7 @@ import type {
   CoursePlayerView,
   CourseLanguage,
   CoursePublication,
+  CourseStatus,
   CourseSummary,
   DashboardView,
   EntityAuthorLaunchView,
@@ -611,4 +614,35 @@ export const adminApi = {
 
   reorderPathCourses: (pathId: string, courseIds: string[]) =>
     api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/order`, { courseIds }),
+
+  // §4C.5 — course oversight
+  listCourses: (
+    filters: {
+      q?: string;
+      publication?: CoursePublication;
+      status?: CourseStatus;
+      entityId?: string;
+      unowned?: boolean;
+      page?: number;
+    } = {},
+  ) => {
+    const query = new URLSearchParams();
+
+    if (filters.q) query.set('q', filters.q);
+    if (filters.publication) query.set('publication', filters.publication);
+    if (filters.status) query.set('status', filters.status);
+    if (filters.entityId) query.set('entityId', filters.entityId);
+    if (filters.unowned) query.set('unowned', 'true');
+    if (filters.page && filters.page > 1) query.set('page', String(filters.page));
+
+    const suffix = query.toString();
+
+    return api.get<AdminCoursePage>(`/api/admin/courses${suffix ? `?${suffix}` : ''}`);
+  },
+
+  /** Hide, restore, or place a course with an organisation. Never sets status. */
+  interveneCourse: (
+    courseId: string,
+    patch: { publication?: CoursePublication; ownerEntityId?: string | null },
+  ) => api.patch<AdminCourseRow>(`/api/admin/courses/${courseId}`, patch),
 };

@@ -11,6 +11,7 @@ import {
   IsUUID,
   Matches,
   Max,
+  ValidateIf,
   ValidateNested,
   MaxLength,
   Min,
@@ -402,4 +403,76 @@ export class ReorderPathCoursesDto {
   @ArrayMaxSize(500)
   @IsUUID(undefined, { each: true })
   courseIds!: string[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.5 — course oversight
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class AdminCourseQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  q?: string;
+
+  @IsOptional()
+  @IsIn(['DRAFT', 'PUBLISHED', 'UNPUBLISHED'])
+  publication?: 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED';
+
+  @IsOptional()
+  @IsIn(['DRAFT', 'AVAILABLE', 'HIDDEN_BUT_COMPLETABLE', 'RETIRED'])
+  status?: 'DRAFT' | 'AVAILABLE' | 'HIDDEN_BUT_COMPLETABLE' | 'RETIRED';
+
+  @IsOptional()
+  @IsUUID()
+  entityId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  pathId?: string;
+
+  /**
+   * Courses no organisation supplies.
+   *
+   * Its own flag rather than a sentinel in `entityId`, because "nobody supplies
+   * this" is a different question from "this organisation does" — and a sentinel
+   * is how a filter for a real entity whose id happened to match would one day
+   * return the wrong rows.
+   */
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  unowned?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
+}
+
+export class InterveneCourseDto {
+  /**
+   * PUBLISHED restores a course to the catalogue; UNPUBLISHED takes it out.
+   *
+   * DRAFT is accepted by the validator and refused by the service, so the
+   * refusal carries a reason an administrator can read rather than a generic
+   * "must be one of" — the distinction is a product rule, not a typo.
+   */
+  @IsOptional()
+  @IsIn(['DRAFT', 'PUBLISHED', 'UNPUBLISHED'])
+  publication?: 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED';
+
+  /** Null places the course back with nobody; a uuid assigns it (D-063). */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsUUID()
+  ownerEntityId?: string | null;
 }

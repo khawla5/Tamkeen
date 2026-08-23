@@ -140,6 +140,16 @@ export const AuditAction = {
   /** A course joined or left a path's membership. */
   ADMIN_PATH_COURSE_ATTACHED: 'ADMIN_PATH_COURSE_ATTACHED',
   ADMIN_PATH_COURSE_DETACHED: 'ADMIN_PATH_COURSE_DETACHED',
+  /**
+   * An administrator intervened on a course (§4C.5) — hid it, restored it, or
+   * placed it with an organisation.
+   *
+   * Recorded with the *resulting* status, because §2/D-015 turns on it: an
+   * intervention that degraded to HIDDEN_BUT_COMPLETABLE and one that retired
+   * the course outright are different events with different consequences for
+   * the learners holding it.
+   */
+  ADMIN_COURSE_INTERVENED: 'ADMIN_COURSE_INTERVENED',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];
@@ -213,6 +223,9 @@ export const AuditReason = {
   PATH_NOT_OFFERABLE: 'PATH_NOT_OFFERABLE',
   /** A course could not leave a path because learners hold it through it. */
   COURSE_HELD_BY_LEARNERS: 'COURSE_HELD_BY_LEARNERS',
+  /** A published course cannot be returned to DRAFT — that state is reachable
+   *  forward only, and going back would bypass the unpublish rules. */
+  COURSE_CANNOT_RETURN_TO_DRAFT: 'COURSE_CANNOT_RETURN_TO_DRAFT',
 } as const;
 
 export type AuditReasonCode = (typeof AuditReason)[keyof typeof AuditReason];

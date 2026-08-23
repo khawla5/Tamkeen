@@ -1,4 +1,4 @@
-import type { CourseStatus } from './catalog';
+import type { CourseLanguage, CoursePublication, CourseStatus } from './catalog';
 import type { RiasecLetter } from './riasec';
 import type { UserRole } from './roles';
 
@@ -412,4 +412,51 @@ export interface AdminAttachableCourse {
   title: string;
   status: CourseStatus;
   ownerEntityName: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.5 — course oversight
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A course as the administrator sees it — every entity's, and the unowned.
+ *
+ * The one catalogue view with no scope at all (D-075). An entity sees its own
+ * courses and has no vocabulary for asking about another's; this carries the
+ * owning organisation, the publication decision *and* the derived status, and
+ * the two LMS facts underneath them — because the question an administrator is
+ * usually asked is "why can nobody see this course", and the answer is always
+ * one of those three disagreeing.
+ */
+export interface AdminCourseRow {
+  id: string;
+  moodleCourseId: number;
+  title: string;
+  /** The entity's decision (D-059). Ours; sync may read it, never write it. */
+  publication: CoursePublication;
+  /** What that decision plus the LMS's state actually produces for a learner. */
+  status: CourseStatus;
+  /** The LMS's own facts, shown because they are half of the derivation. */
+  lmsPresent: boolean;
+  lmsVisible: boolean;
+  language: CourseLanguage | null;
+  durationMinutes: number | null;
+  /** Null for the seeded catalogue and anything the LMS holds unclaimed. */
+  ownerEntityId: string | null;
+  ownerEntityName: string | null;
+  paths: Array<{ id: string; name: string }>;
+  /** How many learners hold it — why it may not be retired outright. */
+  heldByLearners: number;
+  /** When it first entered the catalogue. Written since Phase 4, read here. */
+  publishedAt: string | null;
+  lastSyncedAt: string | null;
+}
+
+export interface AdminCoursePage {
+  rows: AdminCourseRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Courses no organisation supplies — the admin's to place (D-063). */
+  unownedTotal: number;
 }

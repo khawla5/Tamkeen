@@ -7,6 +7,7 @@ import { EmailModule } from '../email/email.module';
 import { MoodleModule } from '../moodle/moodle.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AdminAssessmentService } from './admin-assessment.service';
+import { AdminCoursesService } from './admin-courses.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminEntitiesService } from './admin-entities.service';
 import { AdminPathsService } from './admin-paths.service';
@@ -30,6 +31,7 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
     AdminEntitiesService,
     AdminAssessmentService,
     AdminPathsService,
+    AdminCoursesService,
   ],
 })
 export class AdminModule {}
