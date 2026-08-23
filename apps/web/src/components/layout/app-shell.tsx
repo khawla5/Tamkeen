@@ -1,7 +1,10 @@
+import { LogOut } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { Logo } from '@/components/brand/logo';
 import { MinistryEmblem } from '@/components/brand/ministry-emblem';
+import { Button } from '@/components/ui/button';
+import { useSignOut } from '@/lib/use-sign-out';
 import type { ReactNode } from 'react';
 
 import { STEADY_STATE_NAV, type NavItem } from './nav-items';
@@ -15,6 +18,8 @@ export interface AppShellProps {
   items?: readonly NavItem[];
   /** Nav keys carrying an unseen-items indicator (§2). */
   indicators?: readonly string[];
+  /** Who is signed in — named in the sidebar footer beside the way out (TAM-112). */
+  user?: { fullName: string };
   children: ReactNode;
 }
 
@@ -31,10 +36,13 @@ export function AppShell({
   action,
   items = STEADY_STATE_NAV,
   indicators,
+  user,
   children,
 }: AppShellProps) {
   const t = useTranslations('app');
   const tA11y = useTranslations('a11y');
+  const tProfile = useTranslations('profile');
+  const { signOut, isPending } = useSignOut();
 
   return (
     <div className="relative flex min-h-dvh flex-col md:flex-row">
@@ -51,7 +59,7 @@ export function AppShell({
       </a>
 
       {/* Navigation rail: vertical from md up, horizontal strip below. */}
-      <aside className="bg-neutral-900 md:w-64 md:shrink-0">
+      <aside className="flex flex-col bg-neutral-900 md:w-64 md:shrink-0">
         <div className="flex items-center gap-3 px-4 py-4">
           <span className="inline-flex items-center gap-2 rounded-lg bg-surface px-2 py-1">
             <MinistryEmblem height={32} />
@@ -69,6 +77,26 @@ export function AppShell({
             <SidebarNav items={items} indicators={indicators} orientation="horizontal" />
           </div>
         </nav>
+
+        {user ? (
+          /* The footer, not a seventh nav item: who is signed in and the way
+             out, reachable from every page. Outside the navigation landmark so
+             a screen reader does not announce it as a destination. */
+          <div className="mt-auto flex items-center justify-between gap-3 border-t border-surface/10 px-4 py-3">
+            <span className="truncate text-sm text-surface/85">{user.fullName}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+              onClick={() => void signOut()}
+              className="shrink-0 text-surface/85 hover:bg-surface/10 hover:text-surface"
+            >
+              <LogOut aria-hidden="true" />
+              {isPending ? tProfile('signingOut') : tProfile('signOut')}
+            </Button>
+          </div>
+        ) : null}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

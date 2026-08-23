@@ -7,8 +7,8 @@
 
 ## Current status
 - **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **merged** (PR #13, with PR #12 merging TAM-106 before it). In parallel, the **design-direction workstream** (Platforms Code, D-069) continues on stacked feature branches off the old `feature/dga-alignment` line, now being rebased onto `main`.
-- **Last completed task (this workstream):** **TAM-123 — a meaningful dashboard** (`feature/tam-123-dashboard-content`): tracker, personal header, the top recommendations, next courses, latest certificate, activity feed — one payload from the server, D-095 (authored as D-074). Before that TAM-108 (chips + status strip, closing `assessment-gating`), TAM-107 (D-094), the loader (TAM-122, D-093). TAM-106 and the auth epic are merged.
-- **Next task:** TAM-112 (top of the stack), then the ticket backlog (TAM-109–121, 124–128).
+- **Last completed task (this workstream):** **TAM-112 — sign-out in the sidebar footer** (`feature/tam-112-sidebar-signout`, top of the stack), through one shared `useSignOut()`. Before that **TAM-123 — a meaningful dashboard** (`feature/tam-123-dashboard-content`): tracker, personal header, the top recommendations, next courses, latest certificate, activity feed — one payload from the server, D-095 (authored as D-074). Before that TAM-108 (chips + status strip, closing `assessment-gating`), TAM-107 (D-094), the loader (TAM-122, D-093). TAM-106 and the auth epic are merged.
+- **Next task:** the ticket backlog — results (TAM-113/114), profile (TAM-109–111, re-check against Phase 5 which built password change + email re-verification), portal-dga (TAM-117–121), and the width/paths/courses batch (TAM-124–128).
 - **Phase 4 is merged** (PR #6). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
 - **Test totals (main, post-Phase 5):** 599 API unit · 403 web component · 515 API integration against real PostgreSQL · 84 browser e2e in Chromium — **1601 automated**, plus the real-Chromium verification scripts from Phase 3. **One transient integration failure is recorded in the 2026-08-24 entry and was never reproduced — read it before dismissing a similar one.**
 
@@ -142,6 +142,10 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — TAM-112: the way out, on every page
+
+Branch `feature/tam-112-sidebar-signout`. The sidebar gained a footer — the signed-in user's name and a quiet "تسجيل الخروج" — on every shell page, learner and entity alike, kept outside the navigation landmark so it is never announced as a destination. The logout-then-leave-regardless behaviour that lived only in the profile page is now `useSignOut()`, used by both buttons so they cannot drift. 342 web tests (3 new), typecheck, lint; the e2e signs out from the sidebar and verifies the session cookie is gone.
 
 ### 2026-08-23 — TAM-123: the dashboard stops being blank
 

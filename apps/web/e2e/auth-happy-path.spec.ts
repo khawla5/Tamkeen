@@ -240,6 +240,22 @@ test.describe('Authenticated shell', () => {
     ).toHaveAttribute('aria-current', 'page');
   });
 
+  test('sign-out is reachable from the sidebar on any page, and ends the session (TAM-112)', async ({
+    page,
+  }) => {
+    await signedInEmployee(page, 'signout');
+    await page.goto('/profile');
+
+    /* Outside the navigation landmark: it is a footer, not a seventh item. */
+    const nav = page.getByRole('navigation', { name: 'التنقل الرئيسي' });
+    await expect(nav.getByRole('button', { name: 'تسجيل الخروج' })).toHaveCount(0);
+    await page.getByRole('complementary').getByRole('button', { name: 'تسجيل الخروج' }).click();
+
+    await expect(page).toHaveURL(/\/login$/);
+    const cookies = await page.context().cookies();
+    expect(cookies.find((cookie) => cookie.name === 'tamkeen_session')).toBeUndefined();
+  });
+
   test('numbers use Western Arabic digits by default (D-018)', async ({ page }) => {
     await signedInEmployee(page, 'digits');
 

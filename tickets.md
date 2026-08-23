@@ -227,7 +227,7 @@
   - Reuse the `auth_tokens` single-use hashed-token infrastructure and the existing verify-email page/endpoint shape with a new token type (`EMAIL_CHANGE`); store the pending address as `users.pending_email` (it is not a secret, but it must not become the login before confirmation).
   - The verification email is a *reuse* of the locked "email verification" notification type, not a new type.
 
-## TAM-112 — Sign-out in the sidebar footer — **absorbed by TAM-117** (the shell's header carries sign-out)
+## TAM-112 — Sign-out in the sidebar footer — **DONE** (`feature/tam-112-sidebar-signout`)
 
 - **Labels:** `profile`, `frontend`
 - **Priority:** Low
@@ -235,6 +235,7 @@
 - **Description:**
   Sign-out lives only on the profile page because it needed a home. Add a sidebar footer showing the user's name with a quiet "تسجيل الخروج" action, reachable from every portal page; the profile page keeps its own sign-out as a secondary action at the bottom ("both" per discussion). It is a footer, not a seventh nav item — the six-item steady-state nav is untouched.
   **Acceptance:** footer present on every `chrome="nav"` page, keyboard-reachable, not announced inside the primary-navigation landmark; behaviour identical to the profile button (logout call, then `/login`, navigating even if the request fails); e2e sign-out passes from a non-profile page.
+  **What shipped (2026-08-23):** a sidebar footer (user's name + quiet "تسجيل الخروج") on every `AppShell` page — learner and entity frames both pass the user in — outside the navigation landmark; the logout-then-navigate-regardless behaviour extracted to `useSignOut()` and shared with the profile page, which keeps its own button. 3 shell tests (footer placement, sign-out, sign-out when the request fails); e2e signs out from the sidebar on the profile page and checks the session cookie is gone. TAM-117 may later move this into its header bar — the hook makes that a placement change only.
   **Implementation notes (verified):** the shell is `src/components/layout/app-shell.tsx` + `sidebar-nav.tsx`; `PortalPage` hands it `navForState(...)` items — the footer is layout, not a nav item, so it belongs in `AppShell`, fed from `usePortal().user`. The logout call and the "navigate regardless" comment already exist in `profile/page.tsx` — extract a shared hook so the two buttons cannot drift.
 
 ---
