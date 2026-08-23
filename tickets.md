@@ -61,7 +61,7 @@
   **What shipped (2026-08-23):** all three on `AuthLayout` with the DGA primitives — `PasswordInput` on both reset fields, form-level errors as `Alert`, full-width actions, the single-use token and enumeration-safe behaviours untouched (asserted: forgot shows the same panel on failure; reset refuses a mismatch and a missing token before sending; verify calls the API once). **`AuthCard` is deleted** — nothing imports it. 7 new component tests; auth e2e (register → verify → sign in, domain refusal, mismatch) green against the live app.
   **Implementation notes (verified):** all three pages currently render through `AuthCard` (`src/components/auth/auth-card.tsx`) — after this ticket nothing should import it; delete it and its usages in the same PR so the old design can't resurface. The pages keep their enumeration-resistant behavior (always-report-sent responses) — restyle only.
 
-## TAM-105 — Epic QA pass: RTL/a11y/responsive audit + docs
+## TAM-105 — Epic QA pass: RTL/a11y/responsive audit + docs — **DONE** (`feature/tam-105-auth-qa`)
 
 - **Labels:** `auth-ui-port`, `qa`, `docs`
 - **Priority:** Medium
@@ -71,6 +71,7 @@
   Cross-check BRD §8.1 BR-101–106 once the BRD is delivered — record any gaps as new tickets rather than absorbing scope.
   Update `progress.md` (including correcting the stale "Phase 2 PR awaiting review" — PR #3 is merged) and finalize the `decisions.md` entries. Then the epic is ready for the user-approved test → PR gate.
   **Acceptance:** full suite green (unit + integration + e2e), typecheck/lint/format clean, audit findings fixed or ticketed, docs updated.
+  **What shipped (2026-08-23):** `e2e/auth-a11y.spec.ts` — axe (WCAG 2.1 A/AA) on all five pages, no horizontal overflow at 360/768/1280, the login keyboard order — 21 checks, all green, now a permanent gate (`@axe-core/playwright` added as a dev dependency). Screenshots at the three widths reviewed; one finding fixed (the header's exit link wrapped into the logos at 360px — now arrow-only below `sm`, full name via `aria-label`). Physical-direction grep over the auth surface: none. BRD §8.1 cross-check: BR-101 (ministry-scoped registration), BR-102 (verification), BR-103 (email/password only, no social), BR-104 (forgot flow), BR-105 (roles; login redirects by role), BR-106 (hashing, sessions, rate limit/lockout — the register limiter tripped during repeated e2e runs, as designed) all satisfied; BR-107 (directory/SSO) is explicitly future, confirming D-019. D-070 recorded; CLAUDE.md §4.1 updated.
 
 ---
 

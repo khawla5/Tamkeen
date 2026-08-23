@@ -5,6 +5,15 @@
 
 ---
 
+## D-070 — Auth pages are a centred government template on the Platforms Code form anatomy; axe is a permanent gate
+**Decision:** the five authentication pages share `AuthLayout` — a slim header naming the owner (ministry emblem, Tamkeen logo, a visible exit to the landing page), one centred card with the emblem over the form, a footer strip, a decorative lattice behind — and the shared form primitives carry the Platforms Code field anatomy: `Input` (36px, radius 4, neutral-400 edge darkening on hover, primary focus ring), `Field` (semibold label, required mark before the label and kept out of the accessible name, icon + text error row), `PasswordInput`, `Select`, `Alert`. Because the primitives are shared, every form in the portal wears the anatomy too. An axe run (WCAG 2.1 A/AA) over the five pages at three widths is part of the e2e suite.
+
+**Why:** the epic's original design — a two-panel split with a marketing panel — was the reference repo's layout, the very source the project stopped following when it adopted Platforms Code (D-069). Government sign-in pages (Absher, Nafath, the DGA's own examples) are centred and framed by the owner; the reader should recognise the ministry before the form. "Following the DGA" on a form page is mostly its form anatomy, not its colours, so that had to land in the primitives rather than in five page files. §4.1's "single-column, centred" therefore stands unamended.
+
+**Registration** is a two-step wizard (account, then employee) in one client component with local step state; each step validates the shapes the server enforces before advancing, the server stays authoritative, and a server error returns the user to the step that owns the field. The department is a closed list (`DEPARTMENTS`, a placeholder until the ministry supplies the official one; the server still accepts any non-empty string until then).
+
+**Rejected:** the two-panel shell (built, then discarded — see above); a nested tablist for the wizard steps (one level of tabs is enough for a screen reader); applying the field anatomy to auth only (two anatomies in one app); hand-reviewing accessibility per PR instead of gating it.
+
 ## D-069 — The visual foundation is the DGA's Platforms Code, adopted in full — superseding the Tamkeen brand palette (D-009, D-025)
 **Decision:** the product's design tokens are those of **Platforms Code (كود المنصات)**, the Digital Government Authority's national design system, adopted **in full including the palette**: the Saudi-flag green primary scale, the gold secondary scale, the neutral scale and the semantic status colours, plus its radius scale. The navy/gold/cream brand of D-009 is retired; `--color-navy`, `--color-navy-soft`, `--color-gold-light` and `--color-cream` no longer exist and the contrast test asserts their absence. Typography is unchanged — IBM Plex Sans Arabic is also Platforms Code's typeface (D-023 holds). Source of truth is the official site (`design.dga.gov.sa`) and Figma library; the values were taken from the system's published token export, and must be re-checked against the official foundations by someone with Figma access (open item in progress.md).
 
