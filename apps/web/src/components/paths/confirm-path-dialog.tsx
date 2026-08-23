@@ -65,7 +65,7 @@ export function ConfirmPathDialog({
       /* `m-auto` is load-bearing: the UA stylesheet centres a modal <dialog>
          with `margin: auto`, and Tailwind's preflight resets margins to 0 —
          without this the dialog pins itself to the top of the viewport. */
-      className="m-auto max-w-lg rounded-card border border-border bg-card p-0 text-foreground backdrop:bg-navy/50"
+      className="m-auto max-w-lg rounded-card border border-border bg-card p-0 text-foreground backdrop:bg-neutral-900/50"
     >
       <div className="flex flex-col gap-4 p-6">
         <h2 id="confirm-path-title" className="text-lg font-semibold">

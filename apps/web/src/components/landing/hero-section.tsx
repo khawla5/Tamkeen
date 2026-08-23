@@ -1,10 +1,11 @@
 import { ArrowLeft } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
+import { SaudiMap } from '@/components/brand/saudi-map';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useFormat } from '@/i18n/format-provider';
 
 /**
  * `ArrowLeft` is the "forward" glyph here, not "back". This product is
@@ -14,88 +15,78 @@ import { useFormat } from '@/i18n/format-provider';
  * the left-pointing glyph directly is the correct icon for this direction,
  * not a workaround.
  */
-const HERO_PILL_KEYS = ['heroPill1', 'heroPill2', 'heroPill3'] as const;
-
 /**
- * Real catalogue facts (apps/api/src/seed-data/catalog.ts — 12 seed paths,
- * two per RIASEC letter, 48 seeded courses) and the fixed RIASEC/journey
- * shape, not invented adoption metrics. A pre-launch government platform has
- * no "78% employment rate" to report yet, and the trust section already
- * commits to grounded claims over aspirational marketing (see its comment) —
- * this stat row holds the same line.
+ * The hero of a government front page: who this is for, what it does, and the
+ * one thing to do next — one sentence from the BRD's executive summary (§1)
+ * and the registration rule (BR-101), in the ministry's own register. No
+ * feature pills, no stat row: the paragraph carries the message.
+ *
+ * Two columns from `lg`: the text block on the start edge; on the end edge the
+ * ministry emblem over the Kingdom's map, the map revealing region by region. The emblem is decorative here (`alt=""`) —
+ * the header already names the ministry, and naming it twice in a row is
+ * exactly the duplicate announcement the header tests guard against.
+ *
+ * No stat row. An internal platform does not need to prove its scale to its
+ * own employees, and the only honest figures (path and course counts) belong
+ * in the catalogue, where they change.
  */
-const HERO_STATS: Array<{ key: string; value: number }> = [
-  { key: 'heroStatSteps', value: 4 },
-  { key: 'heroStatPaths', value: 12 },
-  { key: 'heroStatCourses', value: 48 },
-  { key: 'heroStatRiasec', value: 6 },
-];
-
 export function HeroSection() {
   const t = useTranslations('landing');
   const tAuth = useTranslations('auth');
-  const { number } = useFormat();
 
   return (
-    <section className="border-b border-border bg-cream">
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-2xl text-center">
-          <Badge>{t('eyebrow')}</Badge>
+    <section className="bg-primary-deep text-surface">
+      <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-2 lg:py-24">
+        <div className="flex max-w-2xl flex-col items-start text-start">
+          <Badge variant="onColor">{t('eyebrow')}</Badge>
 
-          <h1 className="mt-6 text-4xl font-extrabold leading-tight text-navy sm:text-5xl">
-            {t('heroTitleLine1')}
-            <br />
-            {/* Large bold text clears the 3:1 AA threshold for gold (D-025);
-                4.5:1 only applies at body size, which this isn't. */}
-            <span className="text-gold">{t('heroTitleLine2')}</span>
+          <h1 className="mt-6 text-4xl font-extrabold leading-tight text-surface sm:text-5xl">
+            {t('heroTitle')}
           </h1>
 
-          <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-            {t('heroBody')}
-          </p>
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-primary-50">{t('heroBody')}</p>
 
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-            {HERO_PILL_KEYS.map((key) => (
-              <Badge key={key} variant="soft">
-                {t(key)}
-              </Badge>
-            ))}
-          </div>
-
-          <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-            <Button asChild size="lg">
+          <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+            <Button asChild size="lg" variant="onColor">
               <Link href="/register">
                 {t('heroCta')}
                 <ArrowLeft aria-hidden="true" />
               </Link>
             </Button>
 
-            {/* Same-page jump to the four-step journey, not a route — a plain
-                anchor is correct here, not next/link. */}
-            <Button asChild size="lg" variant="outline">
-              <a href="#how-it-works">{t('heroSecondaryCta')}</a>
+            {/* Same-page jump to the explorer, not a route — a plain anchor is
+                correct here, not next/link. */}
+            <Button asChild size="lg" variant="outlineOnColor">
+              <a href="#about">{t('heroSecondaryCta')}</a>
             </Button>
           </div>
 
-          <p className="mt-4 text-sm text-muted-foreground">
+          <p className="mt-4 text-sm text-primary-50/90">{t('heroEligibility')}</p>
+
+          <p className="mt-2 text-sm text-primary-50/90">
             {tAuth('haveAccount')}{' '}
-            <Link href="/login" className="font-medium text-navy underline underline-offset-4">
+            <Link href="/login" className="font-medium text-surface underline underline-offset-4">
               {tAuth('signInLink')}
             </Link>
           </p>
         </div>
 
-        {/* Catalogue scope, in numbers — see HERO_STATS for why these four and
-            not usage metrics. A <dl>: each figure (term) is paired with what
-            it counts (description). */}
-        <dl className="mx-auto mt-14 grid max-w-3xl grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4">
-          {HERO_STATS.map(({ key, value }) => (
-            <div key={key} className="text-center">
-              <dt className="text-3xl font-extrabold text-navy">{number(value)}</dt>
-              <dd className="mt-1 text-xs text-muted-foreground">{t(`${key}Label`)}</dd>
-            </div>
-          ))}
-        </dl>
+        {/* Owner over territory: the emblem above, the Kingdom's map — every
+            region named — beneath it. Both decorative; see SaudiMap. */}
+        <div className="hidden flex-col items-center gap-5 rounded-2xl bg-surface/10 p-6 ring-1 ring-surface/15 lg:flex">
+          <div className="flex size-36 items-center justify-center rounded-full bg-surface shadow-md">
+            <Image
+              src="/brand/MOI.svg"
+              alt=""
+              width={112}
+              height={112}
+              priority
+              unoptimized
+              className="size-28"
+            />
+          </div>
+          <SaudiMap />
+        </div>
       </div>
     </section>
   );

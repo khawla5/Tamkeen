@@ -156,7 +156,7 @@ function Outcome({ course }: { course: CoursePlayerView }) {
 
   if (course.passed) {
     return (
-      <div className="border-gold bg-gold-light/15 rounded-lg border p-4">
+      <div className="border-primary-600 bg-primary-50 rounded-lg border p-4">
         <p className="font-semibold">{t('passedTitle')}</p>
         <p className="text-sm">{t('passedBody', { grade })}</p>
       </div>

@@ -115,25 +115,25 @@ export default function DashboardPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Link
             href="/my-path"
-            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-gold"
+            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-primary-600"
           >
             {t('tileMyPath')}
           </Link>
           <Link
             href="/courses"
-            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-gold"
+            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-primary-600"
           >
             {t('tileCourses')}
           </Link>
           <Link
             href="/certificates"
-            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-gold"
+            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-primary-600"
           >
             {t('tileCertificates')}
           </Link>
           <Link
             href="/cv"
-            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-gold"
+            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-primary-600"
           >
             {t('tileCv')}
           </Link>

@@ -133,8 +133,8 @@ function AssessmentFlow({ assessment }: { assessment: AssessmentView }) {
                 htmlFor={id}
                 className={`flex cursor-pointer items-center gap-3 rounded-card border p-4 transition-colors ${
                   isChosen
-                    ? 'border-gold bg-card font-medium'
-                    : 'border-border bg-card hover:border-muted-foreground/50'
+                    ? 'border-primary-600 bg-card font-medium'
+                    : 'border-border bg-card hover:border-neutral-400-foreground/50'
                 }`}
               >
                 <input

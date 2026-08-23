@@ -6,13 +6,14 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 4 — the entity / reviewer portal — **COMPLETE and verified; PR opened.**
-- **Last completed task:** The **Phase 4 verification pass** — the whole suite re-run against a `main` that had moved under the branch, four defects found and fixed (D-067, D-068, `published_at`, the e2e fixture), and the six entity pages checked in a real browser.
-- **Next task:** **Phase 5 — the super-admin portal** (full spec in CLAUDE.md §4C), once the Phase 4 PR is merged.
-- **Active branch:** `phase-4-entity-portal`, off `origin/main` and **merged up to `d2e0506`** so the suite ran against what it will land on. **PR #6 opened**, not merged (D-008).
-- **Phase 3 is merged** (PR #4). **The landing page is merged** (PR #5, `origin/main` @ `d2e0506`) — it landed after this branch was cut and touches the same `ar.json` and `api-client.ts`.
-- **Test totals:** 530 API unit · 256 web component · 192 API integration against real PostgreSQL · 34 browser e2e in Chromium — **1012 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
+- **Current phase:** Phase 4 — the entity / reviewer portal — **COMPLETE and verified; PR opened.** In parallel, a **design-direction workstream** is open: the product is moving onto the DGA's national design system, **Platforms Code** (D-069), on branch `feature/dga-alignment`.
+- **Last completed task:** the **`feature/dga-alignment` branch, pushed and PR'd** — Platforms Code foundations (D-069, no gold, DGA buttons), the ministry emblem + Tamkeen logo, and the landing page rebuilt top to bottom on the BRD's content (hero on the deep-green ground with the labelled Kingdom map, the Absher-style explorer, FAQ, government footer). 287 web unit tests, 61 certificate+email API tests, typecheck, lint and format clean.
+- **Next task:** the `auth-ui-port` epic (TAM-101–105, `tickets.md`) on the new foundation — the auth pages are the last public surface still on the old `AuthCard`. TAM-116 (landing) is delivered by this branch. Phase 5 (super-admin, CLAUDE.md §4C) resumes once the Phase 4 PR is merged.
+- **Active branches:** `phase-4-entity-portal` (PR #6, not merged, D-008) and `feature/dga-alignment` off `main` @ `f1f0dcd`.
+- **Phase 3 is merged** (PR #4). **The landing page is merged** (PR #5) — and is being replaced by TAM-116.
+- **Test totals:** 530 API unit · 265 web component · 192 API integration against real PostgreSQL · 34 browser e2e in Chromium — **1021 automated**, plus the real-Chromium verification scripts from Phase 3.
 - **Open blockers / questions for the human:**
+  0. **⚠ PLATFORMS CODE (D-069) — three questions for the ministry/team:** (a) is Platforms Code compliance **mandatory** for this platform or adopted by choice — it decides how much deviation is allowed; (b) **who has access to the official Figma library** — the token values in `globals.css` came from the system's published export and must be re-checked against the official foundations, and the mandatory government header/footer/national-identity elements for TAM-116 must be read from the official guidelines, not guessed; (c) the ministry emblem (D-051) is needed by the landing and auth designs.
   1. **⚠ THE MINISTRY LOGO AND SEAL ARE STILL MISSING.** Certificates ship with a neutral placeholder mark and an empty signature block (name + title). The slot is sized and positioned, so dropping in the real artwork is not a layout change — but **no certificate should reach a real employee until this is supplied** (D-051).
   2. **⚠ MINISTRY APPROVAL OF CUSTOM MOODLE PLUGINS IS STILL UNCONFIRMED.** Unchanged since Phase 2 and still the longest-lead dependency: seamless login uses `local_tamkeensso`, and if the ministry refuses custom PHP the fallback is the OAuth2-IdP route (D-044). Phase 4 deliberately did **not** enlarge that surface — the authoring handoff reuses the plugin unmodified (D-060).
   3. **⚠ `MOODLE_TEACHER_ROLE_ID` and `MOODLE_COURSE_CATEGORY_ID` are placeholders** (3 and 1, Moodle's stock values). Both are per-instance and **must be confirmed against the ministry's Moodle before Phase 7** — a wrong teacher role hands an outside organisation capabilities nobody intended, and a wrong category files ministry courses wherever that instance happens to number one (D-060).
@@ -115,6 +116,30 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — The landing page, rebuilt on the BRD (TAM-116) — and the brand in place
+
+Same branch as the foundations below. **Content first:** the previous page (PR #5) was a faithful port of the reference repo and read as a template — symmetrical card grids, a feature-inventory hero, slogans. Every section was rewritten in the Directorate's register from the BRD (§1–3, §8, §9), which finally reached the repo this session: specific nouns (الإدارة العامة للتدريب، منصة التعلّم الإلكتروني، رقم تحقق), no triplets, no stats, numbers interpolated from the shared constants rather than typed.
+
+**Structure now:** Hero → Explorer → FAQ → Footer. The hero sits on the ministry's deep green (`primary-deep`, a named token with its AA pairings proven) with the emblem above the Kingdom's map — thirteen regions, each named, revealing in sequence with an ambient drift and a hover that deliberately never touches `fill` so the drift keeps running under the pointer. "عن المنصة" became an **Absher-style explorer** (stage tabs → steps → explanation + the one action) covering thirteen steps from the BRD's functional requirements, which made the separate Steps section redundant; the Problem, Trust and closing-CTA sections were removed as marketing. The FAQ's six answers are locked product rules. The footer carries identity, the three real links, and policy names as text until their pages exist (asserted: not links).
+
+**Brand assets:** the Tamkeen lockup from the reference repo and the **ministry emblem** supplied by the user (`public/brand/MOI.svg`, viewBox tightened to the artwork) — header, footer, sidebar, hero. D-051's web-surface half is closed; the certificate PDF still carries the placeholder mark.
+
+**Verified:** 287 web tests (the landing suite drives the explorer and FAQ), typecheck, lint, prettier. Visual checks were done by rasterising the live SVG, since the Chrome extension could not open localhost in this session; the user reviewed every step in their own browser.
+
+**Owed:** Directorate sign-off on the copy; the official Platforms Code foundations check (blocker 0); the auth epic.
+
+### 2026-08-23 — Platforms Code foundations (TAM-115): the palette swap, measured
+
+Branch `feature/dga-alignment` off `main` @ `f1f0dcd`. **The decision first (D-069):** the landing page rebuilt from the reference repo (PR #5) looked like a template, and the real cause was that nothing in the project said what a *government* page should look like. The DGA's national design system, Platforms Code, now does — adopted in full, palette included.
+
+**Built.** `globals.css` carries the Platforms Code primitives (primary green, gold secondary, neutrals, status) with the shadcn roles re-derived from them; `tokens.ts` mirrors them; `contrast.test.ts` was rewritten for the new pairings — 33 assertions, including negative ones that pin **why gold-600 may not be text, a border, or a ground for white text** (2.3:1). The class migration touched 24 web files through one fixed mapping table; the certificate PDF, the emails and the QR code took the same values so the brand does not split at the PDF boundary.
+
+**The test taught something:** I had asserted that display text on a gold-600 fill fails AA, as navy on the old gold did. It passes (6.3:1). That pairing is now recorded as *allowed* — a gold achievement fill with dark text is legitimate for the first time — rather than forbidden out of habit.
+
+**Verified:** 265 web tests, the 61 certificate + email API tests, both typechecks, prettier. **Not verified visually** — the Chrome extension could not open localhost in this session; the user is looking in their own browser. **Not committed** — waiting for the go-ahead.
+
+**Owed:** confirmation of the values against the official Figma (the token export is the community transcription of the Figma variables); the three ministry questions in the blocker list; TAM-116 and the auth epic on top of this foundation. The two mockup artifacts (dashboard, results) are now pre-D-069 in colour; structure stands.
 
 ### 2026-08-22 — Phase 4 verification pass: four defects found, fixed, and the PR opened
 

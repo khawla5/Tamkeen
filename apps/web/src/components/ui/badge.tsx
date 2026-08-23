@@ -4,22 +4,23 @@ import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Eyebrow / tag label. `gold` uses gold for the border/icon only, never as the
- * text colour — at this size (text-xs) gold text falls below the 4.5:1 AA
- * floor for body text (src/lib/contrast.test.ts); a bordered badge is
- * large/non-text so the 3:1 threshold applies to the border and passes.
+ * Eyebrow / tag label (Platforms Code, D-069). `primary` is a bordered chip —
+ * the primary edge with display text, so the text colour never depends on the
+ * accent; `dark` sits on light grounds; `soft` is the neutral chip for lists
+ * of equal-weight items, which keeps the primary chip meaningful.
  */
 const badgeVariants = cva('inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold', {
   variants: {
     variant: {
-      gold: 'border border-gold text-navy',
-      navy: 'bg-navy-soft text-white',
-      /** Neutral chip for lists of equal-weight items — keeps gold scarce. */
-      soft: 'border border-border bg-surface text-navy-soft',
+      primary: 'border border-primary-600 text-foreground',
+      dark: 'bg-neutral-800 text-white',
+      /** On a primary/dark ground: a white outline chip. */
+      onColor: 'border border-surface/50 text-surface',
+      soft: 'border border-border bg-card text-neutral-700',
     },
   },
   defaultVariants: {
-    variant: 'gold',
+    variant: 'primary',
   },
 });
 
