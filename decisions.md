@@ -5,6 +5,28 @@
 
 ---
 
+## D-087 — The digits options carry literal digits, and the guard makes room for exactly those
+**Decision:** the two format options read "أرقام عربية (0123)" and "أرقام هندية (٠١٢٣)". `LITERAL_VALUE_PATHS` in the Arabic-catalogue guard grows a third pattern, `/^profile\.digits(Western|Arabic)$/`, alongside the two it already carried for setting hints and setting-validation errors.
+**Why:** the guard exists because a digit typed into Arabic copy is a number that will not follow D-018 when the preference changes. These two are the exception that proves it: they are *specimens of the glyph set the reader is choosing between*, and the whole point is that both appear regardless of the current setting. Routing them through the formatting layer would render both options in the same digits and make the choice meaningless.
+**Rejected:** a general "digits are fine in `profile`" exemption (the namespace has ordinary copy in it too); rendering the samples through `format.number` (produces two identical labels); naming the sets in words only (the names are ambiguous — each set is called "Arabic numerals" by somebody).
+
+## D-086 — The digits preference is per-user and nullable; the language switch is deferred
+**Decision:** §4.12 ships a digits preference (Western `0-9` ⇄ Arabic-Indic `٠-٩`) written through D-018's single switch point, stored on `users.number_format` as a **nullable** column, and no language selector. Null means "follow whatever §4C.6 has set" and is a real third option in the control, not a blank.
+**Why:** §4.12 asks for a language control, but the interface is Arabic-only — a selector offering English would be a control that does nothing, which is worse than an absent one. What genuinely differs between readers is which digits they read, and D-018 already built the switch point. Nullable rather than defaulted so the ministry can change the system-wide default without overwriting anybody's expressed choice: "no preference" and "prefers Western" have to stay distinguishable.
+**Deferred, not dropped:** the language switch returns when an English UI exists. Recorded here so a later reader finds a decision rather than a gap.
+**Rejected:** a language selector with one option (a promise the product cannot keep); a non-null column defaulted to the system value (freezes every existing user to whatever the default was the day they registered).
+
+## D-085 — Changing a password ends the other sessions, and requires the current one
+**Decision:** `/auth/change-password` verifies the current password before doing anything, refuses a new password identical to the old one, and on success revokes every session for the user *except* the one making the request.
+**Why:** a session cookie is enough to *be* the user, so without the current-password check anyone reaching an unlocked machine could take the account permanently and the owner would find out at their next sign-in. And the usual reason to change a password is that it may be known elsewhere — a change that leaves those sessions alive does not address the thing it was done for. Keeping the acting session is the other half: being signed out of the page you are standing on reads as a failure and invites a second change.
+**Refused rather than accepted:** re-submitting the same password returns `PASSWORD_UNCHANGED`. Somebody who believes they have rotated a compromised password and has not is worse off than somebody told they did not.
+**Rejected:** trusting the session alone (turns an unlocked screen into a permanent takeover); revoking every session including the caller (looks like the change failed); accepting an unchanged password as a no-op (silently false reassurance).
+
+## D-084 — A message namespace is never also a label, and tests hold the line
+**Decision:** `admin.auditAction` stays a namespace of action labels; the column heading that shares its meaning is `admin.auditActionLabel`. A test block asserts that every dynamically-keyed namespace — `auditAction`, `riasec`, `courseStatus`, `coursePublication`, `versionStatus`, `setting` — is an object of strings with no numeric keys.
+**Why:** assigning `auditAction: 'الإجراء'` into the same object overwrote the namespace with a seven-character string, and `Object.assign` onto a string yields `{0..6}` — so every lookup returned undefined and next-intl's fallback rendered the raw code. The screen still worked, every test passed, and the output looked like a deliberate design. That is the failure mode worth a permanent test: a namespace collapsed into a string is invisible unless something asserts the shape.
+**Rejected:** relying on the type checker (the catalogue is JSON, and the keys are dynamic by design); relying on review (the diff looked like one more label being added).
+
 ## D-083 — Catalogue sync tolerates a row that vanished under it
 **Decision:** `withdrawVanished` uses `updateMany` and skips the counter and the audit entry when it matches nothing, instead of `update`, which throws.
 **Why:** the list of vanished courses is gathered in one query and walked one row at a time. A reconciliation job that crashes because the thing it was about to reconcile is gone is reconciling badly — and the throw abandons every course after it in the list, so one missing row silently stops the run half way. There is nothing to withdraw from a row that is not there, and skipping the audit keeps the trail from claiming a course was withdrawn when no course was.

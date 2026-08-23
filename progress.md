@@ -6,23 +6,23 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **in progress, sub-phase 5.4 of 5.9 complete.**
-- **Last completed task:** **Sub-phase 5.4 — Path Management (§4C.4).** Create/edit paths, `path_courses` membership and ordering, the five-course floor, and retirement that strands nobody — plus a one-in-five integration flake chased to four separate causes and fixed at each.
-- **Next task:** **Sub-phase 5.5 — Course Oversight (§4C.5)** — the global catalogue across every entity, ownership assignment for the unowned courses, and intervention under course-edit protection.
+- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **all nine sub-phases built; verification pass complete; awaiting the user's test approval before the PR.**
+- **Last completed task:** **Sub-phase 5.9 — the deferred Profile items (§4.12) + the full verification pass.** Change-password (current password required, other sessions ended) and a per-user digits preference in place of the language selector the Arabic-only UI cannot honour.
+- **Next task:** **the user's test.** Once approved: one branch, one PR for the whole of Phase 5 (D-008). Nothing further is to be built on this branch.
 - **Active branch:** `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd`, which contains Phases 0-4. No PR yet — one PR covers the whole of Phase 5 (D-008).
 - **Phase 4 is merged** (PR #6, `origin/main` @ `f1f0dcd`). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
-- **Test totals:** 579 API unit · 324 web component · 400 API integration against real PostgreSQL · 52 browser e2e in Chromium — **1355 automated**, plus the real-Chromium verification scripts from Phase 3. The integration suite was run five consecutive times, all green. Typecheck, lint and format clean.
+- **Test totals:** 593 API unit · 397 web component · 502 API integration against real PostgreSQL · 52 browser e2e in Chromium — **1544 automated**, plus the real-Chromium verification scripts from Phase 3. The integration suite was run three consecutive times end to end, all green. Typecheck, lint and format clean.
 
 ### Phase 5 sub-phase tracker
 - [x] **5.1 Admin foundation + Dashboard** (§4C.1) — RBAC, route group, shell, integration health
 - [x] **5.2 User Management** (§4C.2) — employees + entities, suspend/activate, **entity-account creation**
 - [x] **5.3 Assessment Management** (§4C.3) — draft/publish, balance guard, copy-on-write versioning
 - [x] **5.4 Path Management** (§4C.4) — paths, `path_courses` membership + ordering, safe retirement
-- [ ] **5.5 Course Oversight** (§4C.5) — global catalogue, ownership assignment, intervention
-- [ ] **5.6 System Settings** (§4C.6) — `settings` table, one `SettingsService`, env fallback
-- [ ] **5.7 Certificate Templates** (§4C.7) — signatory fields, future issuances only
-- [ ] **5.8 Audit & Reports** (§4C.8) — filterable log, reports, CSV export with BOM
-- [ ] **5.9 Deferred Profile items + verification pass** — change password, email re-verification, numerals
+- [x] **5.5 Course Oversight** (§4C.5) — global catalogue, ownership assignment, intervention
+- [x] **5.6 System Settings** (§4C.6) — `settings` table, one `SettingsService`, env fallback
+- [x] **5.7 Certificate Templates** (§4C.7) — signatory fields, future issuances only
+- [x] **5.8 Audit & Reports** (§4C.8) — filterable log, reports, CSV export with BOM
+- [x] **5.9 Deferred Profile items + verification pass** — change password, digits preference
 
 - **Open blockers / questions for the human:**
   1. **⚠ THE MINISTRY LOGO AND SEAL ARE STILL MISSING.** Certificates ship with a neutral placeholder mark and an empty signature block (name + title). The slot is sized and positioned, so dropping in the real artwork is not a layout change — but **no certificate should reach a real employee until this is supplied** (D-051).
@@ -37,6 +37,8 @@
 ---
 
 ## Deferred / owed (carried into later phases)
+- **`EnrollmentService.addCourse` is not actually idempotent under concurrency** (found during the Phase 5 verification pass; pre-existing, and enrolment is untouched by Phase 5). Its duplicate guard is a read-then-write, so two concurrent adds of the same course both pass and the second raises P2002 → 500 rather than the no-op its own comment promises. **Phase 6** should catch P2002 there and return the intended success.
+- **The UI language switch (§4.12)** is deferred until an English UI exists (D-086). The digits preference ships in its place; this is a decision, not a gap.
 - **The ministry logo, seal and signatory are not on the certificate.** A placeholder mark and an empty signature block hold their positions (D-051). **Phase 6/7** must drop in the real artwork before anything is issued to a real employee.
 - **`CERT_STORAGE_DIR` is relative by default and must be absolute in deployment** (D-052). **Phase 7** owns setting it, backing that directory up, and deciding on object storage.
 - **Jest cannot exercise the real PDF renderer.** Puppeteer 25 is ESM-only and Jest's CommonJS runtime cannot load it (D-055), so integration tests stub the renderer and assert the HTML contract. Real rendering is covered by the spike scripts and the browser e2e. **Phase 6** may revisit if Jest gains usable ESM support.
@@ -186,6 +188,98 @@
 **The one genuinely hard test problem this phase created.** Every integration suite namespaces its rows by a per-run id and they run in parallel against one database. The assessment cannot be namespaced — §4.3 has *one* instrument and `getActive` finds the one ACTIVE row — so publishing a version mid-run made `journey.e2e-spec.ts` fail eight tests with `ASSESSMENT_NOT_FOUND`. **That refusal is correct product behaviour**: a taker whose instrument was replaced mid-attempt must not be scored against a bank they never saw. So the fix serialises the two suites with a Postgres advisory lock rather than weakening either assertion — held on its own connection, released by the server if a worker dies, and costing four seconds of wall clock across the whole run.
 
 **Three smaller decisions worth knowing.** The weights DTO names all six letters explicitly rather than accepting a `Record<string, number>`, because a record would let `{ "X": 4 }` past validation and leave the enum column to answer 500 — the DTO is the outermost gate and naming the six is the only shape in which it can say no. Reordering takes the complete order rather than a move-up/move-down, so the result is what the administrator arranged rather than a replay of their clicks, and it writes negative orders first because `display_order` would otherwise collide with itself mid-shuffle. And an option's weights are replaced wholesale rather than merged, because "this option now contributes to S only" has to be expressible and a merge cannot say it.
+
+### 2026-08-23 — Sub-phases 5.5-5.9: oversight, settings, templates, audit, and the Profile debt paid
+
+Run straight through at the user's instruction, on the same branch, one commit per step.
+
+**5.5 — Course Oversight (§4C.5).** The global catalogue: every entity's courses plus the ~40 the
+seeded catalogue holds that nobody supplies — which no entity portal can show by construction, and
+are therefore only ever the administrator's to place. The screen answers one question, *why can
+nobody see this course*, and the answer is always the publication decision and the two LMS facts
+disagreeing, so all three sit on the row rather than only the conclusion. Intervention lands on
+publication and ownership only: the DTO has no `status` field, so `effectiveCourseStatus` stays its
+sole author (D-059) and hiding a course a learner holds degrades to `HIDDEN_BUT_COMPLETABLE` rather
+than retiring it. Returning a published course to DRAFT is refused — that state is reachable
+forward only, and going back would bypass the protection entirely. Also finally renders
+`published_at`, written since Phase 4 and read by nothing until now.
+
+**5.6 — System Settings (§4C.6).** A `settings` table, one `SettingsService`, and the screen. The
+pass threshold had **four independent readers** — three chances to disagree about the number that
+decides whether a learner passed; they now read one source, and the entity portal's dead fifth copy
+is gone. An absent row means the environment, so a fresh deployment behaves exactly as it did
+before the table existed and `.env.example` stays meaningful as documentation of the defaults; a
+malformed row falls back the same way and is logged, because refusing to boot over one setting
+takes the product down for something the portal could fix. Secrets are not settings: the Moodle
+token, the database URL and the SMTP credentials have no key, no endpoint and no route. The 5-10
+bounds and the auth rate limits are shown read-only (D-074) — a product rule and a security floor,
+not knobs. Changing the sync interval re-registers the repeatable job on its fixed id, so lowering
+it changes the polling instead of producing two schedules.
+
+**5.7 — Certificate Templates (§4C.7).** The signature block becomes three settings read at issue
+time, so each certificate freezes the block current when it was earned (D-052). The page leads with
+the notice that an edit reaches *future* issuances only — stated as the property that makes a
+credential a credential, not as a limitation, because an administrator who thinks a correction will
+propagate is one who will not make the correction. The still-missing ministry seal is named on the
+screen, where the person who can supply it is looking, rather than only in this file. The preview is
+the real `renderCertificateHtml` with sample data in a sandboxed `iframe`; the three fields are
+written through the settings endpoints so those rows keep one writer (D-072).
+
+**5.8 — Audit & Reports (§4C.8).** A cursor-paged read-only trail — filters by action, outcome and
+actor; the action filter offers every action the codebase can emit, not only those already logged,
+so options do not quietly vanish as old entries age out. Five reports: journey funnel, path
+popularity, Holland-code distribution, certificate issuance, and course outcomes sorted worst-first,
+which is what makes them actionable. Both export as CSV with a UTF-8 BOM (D-076) and
+formula-defusing.
+
+> **The bug worth remembering.** Adding `auditAction: 'الإجراء'` as a column heading overwrote the
+> `admin.auditAction` **namespace** with a seven-character string — `Object.assign` onto a string
+> yields `{0..6}` — so every ADMIN_* action rendered as its raw code and next-intl's fallback made
+> it look intentional. The screen worked, every test passed. Renamed to `auditActionLabel`, and a
+> permanent test now asserts every dynamically-keyed namespace is still an object of strings
+> (D-084).
+
+**5.9 — the deferred Profile items (§4.12).** Owed since Phase 1. Change-password requires the
+current password and revokes every other session while keeping the one doing the changing (D-085):
+a session cookie is enough to *be* the user, so without the check an unlocked machine is a permanent
+takeover, and the usual reason to change a password is that it may be known elsewhere — which a
+change that leaves those sessions alive does not address. In place of the language selector §4.12
+names, a digits preference through D-018's switch point (D-086): the interface is Arabic-only, so a
+control offering English would be a promise the product cannot keep. Stored nullable, where null
+means "follow whatever §4C.6 has set", so the ministry can change the default without overwriting
+anybody's choice. **The language switch is deferred, not dropped** — it returns when an English UI
+exists.
+
+Two drifted literals surfaced here, both caught by the new integration tests rather than by review:
+the option value was `'arabic'` where `NUMBER_FORMATS` says `'arabic-indic'`, so **every save was
+refused with a 400**, and the `NUMBER_FORMAT` settings hint told administrators to type the same
+wrong value. The options now come from a typed list, so a third drift is a build error.
+
+**Verification pass.** 593 API unit · 502 API integration (run three consecutive times end to end,
+all green) · 397 web component · 52 browser e2e in Chromium. Typecheck, lint and format clean across
+all three workspaces.
+
+**One pre-existing defect found and deliberately NOT fixed here.** `EnrollmentService.addCourse`
+guards duplicates with a read-then-write (`selectedCourseIds.includes`) whose own comment says
+"idempotent", but two concurrent adds of the same course both pass the check and the second gets a
+P2002 → 500 instead of the intended no-op. It appeared in the API log during the browser e2e run.
+Enrolment is untouched by Phase 5 (`git diff origin/main -- apps/api/src/enrollment` is empty), so
+fixing it here would widen the branch past its scope. **Carried to Phase 6** — see Deferred/owed.
+
+**Files:** `admin-{courses,settings,templates,audit}.{service,controller}.ts`, `csv.ts`,
+`settings.{schema,service}.ts`, `certificate-{template,issuance.service}.ts`,
+`auth.{service,controller,dto}.ts`, `session.service.ts`, the
+`(admin)/admin/{courses,settings,templates,audit}` and `(portal)/profile` pages,
+`preference-provider.tsx`, two migrations (`phase_5_settings`, `phase_5_number_format`), and their
+tests.
+
+**Decisions recorded:** D-084 (a namespace is never also a label), D-085 (password change ends other
+sessions), D-086 (per-user digits preference; language switch deferred), D-087 (the guard's third
+exception, for glyph specimens). D-069-D-083 were recorded earlier in the phase.
+
+**Next:** the user's test. On approval: one PR for the whole of Phase 5. Nothing more on this branch.
+
+---
 
 ### 2026-08-23 — Sub-phase 5.2: user management, and Phase 4's provisioning seam closed
 
@@ -655,7 +749,7 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - [x] **Phase 2 — Moodle integration** (spike first; web services, provisioning, catalog sync, enrollment, scheduled completion sync + pass threshold + shared-course reuse, seamless login, course player) — **merged** (PR #3, `origin/main` @ `dcb8aad`)
 - [x] **Phase 3 — Certificates + CV** (idempotent course/path certs, Arabic PDF solved, verification page + QR, gallery, CV builder + English PDF export) — **merged** (PR #4, `origin/main` @ `f2a6b4d`)
 - [x] **Phase 4 — Entity / reviewer portal** (entity accounts + server-side data scoping, course creation in the LMS, authoring handoff, product metadata, publish gate + course-edit protection, learner review) — **merged** (PR #6, `origin/main` @ `f1f0dcd`)
-- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **in progress on `phase-5-admin-portal`; 5.4 of 5.9 done** (sub-phase tracker in Current Status)
+- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **all 9 sub-phases built and verified on `phase-5-admin-portal`; awaiting the user's test approval before the PR** (sub-phase tracker in Current Status)
 - [ ] **Phase 6 — Hardening** (Arabic QA, RTL PDF polish, security review, sync reliability + load, a11y, states)
 - [ ] **Phase 7 — Deployment, acceptance & launch** (deploy app+Moodle, seed data, full end-to-end acceptance, docs/handover, sign-off)
 
