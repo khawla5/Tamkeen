@@ -2,79 +2,106 @@
 @import 'tw-animate-css';
 
 /*
- * ── Brand palette ────────────────────────────────────────────────────────────
- * CLAUDE.md §3 / D-009. These seven values are the entire brand palette.
- * Never hardcode a hex in a component; add or reuse a token here.
+ * ── Platforms Code palette ──────────────────────────────────────────────────
+ * CLAUDE.md §3 / D-069. The DGA's national design system (كود المنصات),
+ * adopted in full for a Ministry of Interior platform. These are the system's
+ * published tokens; only the scale steps the UI consumes are declared, so a
+ * new step is a deliberate addition here, never an ad-hoc hex in a component.
  *
- * Gold is reserved for the recommended-path highlight and achievement accents.
- * Keep it scarce — if gold appears everywhere it stops meaning "recommended".
+ * Roles, so the palette keeps meaning:
+ *   primary  — the Saudi-flag green: actions, links, focus, active nav, AND
+ *              the recommended-path highlight / achievement accents (§3A).
+ *              The system's gold secondary is deliberately not adopted: one
+ *              accent colour means "this matters", and the recommendation is
+ *              carried by the border + the "موصى به" badge, never colour alone.
+ *   neutral  — text, surfaces, borders. 900 is the dark surface (sidebar,
+ *              footer), 800 display text, 700 paragraphs, 500 secondary text.
+ *   Button states follow the system: primary 600 → hover 700 → pressed 900;
+ *   destructive danger-600 → hover danger → pressed danger-900.
  *
- * ACCESSIBILITY CONSTRAINT (measured, see src/lib/contrast.test.ts):
- *   --color-gold on white is 3.42:1 and on navy 3.99:1 — below the 4.5:1 AA
- *   floor for body text. Gold is therefore valid ONLY for borders, focus rings,
- *   icons, and large/bold text (>=24px, or >=18.66px bold), where 3:1 applies.
- *   For a gold *fill* behind body-size text use --color-gold-light with navy
- *   text (6.01:1). The contrast test enforces this; it is not a style opinion.
+ * ACCESSIBILITY (measured, see src/lib/contrast.test.ts): every pairing the
+ * UI uses is asserted at AA. The contrast test is the rule, not this comment.
  */
 @theme {
-  --color-navy: #222e42;
-  --color-navy-soft: #2e3a50;
-  --color-gold: #a8863c;
-  --color-gold-light: #c9a85c;
-  --color-cream: #f4f3f1;
+  --color-primary-50: #f3fcf6;
+  --color-primary-100: #dff6e7;
+  --color-primary-200: #b8eacb;
+  --color-primary-600: #1b8354;
+  --color-primary-700: #166a45;
+  --color-primary-800: #14573a;
+  --color-primary-900: #104631;
+  /* Ministry-requested hero ground (deeper than the system's 900); AA with
+     white, primary-50 and primary-200 text — see the contrast test. */
+  --color-primary-deep: #00663d;
+
+  --color-neutral-50: #f9fafb;
+  --color-neutral-100: #f3f4f6;
+  --color-neutral-200: #e5e7eb;
+  --color-neutral-300: #d2d6db;
+  --color-neutral-400: #9da4ae;
+  --color-neutral-500: #6c727e;
+  --color-neutral-700: #384250;
+  --color-neutral-800: #1f2a37;
+  --color-neutral-900: #111927;
+
   --color-surface: #ffffff;
-  --color-muted: #5e6b85;
+  --color-muted: #6c727e;
 
-  /*
-   * Functional status colours — deliberately NOT part of the brand palette.
-   * Mandatory error/success states (§2B DoD 4) need a signal colour, and the
-   * brand seven contain none. Kept separate so they cannot be mistaken for
-   * brand accents and so gold stays scarce. Both clear 4.5:1 in either
-   * direction on white and cream (D-025).
-   */
-  --color-danger: #a32015;
-  --color-success: #1e6f4e;
+  /* Status colours: the system's text/border value plus its 50 fill. */
+  --color-success: #067647;
+  --color-success-50: #ecfdf3;
+  --color-info: #175cd3;
+  --color-info-50: #eff8ff;
+  --color-warning: #b54707;
+  --color-warning-50: #fffaeb;
+  --color-danger: #b42318;
+  --color-danger-50: #fef3f2;
+  --color-danger-600: #d92c20;
+  --color-danger-900: #7a2619;
 
+  /* Platforms Code's typeface is IBM Plex Sans Arabic — already self-hosted (D-023). */
   --font-sans: var(--font-arabic), system-ui, sans-serif;
 
-  --radius-card: 0.75rem;
+  /* The system's radius scale is 4 / 8 / 16 / 24; cards sit on 16. */
+  --radius-card: 1rem;
 }
 
 /*
  * ── Semantic roles ───────────────────────────────────────────────────────────
  * shadcn/ui components are written against semantic names. Defining them in
- * terms of the brand tokens means the palette stays the single source of truth:
- * changing --color-navy changes every surface that derives from it.
+ * terms of the palette tokens means the palette stays the single source of
+ * truth: changing a token above changes every surface that derives from it.
  */
 :root {
-  --background: var(--color-cream);
-  --foreground: var(--color-navy);
+  --background: var(--color-neutral-50);
+  --foreground: var(--color-neutral-800);
 
   --card: var(--color-surface);
-  --card-foreground: var(--color-navy);
+  --card-foreground: var(--color-neutral-800);
 
-  /* Primary action: navy on white text = 13.66:1. */
-  --primary: var(--color-navy);
+  /* Primary action: white on green = 4.7:1. */
+  --primary: var(--color-primary-600);
   --primary-foreground: var(--color-surface);
 
-  --secondary: var(--color-navy-soft);
+  /* Nested / emphasised surface (progress fills, hover) — darker green. */
+  --secondary: var(--color-primary-700);
   --secondary-foreground: var(--color-surface);
 
-  /* Achievement / recommended fill: navy on light gold = 6.01:1. */
-  --accent: var(--color-gold-light);
-  --accent-foreground: var(--color-navy);
+  /* Recommended / achievement fill: primary-800 on the primary-50 tint. */
+  --accent: var(--color-primary-50);
+  --accent-foreground: var(--color-primary-800);
 
-  --muted-surface: var(--color-cream);
-  --muted-foreground: var(--color-muted);
+  --muted-surface: var(--color-neutral-100);
+  --muted-foreground: var(--color-neutral-500);
 
   --destructive: var(--color-danger);
   --destructive-foreground: var(--color-surface);
 
-  --border: color-mix(in srgb, var(--color-muted) 28%, transparent);
-  --input: color-mix(in srgb, var(--color-muted) 40%, transparent);
+  --border: var(--color-neutral-300);
+  --input: var(--color-neutral-300);
 
-  /* Gold focus ring: 3.42:1 on white, clearing the 3:1 non-text threshold. */
-  --ring: var(--color-gold);
+  /* Green focus ring: 4.7:1 on white, clearing the 3:1 non-text threshold. */
+  --ring: var(--color-primary-600);
 }
 
 @theme inline {
@@ -133,6 +160,83 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /*
+   * Hero map (components/brand/saudi-map.tsx). Two animations on one element,
+   * each with its own per-region delay set inline: a one-shot reveal, then an
+   * ambient highlight that drifts region to region. Both obey the global
+   * prefers-reduced-motion rule above, which collapses them to a frame.
+   */
+  .map-region {
+    /* Fill lives on the group so the drift keyframe (which animates the
+       group's fill) actually reaches the path — a fill class on the path
+       itself would override it. Labels set their own fill explicitly. */
+    fill: var(--color-primary-200);
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation:
+      map-reveal 0.7s ease-out both,
+      map-drift 8s ease-in-out 1.2s infinite;
+  }
+
+  /*
+   * Hover: the region lifts, its outline brightens, its name deepens. The
+   * hover never sets `fill` — the drift keyframe owns the group's fill and a
+   * running animation outranks :hover on the same property, so overriding it
+   * would freeze the drift under the pointer. A brightness filter tints
+   * whatever colour the drift is showing instead, and the animation keeps
+   * going. Decorative only: no pointer cursor, nothing to click.
+   */
+  .map-region path {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition:
+      transform 0.2s ease,
+      stroke-width 0.2s ease,
+      stroke 0.2s ease,
+      filter 0.2s ease;
+  }
+
+  .map-region text {
+    transition: fill 0.2s ease;
+    pointer-events: none;
+  }
+
+  .map-region:hover path {
+    stroke: var(--color-surface);
+    stroke-width: 4;
+    transform: scale(1.03);
+    filter: brightness(1.12);
+  }
+
+  .map-region:hover text {
+    fill: var(--color-primary-deep);
+  }
+
+  @keyframes map-reveal {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes map-drift {
+    0%,
+    18%,
+    100% {
+      fill: var(--color-primary-200);
+    }
+    8% {
+      fill: var(--color-surface);
     }
   }
 }

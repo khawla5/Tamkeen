@@ -99,10 +99,17 @@ describe('certificate template', () => {
     });
 
     it('renders the path certificate as the larger award (§4.10)', () => {
-      /* Gold frame and a filled seal rather than navy, so the two are
-         distinguishable at a glance in the gallery and on paper. */
-      expect(course).toContain('border: 9mm solid #222E42');
-      expect(path).toContain('border: 9mm solid #A8863C');
+      /* The path award wears the deep primary frame and a filled seal; the
+         course certificate the primary — distinguishable at a glance in the
+         gallery and on paper without a second hue (D-069: no gold). */
+      expect(course).toContain('border: 9mm solid #1B8354');
+      expect(path).toContain('border: 9mm solid #14573A');
+    });
+
+    it('uses no gold anywhere — the product has one accent (D-069)', () => {
+      for (const html of [course, path]) {
+        expect(html).not.toMatch(/#DBA102|#A8863C|#C9A85C/i);
+      }
     });
 
     it('sites a course inside its path, and a path by the courses it took', () => {

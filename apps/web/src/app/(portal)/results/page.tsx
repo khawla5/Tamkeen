@@ -122,7 +122,7 @@ function HollandCode({ result }: { result: AssessmentResultView }) {
           {result.code.map((letter, position) => (
             <span
               key={letter}
-              className="rounded-card border-2 border-gold bg-card px-4 py-2 text-base font-semibold text-foreground"
+              className="rounded-card border-2 border-primary-600 bg-card px-4 py-2 text-base font-semibold text-foreground"
             >
               {/* The ordinal is what makes "top three, in rank order" visible;
                   without it the code reads as an unordered set. */}

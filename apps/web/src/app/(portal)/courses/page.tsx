@@ -148,7 +148,7 @@ export default function CoursesPage() {
                   <li key={course.id}>
                     <Link
                       href={`/courses/${course.id}`}
-                      className="flex h-full flex-col gap-2 rounded-card border border-border bg-card p-5 transition-colors hover:border-gold"
+                      className="flex h-full flex-col gap-2 rounded-card border border-border bg-card p-5 transition-colors hover:border-primary-600"
                     >
                       <h2 className="font-semibold text-foreground">{course.title}</h2>
                       <p className="text-sm text-muted-foreground">{course.summary}</p>

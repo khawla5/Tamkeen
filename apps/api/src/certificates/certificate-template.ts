@@ -26,11 +26,12 @@ import { CERTIFICATE_FONT_FAMILY, fontFaceCss } from './certificate-fonts';
  * that is prevented.
  */
 
-const NAVY = '#222E42';
-const NAVY_2 = '#2E3A50';
-const GOLD = '#A8863C';
-const GOLD_LIGHT = '#C9A85C';
-const MUTED = '#5E6B85';
+/* Platforms Code tokens (D-069) — mirrored from apps/web/src/lib/tokens.ts. */
+const PRIMARY = '#1B8354';
+const PRIMARY_DARK = '#14573A';
+const PRIMARY_TINT = '#B8EACB';
+const TEXT = '#1F2A37';
+const MUTED = '#6C727E';
 
 const HIJRI: FormatContext = { ...DEFAULT_FORMAT_CONTEXT, calendar: 'islamic-umalqura' };
 
@@ -69,8 +70,8 @@ function escapeHtml(value: string): string {
 export function renderCertificateHtml(input: CertificateTemplateInput): string {
   const isPath = input.type === 'PATH';
 
-  const frameColor = isPath ? GOLD : NAVY;
-  const innerRule = isPath ? NAVY_2 : GOLD;
+  const frameColor = isPath ? PRIMARY_DARK : PRIMARY;
+  const innerRule = isPath ? PRIMARY : PRIMARY_DARK;
   const heading = isPath ? 'شهادة إتمام مسار' : 'شهادة إتمام دورة';
   const leadIn = isPath ? 'قد أتمّ بنجاح جميع متطلبات مسار' : 'قد أتمّ بنجاح متطلبات دورة';
 
@@ -100,7 +101,7 @@ html, body {
      ministry never approved. */
   font-family: '${CERTIFICATE_FONT_FAMILY}';
   -webkit-font-smoothing: antialiased;
-  color: ${NAVY};
+  color: ${TEXT};
   background: #ffffff;
 }
 
@@ -120,13 +121,13 @@ html, body {
 
 .mark {
   width: 20mm; height: 20mm; border-radius: 50%;
-  border: 0.6mm solid ${GOLD};
-  background: ${isPath ? GOLD : 'transparent'};
+  border: 0.6mm solid ${PRIMARY_DARK};
+  background: ${isPath ? PRIMARY_DARK : 'transparent'};
   display: flex; align-items: center; justify-content: center;
 }
 .mark-inner {
   width: 10mm; height: 10mm; transform: rotate(45deg);
-  border: 0.6mm solid ${isPath ? '#ffffff' : GOLD_LIGHT};
+  border: 0.6mm solid ${isPath ? '#ffffff' : PRIMARY_TINT};
 }
 
 .platform { font-size: 10pt; color: ${MUTED}; margin-top: 4mm; }
@@ -136,10 +137,10 @@ html, body {
 .body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 
 .heading { font-size: ${isPath ? '30pt' : '26pt'}; font-weight: 700; }
-.rule { width: 46mm; height: 0.8mm; background: ${GOLD}; margin: 4mm 0 6mm; }
+.rule { width: 46mm; height: 0.8mm; background: ${PRIMARY}; margin: 4mm 0 6mm; }
 .attest { font-size: 11pt; color: ${MUTED}; }
 .holder { font-size: 22pt; font-weight: 600; margin: 3mm 0; }
-.subject { font-size: ${isPath ? '19pt' : '17pt'}; font-weight: 600; color: ${GOLD}; margin-top: 3mm; }
+.subject { font-size: ${isPath ? '19pt' : '17pt'}; font-weight: 600; color: ${PRIMARY_DARK}; margin-top: 3mm; }
 .context { font-size: 10.5pt; color: ${MUTED}; margin-top: 2.5mm; }
 
 /* Three equal columns with a shared baseline — the footer is where a
@@ -160,7 +161,7 @@ html, body {
 .date-label { font-size: 9pt; color: ${MUTED}; }
 .date-value { font-size: 11pt; margin-top: 1.5mm; }
 
-.sign-line { border-top: 0.3mm solid ${NAVY_2}; padding-top: 2mm; }
+.sign-line { border-top: 0.3mm solid ${PRIMARY_DARK}; padding-top: 2mm; }
 .sign-name { font-size: 10.5pt; font-weight: 600; }
 .sign-title { font-size: 8.5pt; color: ${MUTED}; margin-top: 1mm; }
 </style>
