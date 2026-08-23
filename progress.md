@@ -7,12 +7,13 @@
 
 ## Current status
 - **Current phase:** Phase 4 — the entity / reviewer portal — **COMPLETE and verified; PR opened.** In parallel, a **design-direction workstream** is open: the product is moving onto the DGA's national design system, **Platforms Code** (D-069), on branch `feature/dga-alignment`.
-- **Last completed task:** **TAM-101 + TAM-102 on `feature/tam-101-102-auth-shell-login`** (stacked on `feature/dga-alignment`): the auth shell as a centred government template and `/login` on it, plus the DGA form primitives app-wide. Before that, the **`feature/dga-alignment` branch, pushed and PR'd** — Platforms Code foundations (D-069, no gold, DGA buttons), the ministry emblem + Tamkeen logo, and the landing page rebuilt top to bottom on the BRD's content (hero on the deep-green ground with the labelled Kingdom map, the Absher-style explorer, FAQ, government footer). 287 web unit tests, 61 certificate+email API tests, typecheck, lint and format clean.
-- **Next task:** **TAM-103 — the registration wizard**, on its own branch `feature/tam-103-register-wizard` off `feature/tam-101-102-auth-shell-login`; then TAM-104 (the three remaining auth pages still on `AuthCard`). Phase 5 (super-admin, CLAUDE.md §4C) resumes once the Phase 4 PR is merged.
+- **Last completed task:** **TAM-103 — the registration wizard** on `feature/tam-103-register-wizard` (stacked on the TAM-101/102 branch): two steps, client validation mirroring the server, الإدارة as a dropdown. Before that, **TAM-101 + TAM-102 on `feature/tam-101-102-auth-shell-login`** (stacked on `feature/dga-alignment`): the auth shell as a centred government template and `/login` on it, plus the DGA form primitives app-wide. Before that, the **`feature/dga-alignment` branch, pushed and PR'd** — Platforms Code foundations (D-069, no gold, DGA buttons), the ministry emblem + Tamkeen logo, and the landing page rebuilt top to bottom on the BRD's content (hero on the deep-green ground with the labelled Kingdom map, the Absher-style explorer, FAQ, government footer). 287 web unit tests, 61 certificate+email API tests, typecheck, lint and format clean.
+- **Next task:** **TAM-104** — verify-email, forgot-password and reset-password onto `AuthLayout` (then `AuthCard` can be deleted); then TAM-105's epic QA pass. Phase 5 (super-admin, CLAUDE.md §4C) resumes once the Phase 4 PR is merged.
 - **Active branches:** `phase-4-entity-portal` (PR #6, not merged, D-008) and `feature/dga-alignment` off `main` @ `f1f0dcd`.
 - **Phase 3 is merged** (PR #4). **The landing page is merged** (PR #5) — and is being replaced by TAM-116.
 - **Test totals:** 530 API unit · 265 web component · 192 API integration against real PostgreSQL · 34 browser e2e in Chromium — **1021 automated**, plus the real-Chromium verification scripts from Phase 3.
 - **Open blockers / questions for the human:**
+  0a. **The registration department list (`DEPARTMENTS` in `apps/web/src/lib/auth-constants.ts`) is a placeholder** — the ministry must supply the official list of الإدارات; when it does, the server should validate against it too.
   0. **⚠ PLATFORMS CODE (D-069) — three questions for the ministry/team:** (a) is Platforms Code compliance **mandatory** for this platform or adopted by choice — it decides how much deviation is allowed; (b) **who has access to the official Figma library** — the token values in `globals.css` came from the system's published export and must be re-checked against the official foundations, and the mandatory government header/footer/national-identity elements for TAM-116 must be read from the official guidelines, not guessed; (c) the ministry emblem (D-051) is needed by the landing and auth designs.
   1. **⚠ THE MINISTRY LOGO AND SEAL ARE STILL MISSING.** Certificates ship with a neutral placeholder mark and an empty signature block (name + title). The slot is sized and positioned, so dropping in the real artwork is not a layout change — but **no certificate should reach a real employee until this is supplied** (D-051).
   2. **⚠ MINISTRY APPROVAL OF CUSTOM MOODLE PLUGINS IS STILL UNCONFIRMED.** Unchanged since Phase 2 and still the longest-lead dependency: seamless login uses `local_tamkeensso`, and if the ministry refuses custom PHP the fallback is the OAuth2-IdP route (D-044). Phase 4 deliberately did **not** enlarge that surface — the authoring handoff reuses the plugin unmodified (D-060).
@@ -116,6 +117,16 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — TAM-103: registration as a wizard, validated at the field, with a department list
+
+Branch `feature/tam-103-register-wizard`. Two steps — account, then employee — in one client component with local state, so back keeps what was typed and the URL stays `/register`. One submit at the end; a server error returns the user to the step that owns the field (`EMAIL_DOMAIN_NOT_ALLOWED` → step 1, `EMPLOYEE_ID_INVALID` → step 2, and so on).
+
+**Added at the user's direction:** each step validates its own fields before moving on, with the same shapes the server enforces (the employee-id pattern is mirrored client-side like the password length already was — advisory, the server stays authoritative), and الإدارة became a dropdown over a shared `DEPARTMENTS` list. The list is a **placeholder** (blocker 0a); the server still accepts any non-empty string.
+
+**What the e2e run caught:** the new password show/hide toggle (TAM-102) made `getByLabel('كلمة المرور')` ambiguous on the login page — two elements carry that text — so the login locators now use `exact: true`. The register flows were rewritten around a `fillRegistration` helper. Against the live dev servers every auth flow passes; the one remaining failure (the skip-link test) is the Next dev overlay stealing `:focus`, which does not exist in the production build CI runs. Repeated runs also tripped the register endpoint's rate limit — the brute-force protection doing its job, not a bug.
+
+**Verified:** 306 web unit tests (9 for the wizard), typecheck, lint, prettier, auth e2e. Remaining on `AuthCard`: verify-email, forgot-password, reset-password (TAM-104).
 
 ### 2026-08-23 — TAM-101 + TAM-102: the auth shell as a government page, and the DGA form anatomy
 

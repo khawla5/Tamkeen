@@ -37,11 +37,12 @@
 - **What shipped:** `/login` on `AuthLayout` with the DGA primitives: `PasswordInput`, form-level messages as `Alert` (the unverified-email resend button lives inside the error alert), full-width primary submit, links in the primary. Behaviour untouched — `useErrorMessage` mapping, the `EMAIL_NOT_VERIFIED` resend branch, the role-based redirect (`ENTITY` → `/entity`), `dir="ltr"` on the email field, `noValidate`. Labels and error copy unchanged, so the e2e locators hold.
 - **Acceptance met:** existing login tests pass unmodified; 297 web unit tests green; typecheck, lint, prettier.
 
-## TAM-103 — Registration as a two-step wizard (wired)
+## TAM-103 — Registration as a two-step wizard (wired) — **DONE** (`feature/tam-103-register-wizard`)
 
 - **Labels:** `auth-ui-port`, `frontend`
 - **Priority:** High
 - **Pre-requisite:** TAM-101 + TAM-102 (done). **Own branch:** `feature/tam-103-register-wizard` off `feature/tam-101-102-auth-shell-login`.
+- **What shipped (2026-08-23):** the two-step wizard as specified, plus — at the user's direction — **client validation on both steps** mirroring the server's rules (email shape, password length, full name ≥ 3 chars, employee id against `EMPLOYEE_ID_PATTERN`, a department chosen) with per-field error rows, and **الإدارة as a dropdown** (new native `Select` on the DGA field anatomy) fed by a shared `DEPARTMENTS` list — **placeholder until the ministry supplies the official list**; the server still accepts any non-empty department, tightening it to the list is a server change for when the list is real. Server errors return to the owning step (`STEP_FOR_ERROR`). The e2e suite was rewritten for the wizard (a `fillRegistration` helper; the login locators now `exact`, since the password toggle's name also contains "كلمة المرور"). 9 wizard unit tests; auth e2e green against the live app.
 - **Description:**
   Rebuild `/register` inside `AuthLayout` as a two-step wizard, keeping the reference's step-wizard feel but **deleting the role picker**: **Step 1** account (email, password, confirm password) → **Step 2** employee details (full name, employee ID, department). Arabic step indicator ("الخطوة 1 من 2", western digits). Per-step client validation; one server submit at the end; back preserves entered values. Server-side rules (restricted domain, employee-ID pattern, password policy) untouched.
   A server error on submit must return the user to the step containing the offending field, with the field-level Arabic error shown.
