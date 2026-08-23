@@ -476,3 +476,22 @@ export class InterveneCourseDto {
   @IsUUID()
   ownerEntityId?: string | null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.6 — system settings
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class UpdateSettingDto {
+  /**
+   * The raw value, as text.
+   *
+   * A string because the table is key-value and the *types* live in
+   * `settings.schema.ts`, which parses this against the same Zod field the
+   * environment variable is validated with. So a number arrives as "70" and is
+   * refused unless it parses as one — which is exactly what `PASS_THRESHOLD=70`
+   * in a `.env` file goes through.
+   */
+  @IsString()
+  @MaxLength(2000)
+  value!: string;
+}

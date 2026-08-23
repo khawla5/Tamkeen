@@ -460,3 +460,35 @@ export interface AdminCoursePage {
   /** Courses no organisation supplies — the admin's to place (D-063). */
   unownedTotal: number;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.6 — system settings
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * One product knob (§4C.6, D-072).
+ *
+ * `value` is the effective one — the stored override, or the environment's
+ * default when nothing is stored. `isOverridden` is what tells the two apart,
+ * and it is what makes "reset to default" an honest offer rather than a button
+ * that sometimes does nothing.
+ */
+export interface AdminSetting {
+  key: string;
+  value: string;
+  isOverridden: boolean;
+}
+
+/**
+ * §4C.6's screen.
+ *
+ * **`readOnly` is not a lesser section; it is the point of half the page.** The
+ * 5-10 path bounds and the auth rate limits are shown and cannot be changed —
+ * §2 makes the first a product rule (D-074) and the second a security floor, and
+ * an administrator asked to explain either needs the number in front of them
+ * without being offered a way to move it.
+ */
+export interface AdminSettingsView {
+  settings: AdminSetting[];
+  readOnly: Array<{ key: string; value: string }>;
+}

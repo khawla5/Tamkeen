@@ -2,6 +2,7 @@ import type { CatalogSyncService } from '../catalog-sync/catalog-sync.service';
 import type { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import type { CompletionSyncService } from '../completion-sync/completion-sync.service';
 import type { AppConfigService } from '../config/app-config.module';
+import type { SettingsService } from '../settings/settings.service';
 import type { EnrollmentService } from '../enrollment/enrollment.service';
 import { SyncSchedulerService } from './sync-scheduler.service';
 
@@ -70,13 +71,25 @@ function harness(
       if (key === 'NODE_ENV') return options.nodeEnv ?? 'development';
       if (key === 'SYNC_SCHEDULER_ENABLED') return options.schedulerEnabled ?? true;
       if (key === 'REDIS_URL') return options.redisUrl;
-      if (key === 'COMPLETION_SYNC_INTERVAL_MINUTES') return 5;
       return undefined;
     },
   } as unknown as AppConfigService;
 
+  /* The interval is a *setting* now, not an environment read (D-072): §4C.6
+     changes it without a deployment, and the scheduler re-registers. */
+  const settings = {
+    get: () => Promise.resolve(5),
+  } as unknown as SettingsService;
+
   return {
-    service: new SyncSchedulerService(config, catalog, enrollment, completion, certificates),
+    service: new SyncSchedulerService(
+      config,
+      settings,
+      catalog,
+      enrollment,
+      completion,
+      certificates,
+    ),
     order,
   };
 }

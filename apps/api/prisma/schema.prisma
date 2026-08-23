@@ -86,6 +86,7 @@ model User {
   certificates  Certificate[]
   cvProfile     CvProfile?
   auditEvents   AuditLog[]     @relation("AuditActor")
+  settingsEdited Setting[]     @relation("SettingEditor")
 
   /// Every attempt, newest wins. Retakes append rather than overwrite (D-033).
   assessmentResults AssessmentResult[]
@@ -320,6 +321,40 @@ enum UserPathCourseStatus {
   NOT_STARTED
   IN_PROGRESS
   COMPLETED
+}
+
+/// A product knob an administrator may change without a deployment (§4C.6).
+///
+/// **Key-value, deliberately, and this is the one place that shape is right.**
+/// Everywhere else in this schema a fact gets a typed column, because a column
+/// is what makes the database able to refuse nonsense. Settings are different in
+/// kind: the set of them changes with the product rather than with the data, and
+/// a table with one column per knob would need a migration every time the
+/// ministry wanted a new one — which is exactly the deployment §4C.6 exists to
+/// avoid.
+///
+/// What replaces the column's typing is `SettingsService`: every value is parsed
+/// and validated against the same Zod schema the environment is, so a malformed
+/// row is refused on write and falls back to the environment on read rather than
+/// reaching a consumer as a string.
+///
+/// **Secrets are not here.** The Moodle web-services token, the database URL and
+/// the SMTP credentials stay environment-only (D-072): a setting readable by the
+/// screen that edits it is a setting that appears in a network response.
+model Setting {
+  /// Matches the environment variable it overrides, e.g. `PASS_THRESHOLD`, so
+  /// the two are obviously the same knob when read side by side.
+  key   String @id
+  value String
+
+  /// Who changed it last. `SetNull` rather than Cascade: the setting outlives
+  /// the account, and the audit log carries the full history regardless.
+  updatedByUserId String? @map("updated_by_user_id") @db.Uuid
+  updatedBy       User?   @relation("SettingEditor", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
 }
 
 /// Where a version of the assessment sits in its life (D-070).

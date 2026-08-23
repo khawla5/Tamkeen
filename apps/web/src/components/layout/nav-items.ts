@@ -20,6 +20,9 @@ export const NAV_ICONS = [
   'learners',
   /* Phase 5 — the super-admin portal's own destinations (§4C). */
   'assessment',
+  'settings',
+  'templates',
+  'audit',
 ] as const;
 
 export type NavIconName = (typeof NAV_ICONS)[number];

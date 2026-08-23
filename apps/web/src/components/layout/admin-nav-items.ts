@@ -25,4 +25,5 @@ export const ADMIN_NAV: readonly NavItem[] = [
   { key: 'adminAssessment', href: '/admin/assessment', icon: 'assessment' },
   { key: 'adminPaths', href: '/admin/paths', icon: 'myPath' },
   { key: 'adminCourses', href: '/admin/courses', icon: 'courses' },
+  { key: 'adminSettings', href: '/admin/settings', icon: 'settings' },
 ];

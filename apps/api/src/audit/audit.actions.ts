@@ -150,6 +150,18 @@ export const AuditAction = {
    * the learners holding it.
    */
   ADMIN_COURSE_INTERVENED: 'ADMIN_COURSE_INTERVENED',
+  /**
+   * A product knob changed (§4C.6).
+   *
+   * The one audit action whose payload carries a *value*, and deliberately:
+   * these are product configuration rather than anybody's data, and "who lowered
+   * the pass threshold, to what, and when" is where an audit of a disputed
+   * certificate begins. No secret is settable, which is what makes recording the
+   * value safe at all (D-072).
+   */
+  ADMIN_SETTING_CHANGED: 'ADMIN_SETTING_CHANGED',
+  /** A knob was returned to the environment's default. */
+  ADMIN_SETTING_RESET: 'ADMIN_SETTING_RESET',
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];

@@ -21,6 +21,7 @@ import type {
   AdminCoursePage,
   AdminCourseRow,
   AdminPathBounds,
+  AdminSettingsView,
   AdminPathDetail,
   AdminPathRow,
   AdminAssessmentOverview,
@@ -645,4 +646,13 @@ export const adminApi = {
     courseId: string,
     patch: { publication?: CoursePublication; ownerEntityId?: string | null },
   ) => api.patch<AdminCourseRow>(`/api/admin/courses/${courseId}`, patch),
+
+  // §4C.6 — system settings
+  settings: () => api.get<AdminSettingsView>('/api/admin/settings'),
+
+  updateSetting: (key: string, value: string) =>
+    api.patch<AdminSettingsView>(`/api/admin/settings/${key}`, { value }),
+
+  /** Returns a knob to the environment's value. */
+  resetSetting: (key: string) => api.delete<AdminSettingsView>(`/api/admin/settings/${key}`),
 };

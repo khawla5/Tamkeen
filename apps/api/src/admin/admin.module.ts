@@ -6,8 +6,10 @@ import { AppConfigModule } from '../config/app-config.module';
 import { EmailModule } from '../email/email.module';
 import { MoodleModule } from '../moodle/moodle.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { SyncSchedulerModule } from '../sync-scheduler/sync-scheduler.module';
 import { AdminAssessmentService } from './admin-assessment.service';
 import { AdminCoursesService } from './admin-courses.service';
+import { AdminSettingsService } from './admin-settings.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminEntitiesService } from './admin-entities.service';
 import { AdminPathsService } from './admin-paths.service';
@@ -23,7 +25,17 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
  * exactly one place to check that the whole portal is closed to everyone else.
  */
 @Module({
-  imports: [PrismaModule, AppConfigModule, AuditModule, MoodleModule, EmailModule, AuthModule],
+  imports: [
+    PrismaModule,
+    AppConfigModule,
+    AuditModule,
+    MoodleModule,
+    EmailModule,
+    AuthModule,
+    /* §4C.6 changes the sync interval, which has to re-register the
+       repeatable job rather than wait for a redeploy (D-072). */
+    SyncSchedulerModule,
+  ],
   controllers: [...ADMIN_CONTROLLERS],
   providers: [
     AdminDashboardService,
@@ -32,6 +44,7 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
     AdminAssessmentService,
     AdminPathsService,
     AdminCoursesService,
+    AdminSettingsService,
   ],
 })
 export class AdminModule {}

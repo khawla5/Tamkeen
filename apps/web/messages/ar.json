@@ -71,7 +71,8 @@
     "adminUsers": "الحسابات",
     "adminAssessment": "التقييم",
     "adminPaths": "المسارات",
-    "adminCourses": "الدورات"
+    "adminCourses": "الدورات",
+    "adminSettings": "الإعدادات"
   },
   "actions": {
     "retry": "إعادة المحاولة",
@@ -388,7 +389,15 @@
     "COURSE_HELD_BY_LEARNERS": "لا يمكن إزالة هذه الدورة لأن موظفين اختاروها ضمن هذا المسار. إزالتها ستمنعهم من حفظ اختيارهم أو تأكيده.",
     "COURSE_ALREADY_IN_PATH": "هذه الدورة مضافة إلى المسار بالفعل.",
     "PATH_ORDER_INCOMPLETE": "يجب أن يشمل الترتيب كل دورات المسار مرة واحدة.",
-    "COURSE_CANNOT_RETURN_TO_DRAFT": "لا يمكن إعادة دورة منشورة إلى حالة الإعداد. استخدم سحب الدورة بدلًا من ذلك."
+    "COURSE_CANNOT_RETURN_TO_DRAFT": "لا يمكن إعادة دورة منشورة إلى حالة الإعداد. استخدم سحب الدورة بدلًا من ذلك.",
+    "SETTING_NOT_FOUND": "هذا ليس إعدادًا يمكن تغييره من هنا.",
+    "SETTING_INVALID_PASS_THRESHOLD": "درجة الاجتياز يجب أن تكون رقمًا بين 0 و100.",
+    "SETTING_INVALID_COMPLETION_SYNC_INTERVAL_MINUTES": "فترة المزامنة يجب أن تكون عددًا صحيحًا أكبر من صفر.",
+    "SETTING_INVALID_REGISTRATION_MODE": "سياسة التسجيل يجب أن تكون restricted أو admin-only.",
+    "SETTING_INVALID_ALLOWED_EMAIL_DOMAINS": "أدخل نطاقًا واحدًا على الأقل، مفصولة بفواصل.",
+    "SETTING_INVALID_EMPLOYEE_ID_PATTERN": "صيغة الرقم الوظيفي غير صالحة.",
+    "SETTING_INVALID_NUMBER_FORMAT": "شكل الأرقام يجب أن يكون western أو arabic.",
+    "SETTING_INVALID_MOODLE_BASE_URL": "عنوان منصة التعلم غير صالح."
   },
   "player": {
     "title": "محتوى الدورة",
@@ -671,7 +680,9 @@
       "ADMIN_PATH_RETIRED": "إيقاف عرض مسار",
       "ADMIN_PATH_COURSE_ATTACHED": "إضافة دورة إلى مسار",
       "ADMIN_PATH_COURSE_DETACHED": "إزالة دورة من مسار",
-      "ADMIN_COURSE_INTERVENED": "تدخّل في دورة"
+      "ADMIN_COURSE_INTERVENED": "تدخّل في دورة",
+      "ADMIN_SETTING_CHANGED": "تغيير إعداد",
+      "ADMIN_SETTING_RESET": "إرجاع إعداد إلى الافتراضي"
     },
     "usersTitle": "إدارة الحسابات",
     "tabAccounts": "الحسابات",
@@ -884,6 +895,38 @@
     "coursesOwnerHint": "الجهة المسؤولة عن محتوى الدورة ومراجعة متدربيها.",
     "coursesSaveOwner": "حفظ الجهة",
     "coursesHide": "سحب الدورة",
-    "coursesRestore": "إعادة نشر الدورة"
+    "coursesRestore": "إعادة نشر الدورة",
+    "settingsTitle": "إعدادات النظام",
+    "settingsEditable": "إعدادات قابلة للتعديل",
+    "settingsFixed": "قواعد ثابتة",
+    "settingsFixedHint": "هذه قواعد المنتج وحدود الحماية، تُعرض للاطلاع ولا تُعدَّل من هنا ولا من أي شاشة أخرى.",
+    "settingValue": "القيمة",
+    "settingSave": "حفظ",
+    "settingSaved": "حُفظ الإعداد.",
+    "settingReset": "إرجاع إلى الافتراضي",
+    "settingOverridden": "قيمة الوزارة",
+    "settingDefault": "القيمة الافتراضية",
+    "setting": {
+      "PASS_THRESHOLD": "درجة الاجتياز",
+      "COMPLETION_SYNC_INTERVAL_MINUTES": "فترة المزامنة مع منصة التعلم (بالدقائق)",
+      "REGISTRATION_MODE": "سياسة التسجيل",
+      "ALLOWED_EMAIL_DOMAINS": "نطاقات البريد المسموح بها",
+      "EMPLOYEE_ID_PATTERN": "صيغة الرقم الوظيفي",
+      "NUMBER_FORMAT": "شكل الأرقام",
+      "MOODLE_BASE_URL": "عنوان منصة التعلم",
+      "PATH_MIN_COURSES": "الحد الأدنى لعدد دورات المسار",
+      "PATH_MAX_COURSES": "الحد الأقصى لعدد دورات المسار",
+      "API_RATE_LIMIT_MAX_REQUESTS": "الحد الأقصى للطلبات",
+      "API_RATE_LIMIT_WINDOW_SECONDS": "نافذة احتساب الطلبات (بالثواني)"
+    },
+    "settingHint": {
+      "PASS_THRESHOLD": "الدرجة التي يجب أن يبلغها الموظف في اختبار الدورة ليجتازها. تغييرها يسري على النتائج الجديدة فقط؛ النتائج السابقة تبقى محسوبة بالدرجة التي كانت سارية وقتها.",
+      "COMPLETION_SYNC_INTERVAL_MINUTES": "كل كم دقيقة يستعلم النظام عن إنجاز الموظفين من منصة التعلم. يُعاد ضبط الجدولة فور الحفظ.",
+      "REGISTRATION_MODE": "restricted: يسجّل الموظف بنفسه ضمن الشروط أدناه. admin-only: تُنشأ الحسابات من هذه اللوحة فقط.",
+      "ALLOWED_EMAIL_DOMAINS": "نطاقات بريد الوزارة المقبولة في التسجيل الذاتي، مفصولة بفواصل. لا تنطبق على الحسابات التي ينشئها المسؤول.",
+      "EMPLOYEE_ID_PATTERN": "تعبير نمطي يصف صيغة الرقم الوظيفي المقبولة في التسجيل الذاتي.",
+      "NUMBER_FORMAT": "western للأرقام 0-9، arabic للأرقام ٠-٩. يسري على الواجهة والشهادات معًا.",
+      "MOODLE_BASE_URL": "عنوان منصة التعلم. رمز التكامل ليس إعدادًا ولا يُقرأ ولا يُكتب من هنا."
+    }
   }
 }

@@ -1,5 +1,6 @@
 import { AdminAssessmentController } from './admin-assessment.controller';
 import { AdminCoursesController } from './admin-courses.controller';
+import { AdminSettingsController } from './admin-settings.controller';
 import { AdminPathsController } from './admin-paths.controller';
 import { AdminUsersController } from './admin-users.controller';
 import { AdminController } from './admin.controller';
@@ -29,4 +30,5 @@ export const ADMIN_CONTROLLERS = [
   AdminAssessmentController,
   AdminPathsController,
   AdminCoursesController,
+  AdminSettingsController,
 ];
