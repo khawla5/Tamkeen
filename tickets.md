@@ -77,7 +77,7 @@
 
 > **Epic label: `assessment-gating`** — focusing the pre-assessment experience on the one action that matters: starting the assessment.
 
-## TAM-106 — Hide Courses until the assessment is finished (sidebar + deep links)
+## TAM-106 — Hide Courses until the assessment is finished (sidebar + deep links) — **DONE** (`feature/tam-106-nav-gating`, off `feature/dga-alignment`)
 
 - **Labels:** `assessment-gating`, `frontend`, `spec-change`
 - **Priority:** High
@@ -92,6 +92,7 @@
   - Pre-assessment navigation to any `/courses*` URL lands on the dashboard; post-assessment it renders the catalog normally.
   - New e2e step: fresh user sees only الرئيسية/الملف الشخصي; after submitting the assessment the sidebar gains الدورات without a reload.
   - CLAUDE.md §4.2/§4.6 amended; decisions.md entry added; progress.md updated.
+  **What shipped (2026-08-23):** as specified — `navForState` returns two items pre-assessment; `PortalProvider` redirects `/courses*` to `/` for `PRE_ASSESSMENT` with the loading state shown; `nav-items.test.ts` updated (not duplicated); a new `portal-provider.test.tsx` pins the redirect (4 cases); the journey e2e asserts 2 items + the bounce before the assessment and الدورات appearing after it, and the two catalogue e2e flows now run post-assessment. CLAUDE.md §4.2/§4.6 amended; D-071 recorded.
   **Implementation notes (verified):**
   - The gate lives in ONE function: `navForState(state)` in `src/components/layout/nav-items.ts` — change `['dashboard', 'courses', 'profile']` for the `PRE_ASSESSMENT` branch only; the shell renders whatever list it is handed. The state is decided server-side (`DASHBOARD_STATES` in `packages/types/src/journey.ts`) and loaded once by `PortalProvider` — do not re-derive it in the page.
   - Put the redirect where `PortalProvider` already owns journey state (it handles the 401 redirect the same way): when state is `PRE_ASSESSMENT` and the route matches `/courses`, `router.replace('/')`. Render the loading state while redirecting — never a flash of catalog.
