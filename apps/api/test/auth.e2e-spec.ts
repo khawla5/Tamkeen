@@ -185,7 +185,11 @@ describe('Authentication (e2e)', () => {
       const session = await signIn(email);
       const me = await request(server()).get('/api/auth/me').set('Cookie', session).expect(200);
 
+      /* The session carries what the dashboard header shows (TAM-123). */
       expect(me.body).toMatchObject({ email, role: 'EMPLOYEE' });
+      expect(me.body.employeeId).toEqual(expect.any(String));
+      expect(me.body.department).toEqual(expect.any(String));
+      expect(me.body).not.toHaveProperty('passwordHash');
     }, 60_000);
 
     it('stores a hash, never the password', async () => {

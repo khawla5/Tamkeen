@@ -242,6 +242,8 @@ export interface CurrentUser {
   id: string;
   email: string;
   fullName: string;
+  employeeId: string;
+  department: string;
   role: 'EMPLOYEE' | 'ENTITY' | 'SUPER_ADMIN';
   /** The person's digits choice, or null to follow the system (§4.12). */
   numberFormat: NumberFormat | null;

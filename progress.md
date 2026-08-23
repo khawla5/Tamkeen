@@ -7,8 +7,8 @@
 
 ## Current status
 - **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **merged** (PR #13, with PR #12 merging TAM-106 before it). In parallel, the **design-direction workstream** (Platforms Code, D-069) continues on stacked feature branches off the old `feature/dga-alignment` line, now being rebased onto `main`.
-- **Last completed task (this workstream):** **TAM-108 — the dashboard's chips and status strip** (`feature/tam-108-dashboard`), which **closes the `assessment-gating` epic (106–108)**. Before that, **TAM-107 — the sidebar during the assessment + session drafts** (D-094); the stack sits on `feature/navigation-loader` (TAM-122, D-093). TAM-106 and the auth epic (TAM-101–105) are merged.
-- **Next task:** the rest of the stack (TAM-123, TAM-112), then the ticket backlog (TAM-109–121, 124–128).
+- **Last completed task (this workstream):** **TAM-123 — a meaningful dashboard** (`feature/tam-123-dashboard-content`): tracker, personal header, the top recommendations, next courses, latest certificate, activity feed — one payload from the server, D-095 (authored as D-074). Before that TAM-108 (chips + status strip, closing `assessment-gating`), TAM-107 (D-094), the loader (TAM-122, D-093). TAM-106 and the auth epic are merged.
+- **Next task:** TAM-112 (top of the stack), then the ticket backlog (TAM-109–121, 124–128).
 - **Phase 4 is merged** (PR #6). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
 - **Test totals (main, post-Phase 5):** 599 API unit · 403 web component · 515 API integration against real PostgreSQL · 84 browser e2e in Chromium — **1601 automated**, plus the real-Chromium verification scripts from Phase 3. **One transient integration failure is recorded in the 2026-08-24 entry and was never reproduced — read it before dismissing a similar one.**
 
@@ -142,6 +142,10 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — TAM-123: the dashboard stops being blank
+
+Branch `feature/tam-123-dashboard-content`, on the TAM-108 branch. The user's verdict on the §4.2-literal dashboard — one card and a greeting — was "super blank", and they were right: "near-empty" was a rule against empty widgets and competing actions, not against information. The page now answers the questions a person has on arrival: a four-stage journey tracker (where am I), a personal header with department and employee id (is this mine — the session and `/me` now carry both, which was TAM-109's first bullet), the top three recommended paths while choosing (what should I decide — a reversal of the TAM-108 call, recorded in D-074), the next courses and the latest certificate while working (what is next), and the last three events throughout (what happened). Everything arrives in the one dashboard payload; the activity feed reads the product tables, not the audit log, because those rows carry titles. The `/me` endpoint was shaping its own response and had to be taught the two new fields — caught by looking at the screenshot, not by a test, so the auth integration spec now asserts them. 339 web tests, 531 API unit tests, the journey and auth integration specs against `tamkeen_test`, screenshots of both states reviewed.
 
 ### 2026-08-23 — TAM-108: the dashboard speaks Arabic about the result, and says where you are
 

@@ -410,3 +410,11 @@
 - **Pre-requisite:** none
 - **What shipped (2026-08-23):** `NavigationProgress` mounted once in the root layout — a 3px primary top bar that starts on any internal link click (capture phase, so `next/link` and plain anchors alike), on back/forward, and on programmatic `push`/`replace` through the new `useAppRouter()` (all seven call sites rewired; it is now the only router hook pages use); completes on the route change; one polite "جارٍ الانتقال…" status per navigation; reduced-motion collapses the animation. In-page data waits keep `LoadingState`. D-072 recorded; CLAUDE.md §3 notes the rule. 5 component tests (idle → active → complete; external/new-window/hash/modified clicks ignored; programmatic start; a11y shape).
 
+## TAM-123 — A meaningful dashboard: tracker, identity, the decision, what is next, what happened — **DONE** (`feature/tam-123-dashboard-content`)
+
+- **Labels:** `assessment-gating`, `dashboard`, `frontend`, `api`
+- **Priority:** High
+- **Pre-requisite:** TAM-108
+- **What shipped (2026-08-23), per the discussion:** every state — journey tracker (4 stages, state-derived) + personal header (name · department · employee id; the session and `/me` now carry both — TAM-109's first bullet, done here) + the last three events. Assessed state — the top three recommended paths as cards in rank order + "عرض كل المسارات". Active state — next courses with status, latest certificate or the locked slot. API: `DashboardView` gained `recommendedPaths`, `upcomingCourses`, `latestCertificate`, `recentActivity`; the feed is derived from assessment results, path confirmation, passed completions and issued certificates. D-074 recorded (it reverses TAM-108's "no previews"); CLAUDE.md §4.2 rewritten. 9 new web tests, API journey + auth integration assertions against the test database; screenshots reviewed for both pre-assessment and assessed states.
+- **Not done, by choice:** quick-link tiles in every state (duplicates the sidebar). Recent activity is limited to three events; a full history page is not a dashboard concern.
+

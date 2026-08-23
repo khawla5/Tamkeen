@@ -10,7 +10,9 @@ import {
 import {
   PATH_MAX_COURSES,
   PATH_MIN_COURSES,
+  type DashboardActivity,
   type DashboardView,
+  rankPathsByRecommendation,
   type MyPathCourseView,
   type MyPathView,
   type UserPathCourseStatus,
@@ -353,33 +355,86 @@ export class EnrollmentService {
     };
   }
 
-  /** §4.2 — which of the three dashboard states applies. */
+  /**
+   * §4.2 — which of the three dashboard states applies, plus what that state
+   * needs to be meaningful (TAM-123): the top recommendations while choosing,
+   * the next courses and the latest certificate while working, and the last
+   * few things that happened throughout. One payload, decided here, so the
+   * page renders one branch and never re-derives the rule.
+   */
   async getDashboard(userId: string): Promise<DashboardView> {
     const state = await this.journey.getState(userId);
+    const empty = {
+      recommendedPaths: [],
+      upcomingCourses: [],
+      latestCertificate: null,
+      recentActivity: [] as DashboardActivity[],
+    };
 
     if (!state.latestResult) {
-      return { state: 'PRE_ASSESSMENT', codeString: null, path: null };
+      return { state: 'PRE_ASSESSMENT', codeString: null, path: null, ...empty };
     }
 
     const codeString = state.latestResult.profile.codeString;
+    const recentActivity = await this.recentActivity(userId);
 
     /* A path being *built* is still "no path chosen": §4.2 has three states, and
        the user's next action is the same either way — go and choose. */
     if (!JourneyStateService.isCommitted(state)) {
-      return { state: 'ASSESSED_NO_PATH', codeString, path: null };
+      return {
+        state: 'ASSESSED_NO_PATH',
+        codeString,
+        path: null,
+        ...empty,
+        recommendedPaths: await this.topRecommendedPaths(state),
+        recentActivity,
+      };
     }
 
     const myPath = await this.getMyPath(userId);
 
     if (!myPath) {
-      return { state: 'ASSESSED_NO_PATH', codeString, path: null };
+      return {
+        state: 'ASSESSED_NO_PATH',
+        codeString,
+        path: null,
+        ...empty,
+        recommendedPaths: await this.topRecommendedPaths(state),
+        recentActivity,
+      };
     }
 
     const next = myPath.courses.find((course) => course.isNextUp) ?? null;
+    const latest = await this.prisma.certificate.findFirst({
+      where: { userId },
+      orderBy: { issuedAt: 'desc' },
+      select: { id: true, type: true, subjectTitle: true, issuedAt: true },
+    });
 
     return {
       state: 'ACTIVE_PATH',
       codeString,
+      recommendedPaths: [],
+      /* Current first, then what follows, in path order — the "what's after
+         this one" a learner actually wants. Three is a glance, not a list. */
+      upcomingCourses: myPath.courses
+        .filter((course) => course.status !== 'COMPLETED')
+        .slice(0, 3)
+        .map((course) => ({
+          id: course.id,
+          courseId: course.courseId,
+          title: course.title,
+          status: course.status,
+        })),
+      latestCertificate: latest
+        ? {
+            id: latest.id,
+            type: latest.type,
+            subjectTitle: latest.subjectTitle,
+            issuedAt: latest.issuedAt.toISOString(),
+          }
+        : null,
+      recentActivity,
       path: {
         id: myPath.pathId,
         name: myPath.pathName,
@@ -393,6 +448,103 @@ export class EnrollmentService {
   }
 
   // ── internals ───────────────────────────────────────────────────────────────
+
+  /** The recommended paths in the user's rank order, at most three. */
+  private async topRecommendedPaths(
+    state: JourneyState,
+  ): Promise<DashboardView['recommendedPaths']> {
+    const code = JourneyStateService.hollandCode(state);
+    const paths = await this.prisma.path.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, riasecLetter: true, displayOrder: true },
+    });
+    return rankPathsByRecommendation(
+      paths.map((path) => ({
+        id: path.id,
+        riasecLetter: path.riasecLetter,
+        displayOrder: path.displayOrder,
+        source: path,
+      })),
+      code,
+    )
+      .filter((entry) => entry.recommended)
+      .slice(0, 3)
+      .map((entry) => ({
+        id: entry.path.source.id,
+        name: entry.path.source.name,
+        riasecLetter: entry.path.source.riasecLetter,
+      }));
+  }
+
+  /**
+   * The last three things the learner did, newest first, read from the product
+   * tables rather than the audit log: those rows carry the titles a person
+   * recognises, and the audit log is deliberately minimal (no PII, ids only).
+   */
+  private async recentActivity(userId: string): Promise<DashboardActivity[]> {
+    const [results, userPath, passed, certificates] = await Promise.all([
+      this.prisma.assessmentResult.findMany({
+        where: { userId },
+        orderBy: { completedAt: 'desc' },
+        take: 3,
+        select: { completedAt: true },
+      }),
+      this.prisma.userPath.findFirst({
+        where: { userId, confirmedAt: { not: null } },
+        select: { confirmedAt: true, path: { select: { name: true } } },
+      }),
+      this.prisma.completion.findMany({
+        where: { userId, passed: true, completedAt: { not: null } },
+        orderBy: { completedAt: 'desc' },
+        take: 3,
+        select: { completedAt: true, moodleCourseId: true },
+      }),
+      this.prisma.certificate.findMany({
+        where: { userId },
+        orderBy: { issuedAt: 'desc' },
+        take: 3,
+        select: { issuedAt: true, subjectTitle: true },
+      }),
+    ]);
+
+    const courseTitles = new Map<number, string>();
+    if (passed.length > 0) {
+      const courses = await this.prisma.course.findMany({
+        where: { moodleCourseId: { in: passed.map((c) => c.moodleCourseId) } },
+        select: { moodleCourseId: true, title: true },
+      });
+      for (const course of courses) courseTitles.set(course.moodleCourseId, course.title);
+    }
+
+    const events: DashboardActivity[] = [
+      ...results.map((r) => ({
+        kind: 'ASSESSMENT_COMPLETED' as const,
+        title: null,
+        at: r.completedAt.toISOString(),
+      })),
+      ...(userPath?.confirmedAt
+        ? [
+            {
+              kind: 'PATH_CONFIRMED' as const,
+              title: userPath.path.name,
+              at: userPath.confirmedAt.toISOString(),
+            },
+          ]
+        : []),
+      ...passed.map((c) => ({
+        kind: 'COURSE_PASSED' as const,
+        title: courseTitles.get(c.moodleCourseId) ?? null,
+        at: c.completedAt!.toISOString(),
+      })),
+      ...certificates.map((c) => ({
+        kind: 'CERTIFICATE_ISSUED' as const,
+        title: c.subjectTitle,
+        at: c.issuedAt.toISOString(),
+      })),
+    ];
+
+    return events.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, 3);
+  }
 
   private requireUncommittedPath(state: JourneyState) {
     if (!state.userPath) {

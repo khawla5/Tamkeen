@@ -70,10 +70,45 @@ export const DASHBOARD_STATES = ['PRE_ASSESSMENT', 'ASSESSED_NO_PATH', 'ACTIVE_P
 
 export type DashboardState = (typeof DASHBOARD_STATES)[number];
 
+/** One line of what the learner has done, newest first (TAM-123). */
+export const DASHBOARD_ACTIVITY_KINDS = [
+  'ASSESSMENT_COMPLETED',
+  'PATH_CONFIRMED',
+  'COURSE_PASSED',
+  'CERTIFICATE_ISSUED',
+] as const;
+
+export type DashboardActivityKind = (typeof DASHBOARD_ACTIVITY_KINDS)[number];
+
+export interface DashboardActivity {
+  kind: DashboardActivityKind;
+  /** The course, path or certificate subject the event is about; null for the assessment. */
+  title: string | null;
+  /** ISO 8601. */
+  at: string;
+}
+
 export interface DashboardView {
   state: DashboardState;
   /** Present from ASSESSED_NO_PATH onward. */
   codeString: string | null;
+  /**
+   * ASSESSED_NO_PATH only: the recommended paths in rank order, at most three,
+   * so the dashboard can put the decision in front of the user (TAM-123).
+   * Empty in the other states.
+   */
+  recommendedPaths: Array<{ id: string; name: string; riasecLetter: RiasecLetter }>;
+  /** ACTIVE_PATH only: the next courses in path order, current first, at most three. */
+  upcomingCourses: Array<{
+    id: string;
+    courseId: string;
+    title: string;
+    status: UserPathCourseStatus;
+  }>;
+  /** ACTIVE_PATH only: the most recently issued certificate, if any. */
+  latestCertificate: { id: string; type: 'COURSE' | 'PATH'; subjectTitle: string; issuedAt: string } | null;
+  /** The last three things that happened, newest first. */
+  recentActivity: DashboardActivity[];
   /** Present only in ACTIVE_PATH. */
   path: {
     id: string;

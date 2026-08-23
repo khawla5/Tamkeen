@@ -5,6 +5,17 @@
 
 ---
 
+## D-095 — The dashboard carries context, not just the one action: tracker, identity, the decision, what is next, what happened
+**Decision:** every dashboard state shows a journey tracker (التقييم → المسار → الدورات → الشهادة, done/current/upcoming, derived from the server-decided state) and a personal header (name, department, employee id from the session). The assessed-no-path state previews the **top three recommended paths** in rank order, each opening its path page, beside one "عرض كل المسارات" link. The active state adds the next courses in order with their status, the latest certificate (or the locked slot and how it unlocks), and every state shows the last three things that happened (assessment completed, path confirmed, course passed, certificate issued). All of it arrives in the one dashboard payload; the activity feed is read from the product tables, not the audit log, because those rows carry titles a person recognises.
+
+**Why:** §4.2's "near-empty" was obeyed literally and produced a page that read as unfinished — one card and a greeting. "Near-empty" was protecting against *empty widgets* (a zero-of-zero progress bar) and competing actions, not against information. Each addition answers a question the user has on arrival: where am I, is this mine, what should I decide, what comes next, what just happened. None is a second primary action: the recommendation cards are the decision itself brought forward; the course and certificate links are navigation to content that exists; the tracker and feed are not interactive.
+
+**Reverses** the TAM-108 discussion's "no path previews on the dashboard" — that was the right call for a page whose only content was the card; with the tracker and feed in place, the preview is the most meaningful thing the choosing state can hold, and Results still owns the full ranking, the explanation and the retake.
+
+**Rejected:** quick-link tiles in every state (duplicates the sidebar); a count-only nudge ("لديك 6 مسارات موصى بها" — says less than three names); the audit log as the activity source (minimal by design, no titles); a separate activity endpoint (one payload is the dashboard's contract).
+
+**Numbering note:** authored as D-074 on its feature branch, in parallel with Phase 5, whose merge claimed the number first; renumbered D-095 at rebase (as D-093's note explains).
+
 ## D-094 — The assessment keeps the sidebar, and a session draft makes leaving free
 **Decision:** the assessment page renders inside the normal shell, with the two-item pre-assessment nav (D-071); results and path build stay bare. Answers and the current question are written through to `sessionStorage` on every change, keyed to the assessment id and its question ids; the draft is restored on return within the browser session, discarded if the bank has changed, and cleared on submit so a retake (D-015) starts clean.
 

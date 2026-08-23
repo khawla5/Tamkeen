@@ -156,6 +156,8 @@ export class AuthController {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
+      employeeId: user.employeeId,
+      department: user.department,
       role: user.role,
       /* Null means "follow whatever §4C.6 has set", so the ministry can change
          the default for everyone without overwriting anybody's choice. */
