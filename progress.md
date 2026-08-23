@@ -6,12 +6,24 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 4 — the entity / reviewer portal — **COMPLETE and verified; PR opened.**
-- **Last completed task:** The **Phase 4 verification pass** — the whole suite re-run against a `main` that had moved under the branch, four defects found and fixed (D-067, D-068, `published_at`, the e2e fixture), and the six entity pages checked in a real browser.
-- **Next task:** **Phase 5 — the super-admin portal** (full spec in CLAUDE.md §4C), once the Phase 4 PR is merged.
-- **Active branch:** `phase-4-entity-portal`, off `origin/main` and **merged up to `d2e0506`** so the suite ran against what it will land on. **PR #6 opened**, not merged (D-008).
-- **Phase 3 is merged** (PR #4). **The landing page is merged** (PR #5, `origin/main` @ `d2e0506`) — it landed after this branch was cut and touches the same `ar.json` and `api-client.ts`.
-- **Test totals:** 530 API unit · 256 web component · 192 API integration against real PostgreSQL · 34 browser e2e in Chromium — **1012 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
+- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **in progress, sub-phase 5.1 of 5.9 complete.**
+- **Last completed task:** **Sub-phase 5.1 — admin foundation + Dashboard (§4C.1).** The `admin` API module behind `@Roles('SUPER_ADMIN')`, the `(admin)` route group with its own provider and frame, and the §4C.1 dashboard. Also fixed a live routing defect: a super-admin signing in was sent into the *entity* portal.
+- **Next task:** **Sub-phase 5.2 — User Management (§4C.2)**, including entity-account creation (the seam Phase 4 left).
+- **Active branch:** `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd`, which contains Phases 0-4. No PR yet — one PR covers the whole of Phase 5 (D-008).
+- **Phase 4 is merged** (PR #6, `origin/main` @ `f1f0dcd`). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
+- **Test totals:** 540 API unit · 271 web component · 198 API integration against real PostgreSQL · 34 browser e2e in Chromium — **1043 automated**, plus the real-Chromium verification scripts from Phase 3. Typecheck, lint and format clean.
+
+### Phase 5 sub-phase tracker
+- [x] **5.1 Admin foundation + Dashboard** (§4C.1) — RBAC, route group, shell, integration health
+- [ ] **5.2 User Management** (§4C.2) — employees + entities, suspend/activate, **entity-account creation**
+- [ ] **5.3 Assessment Management** (§4C.3) — draft/publish, balance guard, copy-on-write versioning
+- [ ] **5.4 Path Management** (§4C.4) — paths, `path_courses` membership + ordering, safe retirement
+- [ ] **5.5 Course Oversight** (§4C.5) — global catalogue, ownership assignment, intervention
+- [ ] **5.6 System Settings** (§4C.6) — `settings` table, one `SettingsService`, env fallback
+- [ ] **5.7 Certificate Templates** (§4C.7) — signatory fields, future issuances only
+- [ ] **5.8 Audit & Reports** (§4C.8) — filterable log, reports, CSV export with BOM
+- [ ] **5.9 Deferred Profile items + verification pass** — change password, email re-verification, numerals
+
 - **Open blockers / questions for the human:**
   1. **⚠ THE MINISTRY LOGO AND SEAL ARE STILL MISSING.** Certificates ship with a neutral placeholder mark and an empty signature block (name + title). The slot is sized and positioned, so dropping in the real artwork is not a layout change — but **no certificate should reach a real employee until this is supplied** (D-051).
   2. **⚠ MINISTRY APPROVAL OF CUSTOM MOODLE PLUGINS IS STILL UNCONFIRMED.** Unchanged since Phase 2 and still the longest-lead dependency: seamless login uses `local_tamkeensso`, and if the ministry refuses custom PHP the fallback is the OAuth2-IdP route (D-044). Phase 4 deliberately did **not** enlarge that surface — the authoring handoff reuses the plugin unmodified (D-060).
@@ -115,6 +127,26 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — Phase 5 planned; sub-phase 5.1: the admin foundation and the §4C.1 dashboard
+
+Branch `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd` — which now contains Phase 4 (PR #6 merged). **Phase 5 is divided into nine sub-phases**, run back to back on this one branch with a single PR at the end; the tracker is in Current Status above so a cleared chat can resume mid-phase.
+
+**Eight decisions were taken before any code was written** (D-069 … D-076), because four of them shape the schema and would have been expensive to reverse. The one that matters most is **D-069, copy-on-write assessment versioning**: D-049 says existing results are "frozen as taken", and that is only literally true if the *instrument* survives beside the scores. Editing in place and bumping an integer freezes the numbers but lets a wording change rewrite the questions a past response points at, so a row would claim version 3 and resolve to version 7's text. `assessment_results.assessmentId onDelete: Restrict` (D-035) has been promising since Phase 1 that the instrument still exists; 5.3 is where that promise is either kept or quietly broken.
+
+**Test totals: 540 API unit · 271 web component · 198 API integration · 34 browser e2e — 1043 automated.** Typecheck, lint and format clean. No new dependencies.
+
+**A live defect, found by reading the routing rather than by a failing test.** A `SUPER_ADMIN` who signed in was sent to the *entity* portal. Three separate files each asked `role === 'EMPLOYEE'` and treated everything else as an entity — correct when written, because until this phase there were only two portals, and wrong the moment a third role could sign in. The account with the most authority in the system was being handed somebody else's screens, and no test could see it because every test asserted the two roles that existed. It is now one `Record<UserRole, string>` map with four readers, so adding a role fails the typecheck at every site instead of defaulting silently. This is the second time a half-implemented redirect rule has surfaced (D-067 was the first) — the pattern is that these rules read correctly one branch at a time and are only wrong as a set.
+
+**The RBAC test enumerates its own routes.** `admin-rbac.e2e-spec.ts` reflects Nest's own `PATH_METADATA` / `METHOD_METADATA` off `AdminController` rather than listing paths by hand, so every endpoint added in sub-phases 5.2-5.8 is automatically asserted against an employee, an entity and an anonymous caller the moment it exists. A hand-maintained list would go stale exactly where it matters: the endpoint nobody remembers to add is the one that ships unproven while the suite stays green. Each request carries a valid CSRF token and each denial is checked for `INSUFFICIENT_ROLE`, because a 403 from `CsrfGuard` and a 403 from `RolesGuard` are indistinguishable from outside and one of them would mean the role check never ran.
+
+**The dashboard adds no source of truth.** Every figure on §4C.1 already existed — users, entities, paths, courses, results, completions, certificates, the audit trail. The service only asks the existing tables the questions an administrator has, which is what stops it disagreeing with the screens it summarises. Three pieces of arithmetic were worth unit-testing because a plausible implementation gets each wrong: a retake must not count as a second assessed person (D-033), the code distribution must use each person's *newest* result or it describes the indecisive rather than the ministry, and a completion rate over nobody is undefined rather than 0%.
+
+**Integration health asks two questions, not one.** "Is Moodle answering?" is a live `checkHealth()` call; "did the sync actually run?" is read from the audit trail, because that is the only place a *run* is recorded — `courses.lastSyncedAt` would report a healthy catalogue while every recent run had failed. A Moodle that answers while the scheduler is dead is the outage that a single green tick hides, and it is the one an operator must act on. The failure code is surfaced too: a rejected token and an unreachable host need different fixes, and collapsing them costs the operator their first hour.
+
+**Two smaller things the work forced.** `audit_log.id` is a `BigInt`, and `JSON.stringify` throws on one rather than rounding it — so the conversion happens in the service and is asserted with a value above `Number.MAX_SAFE_INTEGER`. And an audit action with no Arabic copy falls back to its raw code rather than to an empty string, because a blank row hides the event entirely, which is worse than an untranslated one.
+
+**Eight nav items, not six.** §3 caps the *learner's* steady-state nav at six so a person is not shown places they cannot act on; §4C names eight administrative destinations and each is a distinct thing the ministry runs. `ADMIN_NAV` currently holds one entry and gains the others in the sub-phase that builds each page — the same rule `navForState` follows, that an item leading to a 404 advertises what the product cannot do.
 
 ### 2026-08-22 — Phase 4 verification pass: four defects found, fixed, and the PR opened
 
@@ -535,8 +567,8 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - [x] **Phase 1 — Assessment (RIASEC) + path core** (RIASEC questions+scoring→Holland Code, gold ranked results, letter-tagged paths, catalog+detail from mock, 5-10 build + single-path commit, dashboard's 3 states, My Path) — **merged** (PR #2)
 - [x] **Phase 2 — Moodle integration** (spike first; web services, provisioning, catalog sync, enrollment, scheduled completion sync + pass threshold + shared-course reuse, seamless login, course player) — **merged** (PR #3, `origin/main` @ `dcb8aad`)
 - [x] **Phase 3 — Certificates + CV** (idempotent course/path certs, Arabic PDF solved, verification page + QR, gallery, CV builder + English PDF export) — **merged** (PR #4, `origin/main` @ `f2a6b4d`)
-- [x] **Phase 4 — Entity / reviewer portal** (entity accounts + server-side data scoping, course creation in the LMS, authoring handoff, product metadata, publish gate + course-edit protection, learner review) — **complete on `phase-4-entity-portal`; awaiting the user's test approval, then the PR**
-- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards)
+- [x] **Phase 4 — Entity / reviewer portal** (entity accounts + server-side data scoping, course creation in the LMS, authoring handoff, product metadata, publish gate + course-edit protection, learner review) — **merged** (PR #6, `origin/main` @ `f1f0dcd`)
+- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **in progress on `phase-5-admin-portal`; 5.1 of 5.9 done** (sub-phase tracker in Current Status)
 - [ ] **Phase 6 — Hardening** (Arabic QA, RTL PDF polish, security review, sync reliability + load, a11y, states)
 - [ ] **Phase 7 — Deployment, acceptance & launch** (deploy app+Moodle, seed data, full end-to-end acceptance, docs/handover, sign-off)
 

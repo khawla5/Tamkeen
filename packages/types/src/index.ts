@@ -24,3 +24,6 @@ export * from './cv-document';
 
 /* Phase 4 — the entity / reviewer portal. */
 export * from './entity';
+
+/* Phase 5 — the super-admin portal. */
+export * from './admin';

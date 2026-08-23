@@ -18,7 +18,6 @@
     "heroStatPathsLabel": "مسارًا مهنيًا متاحًا",
     "heroStatCoursesLabel": "دورة ضمن الكتالوج",
     "heroStatRiasecLabel": "ميول مهنية أساسية",
-
     "problemEyebrow": "الفجوة التي نغلقها",
     "problemTitle": "كتالوج مفتوح لا يكفي وحده",
     "problem1Title": "بلا مسار واضح",
@@ -28,7 +27,6 @@
     "problem3Title": "بلا دليل موثوق",
     "problem3Body": "لا سجل واحد يثبت الدورات المكتملة، ولا شهادة يمكن التحقق منها بشكل مستقل.",
     "solutionBody": "يحوّل تمكين هذا الكتالوج إلى رحلة محددة: تقييم لميولك، فمسار واحد بين {min} و{max} دورات تلتزم به، فشهادة رسمية عند إتمامه.",
-
     "stepsEyebrow": "كيف يعمل تمكين",
     "stepsTitle": "أربع خطوات من التقييم إلى الشهادة",
     "step1Title": "تقييم الميول المهنية",
@@ -39,7 +37,6 @@
     "step3Body": "تخوض كل دورة واختبارها على منصة الوزارة للتعلّم الإلكتروني، وتُحدَّث حالتك تلقائيًا فور إتمامها.",
     "step4Title": "شهادة وسيرة ذاتية",
     "step4Body": "شهادة رسمية قابلة للتحقق لكل دورة، وشهادة أكبر عند إتمام المسار كاملًا، وسيرة ذاتية مُعبّأة تلقائيًا بإنجازاتك.",
-
     "trustEyebrow": "مبني بمعايير حكومية",
     "trustTitle": "موثوق، عربي بالكامل، ويصل إلى الجميع",
     "trust1Title": "عربية أولًا",
@@ -50,10 +47,8 @@
     "trust3Body": "لكل شهادة معرّف تحقق فريد ورمز استجابة سريعة يؤكدان صحتها دون تسجيل دخول.",
     "trust4Title": "أمان بمستوى حكومي",
     "trust4Body": "كلمات مرور مشفّرة، جلسات آمنة، وسجل تدقيق لكل إجراء حساس على المنصة.",
-
     "ctaTitle": "ابدأ مسارك المهني اليوم",
     "ctaBody": "التسجيل متاح لموظفي الوزارة فقط.",
-
     "footerClassification": "داخلي — للاستخدام الحكومي"
   },
   "a11y": {
@@ -71,7 +66,8 @@
     "entityDashboard": "الرئيسية",
     "entityCourses": "دوراتي",
     "entityLearners": "المتدربون",
-    "entityProfile": "بيانات الجهة"
+    "entityProfile": "بيانات الجهة",
+    "adminDashboard": "الرئيسية"
   },
   "actions": {
     "retry": "إعادة المحاولة",
@@ -563,5 +559,70 @@
     "profileContactEmail": "البريد الإلكتروني",
     "profileEmpty": "لا توجد بيانات جهة مرتبطة بهذا الحساب.",
     "profileReadOnly": "تُدار بيانات الجهة من قِبل إدارة النظام."
+  },
+  "admin": {
+    "dashboardTitle": "لوحة الإشراف",
+    "sectionHealth": "حالة التكامل",
+    "sectionPeople": "الحسابات",
+    "sectionJourney": "مسار الموظفين",
+    "sectionCatalogue": "المسارات والدورات",
+    "sectionCodes": "توزيع الأنماط المهنية",
+    "sectionActivity": "أحدث النشاط",
+    "lmsReachable": "منصة التعلم متصلة",
+    "lmsUnreachable": "تعذّر الوصول إلى منصة التعلم",
+    "lmsAddress": "عنوان المنصة",
+    "lmsFailure": {
+      "UNREACHABLE": "لا تستجيب المنصة. تحقّق من أنها تعمل ومن الوصول إليها عبر الشبكة.",
+      "UNAUTHORISED": "رفضت المنصة رمز التكامل. تحقّق من صلاحية الرمز ومن صلاحيات حساب التكامل.",
+      "UNEXPECTED_RESPONSE": "ردّت المنصة بما لا يمكن قراءته. تحقّق من إصدارها ومن تفعيل خدمات الويب."
+    },
+    "lastCatalogSync": "آخر مزامنة للدورات",
+    "lastCompletionSync": "آخر مزامنة للإنجاز",
+    "syncNever": "لم تُنفَّذ بعد",
+    "assessmentVersion": "التقييم المعمول به: الإصدار {version} منذ {date}",
+    "statEmployees": "الموظفون",
+    "statEntities": "الجهات النشطة",
+    "statSuspended": "حسابات موقوفة",
+    "statUnverified": "لم تُؤكَّد بريدها",
+    "statAssessed": "أكملوا التقييم",
+    "statActivePaths": "مسارات قيد التنفيذ",
+    "statPathCompletion": "نسبة إكمال المسارات",
+    "statCertificates": "شهادات صادرة",
+    "statPathsActive": "مسارات نشطة",
+    "statCoursesPublished": "دورات منشورة",
+    "statCoursesDraft": "دورات تحت الإعداد",
+    "statCoursesUnowned": "دورات بلا جهة",
+    "codesEmpty": "لم يُكمل أحد التقييم بعد، فلا يوجد توزيع لعرضه.",
+    "activityEmpty": "لا يوجد نشاط مسجَّل بعد.",
+    "actorSystem": "النظام",
+    "outcomeFailure": "أخفق",
+    "auditAction": {
+      "AUTH_REGISTERED": "تسجيل حساب جديد",
+      "AUTH_EMAIL_VERIFIED": "تأكيد البريد",
+      "AUTH_LOGIN_SUCCEEDED": "تسجيل دخول",
+      "AUTH_LOGIN_FAILED": "محاولة دخول فاشلة",
+      "AUTH_ACCOUNT_LOCKED": "إيقاف مؤقت للحساب",
+      "AUTH_LOGGED_OUT": "تسجيل خروج",
+      "AUTH_PASSWORD_RESET_REQUESTED": "طلب إعادة تعيين كلمة المرور",
+      "AUTH_PASSWORD_RESET_COMPLETED": "إعادة تعيين كلمة المرور",
+      "AUTHZ_DENIED": "رفض صلاحية",
+      "ASSESSMENT_SUBMITTED": "إرسال التقييم",
+      "PATH_SELECTED": "اختيار مسار",
+      "PATH_COURSES_UPDATED": "تعديل دورات المسار",
+      "PATH_CONFIRMED": "تأكيد المسار",
+      "PATH_ENROLMENT_REQUESTED": "طلب تسجيل في الدورات",
+      "PATH_COMPLETED": "إكمال المسار",
+      "LMS_CATALOG_SYNCED": "مزامنة الدورات",
+      "LMS_COURSE_WITHDRAWN": "سحب دورة من المنصة",
+      "LMS_COMPLETION_SYNCED": "مزامنة الإنجاز",
+      "LMS_COURSE_PASSED": "اجتياز دورة",
+      "LMS_COURSE_LAUNCHED": "دخول دورة",
+      "CERTIFICATE_ISSUED": "إصدار شهادة",
+      "ENTITY_COURSE_CREATED": "إنشاء دورة",
+      "ENTITY_COURSE_METADATA_UPDATED": "تعديل بيانات دورة",
+      "ENTITY_COURSE_PUBLISHED": "نشر دورة",
+      "ENTITY_COURSE_UNPUBLISHED": "سحب دورة",
+      "ENTITY_COURSE_AUTHOR_LAUNCHED": "دخول لتحرير دورة"
+    }
   }
 }

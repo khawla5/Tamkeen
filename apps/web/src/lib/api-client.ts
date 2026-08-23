@@ -16,6 +16,7 @@
  */
 
 import type {
+  AdminDashboardView,
   AssessmentResultView,
   CertificateSummary,
   CvProfile,
@@ -422,4 +423,16 @@ export const entityApi = {
     api.get<EntityLearnerRow[]>(
       `/api/entity/learners${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`,
     ),
+};
+
+/**
+ * The super-admin portal (§4C).
+ *
+ * A separate object from `entityApi` even though a super-admin may call some of
+ * the entity routes (D-075). The two are different surfaces with different
+ * guards, and merging them would make it hard to see, from the client alone,
+ * which calls require which role.
+ */
+export const adminApi = {
+  dashboard: () => api.get<AdminDashboardView>('/api/admin/dashboard'),
 };

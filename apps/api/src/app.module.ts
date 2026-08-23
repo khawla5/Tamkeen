@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
+import { AdminModule } from './admin/admin.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
@@ -79,6 +80,8 @@ import { PrismaModule } from './prisma/prisma.module';
     CvModule,
     /* Phase 4. */
     EntityModule,
+    /* Phase 5. */
+    AdminModule,
   ],
   providers: [
     /*

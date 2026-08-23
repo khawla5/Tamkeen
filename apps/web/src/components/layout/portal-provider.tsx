@@ -8,6 +8,7 @@ import type { DashboardView } from '@tamkeen/types';
 
 import { LandingView } from '@/components/landing/landing-view';
 import { ErrorState, LoadingState } from '@/components/states';
+import { HOME_FOR_ROLE } from './portal-routes';
 import {
   ApiError,
   authApi,
@@ -100,13 +101,16 @@ export function PortalProvider({ children }: { children: ReactNode }) {
    * exists once someone is signed in, so `/` still renders the public landing
    * page for everyone else.
    */
-  const wrongPortal = session.data !== undefined && session.data.role !== 'EMPLOYEE';
+  const wrongPortal =
+    session.data !== undefined && session.data.role !== 'EMPLOYEE'
+      ? HOME_FOR_ROLE[session.data.role]
+      : null;
 
   useEffect(() => {
     if (shouldRedirect) {
       router.replace('/login');
     } else if (wrongPortal) {
-      router.replace('/entity');
+      router.replace(wrongPortal);
     }
   }, [shouldRedirect, wrongPortal, router]);
 
