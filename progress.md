@@ -7,8 +7,8 @@
 
 ## Current status
 - **Current phase:** Phase 4 — the entity / reviewer portal — **COMPLETE and verified; PR opened.** In parallel, a **design-direction workstream** is open: the product is moving onto the DGA's national design system, **Platforms Code** (D-069), on branch `feature/dga-alignment`.
-- **Last completed task:** **TAM-103 — the registration wizard** on `feature/tam-103-register-wizard` (stacked on the TAM-101/102 branch): two steps, client validation mirroring the server, الإدارة as a dropdown. Before that, **TAM-101 + TAM-102 on `feature/tam-101-102-auth-shell-login`** (stacked on `feature/dga-alignment`): the auth shell as a centred government template and `/login` on it, plus the DGA form primitives app-wide. Before that, the **`feature/dga-alignment` branch, pushed and PR'd** — Platforms Code foundations (D-069, no gold, DGA buttons), the ministry emblem + Tamkeen logo, and the landing page rebuilt top to bottom on the BRD's content (hero on the deep-green ground with the labelled Kingdom map, the Absher-style explorer, FAQ, government footer). 287 web unit tests, 61 certificate+email API tests, typecheck, lint and format clean.
-- **Next task:** **TAM-104** — verify-email, forgot-password and reset-password onto `AuthLayout` (then `AuthCard` can be deleted); then TAM-105's epic QA pass. Phase 5 (super-admin, CLAUDE.md §4C) resumes once the Phase 4 PR is merged.
+- **Last completed task:** **TAM-104** on `feature/tam-104-auth-pages` — verify-email, forgot-password and reset-password on the government shell; `AuthCard` deleted, every auth page now shares one frame and one form anatomy. Before that, **TAM-103 — the registration wizard** on `feature/tam-103-register-wizard` (stacked on the TAM-101/102 branch): two steps, client validation mirroring the server, الإدارة as a dropdown. Before that, **TAM-101 + TAM-102 on `feature/tam-101-102-auth-shell-login`** (stacked on `feature/dga-alignment`): the auth shell as a centred government template and `/login` on it, plus the DGA form primitives app-wide. Before that, the **`feature/dga-alignment` branch, pushed and PR'd** — Platforms Code foundations (D-069, no gold, DGA buttons), the ministry emblem + Tamkeen logo, and the landing page rebuilt top to bottom on the BRD's content (hero on the deep-green ground with the labelled Kingdom map, the Absher-style explorer, FAQ, government footer). 287 web unit tests, 61 certificate+email API tests, typecheck, lint and format clean.
+- **Next task:** **TAM-105** — the epic's QA pass (360/768/1280 RTL walk of all five auth pages, keyboard-only run, physical-class grep) and docs; then the `assessment-gating` epic (TAM-106–108). Phase 5 (super-admin, CLAUDE.md §4C) resumes once the Phase 4 PR is merged.
 - **Active branches:** `phase-4-entity-portal` (PR #6, not merged, D-008) and `feature/dga-alignment` off `main` @ `f1f0dcd`.
 - **Phase 3 is merged** (PR #4). **The landing page is merged** (PR #5) — and is being replaced by TAM-116.
 - **Test totals:** 530 API unit · 265 web component · 192 API integration against real PostgreSQL · 34 browser e2e in Chromium — **1021 automated**, plus the real-Chromium verification scripts from Phase 3.
@@ -117,6 +117,10 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — TAM-104: the last three auth pages on the shell; AuthCard retired
+
+Branch `feature/tam-104-auth-pages`. Verify-email, forgot-password and reset-password moved onto `AuthLayout` with the DGA primitives. Nothing behavioural changed, and the tests written first say so: forgot-password shows the same neutral panel whether the request succeeded or failed (the enumeration resistance reaches the UI); reset refuses a mismatch and a missing token before sending; verify calls the API exactly once (the StrictMode double-mount guard survives). `AuthCard` is deleted — the five auth pages now share one frame and one form anatomy. 313 web unit tests; the auth e2e green against the live app.
 
 ### 2026-08-23 — TAM-103: registration as a wizard, validated at the field, with a department list
 

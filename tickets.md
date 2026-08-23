@@ -49,7 +49,7 @@
   **Acceptance:** new unit tests for step validation, back/next value retention, and server-error → correct-step mapping; register e2e happy path updated for the wizard and green; verification email still flows through Mailpit.
   **Implementation notes (verified):** keep it ONE client component with local step state — no routing per step, so back/next retains values for free and the URL stays `/register`. Server submit only at the end via the existing `authApi`; error codes come from the shared `errors` catalogue via `useErrorMessage`, and each code maps to the step that owns its field (domain/email errors → step 1; employee-ID pattern → step 2). Step indicator uses `actions.back`/`actions.next` where possible and western digits (D-018). The e2e suite reads the verification token out of Mailpit — keep field labels unchanged so its label-based locators survive.
 
-## TAM-104 — Secondary auth pages restyle: verify-email, forgot-password, reset-password
+## TAM-104 — Secondary auth pages restyle: verify-email, forgot-password, reset-password — **DONE** (`feature/tam-104-auth-pages`)
 
 - **Labels:** `auth-ui-port`, `frontend`
 - **Priority:** Medium
@@ -58,6 +58,7 @@
   Move the remaining three auth screens (`/verify-email`, `/forgot-password`, `/reset-password`) into `AuthLayout` with the same input styling, so no page is left on the old `AuthCard` design. Single-card forms; functionality unchanged (single-use hashed tokens, enumeration-resistant responses).
   Remove `AuthCard` if nothing references it afterwards; otherwise note what still uses it.
   **Acceptance:** all three flows pass their existing tests; reset-password e2e (token from Mailpit) green; loading/empty/error states intact.
+  **What shipped (2026-08-23):** all three on `AuthLayout` with the DGA primitives — `PasswordInput` on both reset fields, form-level errors as `Alert`, full-width actions, the single-use token and enumeration-safe behaviours untouched (asserted: forgot shows the same panel on failure; reset refuses a mismatch and a missing token before sending; verify calls the API once). **`AuthCard` is deleted** — nothing imports it. 7 new component tests; auth e2e (register → verify → sign in, domain refusal, mismatch) green against the live app.
   **Implementation notes (verified):** all three pages currently render through `AuthCard` (`src/components/auth/auth-card.tsx`) — after this ticket nothing should import it; delete it and its usages in the same PR so the old design can't resurface. The pages keep their enumeration-resistant behavior (always-report-sent responses) — restyle only.
 
 ## TAM-105 — Epic QA pass: RTL/a11y/responsive audit + docs
