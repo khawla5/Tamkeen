@@ -45,6 +45,8 @@ const USER: CurrentUser = {
   id: 'user-1',
   email: 'employee@ministry.gov.example',
   fullName: 'سارة العتيبي',
+  employeeId: 'E-1',
+  department: 'تقنية المعلومات',
   role: 'EMPLOYEE',
 };
 

@@ -213,6 +213,8 @@ export interface CurrentUser {
   id: string;
   email: string;
   fullName: string;
+  employeeId: string;
+  department: string;
   role: 'EMPLOYEE' | 'ENTITY' | 'SUPER_ADMIN';
 }
 
@@ -242,6 +244,12 @@ export const authApi = {
 
   resetPassword: (token: string, password: string) =>
     api.post<{ status: string }>('/api/auth/reset-password', { token, password }),
+};
+
+/** §4.12 — an employee's own profile: name and department, saved together. */
+export const profileApi = {
+  update: (input: { fullName: string; department: string }) =>
+    api.patch<CurrentUser>('/api/me/profile', input),
 };
 
 /**
