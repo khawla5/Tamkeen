@@ -382,6 +382,8 @@
     "personalHeading": "بياناتك",
     "fullName": "الاسم الكامل",
     "email": "البريد الإلكتروني",
+    "employeeId": "الرقم الوظيفي",
+    "department": "الإدارة",
     "role": "الصلاحية",
     "roleEmployee": "موظف",
     "roleEntity": "جهة",

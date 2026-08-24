@@ -46,38 +46,56 @@ export default function ProfilePage() {
 
   return (
     <PortalPage title={t('title')}>
-      <div className="mx-auto max-w-2xl">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('personalHeading')}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-6">
-            <dl className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <dt className="text-sm text-muted-foreground">{t('fullName')}</dt>
-                <dd className="font-medium">{user.fullName}</dd>
-              </div>
-              <div className="flex flex-col gap-1">
-                <dt className="text-sm text-muted-foreground">{t('email')}</dt>
-                {/* The address is Latin script; `dir="ltr"` stops RTL reordering
-                    turning it into something that is not the user's address. */}
-                <dd dir="ltr" className="text-start font-medium">
-                  {user.email}
-                </dd>
-              </div>
-              <div className="flex flex-col gap-1">
-                <dt className="text-sm text-muted-foreground">{t('role')}</dt>
-                <dd className="font-medium">{roleLabel}</dd>
-              </div>
-            </dl>
-            {/* No sign-out here: the header's user menu is the one way out
-                (D-096) — a second button would be the redundancy §3 forbids. */}
-          </CardContent>
-        </Card>
+      {/* Two columns by intent: who you are (facts + the digits preference)
+          beside account security (password, email). Related forms sit
+          together instead of one long scroll; stacks below lg. */}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('personalHeading')}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-6">
+              <dl className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <dt className="text-sm text-muted-foreground">{t('fullName')}</dt>
+                  <dd className="font-medium">{user.fullName}</dd>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <dt className="text-sm text-muted-foreground">{t('email')}</dt>
+                  {/* The address is Latin script; `dir="ltr"` stops RTL reordering
+                      turning it into something that is not the user's address. */}
+                  <dd dir="ltr" className="text-start font-medium">
+                    {user.email}
+                  </dd>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <dt className="text-sm text-muted-foreground">{t('employeeId')}</dt>
+                  <dd dir="ltr" className="text-start font-medium">
+                    {user.employeeId}
+                  </dd>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <dt className="text-sm text-muted-foreground">{t('department')}</dt>
+                  <dd className="font-medium">{user.department}</dd>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <dt className="text-sm text-muted-foreground">{t('role')}</dt>
+                  <dd className="font-medium">{roleLabel}</dd>
+                </div>
+              </dl>
+              {/* No sign-out here: the header's user menu is the one way out
+                  (D-096) — a second button would be the redundancy §3 forbids. */}
+            </CardContent>
+          </Card>
 
-        <EmailCard current={user.email} />
-        <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
-        <PasswordCard />
+          <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
+        </div>
+
+        <div className="flex flex-col gap-6">
+          <PasswordCard />
+          <EmailCard current={user.email} />
+        </div>
       </div>
     </PortalPage>
   );
@@ -143,7 +161,7 @@ function EmailCard({ current }: { current: string }) {
   }
 
   return (
-    <Card className="mt-6">
+    <Card>
       <CardHeader>
         <CardTitle>{t('emailHeading')}</CardTitle>
       </CardHeader>
@@ -250,7 +268,7 @@ function DigitsCard({
   }
 
   return (
-    <Card className="mt-6">
+    <Card>
       <CardHeader>
         <CardTitle>{t('digitsHeading')}</CardTitle>
       </CardHeader>
@@ -328,7 +346,7 @@ function PasswordCard() {
   }
 
   return (
-    <Card className="mt-6">
+    <Card>
       <CardHeader>
         <CardTitle>{t('passwordHeading')}</CardTitle>
       </CardHeader>

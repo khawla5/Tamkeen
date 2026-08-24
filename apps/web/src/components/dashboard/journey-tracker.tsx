@@ -57,9 +57,17 @@ export function JourneyTracker({ dashboard }: { dashboard: DashboardView }) {
               <span
                 className={cn(
                   'text-sm',
-                  stage === 'current' && 'font-semibold text-foreground',
-                  stage === 'done' && 'font-medium text-primary-700',
-                  stage === 'upcoming' && 'text-neutral-500',
+                  /* At phone widths four labels cannot fit beside their nodes
+                     (TAM-124's 360px gate): only the current stage keeps its
+                     visible label; every stage keeps its accessible name via
+                     the li's aria-label. */
+                  stage === 'current'
+                    ? 'font-semibold text-foreground'
+                    : cn(
+                        'hidden sm:inline',
+                        stage === 'done' && 'font-medium text-primary-700',
+                        stage === 'upcoming' && 'text-neutral-500',
+                      ),
                 )}
               >
                 {t(`journey.${key}`)}
