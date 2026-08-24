@@ -36,8 +36,16 @@ vi.mock('@/components/layout/portal-provider', () => ({
 }));
 
 vi.mock('@/components/layout/portal-page', () => ({
-  PortalPage: ({ title, children }: { title: string; children: ReactNode }) => (
-    <div>
+  PortalPage: ({
+    title,
+    chrome,
+    children,
+  }: {
+    title: string;
+    chrome?: 'nav' | 'bare';
+    children: ReactNode;
+  }) => (
+    <div data-chrome={chrome ?? 'nav'}>
       <h1>{title}</h1>
       {children}
     </div>
@@ -65,6 +73,7 @@ const ASSESSMENT: AssessmentView = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.sessionStorage.clear();
   mocks.get.mockResolvedValue(ASSESSMENT);
   mocks.submit.mockResolvedValue({ id: 'result-1', codeString: 'SIA' });
 });
@@ -187,5 +196,64 @@ describe('assessment flow', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('تعذّر تحميل البيانات');
     expect(screen.getByRole('button', { name: /إعادة المحاولة/ })).toBeInTheDocument();
+  });
+
+  describe('sidebar and drafts (TAM-107, D-073)', () => {
+    it('renders inside the normal shell — the two-item sidebar stays reachable mid-assessment', async () => {
+      const { container } = renderWithProviders(<AssessmentPage />);
+      await screen.findByText('العبارة رقم 1');
+
+      expect(container.querySelector('[data-chrome]')).toHaveAttribute('data-chrome', 'nav');
+    });
+
+    it('resumes where the user left off after leaving and coming back within the session', async () => {
+      const user = userEvent.setup();
+      const first = renderWithProviders(<AssessmentPage />);
+      await screen.findByText('العبارة رقم 1');
+
+      await user.click(screen.getByLabelText('ينطبق عليّ تمامًا'));
+      await user.click(screen.getByRole('button', { name: 'التالي' }));
+      await user.click(screen.getByLabelText('لا ينطبق عليّ إطلاقًا'));
+      await user.click(screen.getByRole('button', { name: 'التالي' }));
+      await screen.findByText('العبارة رقم 3');
+
+      first.unmount();
+      renderWithProviders(<AssessmentPage />);
+
+      expect(await screen.findByText('العبارة رقم 3')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'السابق' }));
+      expect(screen.getByLabelText('لا ينطبق عليّ إطلاقًا')).toBeChecked();
+    });
+
+    it('clears the draft on submit, so a later retake starts clean', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AssessmentPage />);
+      await screen.findByText('العبارة رقم 1');
+
+      for (let i = 0; i < 3; i += 1) {
+        await user.click(screen.getByLabelText('ينطبق عليّ تمامًا'));
+        await user.click(
+          screen.getByRole('button', { name: i === 2 ? 'إنهاء التقييم' : 'التالي' }),
+        );
+      }
+      await waitFor(() => expect(mocks.submit).toHaveBeenCalled());
+
+      expect(window.sessionStorage.length).toBe(0);
+    });
+
+    it('discards a draft that no longer matches the question bank', async () => {
+      window.sessionStorage.setItem(
+        'tamkeen:assessment-draft',
+        JSON.stringify({
+          assessmentId: 'assessment-1',
+          questionIds: ['old-1', 'old-2'],
+          index: 1,
+          answers: { 'old-1': 'x' },
+        }),
+      );
+      renderWithProviders(<AssessmentPage />);
+
+      expect(await screen.findByText('العبارة رقم 1')).toBeInTheDocument();
+    });
   });
 });

@@ -1,6 +1,7 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
@@ -8,6 +9,8 @@ import type { DashboardView } from '@tamkeen/types';
 
 import { LandingView } from '@/components/landing/landing-view';
 import { ErrorState, LoadingState } from '@/components/states';
+import { PreferenceProvider } from './preference-provider';
+import { HOME_FOR_ROLE } from './portal-routes';
 import {
   ApiError,
   authApi,
@@ -43,6 +46,14 @@ export interface PortalValue {
   unreadCertificates: number;
   /** Re-reads the dashboard, e.g. after confirming a path changes the nav. */
   refresh: () => void;
+  /**
+   * Re-reads the session.
+   *
+   * Distinct from `refresh`, which re-reads the *journey*. §4.12 changes the
+   * person's digits preference, which lives on the session — refetching the
+   * dashboard would leave the new choice unapplied until a reload.
+   */
+  refreshSession: () => void;
   /** Re-reads the indicator after the gallery marks certificates seen. */
   refreshNotifications: () => void;
 }
@@ -64,7 +75,7 @@ function isUnauthorized(error: unknown): boolean {
 }
 
 export function PortalProvider({ children }: { children: ReactNode }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const t = useTranslations('portal');
 
@@ -100,21 +111,50 @@ export function PortalProvider({ children }: { children: ReactNode }) {
    * exists once someone is signed in, so `/` still renders the public landing
    * page for everyone else.
    */
-  const wrongPortal = session.data !== undefined && session.data.role !== 'EMPLOYEE';
+  const wrongPortal =
+    session.data !== undefined && session.data.role !== 'EMPLOYEE'
+      ? HOME_FOR_ROLE[session.data.role]
+      : null;
+
+  /*
+   * The catalogue does not exist for a user who has not taken the assessment
+   * (D-071): the sidebar hides it, and a typed or bookmarked /courses URL must
+   * agree with the sidebar, or the nav lies. The dashboard's one card already
+   * says what to do instead. The courses API itself stays open — reading
+   * catalogue data leaks nothing, and every mutation is server-gated behind a
+   * confirmed path — so this is a navigation rule, enforced where navigation
+   * state already lives.
+   */
+  const coursesGated =
+    dashboard.data?.state === 'PRE_ASSESSMENT' &&
+    (pathname === '/courses' || pathname.startsWith('/courses/'));
 
   useEffect(() => {
     if (shouldRedirect) {
       router.replace('/login');
     } else if (wrongPortal) {
-      router.replace('/entity');
+      router.replace(wrongPortal);
+    } else if (coursesGated) {
+      router.replace('/');
     }
-  }, [shouldRedirect, wrongPortal, router]);
+  }, [shouldRedirect, wrongPortal, coursesGated, router]);
 
   if (unauthorized && isPublicRoot) {
     return <LandingView />;
   }
 
-  if (session.isLoading || dashboard.isLoading || shouldRedirect || wrongPortal) {
+  /*
+   * `isInitialLoad`, not `isLoading`: a *refetch* must not unmount the page.
+   *
+   * `refreshSession` is called after a preference is saved, and gating on
+   * `isLoading` swapped the whole portal for a loading state while that
+   * request was in flight — which unmounted the screen and destroyed the
+   * confirmation the person had just earned, so a successful save looked like
+   * nothing had happened. The same defect shipped in Phase 4 behind `DataView`
+   * and was fixed in `useApiQuery`; these three providers were the remaining
+   * callers still reading the old flag.
+   */
+  if (session.isInitialLoad || dashboard.isInitialLoad || shouldRedirect || wrongPortal || coursesGated) {
     /* The redirect is in flight during `shouldRedirect`; showing the loading
        state rather than an error avoids a flash of "something went wrong" on
        what is simply an expired session. */
@@ -145,10 +185,12 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         dashboard: dashboard.data,
         unreadCertificates: notifications.data?.certificates ?? 0,
         refresh: dashboard.refetch,
+        refreshSession: session.refetch,
         refreshNotifications: notifications.refetch,
       }}
     >
-      {children}
+      {/* The person's digits choice, applied to everything below (§4.12). */}
+      <PreferenceProvider numberFormat={session.data.numberFormat}>{children}</PreferenceProvider>
     </PortalContext.Provider>
   );
 }

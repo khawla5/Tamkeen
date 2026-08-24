@@ -147,6 +147,7 @@ These apply to **every** phase. A phase/task is not "done" until it meets all of
 - Prefer a single clear primary action per screen.
 - Context-dependent buttons: show only the one action that applies (e.g. a course shows *either* "أضف إلى مساري" *or* "ابدأ الدورة" *or* "مكتمل" — never all three).
 - Keep steady-state navigation to ~6 items. Flow pages (assessment, results) are not permanent nav.
+- **One navigation loader (D-093):** `NavigationProgress` in the root layout — a top progress bar for every page change, link or programmatic (`useAppRouter()` is the only router hook pages use). In-page data waits use `LoadingState` via `DataView`; never a second spinner for a navigation.
 
 ---
 
@@ -201,7 +202,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - After first sign-in → Dashboard (pre-assessment state).
 
 ### 4.2 Dashboard (الرئيسية) — two states
-- **Pre-assessment:** near-empty. One card briefly explaining the assessment (~20–30 questions, few minutes) + single primary button **"ابدأ التقييم"**. No empty widgets. Nav at this stage: Dashboard, Courses, Profile only.
+- **Pre-assessment:** near-empty. One card briefly explaining the assessment (~20–30 questions, few minutes) + single primary button **"ابدأ التقييم"**. No empty widgets. Nav at this stage: **Dashboard and Profile only** (D-071 — Courses appears once the assessment is done; a pre-assessment visit to any `/courses*` URL redirects to the dashboard).
 - **Post-assessment, no path chosen:** main card says **"اختر مسارك"**, links to Results & Path Selection.
 - **Post-assessment, path active:** "continue where you left off" card (next course/quiz, one primary button) + active path progress bar ("X من Y دورات مكتملة") + compact tiles to My Path, Certificates, CV. Everything shown must be actionable.
 
@@ -209,6 +210,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - One-line intro + start. Questions one at a time or in small groups, progress indicator, back/next.
 - Each answer maps to one or more RIASEC dimensions (see §3A); scoring happens server-side.
 - **No score dump.** On finish, compute the ranked per-dimension profile + top-three **Holland Code**, then transition directly to Results & Path Selection.
+- **Shell and drafts (D-094):** the assessment renders inside the normal shell with the two-item pre-assessment nav (D-071); answers and the current question persist in `sessionStorage` (per tab, option ids only) so leaving mid-assessment and returning resumes in place; a changed bank discards the draft; submitting clears it.
 
 ### 4.4 Results & Path Selection (النتيجة والمسارات)
 - Top: the user's **Holland Code** (the three letters with their Arabic type names, e.g. اجتماعي / بحثي / فني) + a short plain-language description (2–3 sentences) of what the code means. Optionally a compact visual of the six-dimension ranking.
@@ -222,7 +224,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - **Confirm = hard commitment** (Arabic confirmation dialog: one path, cannot switch). On confirm: lock path + course set, fire Moodle enrollment, go to My Path.
 
 ### 4.6 Courses catalog (الدورات)
-- Global browse of all courses (available even pre-assessment). Filters: path-type/category, duration; plus search.
+- Global browse of all courses, **available once the assessment is done** (D-071; before that the catalogue is neither in the nav nor reachable by URL — the new user's one action is the assessment). The courses API itself stays open: reading catalogue data leaks nothing and every mutation is server-gated behind a confirmed path. Filters: path-type/category, duration; plus search.
 - Card: title, short description, category, duration, path(s) it belongs to. Click → Course detail.
 
 ### 4.7 Course detail (صفحة الدورة)

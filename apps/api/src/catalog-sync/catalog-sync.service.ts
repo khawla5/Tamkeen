@@ -222,10 +222,30 @@ export class CatalogSyncService implements OnApplicationBootstrap {
         heldByAnyLearner: heldIds.has(row.id),
       });
 
-      await this.prisma.course.update({
+      /*
+       * `updateMany`, not `update`, so a row that disappeared between the read
+       * above and this write matches nothing instead of throwing.
+       *
+       * The list was gathered in one query and is walked one row at a time; a
+       * reconciliation job that crashes because the world changed underneath it
+       * is reconciling badly. Nothing in the product deletes a course — D-040
+       * forbids it — so in production this is defensive, and it is *free*: there
+       * is nothing to withdraw from a row that is gone, and skipping the audit
+       * entry below keeps the trail from claiming a course was withdrawn when no
+       * course was there.
+       *
+       * It also stops one aborted run poisoning the next: the integration suites
+       * create and remove courses of their own, and a sync running while one of
+       * them cleaned up used to fail the *other* suite.
+       */
+      const { count } = await this.prisma.course.updateMany({
         where: { id: row.id },
         data: { lmsPresent: false, status, lastSyncedAt: new Date() },
       });
+
+      if (count === 0) {
+        continue;
+      }
 
       withdrawn += 1;
 

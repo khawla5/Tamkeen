@@ -48,6 +48,8 @@ const USER: CurrentUser = {
   employeeId: 'E-1',
   department: 'تقنية المعلومات',
   role: 'EMPLOYEE',
+  /* Null follows the system default (§4.12, D-018). */
+  numberFormat: null,
 };
 
 function setDashboard(dashboard: DashboardView) {
@@ -102,10 +104,20 @@ describe('dashboard — ASSESSED_NO_PATH', () => {
     expect(links[0]).toHaveTextContent('اختر مسارك');
   });
 
-  it('mentions the Holland Code the user received', () => {
+  it('shows the Holland Code as Arabic chips in rank order — never the Latin string', () => {
     renderWithProviders(<DashboardPage />);
 
-    expect(screen.getByText(/SIA/)).toBeInTheDocument();
+    const chips = screen.getAllByRole('listitem').map((li) => li.textContent);
+    expect(chips).toEqual(['الاجتماعي', 'البحثي', 'الفني']);
+    expect(screen.queryByText(/SIA/)).toBeNull();
+  });
+
+  it('offers no summaries, path previews or retake here — Results owns those', () => {
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.queryByText(/تميل إلى/)).toBeNull();
+    expect(screen.queryByText('موصى به')).toBeNull();
+    expect(screen.queryByText('إعادة التقييم')).toBeNull();
   });
 
   it('does not offer the assessment again from here', () => {
@@ -122,7 +134,9 @@ describe('dashboard — ACTIVE_PATH', () => {
     path: {
       id: 'path-1',
       name: 'خدمة المتعاملين',
+      riasecLetter: 'S',
       completedCount: 2,
+      inProgressCount: 1,
       totalCount: 7,
       nextCourse: { id: 'upc-3', courseId: 'course-3', title: 'مهارات التواصل المؤسسي' },
     },
@@ -171,5 +185,18 @@ describe('dashboard — ACTIVE_PATH', () => {
     expect(screen.getByRole('link', { name: 'الدورات' })).toHaveAttribute('href', '/courses');
     expect(screen.getByRole('link', { name: 'شهاداتي' })).toHaveAttribute('href', '/certificates');
     expect(screen.getByRole('link', { name: 'السيرة الذاتية' })).toHaveAttribute('href', '/cv');
+  });
+
+  it('shows a status strip — the path by name and type, and the three course counts', () => {
+    setDashboard(ACTIVE);
+    renderWithProviders(<DashboardPage />);
+
+    const strip = screen.getByRole('list', { name: 'حالتك الحالية' });
+    expect(strip).toHaveTextContent('خدمة المتعاملين');
+    expect(strip).toHaveTextContent('الاجتماعي');
+    const counts = [...strip.querySelectorAll('[data-count]')].map((el) => el.textContent);
+    /* completed / in progress / not started, summing to the total. */
+    expect(counts).toEqual(['2', '1', '4']);
+    expect(strip.querySelectorAll('a, button')).toHaveLength(0);
   });
 });

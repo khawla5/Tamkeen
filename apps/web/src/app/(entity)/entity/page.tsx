@@ -49,6 +49,16 @@ function DashboardBody({ data }: { data: EntityDashboardView }) {
 
   return (
     <div className="space-y-6">
+      {/*
+        Which organisation this account acts for.
+        `entityName` has been computed since Phase 4 and rendered nowhere, which
+        was harmless while an account's organisation was fixed at seeding. §4C.2
+        lets an administrator move an account between organisations, so "whose
+        courses am I looking at" became a question the screen has to answer
+        rather than one the reader could assume.
+      */}
+      {data.entityName ? <p className="text-sm text-muted-foreground">{data.entityName}</p> : null}
+
       <section
         aria-label={t('dashboardTitle')}
         className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"

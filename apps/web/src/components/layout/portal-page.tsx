@@ -11,9 +11,12 @@ export interface PortalPageProps {
   /** The single primary action for this page, if any (§3). */
   action?: ReactNode;
   /**
-   * Flow pages (assessment, results, path build) are not destinations, so they
-   * render without the navigation rail — §4 keeps them out of the nav, and
-   * showing the rail beside a step-by-step flow invites abandoning it midway.
+   * Results and path build are not destinations, so they render without the
+   * navigation rail — §4 keeps them out of the nav, and they end in a decision
+   * that the rail would invite wandering away from. The assessment is the
+   * exception (D-094): its audience has a two-item nav (D-071) and a legitimate
+   * reason to check their profile, and a session draft means leaving costs
+   * nothing — so it keeps the rail.
    */
   chrome?: 'nav' | 'bare';
   children: ReactNode;

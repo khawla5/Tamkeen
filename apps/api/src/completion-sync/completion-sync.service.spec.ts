@@ -1,7 +1,7 @@
 import { AuditAction } from '../audit/audit.actions';
 import type { AuditEntry, AuditService } from '../audit/audit.service';
 import type { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
-import type { AppConfigService } from '../config/app-config.module';
+import type { SettingsService } from '../settings/settings.service';
 import type { EmailService } from '../email/email.service';
 import type { LmsPort } from '../moodle/lms.port';
 import { LmsUnavailableError, type LmsCourseProgress } from '../moodle/lms.types';
@@ -142,9 +142,14 @@ function harness(options: {
     },
   } as unknown as AuditService;
 
-  const config = {
-    get: (key: string) => (key === 'PASS_THRESHOLD' ? (options.passThreshold ?? 70) : undefined),
-  } as unknown as AppConfigService;
+  /* The one source of truth for the threshold (D-072). Async, like the real
+     one — reading a setting is a database read, and a fake that resolved
+     synchronously would let an un-awaited call pass here and fail in
+     production. */
+  const settings = {
+    get: (key: string) =>
+      Promise.resolve(key === 'PASS_THRESHOLD' ? (options.passThreshold ?? 70) : undefined),
+  } as unknown as SettingsService;
 
   const email = {
     sendCoursePassed: (
@@ -192,7 +197,7 @@ function harness(options: {
   } as unknown as LmsPort;
 
   return {
-    service: new CompletionSyncService(prisma, audit, config, email, certificates, lms),
+    service: new CompletionSyncService(prisma, audit, settings, email, certificates, lms),
     completions,
     chosen,
     audits,

@@ -171,6 +171,56 @@
    * ambient highlight that drifts region to region. Both obey the global
    * prefers-reduced-motion rule above, which collapses them to a frame.
    */
+  /*
+   * The navigation loader (components/layout/navigation-progress.tsx): a 3px
+   * primary bar along the top edge. Active: grows quickly to most of the width
+   * and then creeps, so a slow route still looks alive. Complete: snaps to
+   * full and fades. Idle: gone. The global reduced-motion rule collapses the
+   * animations, leaving appear/disappear — still a loader, just a still one.
+   */
+  .navigation-progress {
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: 100;
+    height: 3px;
+    width: 0;
+    background: var(--color-primary-600);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .navigation-progress[data-state='active'] {
+    opacity: 1;
+    animation: navigation-progress-grow 8s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+  }
+
+  .navigation-progress[data-state='complete'] {
+    width: 100%;
+    animation: navigation-progress-done 0.25s ease-out forwards;
+  }
+
+  @keyframes navigation-progress-grow {
+    0% {
+      width: 0;
+    }
+    15% {
+      width: 60%;
+    }
+    100% {
+      width: 92%;
+    }
+  }
+
+  @keyframes navigation-progress-done {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
   .map-region {
     /* Fill lives on the group so the drift keyframe (which animates the
        group's fill) actually reaches the path — a fill class on the path

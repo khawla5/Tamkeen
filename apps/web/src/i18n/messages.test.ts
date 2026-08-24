@@ -33,6 +33,37 @@ const withoutPlaceholders = (value: string) => value.replace(/\{[^}]*\}/g, '');
 const ARABIC_SCRIPT = /[؀-ۿ]/;
 const LATIN_LETTERS = /[A-Za-z]/;
 
+/**
+ * The places Latin letters and bare digits are correct in Arabic copy.
+ *
+ * §4C.6's settings screen names *literal configuration values* — the string an
+ * administrator must actually type into the field. `REGISTRATION_MODE` accepts
+ * `restricted` or `admin-only`; `NUMBER_FORMAT` accepts `western` or `arabic`.
+ * Translating those into Arabic would produce a hint that tells the reader to
+ * enter something the validator rejects, which is worse than a Latin word in an
+ * Arabic sentence.
+ *
+ * The same goes for the bounds in a validation message: "between 0 and 100" is
+ * describing the field's accepted range, not formatting a quantity, so it has no
+ * ICU placeholder to come from.
+ *
+ * §4.12's digits options are the third case, and the clearest: "أرقام عربية
+ * (0123)" has to *show* the digits it names, or the choice between the two is
+ * meaningless to the person making it. Those digits are specimens, not
+ * quantities — there is nothing for the formatting layer to format.
+ *
+ * Deliberately narrow — three patterns, not a general escape hatch — so the rule
+ * still holds everywhere else a learner can see.
+ */
+const LITERAL_VALUE_PATHS = [
+  /^admin\.settingHint\./,
+  /^errors\.SETTING_INVALID_/,
+  /^profile\.digits(Western|Arabic)$/,
+];
+
+const carriesLiteralValues = (path: string) =>
+  LITERAL_VALUE_PATHS.some((pattern) => pattern.test(path));
+
 describe('Arabic message catalog', () => {
   it('is not empty', () => {
     expect(leaves.length).toBeGreaterThan(0);
@@ -45,7 +76,10 @@ describe('Arabic message catalog', () => {
   });
 
   it('contains no untranslated English copy', () => {
-    const withLatin = leaves.filter((leaf) => LATIN_LETTERS.test(withoutPlaceholders(leaf.value)));
+    const withLatin = leaves.filter(
+      (leaf) =>
+        !carriesLiteralValues(leaf.path) && LATIN_LETTERS.test(withoutPlaceholders(leaf.value)),
+    );
 
     expect(withLatin.map((leaf) => `${leaf.path}: ${leaf.value}`)).toEqual([]);
   });
@@ -70,7 +104,10 @@ describe('Arabic message catalog', () => {
      * setting, and the digit switch could never reach that number. Digits belong
      * in an ICU placeholder, formatted by the shared layer.
      */
-    const withDigits = leaves.filter((leaf) => /[0-9٠-٩]/.test(withoutPlaceholders(leaf.value)));
+    const withDigits = leaves.filter(
+      (leaf) =>
+        !carriesLiteralValues(leaf.path) && /[0-9٠-٩]/.test(withoutPlaceholders(leaf.value)),
+    );
 
     expect(withDigits.map((leaf) => `${leaf.path}: ${leaf.value}`)).toEqual([]);
   });
@@ -98,5 +135,74 @@ describe('Arabic message catalog', () => {
     ]) {
       expect(paths, `missing ${required}`).toContain(required);
     }
+  });
+});
+
+/**
+ * Namespaces that are looked up dynamically, and the constant that supplies the
+ * keys.
+ *
+ * These are the ones a component reads with a computed key — `t(`riasec.${letter}`)`,
+ * `t(row.action)` — so a missing entry is invisible until the exact row that
+ * needs it renders. Everywhere else next-intl fails loudly at the call site.
+ */
+const DYNAMIC_NAMESPACES = [
+  'admin.auditAction',
+  'admin.riasec',
+  'admin.courseStatus',
+  'admin.coursePublication',
+  'admin.versionStatus',
+  'admin.setting',
+];
+
+function at(path: string): unknown {
+  return path.split('.').reduce<unknown>((node, key) => {
+    if (node !== null && typeof node === 'object') {
+      return (node as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, messages);
+}
+
+describe('dynamically-keyed namespaces', () => {
+  /*
+   * A guard against one specific, real accident: a *label* added at
+   * `admin.auditAction` overwrote the auditAction *namespace* with a
+   * seven-character string, and `Object.assign` onto a string produced
+   * `{ '0': 'ا', '1': 'ل', … }`. Nothing failed to compile, every other test
+   * passed, and every action in the audit trail silently rendered as its raw
+   * code — which the fallback made look deliberate.
+   */
+  it.each(DYNAMIC_NAMESPACES)('%s is an object, not a string', (path) => {
+    const node = at(path);
+
+    expect(typeof node).toBe('object');
+    expect(Array.isArray(node)).toBe(false);
+  });
+
+  it.each(DYNAMIC_NAMESPACES)('%s holds only string values', (path) => {
+    const node = at(path) as Record<string, unknown>;
+
+    /* Numeric keys are the signature of a spread string, which is exactly the
+       shape the accident above produced. */
+    expect(Object.keys(node).some((key) => /^\d+$/.test(key))).toBe(false);
+
+    for (const [key, value] of Object.entries(node)) {
+      expect(typeof value, `${path}.${key}`).toBe('string');
+    }
+  });
+
+  it('has Arabic copy for every audit action the API can emit', () => {
+    /*
+     * Read from the API's own constant rather than restated here. An action
+     * added in a later phase without copy would otherwise reach an administrator
+     * as a raw code, which the deliberate fallback makes look intentional —
+     * the exact failure this file exists to prevent.
+     */
+    const actions = at('admin.auditAction') as Record<string, string>;
+
+    expect(Object.keys(actions).length).toBeGreaterThan(40);
+    expect(actions.ADMIN_SETTING_CHANGED).toBeTruthy();
+    expect(actions.CERTIFICATE_ISSUED).toBeTruthy();
   });
 });

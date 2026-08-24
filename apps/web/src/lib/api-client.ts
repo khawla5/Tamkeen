@@ -16,6 +16,28 @@
  */
 
 import type {
+  AdminAssessmentDraft,
+  AdminAttachableCourse,
+  AdminCoursePage,
+  AdminCourseRow,
+  AdminPathBounds,
+  AdminAuditPage,
+  AdminCertificateTemplateView,
+  AdminReports,
+  AdminSettingsView,
+  AdminPathDetail,
+  AdminPathRow,
+  AdminAssessmentOverview,
+  AdminAssessmentVersion,
+  AdminDashboardView,
+  AdminEntityRow,
+  AdminInviteResult,
+  AdminRegistrationPolicyView,
+  AdminUserDetail,
+  AdminUserPage,
+  AdminUserRow,
+  RiasecLetter,
+  UserRole,
   AssessmentResultView,
   CertificateSummary,
   CvProfile,
@@ -28,6 +50,7 @@ import type {
   CoursePlayerView,
   CourseLanguage,
   CoursePublication,
+  CourseStatus,
   CourseSummary,
   DashboardView,
   EntityAuthorLaunchView,
@@ -39,6 +62,7 @@ import type {
   EntityProfileView,
   EntityUnpublishResult,
   MyPathView,
+  NumberFormat,
   PathDetail,
   PathRecommendations,
   UnreadNotificationsView,
@@ -207,6 +231,11 @@ export const api = {
      a time, and a PUT would silently clear whatever the caller did not
      resend. */
   patch: <T>(path: string, body?: unknown) => request<T>(path, 'PATCH', body),
+  /* Used only where something is genuinely removed. Nothing a *learner* touches
+     is deletable — §2 forbids it for courses, D-033 for results — so this exists
+     for the admin portal's drafts, which are the one thing in the product with
+     no history worth keeping. */
+  delete: <T>(path: string) => request<T>(path, 'DELETE'),
 };
 
 export interface CurrentUser {
@@ -216,6 +245,8 @@ export interface CurrentUser {
   employeeId: string;
   department: string;
   role: 'EMPLOYEE' | 'ENTITY' | 'SUPER_ADMIN';
+  /** The person's digits choice, or null to follow the system (§4.12). */
+  numberFormat: NumberFormat | null;
 }
 
 export const authApi = {
@@ -241,6 +272,27 @@ export const authApi = {
 
   forgotPassword: (email: string) =>
     api.post<{ status: string }>('/api/auth/forgot-password', { email }),
+
+  /** §4.12: change your own password, proving the current one. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post<void>('/api/auth/change-password', { currentPassword, newPassword }),
+
+  /**
+   * §4.12: ask to move the account to a new address.
+   *
+   * Nothing changes until the link sent to the new inbox is opened — which is
+   * why the response says "pending" rather than "done".
+   */
+  changeEmail: (newEmail: string, currentPassword: string) =>
+    api.post<{ status: string }>('/api/auth/change-email', { newEmail, currentPassword }),
+
+  /** §4.12: complete the move, from the link in the new inbox. */
+  confirmEmailChange: (token: string) =>
+    api.post<{ status: string }>('/api/auth/confirm-email-change', { token }),
+
+  /** §4.12: which digits you read. Null follows the system default (D-018). */
+  setNumberFormat: (numberFormat: NumberFormat | null) =>
+    api.patch<void>('/api/auth/me/preferences', { numberFormat }),
 
   resetPassword: (token: string, password: string) =>
     api.post<{ status: string }>('/api/auth/reset-password', { token, password }),
@@ -430,4 +482,259 @@ export const entityApi = {
     api.get<EntityLearnerRow[]>(
       `/api/entity/learners${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`,
     ),
+};
+
+/**
+ * The super-admin portal (§4C).
+ *
+ * A separate object from `entityApi` even though a super-admin may call some of
+ * the entity routes (D-075). The two are different surfaces with different
+ * guards, and merging them would make it hard to see, from the client alone,
+ * which calls require which role.
+ */
+export const adminApi = {
+  dashboard: () => api.get<AdminDashboardView>('/api/admin/dashboard'),
+
+  // §4C.2 — users and organisations
+  listUsers: (
+    filters: {
+      q?: string;
+      role?: UserRole;
+      status?: 'ACTIVE' | 'SUSPENDED';
+      entityId?: string;
+      unverified?: boolean;
+      page?: number;
+    } = {},
+  ) => {
+    const query = new URLSearchParams();
+
+    /* Only what is set. The API rejects unknown and malformed parameters, so an
+       empty `q=` would be a 400 rather than "no filter". */
+    if (filters.q) query.set('q', filters.q);
+    if (filters.role) query.set('role', filters.role);
+    if (filters.status) query.set('status', filters.status);
+    if (filters.entityId) query.set('entityId', filters.entityId);
+    if (filters.unverified) query.set('unverified', 'true');
+    if (filters.page && filters.page > 1) query.set('page', String(filters.page));
+
+    const suffix = query.toString();
+
+    return api.get<AdminUserPage>(`/api/admin/users${suffix ? `?${suffix}` : ''}`);
+  },
+
+  getUser: (userId: string) => api.get<AdminUserDetail>(`/api/admin/users/${userId}`),
+
+  /** Provisions an account. Returns an invitation, never a password. */
+  createUser: (input: {
+    email: string;
+    fullName: string;
+    employeeId: string;
+    department: string;
+    role: UserRole;
+    entityId?: string;
+  }) => api.post<AdminInviteResult>('/api/admin/users', input),
+
+  reinvite: (userId: string) =>
+    api.post<AdminInviteResult>(`/api/admin/users/${userId}/invite`, {}),
+
+  setUserStatus: (userId: string, status: 'ACTIVE' | 'SUSPENDED') =>
+    api.patch<AdminUserRow>(`/api/admin/users/${userId}/status`, { status }),
+
+  setUserRole: (userId: string, role: UserRole, entityId?: string) =>
+    api.patch<AdminUserRow>(`/api/admin/users/${userId}/role`, { role, entityId }),
+
+  registrationPolicy: () => api.get<AdminRegistrationPolicyView>('/api/admin/registration-policy'),
+
+  listEntities: (q?: string) =>
+    api.get<AdminEntityRow[]>(`/api/admin/entities${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+
+  createEntity: (input: {
+    key: string;
+    name: string;
+    contactName?: string;
+    contactEmail?: string;
+  }) => api.post<AdminEntityRow>('/api/admin/entities', input),
+
+  updateEntity: (
+    entityId: string,
+    patch: {
+      name?: string;
+      contactName?: string;
+      contactEmail?: string;
+      status?: 'ACTIVE' | 'SUSPENDED';
+    },
+  ) => api.patch<AdminEntityRow>(`/api/admin/entities/${entityId}`, patch),
+
+  // §4C.3 — the assessment
+  assessmentOverview: () => api.get<AdminAssessmentOverview>('/api/admin/assessment'),
+
+  /**
+   * The draft bank, weights included.
+   *
+   * The one call in this client that receives RIASEC weightings. It answers only
+   * to a SUPER_ADMIN session; the learner's `assessmentApi.getActive()` returns
+   * the same questions with the weights stripped (D-034), and an integration
+   * test greps that response to keep it that way.
+   */
+  assessmentDraft: () => api.get<AdminAssessmentDraft>('/api/admin/assessment/draft'),
+
+  createAssessmentDraft: () => api.post<AdminAssessmentDraft>('/api/admin/assessment/draft', {}),
+
+  discardAssessmentDraft: () => api.delete<void>('/api/admin/assessment/draft'),
+
+  updateAssessmentDraft: (patch: { title?: string; description?: string }) =>
+    api.patch<AdminAssessmentDraft>('/api/admin/assessment/draft', patch),
+
+  addDraftQuestion: (input: { text: string; letter: RiasecLetter }) =>
+    api.post<AdminAssessmentDraft>('/api/admin/assessment/draft/questions', input),
+
+  updateDraftQuestion: (questionId: string, patch: { text?: string }) =>
+    api.patch<AdminAssessmentDraft>(`/api/admin/assessment/draft/questions/${questionId}`, patch),
+
+  removeDraftQuestion: (questionId: string) =>
+    api.delete<AdminAssessmentDraft>(`/api/admin/assessment/draft/questions/${questionId}`),
+
+  reorderDraft: (questionIds: string[]) =>
+    api.patch<AdminAssessmentDraft>('/api/admin/assessment/draft/order', { questionIds }),
+
+  updateDraftOption: (
+    optionId: string,
+    patch: { label?: string; weights?: Partial<Record<RiasecLetter, number>> },
+  ) => api.patch<AdminAssessmentDraft>(`/api/admin/assessment/draft/options/${optionId}`, patch),
+
+  publishAssessment: () =>
+    api.post<AdminAssessmentVersion>('/api/admin/assessment/draft/publish', {}),
+
+  assessmentVersion: (assessmentId: string) =>
+    api.get<AdminAssessmentDraft>(`/api/admin/assessment/versions/${assessmentId}`),
+
+  // §4C.4 — study paths
+  listPaths: () => api.get<AdminPathRow[]>('/api/admin/paths'),
+
+  /** The 5-10 rule. Read-only: there is no endpoint that writes it (D-074). */
+  pathBounds: () => api.get<AdminPathBounds>('/api/admin/paths/bounds'),
+
+  getPath: (pathId: string) => api.get<AdminPathDetail>(`/api/admin/paths/${pathId}`),
+
+  /** Courses not already in the path — drafts and hidden ones included. */
+  attachableCourses: (pathId: string, q?: string) =>
+    api.get<AdminAttachableCourse[]>(
+      `/api/admin/paths/${pathId}/attachable${q ? `?q=${encodeURIComponent(q)}` : ''}`,
+    ),
+
+  createPath: (input: {
+    key: string;
+    name: string;
+    description: string;
+    riasecLetter: RiasecLetter;
+    typicalDurationMinutes?: number;
+  }) => api.post<AdminPathDetail>('/api/admin/paths', input),
+
+  updatePath: (
+    pathId: string,
+    patch: {
+      name?: string;
+      description?: string;
+      riasecLetter?: RiasecLetter;
+      typicalDurationMinutes?: number;
+      displayOrder?: number;
+      isActive?: boolean;
+    },
+  ) => api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}`, patch),
+
+  attachPathCourse: (pathId: string, courseId: string) =>
+    api.post<AdminPathDetail>(`/api/admin/paths/${pathId}/courses`, { courseId }),
+
+  detachPathCourse: (pathId: string, courseId: string) =>
+    api.delete<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/${courseId}`),
+
+  reorderPathCourses: (pathId: string, courseIds: string[]) =>
+    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/order`, { courseIds }),
+
+  // §4C.5 — course oversight
+  listCourses: (
+    filters: {
+      q?: string;
+      publication?: CoursePublication;
+      status?: CourseStatus;
+      entityId?: string;
+      unowned?: boolean;
+      page?: number;
+    } = {},
+  ) => {
+    const query = new URLSearchParams();
+
+    if (filters.q) query.set('q', filters.q);
+    if (filters.publication) query.set('publication', filters.publication);
+    if (filters.status) query.set('status', filters.status);
+    if (filters.entityId) query.set('entityId', filters.entityId);
+    if (filters.unowned) query.set('unowned', 'true');
+    if (filters.page && filters.page > 1) query.set('page', String(filters.page));
+
+    const suffix = query.toString();
+
+    return api.get<AdminCoursePage>(`/api/admin/courses${suffix ? `?${suffix}` : ''}`);
+  },
+
+  /** Hide, restore, or place a course with an organisation. Never sets status. */
+  interveneCourse: (
+    courseId: string,
+    patch: { publication?: CoursePublication; ownerEntityId?: string | null },
+  ) => api.patch<AdminCourseRow>(`/api/admin/courses/${courseId}`, patch),
+
+  // §4C.6 — system settings
+  settings: () => api.get<AdminSettingsView>('/api/admin/settings'),
+
+  updateSetting: (key: string, value: string) =>
+    api.patch<AdminSettingsView>(`/api/admin/settings/${key}`, { value }),
+
+  /** Returns a knob to the environment's value. */
+  resetSetting: (key: string) => api.delete<AdminSettingsView>(`/api/admin/settings/${key}`),
+
+  /**
+   * §4C.7 — the certificate face and a rendered preview of it.
+   *
+   * Read-only: the signature block is three settings, and `updateSetting` above
+   * is the one writer for those rows (D-072).
+   */
+  certificateTemplate: () =>
+    api.get<AdminCertificateTemplateView>('/api/admin/certificate-template'),
+
+  // §4C.8 — audit and reports
+  auditLog: (
+    filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE'; before?: string } = {},
+  ) => {
+    const query = new URLSearchParams();
+
+    if (filters.action) query.set('action', filters.action);
+    if (filters.outcome) query.set('outcome', filters.outcome);
+    if (filters.before) query.set('before', filters.before);
+
+    const suffix = query.toString();
+
+    return api.get<AdminAuditPage>(`/api/admin/audit${suffix ? `?${suffix}` : ''}`);
+  },
+
+  reports: () => api.get<AdminReports>('/api/admin/reports'),
+
+  /**
+   * Where the CSV exports live.
+   *
+   * Plain URLs rather than a fetch-and-blob: the session is an httpOnly cookie
+   * on the API's origin, so an ordinary link carries it and the browser handles
+   * the download — while a fetched blob would need the bytes in memory and a
+   * synthetic anchor to save them.
+   */
+  reportsCsvUrl: () => `${API_URL}/api/admin/reports.csv`,
+
+  auditCsvUrl: (filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE' } = {}) => {
+    const query = new URLSearchParams();
+
+    if (filters.action) query.set('action', filters.action);
+    if (filters.outcome) query.set('outcome', filters.outcome);
+
+    const suffix = query.toString();
+
+    return `${API_URL}/api/admin/audit.csv${suffix ? `?${suffix}` : ''}`;
+  },
 };

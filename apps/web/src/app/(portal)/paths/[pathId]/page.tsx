@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 
@@ -54,7 +55,7 @@ function Builder({ path, onReload }: { path: PathDetail; onReload: () => void })
   const t = useTranslations('pathBuild');
   const translateError = useErrorMessage();
   const format = useFormat();
-  const router = useRouter();
+  const router = useAppRouter();
   const { refresh } = usePortal();
 
   const [selected, setSelected] = useState<string[]>(path.selectedCourseIds);

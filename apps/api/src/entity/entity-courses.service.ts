@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 
 import type { EntityCourseSummary } from '@tamkeen/types';
 
-import { AppConfigService } from '../config/app-config.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { EntityScopeService, type EntityScope } from './entity-scope.service';
 
@@ -27,7 +26,6 @@ export class EntityCoursesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: EntityScopeService,
-    private readonly config: AppConfigService,
   ) {}
 
   async list(scope: EntityScope, query: EntityCourseQuery = {}): Promise<EntityCourseSummary[]> {
@@ -147,10 +145,5 @@ export class EntityCoursesService {
     }
 
     return stats;
-  }
-
-  /** The product pass threshold, surfaced so §4B screens can explain a rate. */
-  get passThreshold(): number {
-    return this.config.get('PASS_THRESHOLD');
   }
 }

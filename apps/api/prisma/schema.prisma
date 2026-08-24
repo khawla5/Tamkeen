@@ -72,6 +72,15 @@ model User {
   /// many API instances are running. Per-IP throttling is separate and is held
   /// outside the database (in-process for now, a shared store once the
   /// deployment scales — D-028), so request IPs are not accumulated at rest.
+  /// Which digits this person sees (§4.12, D-018).
+  ///
+  /// Null means "follow the system default", which is what §4C.6 sets — so the
+  /// ministry can change the default for everyone and anyone who has expressed
+  /// a preference keeps theirs. A per-user *language* is deliberately absent:
+  /// the UI is Arabic-only, and a selector offering English would be a control
+  /// that does nothing.
+  numberFormat String? @map("number_format")
+
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime? @map("locked_until")
   lastLoginAt         DateTime? @map("last_login_at")
@@ -86,6 +95,7 @@ model User {
   certificates  Certificate[]
   cvProfile     CvProfile?
   auditEvents   AuditLog[]     @relation("AuditActor")
+  settingsEdited Setting[]     @relation("SettingEditor")
 
   /// Every attempt, newest wins. Retakes append rather than overwrite (D-033).
   assessmentResults AssessmentResult[]
@@ -136,6 +146,7 @@ model Session {
 enum AuthTokenType {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+  EMAIL_CHANGE
 }
 
 /// Single-use, expiring tokens for email verification and password reset.
@@ -151,6 +162,11 @@ model AuthToken {
 
   type      AuthTokenType
   tokenHash String        @unique @map("token_hash")
+
+  /// The address an EMAIL_CHANGE token is for, held here rather than on the
+  /// user so an abandoned request leaves nothing behind and `users.email` never
+  /// holds an address nobody has proved they can read (§4.12).
+  newEmail String? @map("new_email")
 
   expiresAt  DateTime  @map("expires_at")
   /// Set the moment the token is redeemed, making reuse detectable.
@@ -322,18 +338,89 @@ enum UserPathCourseStatus {
   COMPLETED
 }
 
-/// The assessment itself. One exists in Phase 1; Phase 5 may version it.
+/// A product knob an administrator may change without a deployment (§4C.6).
+///
+/// **Key-value, deliberately, and this is the one place that shape is right.**
+/// Everywhere else in this schema a fact gets a typed column, because a column
+/// is what makes the database able to refuse nonsense. Settings are different in
+/// kind: the set of them changes with the product rather than with the data, and
+/// a table with one column per knob would need a migration every time the
+/// ministry wanted a new one — which is exactly the deployment §4C.6 exists to
+/// avoid.
+///
+/// What replaces the column's typing is `SettingsService`: every value is parsed
+/// and validated against the same Zod schema the environment is, so a malformed
+/// row is refused on write and falls back to the environment on read rather than
+/// reaching a consumer as a string.
+///
+/// **Secrets are not here.** The Moodle web-services token, the database URL and
+/// the SMTP credentials stay environment-only (D-072): a setting readable by the
+/// screen that edits it is a setting that appears in a network response.
+model Setting {
+  /// Matches the environment variable it overrides, e.g. `PASS_THRESHOLD`, so
+  /// the two are obviously the same knob when read side by side.
+  key   String @id
+  value String
+
+  /// Who changed it last. `SetNull` rather than Cascade: the setting outlives
+  /// the account, and the audit log carries the full history regardless.
+  updatedByUserId String? @map("updated_by_user_id") @db.Uuid
+  updatedBy       User?   @relation("SettingEditor", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+/// Where a version of the assessment sits in its life (D-070).
+///
+/// Exactly one DRAFT and one ACTIVE may exist per `key`, enforced by two partial
+/// unique indexes the migration adds by hand — Prisma cannot express a `WHERE`
+/// on a unique index, and a rule this important should be the database's rather
+/// than a service's good intentions (the D-035 discipline).
+///
+/// RETIRED is not deletion. A retired version keeps every question and option a
+/// past response points at, which is the whole mechanism behind D-049's promise
+/// that results are frozen as taken.
+enum AssessmentStatus {
+  /// Being edited. Never served to a taker; freely editable, because no
+  /// response can reference a draft's rows.
+  DRAFT
+  /// The version new takers receive.
+  ACTIVE
+  /// Superseded by a later version. Kept forever.
+  RETIRED
+}
+
+/// One version of the assessment (§4C.3, D-069).
+///
+/// **Copy-on-write.** Editing never mutates a live bank: publishing an edit
+/// inserts a *new* row at `version + 1` with its own copy of every question,
+/// option and weight, and retires the previous one. `assessment_results` keep
+/// pointing at the version they were scored against, and `Restrict` on that
+/// relation means the instrument behind any result still exists — which is what
+/// makes "frozen as taken" literally true rather than only true of the numbers.
+///
+/// So `key` is no longer unique on its own: several rows share `riasec-core` and
+/// differ by version.
 model Assessment {
   id String @id @default(uuid()) @db.Uuid
 
-  /// Stable identifier for seeding and idempotent re-seeding.
-  key         String  @unique
-  /// Bumped when the bank is edited. Results record the version they were
-  /// scored against, so an old result stays interpretable after an edit.
-  version     Int     @default(1)
+  /// Stable identifier for the *instrument*, shared by all its versions.
+  key         String
+  /// 1 for the seeded bank; each published edit is the next integer.
+  version     Int    @default(1)
   title       String
   description String
-  isActive    Boolean @default(true) @map("is_active")
+
+  status AssessmentStatus @default(DRAFT)
+
+  /// When this version became the one new takers receive. Null while DRAFT —
+  /// §4C.3 must show a version *and an effective date*, and a draft has no date
+  /// because it is not in effect.
+  effectiveFrom DateTime? @map("effective_from")
+  /// When a later version superseded it. Null unless RETIRED.
+  retiredAt     DateTime? @map("retired_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -341,6 +428,8 @@ model Assessment {
   questions AssessmentQuestion[]
   results   AssessmentResult[]
 
+  @@unique([key, version])
+  @@index([key, status])
   @@map("assessments")
 }
 

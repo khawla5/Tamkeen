@@ -9,10 +9,10 @@ import { expect, type Page } from '@playwright/test';
  */
 
 /** Answers every question at the strongest level and finishes. */
-export async function completeAssessment(page: Page): Promise<void> {
-  await expect(page.getByText('السؤال 1 من 30')).toBeVisible();
+export async function completeAssessment(page: Page, from = 1): Promise<void> {
+  await expect(page.getByText(`السؤال ${from} من 30`)).toBeVisible();
 
-  for (let step = 1; step <= 30; step += 1) {
+  for (let step = from; step <= 30; step += 1) {
     await expect(page.getByText(`السؤال ${step} من 30`)).toBeVisible();
 
     /* The last radio in the group is the strongest agreement level. Chosen by

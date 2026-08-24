@@ -1,4 +1,15 @@
-import { IsEmail, IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
+
+import { NUMBER_FORMATS } from '@tamkeen/types';
 import { Transform } from 'class-transformer';
 
 /**
@@ -93,4 +104,54 @@ export class ResendVerificationDto {
   @MaxLength(254)
   @normaliseEmail()
   email!: string;
+}
+
+/**
+ * §4.12's change-password form.
+ *
+ * The current password is required and is not validated for length: it is
+ * checked against the stored hash, and rejecting a short one here would leak
+ * that the stored password is short.
+ */
+export class ChangePasswordDto {
+  @IsString()
+  @MaxLength(MAX_PASSWORD)
+  currentPassword!: string;
+
+  @IsString()
+  /* 8 is the absolute floor a request must clear; the configurable
+     PASSWORD_MIN_LENGTH is enforced in the service, as everywhere else. */
+  @MinLength(8, { message: 'PASSWORD_TOO_SHORT' })
+  @MaxLength(MAX_PASSWORD, { message: 'PASSWORD_TOO_LONG' })
+  newPassword!: string;
+}
+
+/** Asking to move the account to a new address (§4.12). */
+export class ChangeEmailDto {
+  @IsEmail({}, { message: 'EMAIL_INVALID' })
+  @MaxLength(254)
+  @normaliseEmail()
+  newEmail!: string;
+
+  /* Required for the same reason the password change requires it, only more
+     so: whoever can move the address can then reset the password and own the
+     account, with the real employee locked out and unnotified. */
+  @IsString()
+  @MaxLength(MAX_PASSWORD)
+  currentPassword!: string;
+}
+
+/** §4.12's digits preference (D-018). */
+export class UpdatePreferencesDto {
+  /**
+   * `western`, `arabic`, or null to follow the system default.
+   *
+   * Validated against the shared constant rather than a literal union, so the
+   * two never drift — `format.ts` is the only thing that acts on this value and
+   * it reads the same list.
+   */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsIn(NUMBER_FORMATS)
+  numberFormat?: string | null;
 }

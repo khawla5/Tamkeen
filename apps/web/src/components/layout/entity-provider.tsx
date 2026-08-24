@@ -1,12 +1,14 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
 import type { EntityProfileView } from '@tamkeen/types';
 
 import { ErrorState, LoadingState } from '@/components/states';
+import { PreferenceProvider } from './preference-provider';
+import { HOME_FOR_ROLE } from './portal-routes';
 import { ApiError, authApi, entityApi, type CurrentUser } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 
@@ -49,26 +51,49 @@ function isUnauthorized(error: unknown): boolean {
 }
 
 export function EntityProvider({ children }: { children: ReactNode }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const t = useTranslations('portal');
 
   const session = useApiQuery(() => authApi.me(), []);
   const entity = useApiQuery(() => entityApi.profile(), []);
 
   const unauthorized = isUnauthorized(session.error) || isUnauthorized(entity.error);
-  /* An employee who typed /entity. Sent to their own portal rather than shown a
-     permission error, which tells them nothing they can act on. */
-  const wrongPortal = session.data !== undefined && session.data.role === 'EMPLOYEE';
+  /*
+   * Anyone who typed /entity and does not work here. Sent to their own portal
+   * rather than shown a permission error, which tells them nothing they can act
+   * on.
+   *
+   * A super-admin *may* call the entity API — §4C.5 gives them oversight of
+   * every organisation's courses, and the scope resolver returns them an
+   * unfiltered read (D-075). What they may not usefully do is sit inside these
+   * screens, which are shaped around one organisation and would show them an
+   * empty profile and a nameless dashboard. Their oversight has its own pages.
+   */
+  const wrongPortal =
+    session.data !== undefined && session.data.role !== 'ENTITY'
+      ? HOME_FOR_ROLE[session.data.role]
+      : null;
 
   useEffect(() => {
     if (unauthorized) {
       router.replace('/login');
     } else if (wrongPortal) {
-      router.replace('/');
+      router.replace(wrongPortal);
     }
   }, [unauthorized, wrongPortal, router]);
 
-  if (session.isLoading || entity.isLoading || unauthorized || wrongPortal) {
+  /*
+   * `isInitialLoad`, not `isLoading`: a *refetch* must not unmount the page.
+   *
+   * `refreshSession` is called after a preference is saved, and gating on
+   * `isLoading` swapped the whole portal for a loading state while that
+   * request was in flight — which unmounted the screen and destroyed the
+   * confirmation the person had just earned, so a successful save looked like
+   * nothing had happened. The same defect shipped in Phase 4 behind `DataView`
+   * and was fixed in `useApiQuery`; these three providers were the remaining
+   * callers still reading the old flag.
+   */
+  if (session.isInitialLoad || entity.isInitialLoad || unauthorized || wrongPortal) {
     /* A redirect is in flight in the last two cases; showing the loading state
        rather than an error avoids a flash of "something went wrong" on what is
        simply the wrong address. */
@@ -100,7 +125,8 @@ export function EntityProvider({ children }: { children: ReactNode }) {
         refresh: entity.refetch,
       }}
     >
-      {children}
+      {/* The person's digits choice, applied to everything below (§4.12). */}
+      <PreferenceProvider numberFormat={session.data.numberFormat}>{children}</PreferenceProvider>
     </EntityContext.Provider>
   );
 }

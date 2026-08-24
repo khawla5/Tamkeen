@@ -9,6 +9,8 @@ import type { UserRole } from '@tamkeen/types';
 export const SESSION_COOKIE = 'tamkeen_session';
 
 export interface AuthenticatedUser {
+  /** The person's digits preference, or null to follow the system (§4.12). */
+  numberFormat?: string | null;
   id: string;
   email: string;
   fullName: string;
@@ -77,6 +79,7 @@ export class SessionService {
             department: true,
             role: true,
             status: true,
+            numberFormat: true,
           },
         },
       },
@@ -98,6 +101,7 @@ export class SessionService {
       department: session.user.department,
       role: session.user.role,
       sessionId: session.id,
+      numberFormat: session.user.numberFormat,
     };
   }
 
@@ -133,6 +137,21 @@ export class SessionService {
    * changed the password keeps their new session, and any session an attacker
    * still holds dies with the old credential.
    */
+  /**
+   * Revokes every session but one.
+   *
+   * For a password change (§4.12): the point is to evict anyone *else* holding a
+   * session, and signing the user out of the tab they are looking at — moments
+   * after they proved themselves with their current password — would make the
+   * safe action feel like a failure and teach them not to repeat it.
+   */
+  async revokeAllForUserExcept(userId: string, sessionId: string): Promise<void> {
+    await this.prisma.session.updateMany({
+      where: { userId, id: { not: sessionId }, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   async revokeAllForUser(userId: string): Promise<void> {
     await this.prisma.session.updateMany({
       where: { userId, revokedAt: null },
