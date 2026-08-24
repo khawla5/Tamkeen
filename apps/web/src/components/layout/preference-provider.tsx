@@ -2,9 +2,9 @@
 
 import type { ReactNode } from 'react';
 
-import { DEFAULT_FORMAT_CONTEXT, type NumberFormat } from '@tamkeen/types';
+import type { NumberFormat } from '@tamkeen/types';
 
-import { FormatProvider } from '@/i18n/format-provider';
+import { FormatProvider, useFormat } from '@/i18n/format-provider';
 
 /**
  * Re-provides the formatting context with the signed-in person's digits choice
@@ -16,10 +16,19 @@ import { FormatProvider } from '@/i18n/format-provider';
  * what D-018 meant by "a single locale switch point": one implementation, one
  * place to change what it is told.
  *
- * Null means "follow the system default", which is what §4C.6 sets. So the
- * ministry can change the default for everyone and anybody who has expressed a
- * preference keeps theirs — and a person who has not is not silently pinned to
- * whatever the default happened to be when they registered.
+ * **It always renders the provider, including when there is no preference.**
+ * Returning `children` bare in that case looks like the cheaper path and is a
+ * trap: React compares element types by position, so the first time somebody
+ * saved a preference the tree shape changed, the entire portal below unmounted
+ * and remounted, and every piece of page state went with it — the "saved"
+ * confirmation they had just earned, a half-filled form, an open dialog. The
+ * shape has to be constant for the subtree to survive the change.
+ *
+ * **And the fallback is the inherited context, not a fresh default.** The root
+ * layout resolves `NUMBER_FORMAT` from the environment, so a deployment can ship
+ * Arabic-Indic digits as its default; substituting `DEFAULT_FORMAT_CONTEXT` here
+ * would quietly override that for every signed-in person who never expressed a
+ * preference — which is the opposite of what null means.
  *
  * Wrapped around each portal rather than the root layout, because the root
  * renders for signed-out visitors too and there is nobody to have a preference.
@@ -31,15 +40,10 @@ export function PreferenceProvider({
   numberFormat: NumberFormat | null;
   children: ReactNode;
 }) {
-  if (numberFormat === null) {
-    /* Nothing to override. Rendering the children plainly keeps the root
-       layout's context — the system default — rather than re-asserting a copy
-       of it that could drift. */
-    return <>{children}</>;
-  }
+  const { context } = useFormat();
 
   return (
-    <FormatProvider context={{ ...DEFAULT_FORMAT_CONTEXT, numberFormat }}>
+    <FormatProvider context={numberFormat === null ? context : { ...context, numberFormat }}>
       {children}
     </FormatProvider>
   );

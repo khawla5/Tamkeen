@@ -82,7 +82,18 @@ export function EntityProvider({ children }: { children: ReactNode }) {
     }
   }, [unauthorized, wrongPortal, router]);
 
-  if (session.isLoading || entity.isLoading || unauthorized || wrongPortal) {
+  /*
+   * `isInitialLoad`, not `isLoading`: a *refetch* must not unmount the page.
+   *
+   * `refreshSession` is called after a preference is saved, and gating on
+   * `isLoading` swapped the whole portal for a loading state while that
+   * request was in flight — which unmounted the screen and destroyed the
+   * confirmation the person had just earned, so a successful save looked like
+   * nothing had happened. The same defect shipped in Phase 4 behind `DataView`
+   * and was fixed in `useApiQuery`; these three providers were the remaining
+   * callers still reading the old flag.
+   */
+  if (session.isInitialLoad || entity.isInitialLoad || unauthorized || wrongPortal) {
     /* A redirect is in flight in the last two cases; showing the loading state
        rather than an error avoids a flash of "something went wrong" on what is
        simply the wrong address. */
