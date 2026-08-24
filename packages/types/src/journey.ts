@@ -106,7 +106,12 @@ export interface DashboardView {
     status: UserPathCourseStatus;
   }>;
   /** ACTIVE_PATH only: the most recently issued certificate, if any. */
-  latestCertificate: { id: string; type: 'COURSE' | 'PATH'; subjectTitle: string; issuedAt: string } | null;
+  latestCertificate: {
+    id: string;
+    type: 'COURSE' | 'PATH';
+    subjectTitle: string;
+    issuedAt: string;
+  } | null;
   /** The last three things that happened, newest first. */
   recentActivity: DashboardActivity[];
   /** Present only in ACTIVE_PATH. */

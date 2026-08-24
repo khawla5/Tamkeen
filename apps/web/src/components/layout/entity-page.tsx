@@ -23,7 +23,13 @@ export function EntityPage({ title, action, children }: EntityPageProps) {
    * four destinations all exist from the moment the account does.
    */
   return (
-    <AppShell title={title} action={action} items={ENTITY_NAV} user={user} profileHref="/entity/profile">
+    <AppShell
+      title={title}
+      action={action}
+      items={ENTITY_NAV}
+      user={user}
+      profileHref="/entity/profile"
+    >
       {children}
     </AppShell>
   );
