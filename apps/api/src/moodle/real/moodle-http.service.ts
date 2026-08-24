@@ -273,26 +273,44 @@ export class MoodleHttpService implements LmsPort {
   }
 
   /**
-   * Writes a profile name change through to the LMS (§4.12).
+   * Writes a profile name change and/or a confirmed email change through to
+   * the LMS (§4.12).
    *
    * `core_user_update_users`, the counterpart of the create call `provisionUser`
-   * uses. Idempotent by construction — resending the same names is a no-op
+   * uses. Idempotent by construction — resending the same values is a no-op
    * write in Moodle, not a second account or an error — which is what lets a
    * caller retry after an ambiguous failure the way it already does for
    * `enrol`.
    *
+   * **Never sends `username` (D-038 addendum).** The payload is built from
+   * only whichever of `fullName`/`email` the caller supplied; the id is the
+   * one Moodle identity that never changes here. An email change moves what
+   * the account *displays* — it must not, and here cannot, move what the
+   * account is *found by*, since `provisionUser`/`findUserByEmail` resolve
+   * through a username derived once and never revisited.
+   *
    * Failure here is the caller's to absorb, not this adapter's: a profile save
-   * must not be undone because the LMS was briefly unreachable, and D-036's
-   * reconciliation pattern is what owns catching this up later, not a retry
-   * loop inside this method.
+   * or a confirmed email change must not be undone because the LMS was
+   * briefly unreachable, and D-036's reconciliation pattern is what owns
+   * catching this up later, not a retry loop inside this method.
    */
   async updateUser(input: UpdateUserInput): Promise<void> {
-    const { firstname, lastname } = splitFullName(input.fullName);
+    const user: { id: LmsUserId; firstname?: string; lastname?: string; email?: string } = {
+      id: input.lmsUserId,
+    };
+
+    if (input.fullName !== undefined) {
+      const { firstname, lastname } = splitFullName(input.fullName);
+      user.firstname = firstname;
+      user.lastname = lastname;
+    }
+
+    if (input.email !== undefined) {
+      user.email = normaliseEmail(input.email);
+    }
 
     try {
-      await this.client.call('core_user_update_users', {
-        users: [{ id: input.lmsUserId, firstname, lastname }],
-      });
+      await this.client.call('core_user_update_users', { users: [user] });
     } catch (error) {
       if (error instanceof LmsUnavailableError) {
         throw error;

@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 
@@ -9,6 +11,7 @@ import { AuditAction, AuditReason, type AuditReasonCode } from '../audit/audit.a
 import { AuditService } from '../audit/audit.service';
 import { AppConfigService } from '../config/app-config.module';
 import { EmailService } from '../email/email.service';
+import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashPassword, verifyPassword } from '../common/password';
 import { expiryFromNow, generateToken, hashToken } from '../common/secure-token';
@@ -45,12 +48,15 @@ export interface LoginResult {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
     private readonly audit: AuditService,
     private readonly email: EmailService,
     private readonly sessions: SessionService,
+    @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
 
   /**
@@ -655,6 +661,7 @@ export class AuthService {
         newEmail: true,
         expiresAt: true,
         consumedAt: true,
+        user: { select: { moodleUserId: true } },
       },
     });
 
@@ -690,6 +697,11 @@ export class AuthService {
          something else — so it is refused without being consumed. */
       return refuse(AuditReason.TOKEN_INVALID, token.userId);
     }
+
+    /* Narrowed non-null by the guard above; captured once so the best-effort
+       Moodle sync at the end of this method doesn't lean on control-flow
+       narrowing surviving several `await`s later. */
+    const newEmail = token.newEmail;
 
     /*
      * Re-checked at redemption, not only at request: the address was free when
@@ -736,11 +748,63 @@ export class AuthService {
       targetType: 'User',
       targetId: token.userId,
     });
+
+    /* Not-yet-provisioned users (§4.12 ticket): nothing exists in the LMS yet
+       to update, and provisioning later picks up whatever email is current by
+       then — there is no stale record to leave behind. */
+    if (token.user.moodleUserId !== null) {
+      await this.propagateEmailToLms(
+        token.userId,
+        token.user.moodleUserId,
+        newEmail,
+        context.ipAddress ?? null,
+      );
+    }
   }
 
   /** Stores, or clears, the person's digits preference (§4.12, D-018). */
   async setNumberFormat(userId: string, numberFormat: string | null): Promise<void> {
     await this.prisma.user.update({ where: { id: userId }, data: { numberFormat } });
+  }
+
+  /**
+   * Best-effort by design (§4.12, D-036), mirroring `ProfileService`'s name
+   * propagation: the address has already moved in our database and every
+   * session is already revoked by the time this runs, so a failure here is
+   * recorded and left alone rather than retried inline or surfaced to the
+   * caller as an error the confirmation did not actually have.
+   *
+   * **The Moodle username is never re-derived (D-038 addendum).** It was
+   * fixed once, at `provisionUser` time, against whatever address was
+   * current then — `moodle_user_id` is the durable link, not the username
+   * and not the email. This call moves what the LMS displays; it must not,
+   * and `LmsPort.updateUser` will not, change what the account is found by.
+   */
+  private async propagateEmailToLms(
+    userId: string,
+    moodleUserId: number,
+    email: string,
+    ipAddress: string | null,
+  ): Promise<void> {
+    try {
+      await this.lms.updateUser({ lmsUserId: moodleUserId, email });
+    } catch (error) {
+      this.logger.error(
+        `Failed to propagate an email change to Moodle for user ${userId}: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+
+      await this.audit.record({
+        action: AuditAction.PROFILE_LMS_SYNC_FAILED,
+        outcome: 'FAILURE',
+        actorUserId: userId,
+        ipAddress,
+        targetType: 'user',
+        targetId: userId,
+        detail: { field: 'email' },
+      });
+    }
   }
 
   /** Increments the failure counter and locks the account at the threshold. */

@@ -75,10 +75,12 @@ export const AuditAction = {
   /** An employee changed their own name and/or department. */
   PROFILE_UPDATED: 'PROFILE_UPDATED',
   /**
-   * The save itself succeeded; propagating a name change to the LMS did not.
-   * Recorded so the mismatch is discoverable rather than silent — the profile
-   * update is never rolled back over this, and retrying is D-036's
-   * reconciliation pattern to own, not this call site.
+   * The primary change already succeeded — a profile save, or a confirmed
+   * email change (§4.12, D-038 addendum) — but propagating it to the LMS did
+   * not. Recorded so the mismatch is discoverable rather than silent; the
+   * primary change is never rolled back over this, and retrying is D-036's
+   * reconciliation pattern to own, not this call site. `detail.field`
+   * ('fullName' or 'email') distinguishes which propagation failed.
    */
   PROFILE_LMS_SYNC_FAILED: 'PROFILE_LMS_SYNC_FAILED',
 

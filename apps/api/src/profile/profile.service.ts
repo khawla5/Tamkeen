@@ -140,6 +140,9 @@ export class ProfileService {
         ipAddress,
         targetType: 'user',
         targetId: userId,
+        /* Distinguishes this from an email-sync failure (§4.12's email flow
+           reuses the same action code) without carrying either value. */
+        detail: { field: 'fullName' },
       });
     }
   }

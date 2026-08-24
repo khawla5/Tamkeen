@@ -791,5 +791,80 @@ describe('Profile (e2e)', () => {
 
       await send('post', '/api/auth/confirm-email-change', { token }).expect(409);
     });
+
+    it('updates Moodle’s email for a provisioned user, and leaves the username stable (D-038 addendum)', async () => {
+      const email = await account('em-lms-sync');
+      const target = `prof-${RUN_ID}-em-lms-sync-new@ministry.gov.example`;
+      const userId = await userIdFor(await signIn(email));
+
+      const provisioned = await lms.provisionUser({
+        email,
+        fullName: 'موظف مزود',
+        externalUserId: userId,
+      });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { moodleUserId: provisioned.lmsUserId },
+      });
+
+      const token = await requestChange(email, target);
+      await send('post', '/api/auth/confirm-email-change', { token }).expect(200);
+
+      /* The account is still reachable by the *original* address — its
+         Moodle username was derived once, at provisioning, and this change
+         must not have moved it (D-038 addendum). */
+      const byOriginal = await lms.findUserByEmail(email);
+      expect(byOriginal?.lmsUserId).toBe(provisioned.lmsUserId);
+
+      /* And not reachable by the new one: no account holds a username
+         derived from it, since re-deriving on an email change is exactly
+         what D-038 forbids. This is the real adapter's constraint too, not
+         a mock-only quirk. */
+      expect(await lms.findUserByEmail(target)).toBeNull();
+    });
+
+    it('does not touch Moodle for a user who was never provisioned', async () => {
+      const email = await account('em-unprovisioned');
+      const target = `prof-${RUN_ID}-em-unprovisioned-new@ministry.gov.example`;
+      const token = await requestChange(email, target);
+
+      await send('post', '/api/auth/confirm-email-change', { token }).expect(200);
+
+      /* Never provisioned in the mock at all — if the service had reached
+         for moodle.updateUser regardless, there would be a record to find. */
+      expect(await lms.findUserByEmail(email)).toBeNull();
+      expect(await lms.findUserByEmail(target)).toBeNull();
+    });
+
+    it('confirms successfully and audits the failure when Moodle propagation fails', async () => {
+      const email = await account('em-lms-fail');
+      const target = `prof-${RUN_ID}-em-lms-fail-new@ministry.gov.example`;
+      const userId = await userIdFor(await signIn(email));
+
+      /* An id the mock never provisioned — updateUser refuses it exactly as
+         a real Moodle would refuse an unknown account, without this test
+         having to fabricate an outage. */
+      await prisma.user.update({ where: { id: userId }, data: { moodleUserId: 8_888_887 } });
+
+      const token = await requestChange(email, target);
+
+      /* The confirmation itself is unaffected by the LMS refusing — that is
+         the whole point of best-effort propagation (§4.12, D-036). */
+      await send('post', '/api/auth/confirm-email-change', { token }).expect(200);
+
+      const moved = await prisma.user.findUnique({ where: { email: target } });
+      expect(moved).not.toBeNull();
+
+      const failure = await prisma.auditLog.findFirst({
+        where: { actorUserId: userId, action: 'PROFILE_LMS_SYNC_FAILED' },
+        orderBy: { occurredAt: 'desc' },
+      });
+      expect(failure).toMatchObject({
+        outcome: 'FAILURE',
+        targetType: 'user',
+        targetId: userId,
+        metadata: { field: 'email' },
+      });
+    });
   });
 });

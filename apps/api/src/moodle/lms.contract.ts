@@ -163,6 +163,52 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
           lms.updateUser({ lmsUserId: 99_999_999, fullName: 'لا أحد' }),
         ).rejects.toThrow();
       });
+
+      it('moves the email without re-deriving the username (D-038 addendum)', async () => {
+        /*
+         * The property a confirmed email change (§4.12) depends on: the
+         * account stays keyed on the username derived from its *original*
+         * address. Resolving it by the *new* address must fail exactly like
+         * looking up an address Moodle was never told about — because under
+         * D-038's least-privilege token, that is indistinguishable from
+         * "no such account".
+         */
+        const provisioned = await lms.provisionUser({
+          email: 're-email-a@ministry.gov.example',
+          fullName: 'قبل التغيير',
+          externalUserId: 'ext-re-email',
+        });
+
+        await lms.updateUser({
+          lmsUserId: provisioned.lmsUserId,
+          email: 're-email-b@ministry.gov.example',
+        });
+
+        const byOriginal = await lms.findUserByEmail('re-email-a@ministry.gov.example');
+        expect(byOriginal?.lmsUserId).toBe(provisioned.lmsUserId);
+
+        expect(await lms.findUserByEmail('re-email-b@ministry.gov.example')).toBeNull();
+      });
+
+      it('is idempotent for an email write — writing the same address twice does not throw', async () => {
+        const provisioned = await lms.provisionUser({
+          email: 're-email-twice@ministry.gov.example',
+          fullName: 'ثابت',
+          externalUserId: 'ext-re-email-twice',
+        });
+
+        await lms.updateUser({
+          lmsUserId: provisioned.lmsUserId,
+          email: 're-email-twice-new@ministry.gov.example',
+        });
+
+        await expect(
+          lms.updateUser({
+            lmsUserId: provisioned.lmsUserId,
+            email: 're-email-twice-new@ministry.gov.example',
+          }),
+        ).resolves.not.toThrow();
+      });
     });
 
     describe('listCourses', () => {
