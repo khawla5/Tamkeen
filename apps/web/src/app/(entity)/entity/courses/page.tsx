@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -169,7 +170,7 @@ function CreateCourseForm({
 }) {
   const t = useTranslations('entity');
   const tActions = useTranslations('actions');
-  const router = useRouter();
+  const router = useAppRouter();
   const translateError = useErrorMessage();
 
   const [title, setTitle] = useState('');

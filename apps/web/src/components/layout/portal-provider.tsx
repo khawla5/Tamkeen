@@ -1,6 +1,7 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
@@ -74,7 +75,7 @@ function isUnauthorized(error: unknown): boolean {
 }
 
 export function PortalProvider({ children }: { children: ReactNode }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const t = useTranslations('portal');
 
@@ -135,7 +136,6 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       router.replace(wrongPortal);
     } else if (coursesGated) {
       router.replace('/');
-    }
     }
   }, [shouldRedirect, wrongPortal, coursesGated, router]);
 

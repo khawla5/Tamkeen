@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -25,7 +25,7 @@ import { ApiError, authApi } from '@/lib/api-client';
 export default function LoginPage() {
   const t = useTranslations('auth');
   const translateError = useErrorMessage();
-  const router = useRouter();
+  const router = useAppRouter();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

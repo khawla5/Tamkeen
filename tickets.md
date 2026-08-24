@@ -101,7 +101,7 @@
   - Watch `e2e/journey-happy-path.spec.ts`: it asserts `/courses` URLs mid-journey (lines ~117, ~182). Those steps run post-assessment so they should survive, but verify rather than assume; the new pre-assessment assertions belong in the same spec so ordering is explicit.
   - The dashboard's pre-assessment card and copy need no change — it already presents the single "ابدأ التقييم" action (§4.2).
 
-## TAM-107 — Sidebar during the assessment + resume-within-session drafts
+## TAM-107 — Sidebar during the assessment + resume-within-session drafts — **DONE** (`feature/tam-107-assessment-sidebar`)
 
 - **Labels:** `assessment-gating`, `frontend`, `spec-change`
 - **Priority:** High
@@ -116,6 +116,7 @@
   - Submitting the assessment clears the draft; a later retake starts clean at question 1.
   - A draft referencing question ids no longer in the bank is discarded silently (bank can be edited in Phase 5).
   - Results and path-build still render bare — asserted, not assumed.
+  **What shipped (2026-08-23):** as specified. `chrome="bare"` removed from the assessment page (results and path build keep it; the rationale comment in `portal-page.tsx` rewritten); a sessionStorage draft keyed to the assessment id + question ids, written through on every answer/step, restored on mount, discarded when the bank differs, cleared on submit. 4 new component tests; the journey e2e now answers two statements, leaves to the profile via the sidebar, returns and resumes on statement 3 (`completeAssessment` gained a `from` parameter). Also fixed a leftover invalid class from the token migration on the option cards. D-073 recorded; CLAUDE.md §4.3 updated.
   **Implementation notes (verified):**
   - The chrome switch is one line: `src/app/(portal)/assessment/page.tsx` line ~34 passes `chrome="bare"` to `PortalPage` — remove it and the default `'nav'` chrome renders `AppShell` with `navForState(dashboard.state)`, which after TAM-106 yields the two gated items for `PRE_ASSESSMENT` automatically. No new layout code.
   - Draft state lives in `AssessmentFlow` (same file): `answers` (`Record<string, string>`) and `index` are plain `useState`. Hydrate them from sessionStorage on mount and write through on change; key by the assessment's question-id list so a changed bank invalidates the draft. Clear the key in the submit success handler (where it already calls `usePortal().refresh()` and routes to results).
@@ -394,3 +395,17 @@
 - **Description:**
   The TAM-105 pattern for the portal: an e2e spec that signs in, drives to every learner and entity page in a representative state, runs axe (WCAG 2.1 A/AA) and asserts no horizontal overflow at 360/768/1280; a keyboard walk of the shell (skip link → header actions → sidebar → page action). Screenshot review at the three widths; findings fixed or ticketed. Docs: decisions.md entry for the light sidebar and the portal shell; CLAUDE.md §4 page specs updated where the shell changed them; progress.md.
   **Acceptance:** gate green in CI; no open critical/high findings; docs updated.
+
+  Once the tokens are in and the public surfaces prove the direction, align the signed-in portal's **components and patterns** (sidebar/navigation, cards, forms, tables, empty/loading/error states, the recommended-path treatment, the status strip) to Platforms Code equivalents — colors will already have changed via TAM-115. Break this into per-surface tickets at that point; the currently written tickets (TAM-106–114) remain valid in behaviour and should be implemented against the new tokens, not blocked on this stub.
+
+---
+
+> **Epic label: `app-chrome`** — cross-cutting behaviour every page shares.
+
+## TAM-122 — One navigation loader across the app — **DONE** (`feature/navigation-loader`, off `feature/dga-alignment`)
+
+- **Labels:** `app-chrome`, `frontend`, `design-system`
+- **Priority:** Medium
+- **Pre-requisite:** none
+- **What shipped (2026-08-23):** `NavigationProgress` mounted once in the root layout — a 3px primary top bar that starts on any internal link click (capture phase, so `next/link` and plain anchors alike), on back/forward, and on programmatic `push`/`replace` through the new `useAppRouter()` (all seven call sites rewired; it is now the only router hook pages use); completes on the route change; one polite "جارٍ الانتقال…" status per navigation; reduced-motion collapses the animation. In-page data waits keep `LoadingState`. D-072 recorded; CLAUDE.md §3 notes the rule. 5 component tests (idle → active → complete; external/new-window/hash/modified clicks ignored; programmatic start; a11y shape).
+

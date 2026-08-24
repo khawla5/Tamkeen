@@ -6,12 +6,11 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **complete and verified; [PR #13](https://github.com/AbdullahDamati/tamkeen/pull/13) open against `main`, awaiting human review.**
-- **Last completed task:** **The Phase 5 verification pass.** It found a missing deliverable (email re-verification, §4.12 — now built, D-088) and two defects (the portals unmounting themselves on a refetch, D-089; a duplicate field label). Browser coverage added for the five admin screens and the profile, which had none.
-- **Next task:** **human review of PR #13.** Do not merge it (CLAUDE.md §0). Once it lands: **Phase 6 — hardening**, which already inherits a named list (see Deferred/owed).
-- **Active branch:** `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd`, which contains Phases 0-4. Pushed, with **PR #13** covering the whole of Phase 5 (D-008) — 13 commits, one per sub-phase plus the verification pass.
-- **Phase 4 is merged** (PR #6, `origin/main` @ `f1f0dcd`). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
-- **Test totals:** 599 API unit · 403 web component · 515 API integration against real PostgreSQL · 84 browser e2e in Chromium — **1601 automated**, plus the real-Chromium verification scripts from Phase 3. All green; the integration suite was run three consecutive times end to end. Typecheck, lint and format clean. **One transient integration failure is recorded in the 2026-08-24 entry and was never reproduced — read it before dismissing a similar one.**
+- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **merged** (PR #13, with PR #12 merging TAM-106 before it). In parallel, the **design-direction workstream** (Platforms Code, D-069) continues on stacked feature branches off the old `feature/dga-alignment` line, now being rebased onto `main`.
+- **Last completed task (this workstream):** **TAM-107 — the assessment keeps the sidebar; a session draft makes leaving free** (`feature/tam-107-assessment-sidebar`, stacked on `feature/navigation-loader` — TAM-122, D-093). TAM-106 is merged; the auth epic (TAM-101–105) is merged.
+- **Next task:** **TAM-108** — the dashboard: Holland chips after the assessment, the status strip on an active path; then the rest of the stack (TAM-123, TAM-112) and the ticket backlog (TAM-109–121, 124–128).
+- **Phase 4 is merged** (PR #6). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
+- **Test totals (main, post-Phase 5):** 599 API unit · 403 web component · 515 API integration against real PostgreSQL · 84 browser e2e in Chromium — **1601 automated**, plus the real-Chromium verification scripts from Phase 3. **One transient integration failure is recorded in the 2026-08-24 entry and was never reproduced — read it before dismissing a similar one.**
 
 ### Phase 5 sub-phase tracker
 - [x] **5.1 Admin foundation + Dashboard** (§4C.1) — RBAC, route group, shell, integration health
@@ -143,6 +142,20 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-23 — TAM-107: the assessment keeps its sidebar; a draft makes leaving free
+
+Branch `feature/tam-107-assessment-sidebar`, stacked on the loader branch so the stack stays linear. Removing one `chrome="bare"` prop put the assessment inside the shell with the two-item nav; the real work is the draft — answers and the current question written through to `sessionStorage` on every change, restored on return, discarded if the bank has changed, cleared on submit. The rationale in `portal-page.tsx` that justified hiding the rail on *every* flow page now says why the assessment is the exception (D-094 — authored as D-073, renumbered at rebase). The journey e2e proves it against the live app: answer two, leave to the profile through the sidebar, come back, statement 3 is waiting. A leftover invalid class from the token migration (`hover:border-neutral-400-foreground/50`) was fixed in passing. 326 web unit tests, typecheck, lint, prettier, journey e2e.
+
+### 2026-08-23 — One loader for every navigation (TAM-122, D-093 — authored as D-072, renumbered at rebase)
+
+Branch `feature/navigation-loader`, off `feature/dga-alignment`. Moving between pages showed nothing for the few hundred milliseconds between the old page leaving and the new page's `LoadingState` arriving — long enough to click twice. `NavigationProgress` is now mounted once in the root layout: a top progress bar that starts at the click (a capture-phase listener, so it catches every internal link without wrapping `Link`), on back/forward, and on programmatic navigations through `useAppRouter()`, which replaces `useRouter` at all seven call sites so nothing can bypass it. It completes on the route change — the only honest signal the App Router gives. One polite announcement per navigation; the bar is decoration. `loading.tsx` files were rejected: with client-side fetching they would flash and hand over to `LoadingState`, two loaders for one wait. 292 web unit tests, typecheck, lint, prettier.
+
+### 2026-08-23 — TAM-106: the catalogue does not exist before the assessment (entry restored — dropped in PR #13's merge resolution)
+
+Branch `feature/tam-106-nav-gating`, off `feature/dga-alignment` — it touches nothing the auth stack touches. One branch in `navForState` and one redirect in `PortalProvider`, beside the 401 and wrong-portal redirects it already owns; the test that pinned the old three-item nav was updated rather than duplicated, and a new `PortalProvider` test covers the redirect, including that the loading state shows and the page never renders. The spec change is recorded (D-071, CLAUDE.md §4.2/§4.6), including the deliberate choice to leave the courses API open.
+
+**The e2e told the truth about the old rule:** two catalogue flows browsed the catalogue *before* the assessment — exactly what §4.2 used to permit — and had to become post-assessment flows. The journey now asserts two nav items and the bounce before the assessment, and الدورات appearing after it without a reload. One run failed at the pre-existing path-build counter step while the dev server was recompiling (46s run); two clean re-runs at 10s each say it is that step's race under load, not the gate — worth a look in the Phase 6 reliability pass.
 
 ### 2026-08-23 — Sub-phase 5.4: path management, and a flake chased to its cause
 

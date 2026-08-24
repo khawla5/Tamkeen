@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
@@ -51,7 +51,7 @@ function isUnauthorized(error: unknown): boolean {
 }
 
 export function EntityProvider({ children }: { children: ReactNode }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const t = useTranslations('portal');
 
   const session = useApiQuery(() => authApi.me(), []);
