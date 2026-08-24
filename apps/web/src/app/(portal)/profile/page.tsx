@@ -16,7 +16,6 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { authApi, profileApi } from '@/lib/api-client';
 import { DEPARTMENTS, PASSWORD_MIN_LENGTH } from '@/lib/auth-constants';
-import { useAppRouter } from '@/lib/use-app-router';
 import { useApiMutation } from '@/lib/use-api';
 
 type FieldName = 'fullName' | 'department';
@@ -59,7 +58,6 @@ export default function ProfilePage() {
   const t = useTranslations('profile');
   const tErrors = useTranslations('errors');
   const { user, refreshSession } = usePortal();
-  const router = useAppRouter();
 
   const [fullName, setFullName] = useState(user.fullName);
   const [department, setDepartment] = useState(user.department);
@@ -77,7 +75,6 @@ export default function ProfilePage() {
   const save = useApiMutation((input: { fullName: string; department: string }) =>
     profileApi.update(input),
   );
-  const signOut = useApiMutation(() => authApi.logout());
 
   const isDirty = fullName !== baseline.fullName || department !== baseline.department;
 
@@ -130,14 +127,6 @@ export default function ProfilePage() {
          itself. */
       refreshSession();
     }
-  }
-
-  async function onSignOut() {
-    await signOut.run();
-    /* Navigate regardless: if the session was already gone the request fails,
-       and keeping the user on a page they cannot use would be the wrong
-       response to that. */
-    router.replace('/login');
   }
 
   return (
@@ -244,15 +233,6 @@ export default function ProfilePage() {
               </div>
             </form>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="self-start"
-              disabled={signOut.isPending}
-              onClick={() => void onSignOut()}
-            >
-              {signOut.isPending ? t('signingOut') : t('signOut')}
-            </Button>
             {/* No sign-out here: the header's user menu is the one way out
                 (D-096) — a second button would be the redundancy §3 forbids. */}
           </CardContent>

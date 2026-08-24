@@ -42,7 +42,7 @@ test.describe('profile — accessibility and layout', () => {
     });
   }
 
-  test('the keyboard reaches name, department and sign-out in order, skipping save while disabled', async ({
+  test('the keyboard reaches name and department in order, skipping save while disabled', async ({
     page,
   }) => {
     await signedInEmployee(page, 'profile-kbd');
@@ -62,11 +62,12 @@ test.describe('profile — accessibility and layout', () => {
 
     /* Nothing has been edited, so save is disabled — and a disabled button is
        correctly not a tab stop at all, per the browser's own semantics. The
-       next control a keyboard user reaches is sign-out, not a dead button. */
+       next control a keyboard user reaches is the email card below (D-096:
+       there is no sign-out on this page — that lives in the header menu). */
     await expect(page.getByRole('button', { name: 'حفظ' })).toBeDisabled();
 
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', { name: 'تسجيل الخروج' })).toBeFocused();
+    await expect(page.getByLabel('البريد الإلكتروني الجديد')).toBeFocused();
   });
 
   test('editing the name with the keyboard alone enables and reaches save', async ({ page }) => {

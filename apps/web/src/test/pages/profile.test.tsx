@@ -28,7 +28,6 @@ import { renderWithProviders } from '@/test/render';
  */
 
 const api = vi.hoisted(() => ({
-  logout: vi.fn(),
   changePassword: vi.fn(),
   changeEmail: vi.fn(),
   setNumberFormat: vi.fn(),
@@ -58,12 +57,6 @@ vi.mock('@/components/layout/portal-page', () => ({
   ),
 }));
 
-const replace = vi.fn();
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace }),
-}));
-
 const { default: ProfilePage } = await import('@/app/(portal)/profile/page');
 
 const BASE_USER: CurrentUser = {
@@ -88,7 +81,6 @@ beforeEach(() => {
   api.changePassword.mockResolvedValue(undefined);
   api.changeEmail.mockResolvedValue({ status: 'EMAIL_CHANGE_PENDING' });
   api.setNumberFormat.mockResolvedValue(undefined);
-  api.logout.mockResolvedValue(undefined);
   setUser();
 });
 
@@ -207,15 +199,6 @@ describe('profile — editing name and department', () => {
     expect(await screen.findByText('تعذّر حفظ البيانات. حاول مرة أخرى.')).toBeInTheDocument();
     expect(screen.getByLabelText('الاسم الكامل')).toHaveValue('سارة العتيبي إضافة');
     expect(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' })).toBeEnabled();
-  });
-
-  it('signs out and redirects to /login regardless of the request outcome', async () => {
-    renderWithProviders(<ProfilePage />);
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: 'تسجيل الخروج' }));
-
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
   });
 });
 
