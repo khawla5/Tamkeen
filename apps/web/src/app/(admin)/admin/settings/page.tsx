@@ -130,7 +130,7 @@ function SettingRow({
           {/* Which value this is: the ministry's, or the deployment's. Without
               it, "reset" is a button whose effect cannot be predicted. */}
           {setting.isOverridden ? (
-            <Badge variant="gold">{t('settingOverridden')}</Badge>
+            <Badge variant="primary">{t('settingOverridden')}</Badge>
           ) : (
             <Badge variant="soft">{t('settingDefault')}</Badge>
           )}

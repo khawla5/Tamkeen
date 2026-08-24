@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { Suspense, useEffect, useRef, useState } from 'react';
 
 import { useErrorMessage } from '@/components/auth/use-error-message';
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthLayout } from '@/components/auth/auth-layout';
 import { LoadingState } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api-client';
@@ -68,31 +68,31 @@ function VerifyEmailChange() {
 
   if (status === 'pending') {
     return (
-      <AuthCard title={t('emailChangeTitle')}>
+      <AuthLayout title={t('emailChangeTitle')}>
         <LoadingState rows={0} label={t('emailChangePending')} />
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   if (status === 'changed') {
     return (
-      <AuthCard title={t('emailChangeSuccessTitle')} subtitle={t('emailChangeSuccessBody')}>
-        <Button asChild>
+      <AuthLayout title={t('emailChangeSuccessTitle')} subtitle={t('emailChangeSuccessBody')}>
+        <Button asChild size="lg" className="w-full">
           <Link href="/login">{t('submitSignIn')}</Link>
         </Button>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard
+    <AuthLayout
       title={t('emailChangeFailedTitle')}
       subtitle={token ? (error ?? t('emailChangeFailedBody')) : t('verifyMissingToken')}
     >
-      <Button asChild variant="outline">
+      <Button asChild size="lg" variant="secondary" className="w-full">
         <Link href="/login">{t('signInLink')}</Link>
       </Button>
-    </AuthCard>
+    </AuthLayout>
   );
 }
 

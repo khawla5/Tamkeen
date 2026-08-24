@@ -116,7 +116,7 @@ function PathCard({ path, onManage }: { path: AdminPathRow; onManage: () => void
           {path.name}
           {/* Gold marks the letter because gold is what the letter *does* —
               it is the recommendation signal (§3A). */}
-          <Badge variant="gold">{t(`riasec.${path.riasecLetter}`)}</Badge>
+          <Badge variant="primary">{t(`riasec.${path.riasecLetter}`)}</Badge>
           {path.isActive ? null : <Badge variant="soft">{t('pathNotOffered')}</Badge>}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
