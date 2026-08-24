@@ -141,8 +141,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <PortalPage title={t('title')}>
-      <div className="mx-auto max-w-2xl">
+    <PortalPage title={t('title')} width="narrow">
+      <>
         <Card>
           <CardHeader>
             <CardTitle>{t('personalHeading')}</CardTitle>
@@ -261,7 +261,7 @@ export default function ProfilePage() {
         <EmailCard current={user.email} />
         <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
         <PasswordCard />
-      </div>
+      </>
     </PortalPage>
   );
 }
