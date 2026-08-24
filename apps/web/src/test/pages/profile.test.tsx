@@ -25,6 +25,7 @@ import { renderWithProviders } from '@/test/render';
 const api = vi.hoisted(() => ({
   logout: vi.fn(),
   changePassword: vi.fn(),
+  changeEmail: vi.fn(),
   setNumberFormat: vi.fn(),
 }));
 
@@ -76,6 +77,7 @@ function setUser(overrides: Partial<CurrentUser> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   api.changePassword.mockResolvedValue(undefined);
+  api.changeEmail.mockResolvedValue({ status: 'EMAIL_CHANGE_PENDING' });
   api.setNumberFormat.mockResolvedValue(undefined);
   api.logout.mockResolvedValue(undefined);
   setUser();
@@ -243,5 +245,84 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     /* Not the string "system" — the column is nullable precisely so "no
        preference" and "prefers Western" stay distinguishable. */
     await waitFor(() => expect(api.setNumberFormat).toHaveBeenCalledWith(null));
+  });
+});
+
+describe('profile — changing the email (§4.12)', () => {
+  it('says nothing changes until the new address is confirmed', () => {
+    renderWithProviders(<ProfilePage />);
+
+    /* Said before the fields. A form that looks like it saved and did not is
+       how somebody locks themselves out believing they did the opposite. */
+    expect(screen.getByText(/لن يتغيّر بريدك قبل أن تفتح رابط التأكيد/)).toBeInTheDocument();
+  });
+
+  it('asks for the current password, and will not submit without it', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProfilePage />);
+
+    await user.type(
+      screen.getByLabelText('البريد الإلكتروني الجديد'),
+      'sara.new@ministry.gov.example',
+    );
+
+    /* Whoever can move the address can then reset the password and own the
+       account outright — so this field is the whole gate. */
+    expect(screen.getByRole('button', { name: 'إرسال رابط التأكيد' })).toBeDisabled();
+  });
+
+  it('refuses to submit the address the account already has', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProfilePage />);
+
+    await user.type(screen.getByLabelText('البريد الإلكتروني الجديد'), 'sara@ministry.gov.example');
+    await user.type(screen.getByLabelText('كلمة المرور للتأكيد'), 'the-old-password');
+
+    expect(screen.getByRole('button', { name: 'إرسال رابط التأكيد' })).toBeDisabled();
+  });
+
+  it('renders the new-address field left-to-right', () => {
+    renderWithProviders(<ProfilePage />);
+
+    /* Latin script in an RTL document: without this the punctuation reorders as
+       it is typed, and what is on screen is not what will be submitted. */
+    expect(screen.getByLabelText('البريد الإلكتروني الجديد')).toHaveAttribute('dir', 'ltr');
+  });
+
+  it('sends the request and names the address the link went to', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProfilePage />);
+
+    await user.type(
+      screen.getByLabelText('البريد الإلكتروني الجديد'),
+      'sara.new@ministry.gov.example',
+    );
+    await user.type(screen.getByLabelText('كلمة المرور للتأكيد'), 'the-old-password');
+    await user.click(screen.getByRole('button', { name: 'إرسال رابط التأكيد' }));
+
+    await waitFor(() =>
+      expect(api.changeEmail).toHaveBeenCalledWith(
+        'sara.new@ministry.gov.example',
+        'the-old-password',
+      ),
+    );
+
+    /* "A link has been sent" without saying where is unhelpful exactly when it
+       matters — when the address was mistyped. */
+    expect(await screen.findByRole('status')).toHaveTextContent('sara.new@ministry.gov.example');
+  });
+
+  it('surfaces a refused domain as an error rather than a silent no-op', async () => {
+    const { ApiError } = await import('@/lib/api-client');
+    api.changeEmail.mockRejectedValue(new ApiError('EMAIL_DOMAIN_NOT_ALLOWED', 400));
+
+    const user = userEvent.setup();
+    renderWithProviders(<ProfilePage />);
+
+    await user.type(screen.getByLabelText('البريد الإلكتروني الجديد'), 'sara@gmail.example');
+    await user.type(screen.getByLabelText('كلمة المرور للتأكيد'), 'the-old-password');
+    await user.click(screen.getByRole('button', { name: 'إرسال رابط التأكيد' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/نطاقات الوزارة/);
   });
 });

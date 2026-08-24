@@ -51,6 +51,43 @@ function button(url: string, label: string): string {
   </p>`;
 }
 
+/**
+ * Confirming a NEW address (§4.12).
+ *
+ * Sent to the address being moved to, never to the one being moved from —
+ * proving the person can read the new inbox is the entire point, and a link
+ * delivered to the old one would prove nothing about the new.
+ *
+ * The wording says what is about to change, because this arrives in an inbox
+ * that has no account yet and "confirm your email" would read as an invitation
+ * somebody did not ask for.
+ */
+export function emailChangeEmail(url: string, expiryHours: number): EmailContent {
+  return {
+    subject: 'تأكيد بريدك الإلكتروني الجديد',
+    html: layout(
+      'تأكيد بريدك الإلكتروني الجديد',
+      `<p style="margin:0;">طُلب تغيير البريد الإلكتروني لحسابك في منصة تمكين إلى هذا العنوان.
+         لن يتغيّر شيء قبل أن تؤكّد.</p>
+       ${button(url, 'تأكيد البريد الجديد')}
+       <p style="margin:16px 0 0;font-size:13px;color:#5E6B85;">
+         ينتهي هذا الرابط خلال ${expiryHours} ساعة. إذا لم تطلب هذا التغيير، تجاهل هذه الرسالة
+         ولن يُنقل حسابك.
+       </p>`,
+    ),
+    text: [
+      'تأكيد بريدك الإلكتروني الجديد',
+      '',
+      'طُلب تغيير البريد الإلكتروني لحسابك في منصة تمكين إلى هذا العنوان.',
+      'لن يتغيّر شيء قبل أن تؤكّد. افتح الرابط التالي:',
+      url,
+      '',
+      `ينتهي هذا الرابط خلال ${expiryHours} ساعة.`,
+      'إذا لم تطلب هذا التغيير، تجاهل هذه الرسالة ولن يُنقل حسابك.',
+    ].join('\n'),
+  };
+}
+
 export function verificationEmail(url: string, expiryHours: number): EmailContent {
   return {
     subject: 'تأكيد بريدك الإلكتروني',

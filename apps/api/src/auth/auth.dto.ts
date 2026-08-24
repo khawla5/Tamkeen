@@ -126,6 +126,21 @@ export class ChangePasswordDto {
   newPassword!: string;
 }
 
+/** Asking to move the account to a new address (§4.12). */
+export class ChangeEmailDto {
+  @IsEmail({}, { message: 'EMAIL_INVALID' })
+  @MaxLength(254)
+  @normaliseEmail()
+  newEmail!: string;
+
+  /* Required for the same reason the password change requires it, only more
+     so: whoever can move the address can then reset the password and own the
+     account, with the real employee locked out and unnotified. */
+  @IsString()
+  @MaxLength(MAX_PASSWORD)
+  currentPassword!: string;
+}
+
 /** §4.12's digits preference (D-018). */
 export class UpdatePreferencesDto {
   /**

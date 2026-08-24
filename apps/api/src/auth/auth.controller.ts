@@ -19,6 +19,7 @@ import {
   RegisterDto,
   RequestPasswordResetDto,
   ResendVerificationDto,
+  ChangeEmailDto,
   ChangePasswordDto,
   UpdatePreferencesDto,
   ResetPasswordDto,
@@ -213,6 +214,56 @@ export class AuthController {
       ipAddress: request.ip ?? null,
       userAgent: request.get('user-agent') ?? null,
     });
+  }
+
+  /**
+   * Asks to move the account to a new address (§4.12).
+   *
+   * Throttled hard: this endpoint verifies a password and sends mail to an
+   * attacker-chosen address, so it is both a password oracle and a way to make
+   * the ministry's mail server send things.
+   *
+   * 202, not 200: nothing has changed yet, and will not until the link in the
+   * new inbox is opened. The response is identical whether or not the address
+   * is already taken — the caller is authenticated, but answering that would
+   * turn the profile form into the address oracle registration refuses to be.
+   */
+  @Throttle({ default: { limit: 3, ttl: 300_000 } })
+  @Post('change-email')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async changeEmail(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangeEmailDto,
+    @Req() request: Request,
+  ): Promise<{ status: string }> {
+    await this.auth.requestEmailChange(
+      user.id,
+      dto.newEmail,
+      dto.currentPassword,
+      this.contextOf(request),
+    );
+
+    return { status: 'EMAIL_CHANGE_PENDING' };
+  }
+
+  /**
+   * Completes the move, from the link in the new inbox.
+   *
+   * `@Public()` like every other token redemption: the link is very likely
+   * opened in whichever browser that mailbox is signed into, which is not
+   * necessarily the one that asked.
+   */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('confirm-email-change')
+  @HttpCode(HttpStatus.OK)
+  async confirmEmailChange(
+    @Body() dto: VerifyEmailDto,
+    @Req() request: Request,
+  ): Promise<{ status: string }> {
+    await this.auth.confirmEmailChange(dto.token, this.contextOf(request));
+
+    return { status: 'EMAIL_CHANGED' };
   }
 
   @Public()

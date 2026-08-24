@@ -1,6 +1,11 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 
-import { AuditAction, AuditReason } from '../audit/audit.actions';
+import { AuditAction, AuditReason, type AuditReasonCode } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { AppConfigService } from '../config/app-config.module';
 import { EmailService } from '../email/email.service';
@@ -8,7 +13,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { hashPassword, verifyPassword } from '../common/password';
 import { expiryFromNow, generateToken, hashToken } from '../common/secure-token';
 import type { LoginDto, RegisterDto } from './auth.dto';
-import { checkRegistrationPolicy, rejectionToException } from './registration-policy';
+import {
+  checkEmailDomain,
+  checkRegistrationPolicy,
+  rejectionToException,
+} from './registration-policy';
 import { SessionService, type SessionContext } from './session.service';
 
 /**
@@ -493,6 +502,223 @@ export class AuthService {
       outcome: 'SUCCESS',
       actorUserId: userId,
       ipAddress: context.ipAddress,
+    });
+  }
+
+  /**
+   * Asks to move the account to a new address (§4.12).
+   *
+   * **Nothing changes here.** The address is written to the token, the token is
+   * mailed to the address being moved *to*, and `users.email` is untouched until
+   * somebody proves they can read that inbox. Anything else — even a
+   * `pending_email` column on the user — creates a window where the account
+   * points at an address nobody has verified, which is the whole failure this
+   * exists to prevent.
+   *
+   * **The current password is required**, for a stronger reason than the
+   * password change: an attacker who can move the address can then use "forgot
+   * password" and own the account outright, with the real employee locked out
+   * and no longer receiving so much as a notice.
+   *
+   * **And the ministry-domain gate applies** (D-017 via `checkEmailDomain`).
+   * Without it an employee could walk a ministry account to a personal inbox one
+   * profile edit at a time, which is the restricted-registration policy defeated
+   * through the back door.
+   */
+  async requestEmailChange(
+    userId: string,
+    newEmail: string,
+    currentPassword: string,
+    context: SessionContext,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { passwordHash: true, email: true },
+    });
+
+    if (!(await verifyPassword(user.passwordHash, currentPassword))) {
+      await this.audit.record({
+        action: AuditAction.AUTH_EMAIL_CHANGE_REQUESTED,
+        outcome: 'FAILURE',
+        actorUserId: userId,
+        ipAddress: context.ipAddress,
+        reason: AuditReason.BAD_PASSWORD,
+      });
+
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
+
+    if (newEmail === user.email) {
+      throw new BadRequestException('EMAIL_UNCHANGED');
+    }
+
+    const rejection = checkEmailDomain(newEmail, this.config.get('ALLOWED_EMAIL_DOMAINS'));
+
+    if (rejection) {
+      await this.audit.record({
+        action: AuditAction.AUTH_EMAIL_CHANGE_REQUESTED,
+        outcome: 'FAILURE',
+        actorUserId: userId,
+        ipAddress: context.ipAddress,
+        reason: rejection.reason,
+      });
+
+      throw rejectionToException(rejection);
+    }
+
+    /*
+     * A taken address is refused silently, exactly as registration does: the
+     * caller is authenticated, but answering "that address already has an
+     * account" would turn the profile form into the address oracle the
+     * registration endpoint refuses to be. The audit entry carries the reason
+     * for anyone reviewing.
+     */
+    const taken = await this.prisma.user.findUnique({
+      where: { email: newEmail },
+      select: { id: true },
+    });
+
+    await this.prisma.authToken.updateMany({
+      where: { userId, type: 'EMAIL_CHANGE', consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+
+    if (taken) {
+      await this.audit.record({
+        action: AuditAction.AUTH_EMAIL_CHANGE_REQUESTED,
+        outcome: 'FAILURE',
+        actorUserId: userId,
+        ipAddress: context.ipAddress,
+        reason: AuditReason.EMAIL_ALREADY_REGISTERED,
+      });
+
+      return;
+    }
+
+    const token = generateToken();
+
+    await this.prisma.authToken.create({
+      data: {
+        userId,
+        type: 'EMAIL_CHANGE',
+        newEmail,
+        tokenHash: hashToken(token),
+        expiresAt: expiryFromNow(this.config.get('EMAIL_VERIFICATION_TTL_MINUTES')),
+      },
+    });
+
+    await this.audit.record({
+      action: AuditAction.AUTH_EMAIL_CHANGE_REQUESTED,
+      outcome: 'SUCCESS',
+      actorUserId: userId,
+      ipAddress: context.ipAddress,
+    });
+
+    await this.email.sendEmailChange(newEmail, token);
+  }
+
+  /**
+   * Completes the move, from the link in the new inbox.
+   *
+   * Public, like every other token redemption: the link may well be opened in
+   * the browser where that mailbox is signed in, which is not necessarily the
+   * one that asked.
+   *
+   * **Every session is revoked, including the caller's.** The identifier the
+   * person signs in with has just changed, so being asked to sign in again with
+   * it is the honest next step — and if the request was not theirs, it ends the
+   * attacker's session too.
+   */
+  async confirmEmailChange(rawToken: string, context: SessionContext): Promise<void> {
+    const token = await this.prisma.authToken.findUnique({
+      where: { tokenHash: hashToken(rawToken) },
+      select: {
+        id: true,
+        userId: true,
+        type: true,
+        newEmail: true,
+        expiresAt: true,
+        consumedAt: true,
+      },
+    });
+
+    /*
+     * Checked one reason at a time rather than as one boolean, so the type
+     * checker can see that a token surviving all four has a `newEmail` — the
+     * combined condition was correct and unprovable, and the alternative was a
+     * non-null assertion that would keep compiling if a check were ever removed.
+     */
+    const refuse = async (reason: AuditReasonCode, userId: string | null): Promise<never> => {
+      await this.audit.record({
+        action: AuditAction.AUTH_EMAIL_CHANGED,
+        outcome: 'FAILURE',
+        actorUserId: userId,
+        ipAddress: context.ipAddress,
+        reason,
+      });
+
+      throw new UnauthorizedException('TOKEN_INVALID');
+    };
+
+    if (!token) {
+      return refuse(AuditReason.TOKEN_INVALID, null);
+    }
+    if (token.consumedAt !== null) {
+      return refuse(AuditReason.TOKEN_ALREADY_USED, token.userId);
+    }
+    if (token.expiresAt <= new Date()) {
+      return refuse(AuditReason.TOKEN_EXPIRED, token.userId);
+    }
+    if (token.type !== 'EMAIL_CHANGE' || token.newEmail === null) {
+      /* A verification or reset token presented here. It is valid — for
+         something else — so it is refused without being consumed. */
+      return refuse(AuditReason.TOKEN_INVALID, token.userId);
+    }
+
+    /*
+     * Re-checked at redemption, not only at request: the address was free when
+     * the link was sent and somebody else may have registered it since. The
+     * unique index would refuse anyway — this turns a 500 into an answer the
+     * page can explain.
+     */
+    const taken = await this.prisma.user.findUnique({
+      where: { email: token.newEmail },
+      select: { id: true },
+    });
+
+    if (taken) {
+      await this.audit.record({
+        action: AuditAction.AUTH_EMAIL_CHANGED,
+        outcome: 'FAILURE',
+        actorUserId: token.userId,
+        ipAddress: context.ipAddress,
+        reason: AuditReason.EMAIL_ALREADY_REGISTERED,
+      });
+
+      throw new ConflictException('EMAIL_ALREADY_REGISTERED');
+    }
+
+    /* Consumed and applied together, so a crash between the two cannot leave a
+       token that still works against an address already moved. */
+    await this.prisma.$transaction([
+      this.prisma.authToken.update({ where: { id: token.id }, data: { consumedAt: new Date() } }),
+      this.prisma.user.update({
+        where: { id: token.userId },
+        /* Verified by this very act — the link only arrives in an inbox the
+           person can read, which is the same proof registration asks for. */
+        data: { email: token.newEmail, emailVerifiedAt: new Date() },
+      }),
+    ]);
+
+    await this.sessions.revokeAllForUser(token.userId);
+
+    await this.audit.record({
+      action: AuditAction.AUTH_EMAIL_CHANGED,
+      outcome: 'SUCCESS',
+      actorUserId: token.userId,
+      ipAddress: context.ipAddress,
+      targetType: 'User',
+      targetId: token.userId,
     });
   }
 

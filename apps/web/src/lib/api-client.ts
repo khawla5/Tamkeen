@@ -275,6 +275,19 @@ export const authApi = {
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post<void>('/api/auth/change-password', { currentPassword, newPassword }),
 
+  /**
+   * §4.12: ask to move the account to a new address.
+   *
+   * Nothing changes until the link sent to the new inbox is opened — which is
+   * why the response says "pending" rather than "done".
+   */
+  changeEmail: (newEmail: string, currentPassword: string) =>
+    api.post<{ status: string }>('/api/auth/change-email', { newEmail, currentPassword }),
+
+  /** §4.12: complete the move, from the link in the new inbox. */
+  confirmEmailChange: (token: string) =>
+    api.post<{ status: string }>('/api/auth/confirm-email-change', { token }),
+
   /** §4.12: which digits you read. Null follows the system default (D-018). */
   setNumberFormat: (numberFormat: NumberFormat | null) =>
     api.patch<void>('/api/auth/me/preferences', { numberFormat }),

@@ -96,6 +96,7 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
+        <EmailCard current={user.email} />
         <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
         <PasswordCard />
       </div>
@@ -118,6 +119,117 @@ const DIGIT_CHOICES: ReadonlyArray<{ value: Choice; label: string }> = [
   { value: 'western', label: 'digitsWestern' },
   { value: 'arabic-indic', label: 'digitsArabic' },
 ];
+
+/**
+ * Changing the address the account signs in with (§4.12).
+ *
+ * **Nothing here changes anything.** Submitting sends a link to the *new*
+ * address and stops; `users.email` moves only when somebody opens it. The card
+ * says so before the fields, because a form that appears to have saved and has
+ * not is how somebody locks themselves out of their own account believing they
+ * did the opposite.
+ *
+ * The current password is asked for the same reason the password form asks —
+ * only more so. Whoever can move the address can then use "forgot password" and
+ * own the account outright, with the real employee locked out and unnotified.
+ */
+function EmailCard({ current }: { current: string }) {
+  const t = useTranslations('profile');
+  const translateError = useErrorMessage();
+
+  const [newEmail, setNewEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+
+  const unchanged = newEmail.trim().toLowerCase() === current.toLowerCase();
+
+  async function save() {
+    setError(null);
+    setSent(null);
+    setBusy(true);
+
+    try {
+      await authApi.changeEmail(newEmail, currentPassword);
+      setSent(newEmail);
+      setNewEmail('');
+      setCurrentPassword('');
+    } catch (caught) {
+      setError(translateError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>{t('emailHeading')}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">{t('emailHint')}</p>
+
+        <Field id="new-email" label={t('newEmail')} required>
+          {(field) => (
+            <Input
+              {...field}
+              type="email"
+              /* Latin script inside an RTL document: without this the
+                 punctuation reorders as it is typed and what is on screen is
+                 not what will be submitted. */
+              dir="ltr"
+              className="text-start"
+              autoComplete="email"
+              value={newEmail}
+              onChange={(event) => setNewEmail(event.target.value)}
+            />
+          )}
+        </Field>
+
+        {/* Its own label, not a second "current password": two fields sharing
+            one label on a page is a screen reader announcing the same thing
+            twice with no way to tell which is which. */}
+        <Field id="email-password" label={t('emailPassword')} required>
+          {(field) => (
+            <Input
+              {...field}
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+            />
+          )}
+        </Field>
+
+        <Button
+          className="self-start"
+          disabled={
+            busy || newEmail.trim().length === 0 || currentPassword.length === 0 || unchanged
+          }
+          onClick={() => void save()}
+        >
+          {t('emailSend')}
+        </Button>
+
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        {sent && !error ? (
+          /* Names the address the link went to. "A link has been sent" without
+             saying where is unhelpful precisely when it matters — when the
+             address was mistyped. */
+          <p role="status" className="text-sm text-success">
+            {t('emailSent', { email: sent })}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
 
 /**
  * The digits preference (§4.12, D-018).

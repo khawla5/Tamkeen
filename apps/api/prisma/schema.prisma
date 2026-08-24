@@ -146,6 +146,7 @@ model Session {
 enum AuthTokenType {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+  EMAIL_CHANGE
 }
 
 /// Single-use, expiring tokens for email verification and password reset.
@@ -161,6 +162,11 @@ model AuthToken {
 
   type      AuthTokenType
   tokenHash String        @unique @map("token_hash")
+
+  /// The address an EMAIL_CHANGE token is for, held here rather than on the
+  /// user so an abandoned request leaves nothing behind and `users.email` never
+  /// holds an address nobody has proved they can read (§4.12).
+  newEmail String? @map("new_email")
 
   expiresAt  DateTime  @map("expires_at")
   /// Set the moment the token is redeemed, making reuse detectable.

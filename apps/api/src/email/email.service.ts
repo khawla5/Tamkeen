@@ -3,6 +3,7 @@ import { createTransport, type Transporter } from 'nodemailer';
 
 import { AppConfigService } from '../config/app-config.module';
 import {
+  emailChangeEmail,
   passwordResetEmail,
   verificationEmail,
   coursePassedEmail,
@@ -50,6 +51,21 @@ export class EmailService {
     const url = `${this.config.get('APP_URL')}/verify-email?token=${encodeURIComponent(token)}`;
 
     await this.send(to, verificationEmail(url, hours));
+  }
+
+  /**
+   * Confirming a NEW address (§4.12).
+   *
+   * Sent only to the address being moved to. Its own page, not `/verify-email`:
+   * the two tokens do different things — one activates an account, the other
+   * moves one — and a single redemption route that had to branch on token type
+   * is how a link for one ends up doing the other.
+   */
+  async sendEmailChange(to: string, token: string): Promise<void> {
+    const hours = Math.round(this.config.get('EMAIL_VERIFICATION_TTL_MINUTES') / 60);
+    const url = `${this.config.get('APP_URL')}/verify-email-change?token=${encodeURIComponent(token)}`;
+
+    await this.send(to, emailChangeEmail(url, hours));
   }
 
   async sendPasswordReset(to: string, token: string): Promise<void> {

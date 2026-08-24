@@ -1,5 +1,9 @@
 import { AuditReason } from '../audit/audit.actions';
-import { checkRegistrationPolicy, type RegistrationPolicyConfig } from './registration-policy';
+import {
+  checkEmailDomain,
+  checkRegistrationPolicy,
+  type RegistrationPolicyConfig,
+} from './registration-policy';
 
 /**
  * The restricted-registration gate is the rule that keeps this from being an
@@ -156,5 +160,54 @@ describe('checkRegistrationPolicy', () => {
 
       expect(rejection?.reason).toBe(AuditReason.SELF_REGISTRATION_DISABLED);
     });
+  });
+});
+
+describe('checkEmailDomain — the half an email change reuses (§4.12)', () => {
+  const allowed = ['ministry.gov.example', 'other.gov.example'];
+
+  it('accepts any allowed ministry domain', () => {
+    expect(checkEmailDomain('someone@other.gov.example', allowed)).toBeNull();
+  });
+
+  it('refuses a personal inbox', () => {
+    /* The reason the change flow reuses this rather than skipping the gate: an
+       employee able to move a ministry account to a personal address would
+       defeat D-017 one profile edit at a time. */
+    expect(checkEmailDomain('someone@gmail.example', allowed)?.message).toBe(
+      'EMAIL_DOMAIN_NOT_ALLOWED',
+    );
+  });
+
+  it('is case-insensitive about the domain', () => {
+    expect(checkEmailDomain('Someone@Ministry.Gov.Example', allowed)).toBeNull();
+  });
+
+  it('refuses an address with no domain at all', () => {
+    expect(checkEmailDomain('not-an-address', allowed)).not.toBeNull();
+  });
+
+  it('fails closed on an empty allow-list', () => {
+    /* An empty list must not read as "anything goes" — that would turn the
+       restricted policy into open sign-up by omission. */
+    expect(checkEmailDomain('someone@ministry.gov.example', [])).not.toBeNull();
+  });
+
+  it('is the same rule registration applies, not a second copy', () => {
+    /* The regression this guards: two implementations drifting, so the
+       registration form refuses what the profile form allows. */
+    const viaRegistration = checkRegistrationPolicy(
+      { email: 'someone@gmail.example', employeeId: 'EMP-1', password: 'a-long-enough-password' },
+      {
+        mode: 'restricted',
+        allowedDomains: allowed,
+        employeeIdPattern: '.*',
+        passwordMinLength: 8,
+      },
+    );
+
+    expect(viaRegistration?.message).toBe(
+      checkEmailDomain('someone@gmail.example', allowed)?.message,
+    );
   });
 });
