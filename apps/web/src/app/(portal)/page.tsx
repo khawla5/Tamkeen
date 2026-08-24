@@ -32,7 +32,7 @@ export default function DashboardPage() {
 
   return (
     <PortalPage title={t('title')}>
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+      <div className="flex flex-col gap-6">
         <PersonalHeader user={user} />
         <Card>
           <CardContent className="py-5">

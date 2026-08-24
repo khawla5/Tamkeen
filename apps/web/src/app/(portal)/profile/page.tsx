@@ -45,8 +45,8 @@ export default function ProfilePage() {
         : t('roleEmployee');
 
   return (
-    <PortalPage title={t('title')}>
-      <div className="mx-auto max-w-2xl">
+    <PortalPage title={t('title')} width="narrow">
+      <div>
         <Card>
           <CardHeader>
             <CardTitle>{t('personalHeading')}</CardTitle>

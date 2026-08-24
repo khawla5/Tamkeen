@@ -419,7 +419,7 @@
 - **What shipped (2026-08-23), per the discussion:** every state — journey tracker (4 stages, state-derived) + personal header (name · department · employee id; the session and `/me` now carry both — TAM-109's first bullet, done here) + the last three events. Assessed state — the top three recommended paths as cards in rank order + "عرض كل المسارات". Active state — next courses with status, latest certificate or the locked slot. API: `DashboardView` gained `recommendedPaths`, `upcomingCourses`, `latestCertificate`, `recentActivity`; the feed is derived from assessment results, path confirmation, passed completions and issued certificates. D-074 recorded (it reverses TAM-108's "no previews"); CLAUDE.md §4.2 rewritten. 9 new web tests, API journey + auth integration assertions against the test database; screenshots reviewed for both pre-assessment and assessed states.
 - **Not done, by choice:** quick-link tiles in every state (duplicates the sidebar). Recent activity is limited to three events; a full history page is not a dashboard concern.
 
-## TAM-124 — One page width across the portal: الرئيسية is the reference
+## TAM-124 — One page width across the portal: الرئيسية is the reference — **DONE** (`feature/tam-124-page-width`)
 
 - **Labels:** `app-chrome`, `frontend`, `design-system`
 - **Priority:** High (TAM-125 builds on it; every open page ticket inherits it)

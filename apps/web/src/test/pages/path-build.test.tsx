@@ -48,6 +48,7 @@ vi.mock('@/components/layout/portal-provider', () => ({
 }));
 
 vi.mock('@/components/layout/portal-page', () => ({
+  PAGE_MAX_WIDTH: 'max-w-6xl',
   PortalPage: ({ title, children }: { title: string; children: ReactNode }) => (
     <div>
       <h1>{title}</h1>

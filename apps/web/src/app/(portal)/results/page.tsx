@@ -61,7 +61,7 @@ function Results({
     /* Reaching this page without a result is a normal navigation, not an error
        — an empty state with the way forward beats a dead end. */
     return (
-      <div className="mx-auto max-w-2xl">
+      <div>
         <EmptyState
           title={t('noResultTitle')}
           body={t('noResultBody')}
@@ -79,7 +79,7 @@ function Results({
   const others = paths.paths.filter((path) => !path.recommended);
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <HollandCode result={result} />
 
       {recommended.length > 0 ? (
