@@ -7,20 +7,22 @@ import { NAV_ICONS, STEADY_STATE_NAV, navForState } from './nav-items';
  * Which navigation a learner sees, and — the part that keeps being wrong — which
  * they do not.
  *
- * Two rules meet here. §4.2 states one outright: before the assessment the nav
- * is Dashboard, Courses and Profile only. The other is ours: an item appears
- * only once the page behind it exists, because a link to a 404 advertises
- * something the product cannot do and costs a click to find out.
+ * Two rules meet here. §4.2 (as amended by D-071) states one outright: before
+ * the assessment the nav is Dashboard and Profile only — a new user has exactly
+ * one thing to do, and a browsable catalogue competes with it. The other is
+ * ours: an item appears only once the page behind it exists, because a link to
+ * a 404 advertises something the product cannot do and costs a click to find
+ * out.
  */
 
 const keys = (state: Parameters<typeof navForState>[0]) => navForState(state).map((i) => i.key);
 
 describe('navForState', () => {
-  it('shows only Dashboard, Courses and Profile before the assessment (§4.2)', () => {
-    expect(keys('PRE_ASSESSMENT')).toEqual(['dashboard', 'courses', 'profile']);
+  it('shows only Dashboard and Profile before the assessment (§4.2, D-071)', () => {
+    expect(keys('PRE_ASSESSMENT')).toEqual(['dashboard', 'profile']);
   });
 
-  it('still hides My Path once assessed but with no path chosen', () => {
+  it('adds Courses the moment the assessment is done, still without My Path', () => {
     /* My Path is not a destination when there is no path. */
     expect(keys('ASSESSED_NO_PATH')).toEqual(['dashboard', 'courses', 'profile']);
   });

@@ -5,6 +5,14 @@
 
 ---
 
+## D-071 — No catalogue before the assessment: the sidebar hides Courses and the URL agrees
+**Decision:** for a user in `PRE_ASSESSMENT` the navigation is Dashboard and Profile only; Courses joins it the moment the assessment is done (`ASSESSED_NO_PATH`), My Path, Certificates and the CV once a path is active. A pre-assessment visit to `/courses` or any route under it is redirected to the dashboard by `PortalProvider`, beside the existing 401 and wrong-portal redirects, with the loading state shown in the meantime so the catalogue never flashes. The courses **API stays open**.
+
+**Why:** a brand-new user has exactly one meaningful action — take the assessment — and the dashboard's single card already says so. A browsable catalogue before any recommendation exists competes with that action and invites choosing courses by browsing rather than by fit, which is the failure mode the whole product exists to remove. The nav and the URL must agree: a hidden menu item with a working URL behind it is a nav that lies. The API is left open deliberately: catalogue data is not sensitive, every mutation (adding a course to a path) is already server-gated behind a confirmed path, and closing a read endpoint would buy nothing but a second place for the rule to drift.
+
+**Supersedes:** CLAUDE.md §4.2's "Dashboard, Courses, Profile" and §4.6's "available even pre-assessment", both amended.
+
+**Rejected:** hiding from the nav only (the URL still works — the lie above); a gate page at `/courses` ("finish the assessment first") — a dead end that duplicates the dashboard's card; closing the API (see above).
 ## D-070 — Auth pages are a centred government template on the Platforms Code form anatomy; axe is a permanent gate
 **Decision:** the five authentication pages share `AuthLayout` — a slim header naming the owner (ministry emblem, Tamkeen logo, a visible exit to the landing page), one centred card with the emblem over the form, a footer strip, a decorative lattice behind — and the shared form primitives carry the Platforms Code field anatomy: `Input` (36px, radius 4, neutral-400 edge darkening on hover, primary focus ring), `Field` (semibold label, required mark before the label and kept out of the accessible name, icon + text error row), `PasswordInput`, `Select`, `Alert`. Because the primitives are shared, every form in the portal wears the anatomy too. An axe run (WCAG 2.1 A/AA) over the five pages at three widths is part of the e2e suite.
 
