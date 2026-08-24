@@ -114,8 +114,9 @@ function PathCard({ path, onManage }: { path: AdminPathRow; onManage: () => void
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-2 font-medium text-foreground">
           {path.name}
-          {/* Gold marks the letter because gold is what the letter *does* —
-              it is the recommendation signal (§3A). */}
+          {/* The accent marks the letter because that is what the letter
+              *does* — it is the recommendation signal (§3A). One accent since
+              D-069 retired gold; the treatment, not the hue, carries it. */}
           <Badge variant="primary">{t(`riasec.${path.riasecLetter}`)}</Badge>
           {path.isActive ? null : <Badge variant="soft">{t('pathNotOffered')}</Badge>}
         </p>

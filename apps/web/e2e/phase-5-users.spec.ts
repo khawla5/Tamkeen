@@ -58,7 +58,7 @@ test.describe('Phase 5 — user management', () => {
   test('signing in as an admin lands in the admin portal, not the entity one', async () => {
     await adminPage.goto('/login');
     await adminPage.getByLabel('البريد الإلكتروني').fill(admin.email);
-    await adminPage.getByLabel('كلمة المرور').fill(ADMIN_PASSWORD);
+    await adminPage.getByLabel('كلمة المرور', { exact: true }).fill(ADMIN_PASSWORD);
     await adminPage.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
     /*
@@ -166,7 +166,7 @@ test.describe('Phase 5 — user management', () => {
   test('and signs in to the entity portal, closing Phase 4’s seam', async () => {
     await invitedPage.goto('/login');
     await invitedPage.getByLabel('البريد الإلكتروني').fill(invitedEmail);
-    await invitedPage.getByLabel('كلمة المرور').fill(ADMIN_PASSWORD);
+    await invitedPage.getByLabel('كلمة المرور', { exact: true }).fill(ADMIN_PASSWORD);
     await invitedPage.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
     /*

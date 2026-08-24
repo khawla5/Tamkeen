@@ -68,6 +68,14 @@ test.describe('Phase 4 — the entity portal', () => {
     browsingPage = await browser.newPage();
     await signedInEmployee(browsingPage, 'entity-browser');
 
+    /* D-071 opens the catalogue only once the assessment is done, and every
+       assertion below reads /courses. Taking it unlocks the catalogue without
+       selecting anything, so this learner still holds nothing — a path is
+       deliberately never confirmed here, which is the whole point of them. */
+    await browsingPage.goto('/assessment');
+    await completeAssessment(browsingPage);
+    await expect(browsingPage).toHaveURL(/\/results$/, { timeout: 15_000 });
+
     entityPage = await browser.newPage();
   });
 
@@ -83,7 +91,7 @@ test.describe('Phase 4 — the entity portal', () => {
        flickers through a learner dashboard on the way to their own. */
     await entityPage.goto('/login');
     await entityPage.getByLabel('البريد الإلكتروني').fill(entity.email);
-    await entityPage.getByLabel('كلمة المرور').fill(ENTITY_PASSWORD);
+    await entityPage.getByLabel('كلمة المرور', { exact: true }).fill(ENTITY_PASSWORD);
     await entityPage.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
     await expect(entityPage).toHaveURL('http://localhost:3000/entity');
