@@ -45,7 +45,7 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
     elsewhere = await browser.newPage();
     await elsewhere.goto('/login');
     await elsewhere.getByLabel('البريد الإلكتروني').fill(account.email);
-    await elsewhere.getByLabel('كلمة المرور').fill(PASSWORD);
+    await elsewhere.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
     await elsewhere.getByRole('button', { name: 'تسجيل الدخول' }).click();
     await expect(elsewhere.getByRole('navigation', { name: 'التنقل الرئيسي' })).toBeVisible();
   });
@@ -123,11 +123,11 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
 
   test('the new password is the one that signs in, and the old one is dead', async () => {
     await elsewhere.getByLabel('البريد الإلكتروني').fill(account.email);
-    await elsewhere.getByLabel('كلمة المرور').fill(PASSWORD);
+    await elsewhere.getByLabel('كلمة المرور', { exact: true }).fill(PASSWORD);
     await elsewhere.getByRole('button', { name: 'تسجيل الدخول' }).click();
     await expect(elsewhere.getByRole('alert')).toBeVisible({ timeout: 15_000 });
 
-    await elsewhere.getByLabel('كلمة المرور').fill(NEXT_PASSWORD);
+    await elsewhere.getByLabel('كلمة المرور', { exact: true }).fill(NEXT_PASSWORD);
     await elsewhere.getByRole('button', { name: 'تسجيل الدخول' }).click();
     await expect(elsewhere.getByRole('navigation', { name: 'التنقل الرئيسي' })).toBeVisible({
       timeout: 15_000,
@@ -246,12 +246,12 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
 
   test('§4.12 — the new address is the one that signs in now', async () => {
     await here.getByLabel('البريد الإلكتروني').fill(account.email);
-    await here.getByLabel('كلمة المرور').fill(NEXT_PASSWORD);
+    await here.getByLabel('كلمة المرور', { exact: true }).fill(NEXT_PASSWORD);
     await here.getByRole('button', { name: 'تسجيل الدخول' }).click();
     await expect(here.getByRole('alert')).toBeVisible({ timeout: 15_000 });
 
     await here.getByLabel('البريد الإلكتروني').fill(movedEmail);
-    await here.getByLabel('كلمة المرور').fill(NEXT_PASSWORD);
+    await here.getByLabel('كلمة المرور', { exact: true }).fill(NEXT_PASSWORD);
     await here.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
     await expect(here.getByRole('navigation', { name: 'التنقل الرئيسي' })).toBeVisible({

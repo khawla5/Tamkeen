@@ -154,7 +154,13 @@ export function PortalProvider({ children }: { children: ReactNode }) {
    * and was fixed in `useApiQuery`; these three providers were the remaining
    * callers still reading the old flag.
    */
-  if (session.isInitialLoad || dashboard.isInitialLoad || shouldRedirect || wrongPortal || coursesGated) {
+  if (
+    session.isInitialLoad ||
+    dashboard.isInitialLoad ||
+    shouldRedirect ||
+    wrongPortal ||
+    coursesGated
+  ) {
     /* The redirect is in flight during `shouldRedirect`; showing the loading
        state rather than an error avoids a flash of "something went wrong" on
        what is simply an expired session. */

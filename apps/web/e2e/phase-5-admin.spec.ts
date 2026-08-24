@@ -60,7 +60,7 @@ test.describe('Phase 5 — the administered surface', () => {
 
     await page.goto('/login');
     await page.getByLabel('البريد الإلكتروني').fill(admin.email);
-    await page.getByLabel('كلمة المرور').fill(ADMIN_PASSWORD);
+    await page.getByLabel('كلمة المرور', { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
 
     /*
