@@ -75,10 +75,12 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
                    active does not shift the layout. */
                 orientation === 'vertical' ? 'border-s-2' : 'border-b-2',
                 isActive
-                  ? /* Bold weight accompanies the primary edge, so position is not
+                  ? /* Platforms Code's light-nav anatomy (TAM-117): the primary
+                       start-edge bar, tinted ground and primary text mark the
+                       current item; bold weight rides along so position is not
                        signalled by colour alone (WCAG 1.4.1). */
-                    'border-primary-600 bg-white/10 font-semibold text-white'
-                  : 'border-transparent text-white/75 hover:bg-white/5 hover:text-white',
+                    'border-primary-600 bg-primary-50 font-semibold text-primary-800'
+                  : 'border-transparent text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900',
               )}
             >
               <Icon aria-hidden="true" className="size-4 shrink-0" />
@@ -96,7 +98,9 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
                 <>
                   <span
                     aria-hidden="true"
-                    className="ms-auto size-2 shrink-0 rounded-full bg-accent"
+                    /* primary-600, not the accent tint: on the light rail the
+                       accent (primary-50) would vanish into the ground. */
+                    className="ms-auto size-2 shrink-0 rounded-full bg-primary-600"
                   />
                   <span className="sr-only">{tA11y('newCertificates')}</span>
                 </>

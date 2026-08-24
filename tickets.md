@@ -333,7 +333,7 @@
 > **Source of truth:** the official Platforms Code site/Figma; the community registry's Navigation Menu, Breadcrumb, Card, Table, Tabs, Tag, Tooltip, Skeleton and Sonner definitions are the practical reference for component anatomy (unofficial — reconcile with the official spec where they differ).
 > **Branching:** `feature/tam-117-portal-shell` off `feature/tam-106-nav-gating`; each following ticket stacks on the previous.
 
-## TAM-117 — Portal shell on Platforms Code: header bar, light sidebar, page frame, footer
+## TAM-117 — Portal shell on Platforms Code: header bar, light sidebar, page frame, footer — **DONE** (`feature/tam-117-portal-shell`, D-097; sign-out had already moved to the header user menu per D-096, which this shell keeps)
 
 - **Labels:** `portal-dga`, `frontend`, `design-system`
 - **Priority:** High (every portal page sits in it)

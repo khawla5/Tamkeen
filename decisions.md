@@ -5,6 +5,13 @@
 
 ---
 
+## D-097 — The shell is framed like a government application: owner's bar, light rail, footer strip
+**Decision:** the portal shell (all three portals — one `AppShell`) is: a top header bar carrying the ministry/Tamkeen lockup on the start edge and the signed-in identity (the D-096 line and avatar menu) on the end; a **light** navigation rail — white ground, Platforms Code anatomy, the active item marked by the primary start-edge bar, tinted ground and primary text — replacing the dark neutral-900 rail; the page header (h1 + the single action) inside the content column, aligned to the TAM-124 width, which `AppShell` now owns for all portals; and the same slim footer strip the auth pages wear (الوزارة · الإدارة العامة للتدريب · التصنيف). The certificates dot becomes primary-600 — the accent tint it used to wear vanishes on a light ground.
+
+**Why:** the dark rail was the last surface of the navy era: Platforms Code applications frame with a light nav and the primary as the active indicator, and a neutral-900 column beside white content was the one place the portal still looked like the old brand. The owner's bar restores the rule every public page already follows — the ministry is named before the product. CLAUDE.md §3's "dark surface (sidebar, footer)" row is amended to the landing footer only.
+
+**Rejected:** keeping the white lockup tile on a dark rail (the tile existed because the rail was dark); per-portal shells (the entity and admin frames are configurations of one shell, which is what kept this change to one file plus the nav anatomy).
+
 ## D-096 — One exit for every role: the header's user menu; the sidebar footer only names
 **Decision:** sign-out lives in the header's user menu — an initials avatar on every shell page that opens to the identity block (name, department), the role's own profile link (learner `/profile`, entity `/entity/profile`, none for the admin, who has no profile page) and the one «تسجيل الخروج». The sidebar footer keeps naming who is signed in but acts on nothing, and the profile page's own sign-out button was removed. The identity line (department · الرقم الوظيفي) moved off the dashboard into the header chrome, visible on every screen from md up; the dashboard keeps only the greeting.
 
