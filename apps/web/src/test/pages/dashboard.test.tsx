@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -52,6 +52,17 @@ const USER: CurrentUser = {
   numberFormat: null,
 };
 
+/** The fields every state carries (TAM-123), empty unless a test fills them. */
+const EMPTY = {
+  recommendedPaths: [] as DashboardView['recommendedPaths'],
+  upcomingCourses: [] as DashboardView['upcomingCourses'],
+  latestCertificate: null,
+  recentActivity: [] as DashboardView['recentActivity'],
+} satisfies Pick<
+  DashboardView,
+  'recommendedPaths' | 'upcomingCourses' | 'latestCertificate' | 'recentActivity'
+>;
+
 function setDashboard(dashboard: DashboardView) {
   portal.value = { user: USER, dashboard, refresh: vi.fn() };
 }
@@ -62,7 +73,7 @@ beforeEach(() => {
 
 describe('dashboard — PRE_ASSESSMENT', () => {
   beforeEach(() => {
-    setDashboard({ state: 'PRE_ASSESSMENT', codeString: null, path: null });
+    setDashboard({ state: 'PRE_ASSESSMENT', codeString: null, path: null, ...EMPTY });
   });
 
   it('offers the assessment as the single primary action', () => {
@@ -72,6 +83,27 @@ describe('dashboard — PRE_ASSESSMENT', () => {
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveTextContent('ابدأ التقييم');
     expect(links[0]).toHaveAttribute('href', '/assessment');
+  });
+
+  it('shows the journey tracker with the assessment current and nothing done yet', () => {
+    renderWithProviders(<DashboardPage />);
+
+    const steps = screen.getAllByRole('listitem', { name: /التقييم|المسار|الدورات|الشهادة/ });
+    expect(steps.map((li) => li.getAttribute('data-stage'))).toEqual([
+      'current',
+      'upcoming',
+      'upcoming',
+      'upcoming',
+    ]);
+    expect(screen.getByRole('list', { name: 'رحلتك التدريبية' })).toBeInTheDocument();
+  });
+
+  it('greets the user by name; department and employee id live in the shell header (D-096)', () => {
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.getByText(/سارة العتيبي/)).toBeInTheDocument();
+    /* The identity line moved into the chrome — the page must not repeat it. */
+    expect(screen.queryByText(/الرقم الوظيفي/)).not.toBeInTheDocument();
   });
 
   it('shows no progress bar and no path tiles', () => {
@@ -86,37 +118,74 @@ describe('dashboard — PRE_ASSESSMENT', () => {
   it('greets the user by name', () => {
     renderWithProviders(<DashboardPage />);
 
-    expect(screen.getByText('أهلًا، سارة العتيبي')).toBeInTheDocument();
+    expect(screen.getByText(/أهلًا، سارة العتيبي/)).toBeInTheDocument();
   });
 });
 
 describe('dashboard — ASSESSED_NO_PATH', () => {
   beforeEach(() => {
-    setDashboard({ state: 'ASSESSED_NO_PATH', codeString: 'SIA', path: null });
+    setDashboard({
+      state: 'ASSESSED_NO_PATH',
+      codeString: 'SIA',
+      path: null,
+      ...EMPTY,
+      recommendedPaths: [
+        { id: 'p1', name: 'خدمة المتعاملين', riasecLetter: 'S' },
+        { id: 'p2', name: 'التدريب وتنمية القدرات', riasecLetter: 'S' },
+        { id: 'p3', name: 'القيادة وإدارة الفرق', riasecLetter: 'E' },
+      ],
+      recentActivity: [{ kind: 'ASSESSMENT_COMPLETED', title: null, at: '2026-08-23T10:00:00Z' }],
+    });
   });
 
-  it('points at path selection as the single action', () => {
+  it('keeps one primary action — Results — and previews the top recommendations as cards', () => {
     renderWithProviders(<DashboardPage />);
 
-    const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAttribute('href', '/results');
-    expect(links[0]).toHaveTextContent('اختر مسارك');
+    expect(screen.getByRole('link', { name: 'اختر مسارك' })).toHaveAttribute('href', '/results');
+
+    const preview = screen.getByRole('region', { name: 'مسارات موصى بها لك' });
+    const cards = within(preview)
+      .getAllByRole('link')
+      .filter((a) => a.getAttribute('href')?.startsWith('/paths/'));
+    expect(cards.map((a) => a.getAttribute('href'))).toEqual([
+      '/paths/p1',
+      '/paths/p2',
+      '/paths/p3',
+    ]);
+    expect(cards[0]).toHaveTextContent('خدمة المتعاملين');
+    expect(cards[0]).toHaveTextContent('الاجتماعي');
+    expect(within(preview).getByRole('link', { name: 'عرض كل المسارات' })).toHaveAttribute(
+      'href',
+      '/results',
+    );
+  });
+
+  it('tracker: assessment done, path current', () => {
+    renderWithProviders(<DashboardPage />);
+
+    const steps = screen.getAllByRole('listitem', { name: /التقييم|المسار|الدورات|الشهادة/ });
+    expect(steps.map((li) => li.getAttribute('data-stage'))).toEqual([
+      'done',
+      'current',
+      'upcoming',
+      'upcoming',
+    ]);
   });
 
   it('shows the Holland Code as Arabic chips in rank order — never the Latin string', () => {
     renderWithProviders(<DashboardPage />);
 
-    const chips = screen.getAllByRole('listitem').map((li) => li.textContent);
+    const chips = within(screen.getByRole('list', { name: 'ميولك المهنية' }))
+      .getAllByRole('listitem')
+      .map((li) => li.textContent);
     expect(chips).toEqual(['الاجتماعي', 'البحثي', 'الفني']);
     expect(screen.queryByText(/SIA/)).toBeNull();
   });
 
-  it('offers no summaries, path previews or retake here — Results owns those', () => {
+  it('offers no summaries or retake here — Results owns the explanation and the retake', () => {
     renderWithProviders(<DashboardPage />);
 
     expect(screen.queryByText(/تميل إلى/)).toBeNull();
-    expect(screen.queryByText('موصى به')).toBeNull();
     expect(screen.queryByText('إعادة التقييم')).toBeNull();
   });
 
@@ -140,6 +209,23 @@ describe('dashboard — ACTIVE_PATH', () => {
       totalCount: 7,
       nextCourse: { id: 'upc-3', courseId: 'course-3', title: 'مهارات التواصل المؤسسي' },
     },
+    ...EMPTY,
+    upcomingCourses: [
+      { id: 'upc-3', courseId: 'course-3', title: 'مهارات التواصل المؤسسي', status: 'IN_PROGRESS' },
+      { id: 'upc-4', courseId: 'course-4', title: 'إدارة الشكاوى', status: 'NOT_STARTED' },
+      { id: 'upc-5', courseId: 'course-5', title: 'أخلاقيات الخدمة', status: 'NOT_STARTED' },
+    ],
+    latestCertificate: {
+      id: 'cert-1',
+      type: 'COURSE',
+      subjectTitle: 'استقبال الطلبات',
+      issuedAt: '2026-08-20T09:00:00Z',
+    },
+    recentActivity: [
+      { kind: 'CERTIFICATE_ISSUED', title: 'استقبال الطلبات', at: '2026-08-20T09:00:00Z' },
+      { kind: 'COURSE_PASSED', title: 'استقبال الطلبات', at: '2026-08-20T08:55:00Z' },
+      { kind: 'PATH_CONFIRMED', title: 'خدمة المتعاملين', at: '2026-08-18T12:00:00Z' },
+    ],
   };
 
   it('shows progress as text as well as a bar (WCAG 1.4.1)', () => {
@@ -198,5 +284,63 @@ describe('dashboard — ACTIVE_PATH', () => {
     /* completed / in progress / not started, summing to the total. */
     expect(counts).toEqual(['2', '1', '4']);
     expect(strip.querySelectorAll('a, button')).toHaveLength(0);
+  });
+
+  it('lists the next courses in order with their status, the current one first', () => {
+    setDashboard(ACTIVE);
+    renderWithProviders(<DashboardPage />);
+
+    const list = screen.getByRole('list', { name: 'الدورات التالية' });
+    const items = within(list).getAllByRole('listitem');
+    expect(items).toHaveLength(3);
+    expect(items[0]).toHaveTextContent('مهارات التواصل المؤسسي');
+    expect(items[0]).toHaveTextContent('قيد التنفيذ');
+    expect(items[1]).toHaveTextContent('لم تبدأ');
+    expect(within(items[0]!).getByRole('link')).toHaveAttribute('href', '/courses/course-3');
+  });
+
+  it('shows the latest certificate with a link to the gallery', () => {
+    setDashboard(ACTIVE);
+    renderWithProviders(<DashboardPage />);
+
+    const region = screen.getByRole('region', { name: 'أحدث شهادة' });
+    expect(region).toHaveTextContent('استقبال الطلبات');
+    expect(within(region).getByRole('link')).toHaveAttribute('href', '/certificates');
+  });
+
+  it('shows the locked path-certificate slot when nothing has been earned yet', () => {
+    setDashboard({ ...ACTIVE, latestCertificate: null });
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.getByRole('region', { name: 'أحدث شهادة' })).toHaveTextContent(
+      'لم تصدر لك شهادة بعد',
+    );
+  });
+
+  it('lists the last three things that happened, newest first, in Arabic', () => {
+    setDashboard(ACTIVE);
+    renderWithProviders(<DashboardPage />);
+
+    const feed = screen.getByRole('list', { name: 'آخر المستجدات' });
+    const items = within(feed)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent ?? '');
+    expect(items).toHaveLength(3);
+    expect(items[0]).toMatch(/صدرت شهادة/);
+    expect(items[1]).toMatch(/اجتزت دورة/);
+    expect(items[2]).toMatch(/أكّدت مسار/);
+  });
+
+  it('tracker: assessment and path done, courses current', () => {
+    setDashboard(ACTIVE);
+    renderWithProviders(<DashboardPage />);
+
+    const steps = screen.getAllByRole('listitem', { name: /التقييم|المسار|الدورات|الشهادة/ });
+    expect(steps.map((li) => li.getAttribute('data-stage'))).toEqual([
+      'done',
+      'done',
+      'current',
+      'upcoming',
+    ]);
   });
 });

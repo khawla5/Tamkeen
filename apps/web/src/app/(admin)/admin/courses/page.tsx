@@ -223,7 +223,7 @@ function CourseTable({
               </td>
               <td className="px-4 py-3">{t(`coursePublication.${row.publication}`)}</td>
               <td className="px-4 py-3">
-                <Badge variant={row.status === 'AVAILABLE' ? 'soft' : 'navy'}>
+                <Badge variant={row.status === 'AVAILABLE' ? 'soft' : 'dark'}>
                   {t(`courseStatus.${row.status}`)}
                 </Badge>
                 {/* The LMS half of the derivation, shown only when it is the

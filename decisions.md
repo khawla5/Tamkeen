@@ -5,6 +5,24 @@
 
 ---
 
+## D-096 — One exit for every role: the header's user menu; the sidebar footer only names
+**Decision:** sign-out lives in the header's user menu — an initials avatar on every shell page that opens to the identity block (name, department), the role's own profile link (learner `/profile`, entity `/entity/profile`, none for the admin, who has no profile page) and the one «تسجيل الخروج». The sidebar footer keeps naming who is signed in but acts on nothing, and the profile page's own sign-out button was removed. The identity line (department · الرقم الوظيفي) moved off the dashboard into the header chrome, visible on every screen from md up; the dashboard keeps only the greeting.
+
+**Why:** TAM-112 put the sign-out in the sidebar footer; the user asked for the header-avatar pattern, and §3 forbids keeping both. The header menu is what Absher-class government portals do, and it made a real gap visible: the admin shell passed no user at all, so once the profile button went the super-admin would have had **no exit** — every role now gets the same one. The identity line moved for the same reason the menu did: it is chrome (whose session is this), not dashboard content, and on the dashboard it existed on exactly one page.
+
+**Rejected:** sign-out in both places (redundant UI, §3); keeping the profile page's button (a second exit); a shared /profile route for the admin (the portal provider correctly bounces wrong-portal roles — the menu simply omits the link instead).
+
+## D-095 — The dashboard carries context, not just the one action: tracker, identity, the decision, what is next, what happened
+**Decision:** every dashboard state shows a journey tracker (التقييم → المسار → الدورات → الشهادة, done/current/upcoming, derived from the server-decided state) and a personal header (name, department, employee id from the session). The assessed-no-path state previews the **top three recommended paths** in rank order, each opening its path page, beside one "عرض كل المسارات" link. The active state adds the next courses in order with their status, the latest certificate (or the locked slot and how it unlocks), and every state shows the last three things that happened (assessment completed, path confirmed, course passed, certificate issued). All of it arrives in the one dashboard payload; the activity feed is read from the product tables, not the audit log, because those rows carry titles a person recognises.
+
+**Why:** §4.2's "near-empty" was obeyed literally and produced a page that read as unfinished — one card and a greeting. "Near-empty" was protecting against *empty widgets* (a zero-of-zero progress bar) and competing actions, not against information. Each addition answers a question the user has on arrival: where am I, is this mine, what should I decide, what comes next, what just happened. None is a second primary action: the recommendation cards are the decision itself brought forward; the course and certificate links are navigation to content that exists; the tracker and feed are not interactive.
+
+**Reverses** the TAM-108 discussion's "no path previews on the dashboard" — that was the right call for a page whose only content was the card; with the tracker and feed in place, the preview is the most meaningful thing the choosing state can hold, and Results still owns the full ranking, the explanation and the retake.
+
+**Rejected:** quick-link tiles in every state (duplicates the sidebar); a count-only nudge ("لديك 6 مسارات موصى بها" — says less than three names); the audit log as the activity source (minimal by design, no titles); a separate activity endpoint (one payload is the dashboard's contract).
+
+**Numbering note:** authored as D-074 on its feature branch, in parallel with Phase 5, whose merge claimed the number first; renumbered D-095 at rebase (as D-093's note explains).
+
 ## D-094 — The assessment keeps the sidebar, and a session draft makes leaving free
 **Decision:** the assessment page renders inside the normal shell, with the two-item pre-assessment nav (D-071); results and path build stay bare. Answers and the current question are written through to `sessionStorage` on every change, keyed to the assessment id and its question ids; the draft is restored on return within the browser session, discarded if the bank has changed, and cleared on submit so a retake (D-015) starts clean.
 
@@ -96,7 +114,7 @@
 
 ## D-083 — The seed bootstraps the assessment; it does not maintain it
 **Decision:** `seedAssessment` writes version 1 only while version 1 is the *only* version of the instrument. Once an administrator has published an edit through §4C.3, the seed reports that the content is the ministry's and leaves every row alone.
-**Why:** the seed upserted the bank by key on every run, which was right while the code owned the wording. After D-069 it would overwrite a published ministry version with whatever draft text shipped in the repository — on `npm run db:seed`, in a deployment script, in CI against a real database. That is data loss dressed as a convenience, and the loss is a career instrument the ministry authored.
+**Why:** the seed upserted the bank by key on every run, which was right while the code owned the wording. After D-072 (copy-on-write) it would overwrite a published ministry version with whatever draft text shipped in the repository — on `npm run db:seed`, in a deployment script, in CI against a real database. That is data loss dressed as a convenience, and the loss is a career instrument the ministry authored.
 **Also decided:** it says so on standing back rather than skipping quietly. A seed that appears to run and changes nothing is how somebody spends an afternoon wondering why their edit did not take.
 **Consequence:** revising the seeded Arabic in `seed-data/assessment.ts` stops having any effect on an instance that has been edited. That is correct — after the first publish there are two authors and only one of them is authoritative — and it is what D-032 meant by "seeded data precisely so Phase 5 can edit it without a deploy".
 **Rejected:** upserting unconditionally (overwrites published content); refusing to seed at all once any assessment exists (breaks `db:reset && db:seed` in development, which is the seed's main job); a `--force` flag (a flag that exists to overwrite ministry content will eventually be used to overwrite ministry content).
@@ -160,7 +178,7 @@
 
 ## D-073 — An assessment edit is drafted, then published; the guard fires at publish
 **Decision:** Editing the assessment produces a **draft version** — a full working copy of the bank that an admin may leave temporarily inconsistent — and a separate, deliberate **publish** step that validates it and makes it the active assessment. Balance is checked at publish, not on each save.
-**Why:** Going from a balanced thirty-item bank to a balanced thirty-six-item bank means passing through six unbalanced states. A guard on every save would make the legal destination unreachable except by an ordering trick, which is the kind of rule people learn to defeat rather than obey. It also gives the admin somewhere to work: an assessment revision is a content task done over an afternoon, not one atomic edit. D-069's copy-on-write already gives the draft a natural home — it is simply the next version before it becomes active.
+**Why:** Going from a balanced thirty-item bank to a balanced thirty-six-item bank means passing through six unbalanced states. A guard on every save would make the legal destination unreachable except by an ordering trick, which is the kind of rule people learn to defeat rather than obey. It also gives the admin somewhere to work: an assessment revision is a content task done over an afternoon, not one atomic edit. D-072's copy-on-write already gives the draft a natural home — it is simply the next version before it becomes active.
 **Consequence:** at most one draft version exists at a time, and the active version is never the one being edited. A learner mid-assessment is unaffected by an edit in progress, and unaffected by the publish too — their submission scores against the version they were served.
 **Rejected:** Immediate-effect edits (no safe intermediate state, and no moment at which an admin confirms what they are about to do to future takers); a free-text "publish notes" field (untyped, and nothing reads it).
 

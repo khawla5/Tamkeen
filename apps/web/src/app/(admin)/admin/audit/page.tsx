@@ -276,7 +276,7 @@ function AuditEntry({ row }: { row: AdminAuditRow }) {
           {/* An action with no Arabic copy falls back to its code — a blank row
               would hide the event, which is worse than an untranslated one. */}
           {tAction.has(row.action) ? tAction(row.action) : row.action}
-          {row.outcome === 'FAILURE' ? <Badge variant="navy">{t('outcomeFailure')}</Badge> : null}
+          {row.outcome === 'FAILURE' ? <Badge variant="dark">{t('outcomeFailure')}</Badge> : null}
         </p>
 
         {/* The reason, which is half the value of a refused entry. Non-PII by

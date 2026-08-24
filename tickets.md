@@ -227,7 +227,7 @@
   - Reuse the `auth_tokens` single-use hashed-token infrastructure and the existing verify-email page/endpoint shape with a new token type (`EMAIL_CHANGE`); store the pending address as `users.pending_email` (it is not a secret, but it must not become the login before confirmation).
   - The verification email is a *reuse* of the locked "email verification" notification type, not a new type.
 
-## TAM-112 — Sign-out in the sidebar footer — **absorbed by TAM-117** (the shell's header carries sign-out)
+## TAM-112 — Sign-out: the header user menu, one exit for every role — **DONE** (`feature/tam-112-sidebar-signout`, revised per D-096)
 
 - **Labels:** `profile`, `frontend`
 - **Priority:** Low
@@ -235,6 +235,7 @@
 - **Description:**
   Sign-out lives only on the profile page because it needed a home. Add a sidebar footer showing the user's name with a quiet "تسجيل الخروج" action, reachable from every portal page; the profile page keeps its own sign-out as a secondary action at the bottom ("both" per discussion). It is a footer, not a seventh nav item — the six-item steady-state nav is untouched.
   **Acceptance:** footer present on every `chrome="nav"` page, keyboard-reachable, not announced inside the primary-navigation landmark; behaviour identical to the profile button (logout call, then `/login`, navigating even if the request fails); e2e sign-out passes from a non-profile page.
+  **What shipped (2026-08-23):** a sidebar footer (user's name + quiet "تسجيل الخروج") on every `AppShell` page — learner and entity frames both pass the user in — outside the navigation landmark; the logout-then-navigate-regardless behaviour extracted to `useSignOut()` and shared with the profile page, which keeps its own button. 3 shell tests (footer placement, sign-out, sign-out when the request fails); e2e signs out from the sidebar on the profile page and checks the session cookie is gone. TAM-117 may later move this into its header bar — the hook makes that a placement change only.
   **Implementation notes (verified):** the shell is `src/components/layout/app-shell.tsx` + `sidebar-nav.tsx`; `PortalPage` hands it `navForState(...)` items — the footer is layout, not a nav item, so it belongs in `AppShell`, fed from `usePortal().user`. The logout call and the "navigate regardless" comment already exist in `profile/page.tsx` — extract a shared hook so the two buttons cannot drift.
 
 ---
@@ -409,4 +410,134 @@
 - **Priority:** Medium
 - **Pre-requisite:** none
 - **What shipped (2026-08-23):** `NavigationProgress` mounted once in the root layout — a 3px primary top bar that starts on any internal link click (capture phase, so `next/link` and plain anchors alike), on back/forward, and on programmatic `push`/`replace` through the new `useAppRouter()` (all seven call sites rewired; it is now the only router hook pages use); completes on the route change; one polite "جارٍ الانتقال…" status per navigation; reduced-motion collapses the animation. In-page data waits keep `LoadingState`. D-072 recorded; CLAUDE.md §3 notes the rule. 5 component tests (idle → active → complete; external/new-window/hash/modified clicks ignored; programmatic start; a11y shape).
+
+## TAM-123 — A meaningful dashboard: tracker, identity, the decision, what is next, what happened — **DONE** (`feature/tam-123-dashboard-content`)
+
+- **Labels:** `assessment-gating`, `dashboard`, `frontend`, `api`
+- **Priority:** High
+- **Pre-requisite:** TAM-108
+- **What shipped (2026-08-23), per the discussion:** every state — journey tracker (4 stages, state-derived) + personal header (name · department · employee id; the session and `/me` now carry both — TAM-109's first bullet, done here) + the last three events. Assessed state — the top three recommended paths as cards in rank order + "عرض كل المسارات". Active state — next courses with status, latest certificate or the locked slot. API: `DashboardView` gained `recommendedPaths`, `upcomingCourses`, `latestCertificate`, `recentActivity`; the feed is derived from assessment results, path confirmation, passed completions and issued certificates. D-074 recorded (it reverses TAM-108's "no previews"); CLAUDE.md §4.2 rewritten. 9 new web tests, API journey + auth integration assertions against the test database; screenshots reviewed for both pre-assessment and assessed states.
+- **Not done, by choice:** quick-link tiles in every state (duplicates the sidebar). Recent activity is limited to three events; a full history page is not a dashboard concern.
+
+## TAM-124 — One page width across the portal: الرئيسية is the reference
+
+- **Labels:** `app-chrome`, `frontend`, `design-system`
+- **Priority:** High (TAM-125 builds on it; every open page ticket inherits it)
+- **Pre-requisite:** none
+- **Description:**
+  Every page currently picks its own content width, and they disagree: the assessment says `max-w-2xl`, my-path/courses/path-build `3xl`, results `4xl`, the dashboard `6xl` (widened on request in TAM-123, and confirmed as the reference). On a desktop screen most pages float in a narrow centered strip with dead whitespace either side — the same complaint, page after page. Fix it **once, structurally**:
+  1. **`PortalPage` owns the container.** It wraps `children` in the dashboard's container (`mx-auto w-full max-w-6xl`) — in **both** chrome variants, `nav` and `bare` (results and path-build are `bare` and need it most). Pages stop declaring their own.
+  2. **A `width="narrow"` opt-in** (`max-w-2xl`) for genuinely narrow flows — the assessment questions, the profile form, the course player. Default is the standard width; narrow is an explicit, visible choice in the page's code.
+  3. **Sweep the pages:** remove the per-page `mx-auto max-w-*` wrappers (dashboard, results, paths/[pathId] — including the fixed footer's inner container, which must track the same width — courses, courses/[courseId], my-path; assessment/profile/player switch to the prop). In-page `EmptyState`/error wrappers that used their own `max-w-2xl` follow the same rule.
+  **Acceptance:**
+  - `grep -rn "max-w-" src/app/(portal)` returns nothing — the only content-width declarations live in `PortalPage` (asserted in a test or CI grep).
+  - Dashboard renders exactly as before (it is the reference, not a change target).
+  - Path-build's fixed counter bar aligns flush with the page content at every viewport.
+  - No horizontal overflow at 360px on any portal page; existing page tests updated, e2e journey green.
+  **Implementation notes (verified):**
+  - `src/components/layout/portal-page.tsx` — the `bare` branch renders `<main id="main-content" className="p-6">{children}</main>`; the `nav` branch delegates to `AppShell`, whose `<main>` padding is in `app-shell.tsx`. Put the container around `children` in `PortalPage` itself so both branches share it, rather than inside `AppShell`.
+  - Current per-page widths to sweep: `assessment` 2xl → narrow prop; `courses/[courseId]` 3xl → default; `courses/[courseId]/player` 2xl → narrow; `my-path` 3xl (+2xl empty states) → default; `page.tsx` (dashboard) 6xl → default; `paths/[pathId]` 3xl + footer inner 3xl → default; `profile` 2xl → narrow; `results` 4xl (+2xl empty state) → default.
+  - The fixed footer in `paths/[pathId]` is outside the flow, so it cannot inherit the wrapper — it keeps its own inner container; give both the same width via one exported constant/class rather than two literals.
+  - TAM-119/120 (the portal-dga sweeps) restyle these pages later — they build on this standard, not around it.
+
+## TAM-125 — Path build page: header card with meta + selectable-card course grid
+
+- **Labels:** `paths`, `frontend`
+- **Priority:** High
+- **Pre-requisite:** TAM-124 (the grid needs the standard width)
+- **Approved mockup (2026-08-24):** https://claude.ai/code/artifact/58480b76-3385-4980-921e-01468b3d0bad — second screen; the annotations are part of the spec.
+- **Description:**
+  The build page (screenshot 2026-08-24 on file) is a bare description line and eleven full-width stacked rows, each mostly empty — ~6 screenfuls to see one path's courses, with the choice the page exists for (5–10, confirm) pushed far below. Same data, same API, same rules; the fixed counter bar and the confirm dialog behave exactly as today.
+  1. **Header card with meta.** The description plus: the path's RIASEC type as a tag, the «موصى به» badge when the path matches the user's code, the course count ("11 دورة متاحة"), and the **live total of selected hours** (updates as courses are picked — the user sees the commitment grow). This answers "what am I committing to" before the list.
+  2. **Selectable-card grid.** Compact cards — title, one-line summary (clamped), hours — in a responsive grid (1 / 2 / 3 columns). **The whole card is the toggle**: one accessible control per course (the card itself is the button, `aria-pressed`), a visible checkbox glyph (decorative, `aria-hidden`) plus the primary-600 selected border — state is never colour alone. Unavailable courses and the at-max state keep their text hints and are not pressable.
+  3. **Counter bar unchanged in behaviour** (persistent §4.5, `aria-live`), restyled only as needed to sit on the grid.
+  **Acceptance:**
+  - Grid at 1/2/3 columns across breakpoints; the eleven seeded courses fit ~2 screenfuls at desktop.
+  - Card toggles with pointer **and** keyboard (Enter/Space), announces pressed state; exactly one interactive element per card — no nested buttons/links (asserted).
+  - Selected state readable without colour (glyph + `aria-pressed`); unavailable/at-max cards expose their reason as text and are disabled.
+  - Header shows type tag, count, and selected-hours total that updates on every toggle; «موصى به» appears only when the path is actually recommended for this user.
+  - 5–10 enforcement, confirm enable/disable, the hard-commitment dialog, the locked (`canBuild=false`) state, and API course order — all unchanged, asserted.
+  - e2e journey (build step) green with updated selectors.
+  **Implementation notes (verified):**
+  - Page: `src/app/(portal)/paths/[pathId]/page.tsx` — rows are inline (~lines 147–194); `toggle()` persists each click through `setCourses` and `isPending` already guards double-fires; keep the guard when the whole card becomes the control. `toHours(durationMinutes)` exists.
+  - The current row keeps the rule "exactly one control per course, label states the current state" (comment in file) — the card-as-button keeps that rule; the state word (أُضيفت/أضف/الحد الأقصى/غير متاحة) moves into the card as the glyph's label.
+  - **Verify the detail payload carries `riasecLetter` and `recommendationRank`** (the list's `PathSummary` has both; the detail endpoint may not) — if missing, add them to the detail response (read-only field, no rule change).
+  - The fixed footer's inner width comes from TAM-124's shared constant.
+
+## TAM-126 — My Path as a journey: vertical timeline, one action, the certificate as the last stop
+
+- **Labels:** `paths`, `frontend`
+- **Priority:** High
+- **Pre-requisite:** TAM-124 (the standard width)
+- **Approved mockup (2026-08-24):** https://claude.ai/code/artifact/58480b76-3385-4980-921e-01468b3d0bad — first screen; the annotations are part of the spec.
+- **Description:**
+  The run view (screenshot 2026-08-24 on file) renders the path as five identical disconnected cards — **every unfinished course carries an «ابدأ الدورة» button** (the next one primary, the rest outline), which is four more actions than §3 and §4.9's "must not compete with continue" allow. Nothing conveys sequence on the one page whose subject *is* a sequence, statuses are a grey word, and the certificate is a detached box with a lock and no explanation. Same data flow, same routes; restructure the page as the journey it describes:
+  1. **Header card with meta.** Path name + its RIASEC type tag (needs `riasecLetter` in the payload — see notes), the progress bar with "X من Y دورات مكتملة" as today.
+  2. **Vertical timeline** replacing the card list — one ordered rail, the courses as numbered stops:
+     - **Done:** check glyph, «مكتملة» + the quiz grade (already in the payload), and a quiet text link **«عرض الشهادة»** to that course's certificate. No buttons.
+     - **Current (`isNextUp`):** the highlighted stop — the card treatment, «التالية» badge, and **the page's only button** («ابدأ الدورة» / «أكمل الدورة»).
+     - **Upcoming:** quiet rows, number + title + «لم تبدأ». No buttons. A course that is `IN_PROGRESS` but not next-up shows its status only — its access stays on the course page.
+  3. **The certificate is the final stop on the rail,** not a separate box. Locked: lock glyph + how it unlocks («تُفتح عند إتمام دوراتك الخمس» — count interpolated). Unlocked: the achievement treatment + the existing link to the gallery.
+  4. **The quiet add (§4.9, owed since Phase 1):** after the last course stop, a subdued text link «إضافة دورة (لديك ٥ من ١٠)» to the catalogue — shown only while the path is active and under `PATH_MAX_COURSES`. The server already enforces everything (add-only, cap of 10); the course detail page already performs the add.
+  **Acceptance:**
+  - Exactly **one** `<button>`/primary action on the page in every state (asserted): the next-up course's. Done rows expose links only; upcoming rows expose nothing.
+  - The list stays an `<ol>` in API order; each stop's state is announced in text (never colour/glyph alone); grades render via `format.percent`.
+  - Certificate stop: locked shows the unlock condition with the real remaining count; unlocked keeps today's link; `pathCertificateUnlocked` logic untouched.
+  - The add link appears only when `status === 'ACTIVE' && totalCount < 10`, disappears at 10, and never renders for a completed path.
+  - `BUILDING` redirect state, `NoPath` empty state, loading/error states — unchanged, asserted.
+  - e2e journey green (its my-path step selectors updated).
+  **Implementation notes (verified):**
+  - Page: `src/app/(portal)/my-path/page.tsx` — `CourseRow` currently gives **every** non-completed course a button (next primary, others outline); that is the bug this ticket fixes, and the comment above it already states the correct rule.
+  - Payload: `MyPathView` has `pathId/pathName/status/completedCount/totalCount/pathCertificateUnlocked`, courses have `id/courseId/title/status/gradePercent/isNextUp`. **Missing for this ticket:** `riasecLetter` (header tag) and, per completed course, its `certificateId` (the «عرض الشهادة» link) — add both to the my-path response (read-only fields; the certificates module already knows the mapping; issuance is untouched).
+  - The «عرض الشهادة» link points wherever the gallery's view action points for that certificate — one URL scheme, not two.
+  - The add link's destination is the catalogue (`/courses`): the course detail page already calls `myPathApi.addCourse` (`api-client.ts:305`) with all server rules enforced (`enrollment.service.ts` `addCourse` — add-only, never remove). No new endpoint.
+  - Rail styling: logical properties only (the rail sits on the inline-start side); glyphs `aria-hidden` with the state as text; the timeline is presentation — heading levels stay `h1` page → `h2` courses section → `h3` course titles.
+
+## TAM-127 — Courses catalogue: state-aware default, personal status on cards, DGA filter row
+
+- **Labels:** `courses`, `frontend`
+- **Priority:** Medium
+- **Pre-requisite:** TAM-124 (the standard width)
+- **Description:**
+  The catalogue treats every user identically, but the product doesn't: **once a path is confirmed, the server only ever accepts adding courses from that path** (`assertCoursesSelectable` in `addCourse`) — so a committed user browsing 48 global courses is looking at ~40 they can never act on, with nothing marking the ones that are theirs. Meanwhile the filter row is raw pre-DGA HTML and the card is an undifferentiated text stack. Browse stays **global** (§4.6 unchanged — this is a default, not a restriction):
+  1. **State-aware default.** A user with a confirmed path lands with **their path preselected** in the path filter — the first screen is "دورات مساري" (their 5–10, statuses visible), and «كل المسارات» is one selection away. Uncommitted users (and users still building) land on the global catalogue, because for them the catalogue's job is evaluating paths.
+  2. **The global view is grouped by path, recommended first.** For an uncommitted user, one section per path — the user's recommended paths first in their letter-rank order (heading: path name + «موصى به» + course count), the rest after — courses inside in path order. The catalogue becomes the evaluation tool it's actually used as: "this is what هذا المسار actually teaches." Any search text or filter collapses the grouping into today's flat grid (a filtered result is an answer, not a tour).
+  3. **Personal status chip on cards.** When the course is in the user's path, one chip: «مكتملة» / «قيد التنفيذ» / «في مسارك» (not started). At most one chip; courses outside the user's path get none — absence is the signal. Path membership renders as quiet tags instead of today's comma-joined names.
+  4. **Filter row on the shared primitives.** Search (`Input`, as today) + path + duration rebuilt on the shared `Select` — the current `<select>`s use dead pre-token classes (`border-input`, `rounded-md`). Same three filters; §4.6's "category" is satisfied by the path filter — record that reading in decisions.md alongside the default (a RIASEC-type filter was considered and rejected: users think in paths, and two filters narrowing the same dimension compete).
+  **Out of scope, decided:** no pagination — the grouped default and filters keep screens short at seed scale; paging becomes its own ticket when real ministry data lands (Phase 7). Card click always opens course **detail** (never deep-links to the player) — one predictable behaviour; the chip informs, the detail page acts.
+  **Acceptance:**
+  - Committed user: first render shows only their path's courses with the path filter visibly set; switching to «كل المسارات» shows everything (asserted). Uncommitted user: grouped global view, recommended path groups first in the user's letter-rank order, no preselection (asserted).
+  - Grouping collapses to the flat grid the moment any search/filter is active, and returns when cleared (asserted). Group headings are `h2`, card titles `h3`; a path with no visible courses produces no empty heading.
+  - Every card links to `/courses/[id]` — no player deep-links from the catalogue (asserted).
+  - Cards for the user's own courses carry exactly one status chip matching their my-path status; other cards carry none; the chip is text, never colour alone.
+  - No raw `<select>` remains on the page; filters are labelled, keyboard-operable, and the result count line still announces politely.
+  - Search/filter/empty/clear-filters behaviour, debounce, and routes unchanged; loading/error states intact.
+  - The stale header comment ("browsable before the assessment" — reversed by D-071) is corrected.
+  - decisions.md entry (state-aware default + category-filter reading); page tests updated; e2e catalogue flows green.
+  **Implementation notes (verified):**
+  - Page: `src/app/(portal)/courses/page.tsx`. The committed path id is already client-side: `usePortal().dashboard` — `state === 'ACTIVE_PATH'` with `path.id` — use it as the filter's initial value (initial state only, not a controlled override; the user's later choice wins).
+  - **No API change needed for the chips:** `myPathApi.get()` already returns every selected course with `courseId` + `status` — fetch it once alongside the list (only when committed) and map `courseId → status` client-side. If the team prefers one payload, adding per-user status to the courses list response is the alternative; don't do both.
+  - The status chip vocabulary matches my-path's (`statusCompleted` / `statusInProgress` — reuse the `myPath` message keys or lift them to a shared namespace rather than duplicating strings).
+  - Card grid is already 1/2/3 columns; keep it, it inherits TAM-124's width. Path tags: same quiet `tag` treatment as TAM-125's header (neutral fill), never the «موصى به» badge on cards — recommendation is a path-level concept; it appears on **group headings** only.
+  - Grouping needs no API change either: `pathsApi.list()` already returns every path with `recommendationRank` (null when not recommended), and each course's `paths` names its memberships — group client-side, ordering groups by rank then the API's path order. A course in two paths appears in each group it belongs to (the card is the same; the grouping is a lens, not a partition).
+
+## TAM-128 — Course detail: header with meta, structured sections, the action where it can be seen
+
+- **Labels:** `courses`, `frontend`
+- **Priority:** Medium
+- **Pre-requisite:** TAM-124 (standard width); pairs with TAM-127 (shared status-chip and path-tag treatment)
+- **Description:**
+  The detail page (§4.7) is one undifferentiated card: summary, duration, objectives, prerequisites, a comma-joined path list, the certificate line, and — at the very bottom, below everything — the page's single action. The content is right; the shape buries it.
+  1. **Header block with meta.** Under the page title: the summary, then the meta row — duration, path membership as quiet tags (TAM-127's treatment), and the user's personal status chip when the course is in their path («مكتملة» / «قيد التنفيذ» / «في مسارك»).
+  2. **The single context action moves to the page header** (`PortalPage`'s `action` slot) so it is visible without scrolling — still exactly one action, server-chosen (§4.7: أضف إلى مساري / ابدأ الدورة / أكمل الدورة / مكتمل), never a menu. Verify the «مكتمل» state links to the course certificate as §4.7 specifies — if the payload lacks the certificate reference, add it (read-only; same field TAM-126 adds to my-path).
+  3. **Content as sections:** الأهداف and المتطلبات as they are today (omitted when empty — keep that rule), the certificate line as a quiet footnote. No new content; §3's "no redundant UI" holds.
+  **Acceptance:**
+  - Exactly one action on the page, in the header slot, matching the server-decided state; each of the four states renders its correct label and behaviour (asserted per state).
+  - «مكتمل» offers the certificate link; a course not in the user's path shows «أضف إلى مساري» only when the server would accept it (own path + under 10 + not committed-elsewhere rules — the server stays the authority, the button just reflects `course.action` as today).
+  - Meta row: tags not comma lists; status chip logic shared with TAM-127 (one implementation).
+  - Empty-section omission, error display for a failed add, the reload-after-add behaviour, and the back link — unchanged, asserted.
+  **Implementation notes (verified):**
+  - Page: `src/app/(portal)/courses/[courseId]/page.tsx` — the comment at the top of the card explains why the course name is not repeated (the `h1` is the page header); keep that. `CourseAction` already renders "the one action the server chose — never a menu"; this ticket relocates it, it does not reinvent it.
+  - The add flow's reload-confirms-outcome comment (`addCourse` resolves undefined on success and failure) is a real subtlety — preserve the behaviour and the comment.
+  - `PortalPage` already has the `action` prop ("the single primary action for this page, §3") — this is its intended use.
 
