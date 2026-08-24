@@ -13,6 +13,7 @@ import {
   type LmsUserId,
   type LmsUserRef,
   type ProvisionUserInput,
+  type UpdateUserInput,
 } from '../lms.types';
 import { MOCK_COURSES, MOCK_LMS_BASE_URL } from './mock-lms.data';
 
@@ -129,10 +130,30 @@ export class MockLmsService implements LmsPort {
       }
     }
 
-    const reference: LmsUserRef = { lmsUserId: this.idFor(email), email };
+    const reference: LmsUserRef = { lmsUserId: this.idFor(email), email, fullName: input.fullName };
     this.users.set(reference.lmsUserId, reference);
 
     return Promise.resolve(reference);
+  }
+
+  /**
+   * Overwrites the stored name, the same effect `core_user_update_users` has
+   * on a real Moodle account. Unknown ids are refused rather than silently
+   * accepted, so a caller that raced a real outage sees the same shape of
+   * failure here as it would there.
+   *
+   * `async`, like `createCourse` and for the same reason: a synchronous throw
+   * from a method typed to return a `Promise` never reaches a caller's
+   * `.catch()`, so the mock would be easier to satisfy than reality.
+   */
+  async updateUser(input: UpdateUserInput): Promise<void> {
+    const existing = this.users.get(input.lmsUserId);
+
+    if (!existing) {
+      throw new LmsOperationError('UPDATE_USER');
+    }
+
+    this.users.set(input.lmsUserId, { ...existing, fullName: input.fullName });
   }
 
   findUserByEmail(email: string): Promise<LmsUserRef | null> {

@@ -37,6 +37,16 @@ export interface ProvisionUserInput {
 export interface LmsUserRef {
   lmsUserId: LmsUserId;
   email: string;
+  /** The LMS's own record of the display name — read back, not echoed from a
+   *  caller's input, so it reflects what Moodle actually holds (the same
+   *  "read back rather than synthesise" rule `createCourse` follows). */
+  fullName: string;
+}
+
+/** What a profile edit can change about the LMS's copy of a user (§4.12). */
+export interface UpdateUserInput {
+  lmsUserId: LmsUserId;
+  fullName: string;
 }
 
 export interface LmsCourse {
@@ -156,7 +166,9 @@ export class LmsUnavailableError extends Error {
  * operator can find it and a caller cannot couple to it.
  */
 export class LmsOperationError extends Error {
-  constructor(readonly operation: 'PROVISION' | 'ENROL' | 'SYNC' | 'CREATE_COURSE') {
+  constructor(
+    readonly operation: 'PROVISION' | 'ENROL' | 'SYNC' | 'CREATE_COURSE' | 'UPDATE_USER',
+  ) {
     super(`LMS_${operation}_REJECTED`);
     this.name = 'LmsOperationError';
   }

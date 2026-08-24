@@ -14,10 +14,12 @@ import {
   type LmsUserId,
   type LmsUserRef,
   type ProvisionUserInput,
+  type UpdateUserInput,
 } from '../lms.types';
 import {
   deriveMoodleUsername,
   generateUnusedPassword,
+  joinFullName,
   normaliseEmail,
   splitFullName,
 } from './moodle-identity';
@@ -52,6 +54,8 @@ interface MoodleSiteInfo {
 interface MoodleUser {
   id: number;
   username?: string;
+  firstname?: string;
+  lastname?: string;
 }
 
 interface MoodleCourse {
@@ -181,7 +185,11 @@ export class MoodleHttpService implements LmsPort {
 
     const existing = await this.findByUsername(username);
     if (existing) {
-      return { lmsUserId: existing.id, email };
+      return {
+        lmsUserId: existing.id,
+        email,
+        fullName: joinFullName(existing.firstname ?? '', existing.lastname ?? ''),
+      };
     }
 
     const { firstname, lastname } = splitFullName(input.fullName);
@@ -209,7 +217,7 @@ export class MoodleHttpService implements LmsPort {
         throw new LmsUnavailableError('UNEXPECTED_RESPONSE');
       }
 
-      return { lmsUserId: first.id, email };
+      return { lmsUserId: first.id, email, fullName: input.fullName };
     } catch (error) {
       if (error instanceof LmsUnavailableError) {
         throw error;
@@ -229,7 +237,11 @@ export class MoodleHttpService implements LmsPort {
 
       if (raced) {
         this.logger.warn(`Provisioning raced for ${username}; using the existing account`);
-        return { lmsUserId: raced.id, email };
+        return {
+          lmsUserId: raced.id,
+          email,
+          fullName: joinFullName(raced.firstname ?? '', raced.lastname ?? ''),
+        };
       }
 
       this.logger.error(
@@ -251,7 +263,48 @@ export class MoodleHttpService implements LmsPort {
     const normalised = normaliseEmail(email);
     const found = await this.findByUsername(deriveMoodleUsername(normalised));
 
-    return found ? { lmsUserId: found.id, email: normalised } : null;
+    return found
+      ? {
+          lmsUserId: found.id,
+          email: normalised,
+          fullName: joinFullName(found.firstname ?? '', found.lastname ?? ''),
+        }
+      : null;
+  }
+
+  /**
+   * Writes a profile name change through to the LMS (§4.12).
+   *
+   * `core_user_update_users`, the counterpart of the create call `provisionUser`
+   * uses. Idempotent by construction — resending the same names is a no-op
+   * write in Moodle, not a second account or an error — which is what lets a
+   * caller retry after an ambiguous failure the way it already does for
+   * `enrol`.
+   *
+   * Failure here is the caller's to absorb, not this adapter's: a profile save
+   * must not be undone because the LMS was briefly unreachable, and D-036's
+   * reconciliation pattern is what owns catching this up later, not a retry
+   * loop inside this method.
+   */
+  async updateUser(input: UpdateUserInput): Promise<void> {
+    const { firstname, lastname } = splitFullName(input.fullName);
+
+    try {
+      await this.client.call('core_user_update_users', {
+        users: [{ id: input.lmsUserId, firstname, lastname }],
+      });
+    } catch (error) {
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Name update refused for LMS user ${input.lmsUserId}: ${
+          error instanceof MoodleWsError ? error.errorcode : 'unknown'
+        }`,
+      );
+      throw new LmsOperationError('UPDATE_USER');
+    }
   }
 
   private async findByUsername(username: string): Promise<MoodleUser | null> {

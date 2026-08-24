@@ -9,6 +9,7 @@ import type {
   LmsUserId,
   LmsUserRef,
   ProvisionUserInput,
+  UpdateUserInput,
 } from './lms.types';
 
 /**
@@ -53,6 +54,20 @@ export interface LmsPort {
   provisionUser(input: ProvisionUserInput): Promise<LmsUserRef>;
 
   findUserByEmail(email: string): Promise<LmsUserRef | null>;
+
+  /**
+   * Updates the LMS's record of a user's display name (§4.12).
+   *
+   * **Idempotent**, matching `provisionUser`/`enrol`: writing the same name
+   * twice must not error, since a caller that failed to confirm success is
+   * expected to retry. **Best-effort from the caller's side** — a profile
+   * edit is not undone because this failed, and D-036's reconciliation
+   * pattern is what owns retrying a failure, not this call itself.
+   *
+   * Nothing here provisions an account: a user with no `moodle_user_id` has
+   * nothing to update, and callers must not reach this method for one.
+   */
+  updateUser(input: UpdateUserInput): Promise<void>;
 
   /** Full catalogue, for the Phase 2 sync into our cached `courses` table. */
   listCourses(): Promise<LmsCourse[]>;

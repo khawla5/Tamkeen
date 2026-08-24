@@ -126,6 +126,45 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
       });
     });
 
+    describe('updateUser', () => {
+      it('changes the name the LMS reports back', async () => {
+        const provisioned = await lms.provisionUser({
+          email: 'rename@ministry.gov.example',
+          fullName: 'الاسم الأول',
+          externalUserId: 'ext-rename',
+        });
+
+        await lms.updateUser({ lmsUserId: provisioned.lmsUserId, fullName: 'الاسم الجديد' });
+
+        const found = await lms.findUserByEmail('rename@ministry.gov.example');
+        expect(found?.fullName).toBe('الاسم الجديد');
+      });
+
+      it('is idempotent — writing the same name twice does not throw', async () => {
+        const provisioned = await lms.provisionUser({
+          email: 'rename-twice@ministry.gov.example',
+          fullName: 'اسم ثابت',
+          externalUserId: 'ext-rename-twice',
+        });
+
+        await lms.updateUser({ lmsUserId: provisioned.lmsUserId, fullName: 'اسم جديد' });
+
+        await expect(
+          lms.updateUser({ lmsUserId: provisioned.lmsUserId, fullName: 'اسم جديد' }),
+        ).resolves.not.toThrow();
+      });
+
+      it('rejects an id nothing provisioned', async () => {
+        /* The caller's contract, not this test's: a profile save must not
+           reach this for a user with no moodle_user_id at all (§4.12). This
+           only proves the adapter fails rather than silently no-opping if
+           that rule is ever broken upstream. */
+        await expect(
+          lms.updateUser({ lmsUserId: 99_999_999, fullName: 'لا أحد' }),
+        ).rejects.toThrow();
+      });
+    });
+
     describe('listCourses', () => {
       it('returns courses in our vocabulary, not the LMS payload shape', async () => {
         const courses = await lms.listCourses();
