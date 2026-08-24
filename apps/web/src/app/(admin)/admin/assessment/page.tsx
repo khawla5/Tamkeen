@@ -173,7 +173,7 @@ function VersionCard({
         <p className="font-medium text-foreground">
           {t('versionLabel', { version: format.number(version.version) })}
         </p>
-        <Badge variant={version.status === 'ACTIVE' ? 'gold' : 'soft'}>
+        <Badge variant={version.status === 'ACTIVE' ? 'primary' : 'soft'}>
           {t(`versionStatus.${version.status}`)}
         </Badge>
       </div>

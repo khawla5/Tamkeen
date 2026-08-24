@@ -14,6 +14,8 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   fullName: string;
+  employeeId: string;
+  department: string;
   role: UserRole;
   sessionId: string;
 }
@@ -73,6 +75,8 @@ export class SessionService {
             id: true,
             email: true,
             fullName: true,
+            employeeId: true,
+            department: true,
             role: true,
             status: true,
             numberFormat: true,
@@ -93,6 +97,8 @@ export class SessionService {
       id: session.user.id,
       email: session.user.email,
       fullName: session.user.fullName,
+      employeeId: session.user.employeeId,
+      department: session.user.department,
       role: session.user.role,
       sessionId: session.id,
       numberFormat: session.user.numberFormat,

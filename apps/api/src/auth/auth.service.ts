@@ -33,7 +33,14 @@ const DUMMY_HASH =
 
 export interface LoginResult {
   token: string;
-  user: { id: string; email: string; fullName: string; role: string };
+  user: {
+    id: string;
+    email: string;
+    fullName: string;
+    employeeId: string;
+    department: string;
+    role: string;
+  };
 }
 
 @Injectable()
@@ -231,6 +238,8 @@ export class AuthService {
         id: true,
         email: true,
         fullName: true,
+        employeeId: true,
+        department: true,
         role: true,
         status: true,
         passwordHash: true,
@@ -287,7 +296,14 @@ export class AuthService {
 
     return {
       token,
-      user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        employeeId: user.employeeId,
+        department: user.department,
+        role: user.role,
+      },
     };
   }
 

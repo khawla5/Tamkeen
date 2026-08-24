@@ -66,6 +66,8 @@ function setUser(overrides: Partial<CurrentUser> = {}) {
       id: 'user-1',
       email: 'sara@ministry.gov.example',
       fullName: 'سارة العتيبي',
+      employeeId: 'EMP-2201',
+      department: 'الإدارة العامة للتدريب',
       role: 'EMPLOYEE',
       numberFormat: null,
       ...overrides,

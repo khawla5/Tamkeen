@@ -202,9 +202,10 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - After first sign-in → Dashboard (pre-assessment state).
 
 ### 4.2 Dashboard (الرئيسية) — two states
-- **Pre-assessment:** near-empty. One card briefly explaining the assessment (~20–30 questions, few minutes) + single primary button **"ابدأ التقييم"**. No empty widgets. Nav at this stage: **Dashboard and Profile only** (D-071 — Courses appears once the assessment is done; a pre-assessment visit to any `/courses*` URL redirects to the dashboard).
-- **Post-assessment, no path chosen:** main card says **"اختر مسارك"**, links to Results & Path Selection.
-- **Post-assessment, path active:** "continue where you left off" card (next course/quiz, one primary button) + active path progress bar ("X من Y دورات مكتملة") + compact tiles to My Path, Certificates, CV. Everything shown must be actionable.
+- **Every state (D-095):** a personal header (name · department · employee id) and a four-stage journey tracker; the last three things that happened, when any. Information, never a second primary action.
+- **Pre-assessment:** one card briefly explaining the assessment (~20–30 questions, few minutes) + single primary button **"ابدأ التقييم"**. No empty widgets (no zero-of-zero progress bar). Nav at this stage: **Dashboard and Profile only** (D-071 — Courses appears once the assessment is done; a pre-assessment visit to any `/courses*` URL redirects to the dashboard).
+- **Post-assessment, no path chosen:** main card says **"اختر مسارك"** with the Holland Code as Arabic chips, links to Results & Path Selection; below it the top three recommended paths as cards (D-095) with "عرض كل المسارات".
+- **Post-assessment, path active:** the status strip (path name · type · مكتملة / قيد التنفيذ / لم تبدأ) + "continue where you left off" card (next course/quiz, one primary button) + progress bar ("X من Y دورات مكتملة") + the next courses with status + the latest certificate (or the locked slot) + compact tiles to My Path, Courses, Certificates, CV (D-095). Everything shown is actionable or is status.
 
 ### 4.3 Assessment (التقييم) — Holland/RIASEC
 - One-line intro + start. Questions one at a time or in small groups, progress indicator, back/next.

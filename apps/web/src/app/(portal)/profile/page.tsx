@@ -1,6 +1,5 @@
 'use client';
 
-import { useAppRouter } from '@/lib/use-app-router';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -15,7 +14,6 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { authApi } from '@/lib/api-client';
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth-constants';
-import { useApiMutation } from '@/lib/use-api';
 
 /**
  * Profile (§4.12), completed in Phase 5.
@@ -38,9 +36,6 @@ import { useApiMutation } from '@/lib/use-api';
 export default function ProfilePage() {
   const t = useTranslations('profile');
   const { user, refreshSession } = usePortal();
-  const router = useAppRouter();
-
-  const signOut = useApiMutation(() => authApi.logout());
 
   const roleLabel =
     user.role === 'SUPER_ADMIN'
@@ -48,14 +43,6 @@ export default function ProfilePage() {
       : user.role === 'ENTITY'
         ? t('roleEntity')
         : t('roleEmployee');
-
-  async function onSignOut() {
-    await signOut.run();
-    /* Navigate regardless: if the session was already gone the request fails,
-       and keeping the user on a page they cannot use would be the wrong
-       response to that. */
-    router.replace('/login');
-  }
 
   return (
     <PortalPage title={t('title')}>
@@ -83,16 +70,8 @@ export default function ProfilePage() {
                 <dd className="font-medium">{roleLabel}</dd>
               </div>
             </dl>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="self-start"
-              disabled={signOut.isPending}
-              onClick={() => void onSignOut()}
-            >
-              {signOut.isPending ? t('signingOut') : t('signOut')}
-            </Button>
+            {/* No sign-out here: the header's user menu is the one way out
+                (D-096) — a second button would be the redundancy §3 forbids. */}
           </CardContent>
         </Card>
 

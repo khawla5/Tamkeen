@@ -788,6 +788,16 @@ describe('Phase 1 journey (e2e)', () => {
 
       const body = (await get('/api/dashboard', session).expect(200)).body as DashboardView;
       expect(body.state).toBe('ASSESSED_NO_PATH');
+
+      /* TAM-123: the decision is on the dashboard — the top recommended paths,
+         in rank order, never more than three, and all actually recommended. */
+      expect(body.recommendedPaths.length).toBeGreaterThan(0);
+      expect(body.recommendedPaths.length).toBeLessThanOrEqual(3);
+      for (const path of body.recommendedPaths) {
+        expect(body.codeString).toContain(path.riasecLetter);
+      }
+      expect(body.upcomingCourses).toEqual([]);
+      expect(body.recentActivity.map((a) => a.kind)).toEqual(['ASSESSMENT_COMPLETED']);
     });
 
     it('is ACTIVE_PATH once confirmed, with a single continue target', async () => {
@@ -806,6 +816,18 @@ describe('Phase 1 journey (e2e)', () => {
       expect(body.path?.riasecLetter).toMatch(/^[RIASEC]$/);
       expect(body.path?.inProgressCount).toBe(0);
       expect(body.path?.nextCourse).not.toBeNull();
+
+      /* TAM-123: the active dashboard knows what comes next and what happened. */
+      expect(body.recommendedPaths).toEqual([]);
+      expect(body.upcomingCourses.length).toBeGreaterThan(0);
+      expect(body.upcomingCourses.length).toBeLessThanOrEqual(3);
+      expect(body.upcomingCourses[0]?.id).toBe(body.path?.nextCourse?.id);
+      expect(body.latestCertificate).toBeNull();
+      expect(body.recentActivity.map((a) => a.kind)).toEqual([
+        'PATH_CONFIRMED',
+        'ASSESSMENT_COMPLETED',
+      ]);
+      expect(body.recentActivity[0]?.title).toBe(body.path?.name);
     });
   });
 

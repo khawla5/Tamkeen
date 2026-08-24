@@ -234,7 +234,7 @@ function StatusBadge({ row }: { row: AdminUserRow }) {
   const t = useTranslations('admin');
 
   if (row.status === 'SUSPENDED') {
-    return <Badge variant="navy">{t('statusSuspended')}</Badge>;
+    return <Badge variant="dark">{t('statusSuspended')}</Badge>;
   }
 
   /*
@@ -244,7 +244,7 @@ function StatusBadge({ row }: { row: AdminUserRow }) {
    * "why can this person not sign in" is the question this screen answers.
    */
   if (!row.emailVerifiedAt) {
-    return <Badge variant="gold">{t('statusInvited')}</Badge>;
+    return <Badge variant="primary">{t('statusInvited')}</Badge>;
   }
 
   return <Badge variant="soft">{t('statusActive')}</Badge>;
