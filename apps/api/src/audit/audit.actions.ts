@@ -67,6 +67,17 @@ export const AuditAction = {
    */
   CERTIFICATE_ISSUED: 'CERTIFICATE_ISSUED',
 
+  // Profile (§4.12)
+  /** An employee changed their own name and/or department. */
+  PROFILE_UPDATED: 'PROFILE_UPDATED',
+  /**
+   * The save itself succeeded; propagating a name change to the LMS did not.
+   * Recorded so the mismatch is discoverable rather than silent — the profile
+   * update is never rolled back over this, and retrying is D-036's
+   * reconciliation pattern to own, not this call site.
+   */
+  PROFILE_LMS_SYNC_FAILED: 'PROFILE_LMS_SYNC_FAILED',
+
   // Entity portal (Phase 4)
   /** An entity created a course shell — in the LMS and in our catalogue. */
   ENTITY_COURSE_CREATED: 'ENTITY_COURSE_CREATED',

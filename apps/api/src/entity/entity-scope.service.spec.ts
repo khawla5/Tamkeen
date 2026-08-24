@@ -60,6 +60,8 @@ const account = (role: AuthenticatedUser['role'], id = 'user-1'): AuthenticatedU
   id,
   email: 'someone@authority.gov.example',
   fullName: 'حساب',
+  employeeId: 'EMP-1',
+  department: 'الإدارة',
   role,
   sessionId: 'session-1',
 });

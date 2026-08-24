@@ -16,6 +16,7 @@ import { CoursesModule } from './courses/courses.module';
 import { EnrollmentModule } from './enrollment/enrollment.module';
 import { JourneyModule } from './journey/journey.module';
 import { PathsModule } from './paths/paths.module';
+import { ProfileModule } from './profile/profile.module';
 import { CsrfGuard } from './auth/csrf.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { SessionGuard } from './auth/session.guard';
@@ -69,6 +70,7 @@ import { PrismaModule } from './prisma/prisma.module';
     PathsModule,
     CoursesModule,
     EnrollmentModule,
+    ProfileModule,
     /* Phase 2. */
     CatalogSyncModule,
     CompletionSyncModule,
