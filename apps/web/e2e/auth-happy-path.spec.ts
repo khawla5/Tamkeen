@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { DEPARTMENT, PASSWORD, RUN_ID, accountFor, signedInEmployee } from './account';
+import { completeAssessment } from './journey';
 import { assertMailpitReachable, tokenFromEmail } from './mailpit';
 
 /**
@@ -262,7 +263,15 @@ test.describe('Authenticated shell', () => {
     await signedInEmployee(page, 'digits');
 
     /* The catalogue's result count is the first Phase 1 number a signed-in user
-       meets; the Phase 0 sample page it used to assert against is gone. */
+       meets; the Phase 0 sample page it used to assert against is gone.
+
+       D-071 opens the catalogue only once the assessment is done — a
+       pre-assessment visit bounces to the dashboard — so take it first, the
+       same order the journey suite uses for the same reason. */
+    await page.goto('/assessment');
+    await completeAssessment(page);
+    await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
+
     await page.goto('/courses');
 
     const count = page.getByText(/دورة$/).first();
