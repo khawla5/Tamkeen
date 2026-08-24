@@ -2,11 +2,23 @@ import { useTranslations } from 'next-intl';
 
 import { Logo } from '@/components/brand/logo';
 import { MinistryEmblem } from '@/components/brand/ministry-emblem';
+import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
 import { STEADY_STATE_NAV, type NavItem } from './nav-items';
 import { SidebarNav } from './sidebar-nav';
 import { UserMenu } from './user-menu';
+
+/**
+ * The one content width (TAM-124): الرئيسية is the reference, and every page
+ * inherits it from the frame rather than declaring its own. The fixed counter
+ * bar on the path-build page sits outside the flow and cannot inherit the
+ * wrapper, so it shares this constant instead of a second literal.
+ */
+export const PAGE_MAX_WIDTH = 'max-w-6xl';
+
+/** The explicit opt-in for genuinely narrow flows — a form, a question. */
+export const NARROW_MAX_WIDTH = 'max-w-2xl';
 
 export interface AppShellProps {
   /** Page heading — every page has exactly one h1. */
@@ -20,11 +32,18 @@ export interface AppShellProps {
   user?: { fullName: string; department?: string; employeeId?: string };
   /** The role's own profile route for the user menu; omit where none exists. */
   profileHref?: string;
+  /** TAM-124: `narrow` for single-column flows; everything else takes the standard width. */
+  width?: 'default' | 'narrow';
   children: ReactNode;
 }
 
 /**
- * The application frame: navigation rail, page header, content region.
+ * The application frame, on Platforms Code (TAM-117): a top header bar naming
+ * the owner (the same lockup as the landing and auth headers) and carrying the
+ * signed-in identity, a light navigation rail with the primary as the active
+ * indicator, the page header inside the content column, and the slim footer
+ * strip the auth pages already wear. One shell serves all three portals — the
+ * entity and admin frames are configurations of it, not copies.
  *
  * RTL correctness comes from the document `dir="rtl"` plus logical properties
  * throughout — no `left`/`right` anywhere. In RTL a flex row lays its first
@@ -38,17 +57,19 @@ export function AppShell({
   indicators,
   user,
   profileHref,
+  width = 'default',
   children,
 }: AppShellProps) {
   const t = useTranslations('app');
   const tA11y = useTranslations('a11y');
+  const tLanding = useTranslations('landing');
 
   return (
-    <div className="relative flex min-h-dvh flex-col md:flex-row">
+    <div className="relative flex min-h-dvh flex-col">
       {/*
         First focusable element on the page — WCAG 2.4.1 bypass blocks.
-        `start-3` (logical) rather than `left-3`, and anchored to the relative
-        wrapper above so it lands predictably on the reading-start edge in RTL.
+        `start-3` (logical) rather than `left-3`, anchored to the relative
+        wrapper so it lands predictably on the reading-start edge in RTL.
       */}
       <a
         href="#main-content"
@@ -57,47 +78,20 @@ export function AppShell({
         {tA11y('skipToContent')}
       </a>
 
-      {/* Navigation rail: vertical from md up, horizontal strip below. */}
-      <aside className="flex flex-col bg-neutral-900 md:w-64 md:shrink-0">
-        <div className="flex items-center gap-3 px-4 py-4">
-          <span className="inline-flex items-center gap-2 rounded-lg bg-surface px-2 py-1">
-            <MinistryEmblem height={32} />
-            <span aria-hidden="true" className="h-6 w-px bg-border" />
-            <Logo height={28} />
-          </span>
+      {/* The owner's bar: lockup on the start edge, the signed-in identity on
+          the end — the same frame the landing and auth pages establish. */}
+      <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
+        <span className="inline-flex items-center gap-2">
+          <MinistryEmblem height={36} />
+          <span aria-hidden="true" className="h-7 w-px bg-border" />
+          <Logo height={30} />
           <span className="sr-only">{t('name')}</span>
-        </div>
-
-        <nav aria-label={tA11y('primaryNav')} className="px-3 pb-4">
-          <div className="hidden md:block">
-            <SidebarNav items={items} indicators={indicators} />
-          </div>
-          <div className="md:hidden">
-            <SidebarNav items={items} indicators={indicators} orientation="horizontal" />
-          </div>
-        </nav>
+        </span>
 
         {user ? (
-          /* The footer names who is signed in and nothing more — the action
-             lives in the header's user menu (D-096), so there is exactly one
-             sign-out. Outside the navigation landmark so a screen reader does
-             not announce it as a destination. */
-          <div className="mt-auto border-t border-surface/10 px-4 py-3">
-            <span className="block truncate text-sm text-surface/85">{user.fullName}</span>
-          </div>
-        ) : null}
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-3">
-          <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-          <div className="flex items-center gap-3">
-            {action}
-            {user?.department && user.employeeId ? (
-              /* The identity line, in the chrome rather than on a page (D-096):
-                 department and employee number, on every screen. The name is
-                 in the sidebar footer and the menu; repeating it here would be
-                 the redundancy §3 forbids. */
+          <span className="flex items-center gap-3">
+            {user.department && user.employeeId ? (
+              /* The identity line, in the chrome rather than on a page (D-096). */
               <p className="hidden text-sm text-muted-foreground md:block">
                 {user.department}
                 <span aria-hidden="true"> · </span>
@@ -107,13 +101,57 @@ export function AppShell({
                 </span>
               </p>
             ) : null}
-            {user ? <UserMenu user={user} profileHref={profileHref} /> : null}
-          </div>
-        </header>
+            <UserMenu user={user} profileHref={profileHref} />
+          </span>
+        ) : null}
+      </header>
 
-        <main id="main-content" className="min-w-0 flex-1 p-6">
-          {children}
-        </main>
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        {/* Light navigation rail (TAM-117): Platforms Code applications use a
+            light nav with the primary as the active indicator — the dark
+            neutral-900 rail was the last of the old brand. */}
+        <aside className="flex flex-col border-b border-border bg-card md:w-64 md:shrink-0 md:border-b-0 md:border-e">
+          <nav aria-label={tA11y('primaryNav')} className="p-3">
+            <div className="hidden md:block">
+              <SidebarNav items={items} indicators={indicators} />
+            </div>
+            <div className="md:hidden">
+              <SidebarNav items={items} indicators={indicators} orientation="horizontal" />
+            </div>
+          </nav>
+
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main id="main-content" className="min-w-0 flex-1 p-6">
+            <div
+              className={cn(
+                'mx-auto flex w-full flex-col gap-6',
+                width === 'narrow' ? NARROW_MAX_WIDTH : PAGE_MAX_WIDTH,
+              )}
+            >
+              {/* The page header, aligned with the content it heads (§3: at
+                  most one primary action beside the title). */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+                {action}
+              </div>
+
+              {children}
+            </div>
+          </main>
+
+          {/* The slim strip every government page ends on — same content as
+              the auth footer. */}
+          <footer className="border-t border-border bg-card px-4 py-3 sm:px-6">
+            <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                {t('ministry')} · {tLanding('footerDirectorate')}
+              </span>
+              <span>{tLanding('footerClassification')}</span>
+            </div>
+          </footer>
+        </div>
       </div>
     </div>
   );
