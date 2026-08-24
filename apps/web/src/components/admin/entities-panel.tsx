@@ -101,7 +101,7 @@ function EntityCard({ entity, onChanged }: { entity: AdminEntityRow; onChanged: 
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-2 font-medium text-foreground">
           {entity.name}
-          {suspended ? <Badge variant="navy">{t('statusSuspended')}</Badge> : null}
+          {suspended ? <Badge variant="dark">{t('statusSuspended')}</Badge> : null}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           {/*

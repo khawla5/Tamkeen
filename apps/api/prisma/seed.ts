@@ -243,6 +243,75 @@ async function seedDemoEntity(): Promise<void> {
 /** A deliberately small slice — see `seedDemoEntity`. */
 const DEMO_ENTITY_COURSE_IDS = [101, 102, 103, 104, 105, 106, 107, 108];
 
+/**
+ * A demonstration employee — the account that walks the learner journey.
+ *
+ * Same discipline as the other seeded accounts: no known default password
+ * (generated and printed once in development, skipped in production unless
+ * SEED_STUDENT_PASSWORD is supplied), pre-verified because it is provisioned by
+ * an operator rather than through self-registration, and idempotent — a re-seed
+ * never touches the password of an account in use, it only repairs the role.
+ *
+ * No `moodleUserId` is written: the LMS counterpart is provisioned lazily by
+ * the enrolment service the first time this account confirms a path, exactly
+ * as it is for a self-registered employee.
+ */
+async function seedDemoStudent(): Promise<void> {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const supplied = process.env.SEED_STUDENT_PASSWORD;
+
+  if (isProduction && !supplied) {
+    console.log('NODE_ENV=production without SEED_STUDENT_PASSWORD — skipping the demo student.');
+    return;
+  }
+
+  const email = process.env.SEED_STUDENT_EMAIL ?? 'student@ministry.gov.example';
+  const password = supplied ?? randomBytes(24).toString('base64url');
+
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, role: true },
+  });
+
+  if (existing) {
+    if (existing.role !== UserRole.EMPLOYEE) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { role: UserRole.EMPLOYEE },
+      });
+      console.log(`Repaired student account ${email}`);
+    } else {
+      console.log(`Student account ${email} already exists — nothing to do.`);
+    }
+    return;
+  }
+
+  await prisma.user.create({
+    data: {
+      email,
+      passwordHash: await hashPassword(password),
+      fullName: 'طالب تجريبي',
+      employeeId: process.env.SEED_STUDENT_EMPLOYEE_ID ?? 'EMP-1001',
+      department: 'تقنية المعلومات',
+      role: UserRole.EMPLOYEE,
+      status: UserStatus.ACTIVE,
+      emailVerifiedAt: new Date(),
+    },
+  });
+
+  console.log(`Created student account ${email}`);
+
+  if (!supplied) {
+    console.log('');
+    console.log('  ┌─────────────────────────────────────────────────────────────');
+    console.log('  │ Generated student password (shown once, not stored):');
+    console.log(`  │   ${password}`);
+    console.log('  │ Set SEED_STUDENT_PASSWORD to choose your own instead.');
+    console.log('  └─────────────────────────────────────────────────────────────');
+    console.log('');
+  }
+}
+
 async function main(): Promise<void> {
   await seedSuperAdmin();
 
@@ -255,6 +324,8 @@ async function main(): Promise<void> {
 
   /* After the catalogue, because it claims courses the catalogue seed creates. */
   await seedDemoEntity();
+
+  await seedDemoStudent();
 }
 
 main()

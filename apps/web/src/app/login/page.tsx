@@ -13,6 +13,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { ApiError, authApi } from '@/lib/api-client';
+import { HOME_FOR_ROLE } from '@/components/layout/portal-routes';
 
 /**
  * Sign-in (§4.1): email, password, forgot-password. Nothing else.

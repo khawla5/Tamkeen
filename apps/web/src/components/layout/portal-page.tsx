@@ -24,7 +24,7 @@ export interface PortalPageProps {
 
 /** The frame every authenticated page uses, with the nav gated by §4.2. */
 export function PortalPage({ title, action, chrome = 'nav', children }: PortalPageProps) {
-  const { dashboard, unreadCertificates } = usePortal();
+  const { user, dashboard, unreadCertificates } = usePortal();
 
   if (chrome === 'bare') {
     return (
@@ -44,6 +44,8 @@ export function PortalPage({ title, action, chrome = 'nav', children }: PortalPa
       title={title}
       action={action}
       items={navForState(dashboard.state)}
+      user={user}
+      profileHref="/profile"
       /* §2: the indicator points at exactly one destination. */
       indicators={unreadCertificates > 0 ? ['certificates'] : undefined}
     >

@@ -240,6 +240,24 @@ test.describe('Authenticated shell', () => {
     ).toHaveAttribute('aria-current', 'page');
   });
 
+  test('sign-out lives in the header user menu on any page, and ends the session (TAM-112, D-096)', async ({
+    page,
+  }) => {
+    await signedInEmployee(page, 'signout');
+    await page.goto('/profile');
+
+    /* One sign-out: nothing on the page or in the sidebar offers it until the
+       avatar menu opens (D-096 — the profile's own button was removed). */
+    await expect(page.getByRole('button', { name: 'تسجيل الخروج' })).toHaveCount(0);
+
+    await page.getByRole('banner').getByRole('button', { name: 'قائمة المستخدم' }).click();
+    await page.getByRole('menuitem', { name: 'تسجيل الخروج' }).click();
+
+    await expect(page).toHaveURL(/\/login$/);
+    const cookies = await page.context().cookies();
+    expect(cookies.find((cookie) => cookie.name === 'tamkeen_session')).toBeUndefined();
+  });
+
   test('numbers use Western Arabic digits by default (D-018)', async ({ page }) => {
     await signedInEmployee(page, 'digits');
 

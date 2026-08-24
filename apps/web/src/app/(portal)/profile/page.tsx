@@ -253,6 +253,9 @@ export default function ProfilePage() {
             >
               {signOut.isPending ? t('signingOut') : t('signOut')}
             </Button>
+            </dl>
+            {/* No sign-out here: the header's user menu is the one way out
+                (D-096) — a second button would be the redundancy §3 forbids. */}
           </CardContent>
         </Card>
 
