@@ -314,11 +314,11 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     const user = userEvent.setup();
     renderWithProviders(<ProfilePage />);
 
-    expect(screen.queryByRole('button', { name: 'حفظ' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'حفظ شكل الأرقام' })).not.toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText(/الأرقام المعروضة/), 'arabic-indic');
 
-    expect(screen.getByRole('button', { name: 'حفظ' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'حفظ شكل الأرقام' })).toBeInTheDocument();
   });
 
   it('saves the chosen format and refreshes the session so the app re-renders', async () => {
@@ -326,7 +326,7 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     renderWithProviders(<ProfilePage />);
 
     await user.selectOptions(screen.getByLabelText(/الأرقام المعروضة/), 'arabic-indic');
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await user.click(screen.getByRole('button', { name: 'حفظ شكل الأرقام' }));
 
     await waitFor(() => expect(api.setNumberFormat).toHaveBeenCalledWith('arabic-indic'));
     /* Without the refresh the preference is stored but the page keeps rendering
@@ -341,7 +341,7 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     renderWithProviders(<ProfilePage />);
 
     await user.selectOptions(screen.getByLabelText(/الأرقام المعروضة/), 'system');
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await user.click(screen.getByRole('button', { name: 'حفظ شكل الأرقام' }));
 
     /* Not the string "system" — the column is nullable precisely so "no
        preference" and "prefers Western" stay distinguishable. */

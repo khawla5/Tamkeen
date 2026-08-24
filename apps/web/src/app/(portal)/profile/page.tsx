@@ -437,7 +437,12 @@ function DigitsCard({
 
         {/* Save appears only when there is something to save (§3). */}
         {value !== (current ?? 'system') ? (
-          <Button className="self-start" disabled={busy} onClick={() => void save()}>
+          <Button
+            className="self-start"
+            aria-label={t('digitsSaveAriaLabel')}
+            disabled={busy}
+            onClick={() => void save()}
+          >
             {t('digitsSave')}
           </Button>
         ) : null}
