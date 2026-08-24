@@ -4,7 +4,8 @@
 >
 > **Baseline:** all "verified" implementation notes were re-checked against `main` @ `f1f0dcd` (2026-08-23), which now includes Phase 3 (certificates + CV, PR #4), the public landing page (PR #5, built from the reference design), and Phase 4 (entity portal, PR #6). Phase 5 (super-admin) is next. Re-verify notes again if `main` moves before a ticket is picked up.
 >
-> **Epic label: `auth-ui-port`** — rebuilding the sign-in/sign-up screens (wired, functionality unchanged) for ministry requirements. **Re-based 2026-08-23 on the DGA's Platforms Code (see the `dga-alignment` epic): the design source is now the official Platforms Code templates/components, not the reference repo.** The reference repo (`AhmadIbrahiem/frontend`, `master`) remains useful only for the *interaction* ideas already approved — the two-step registration wizard, input treatment — where Platforms Code has no prescribed pattern. Shared ground rules for every ticket in this epic:
+> **Epic label: `auth-ui-port`** — rebuilding the sign-in/sign-up screens (wired, functionality unchanged) for ministry requirements. **Re-based 2026-08-23 on the DGA's Platforms Code (see the `dga-alignment` epic): the design source is now the official Platforms Code templates/components, not the reference repo.** The reference repo (`AhmadIbrahiem/frontend`, `master`) remains useful only for the _interaction_ ideas already approved — the two-step registration wizard, input treatment — where Platforms Code has no prescribed pattern. Shared ground rules for every ticket in this epic:
+>
 > - Fully wired to the existing auth API — no functionality changes, restyle only.
 > - **Email/password only. No SSO (real or mock), no social login, no demo accounts** (D-019 reaffirmed).
 > - Arabic-first RTL, Tailwind **logical properties only** (`ms-`/`me-`/`ps-`/`pe-`/`text-start`…), directional icons mirrored.
@@ -24,7 +25,7 @@
 - **Labels:** `auth-ui-port`, `frontend`, `design-system`
 - **Priority:** High (blocks every other ticket in the epic)
 - **Pre-requisite:** TAM-115 (Platforms Code tokens) — stacked on `feature/dga-alignment`
-- **What shipped (2026-08-23) — note the change from the original two-panel idea:** the two-panel split was the *reference repo's* layout, exactly the source the epic stopped following. Government sign-in pages (Absher, Nafath, the DGA's examples) are **centred**: a slim header naming the owner, one card with the ministry emblem over the form, a footer strip, a quiet geometric lattice behind the page. So `AuthLayout` is that — and CLAUDE.md §4.1's "single-column, centred" **stands; no decision amendment was needed**. The header carries a visible exit ("← العودة إلى الصفحة الرئيسية") because a logo link is a convention, not a signpost.
+- **What shipped (2026-08-23) — note the change from the original two-panel idea:** the two-panel split was the _reference repo's_ layout, exactly the source the epic stopped following. Government sign-in pages (Absher, Nafath, the DGA's examples) are **centred**: a slim header naming the owner, one card with the ministry emblem over the form, a footer strip, a quiet geometric lattice behind the page. So `AuthLayout` is that — and CLAUDE.md §4.1's "single-column, centred" **stands; no decision amendment was needed**. The header carries a visible exit ("← العودة إلى الصفحة الرئيسية") because a logo link is a convention, not a signpost.
 - **Also shipped, app-wide:** the DGA form anatomy in the shared primitives — `Input` (36px, radius 4, neutral-400 edge, primary focus ring), `Field` (semibold label, required mark before the label but kept out of the accessible name, icon + text error row), new `PasswordInput` (show/hide toggle, `aria-pressed`, never submits) and `Alert` (status banners: error = assertive alert, success/info = polite status). Every form in the portal inherits this.
 - **Acceptance met:** one `h1`; header/main/footer landmarks; pattern `aria-hidden`; no physical-direction classes, no retired tokens (tested); 9 `Field` accessibility tests unchanged and green.
 - **Open:** whether Platforms Code publishes an official login template (official site unreadable from here) — if it does, reconcile; the decorative lattice is below AA on purpose.
@@ -92,8 +93,8 @@
   - Pre-assessment navigation to any `/courses*` URL lands on the dashboard; post-assessment it renders the catalog normally.
   - New e2e step: fresh user sees only الرئيسية/الملف الشخصي; after submitting the assessment the sidebar gains الدورات without a reload.
   - CLAUDE.md §4.2/§4.6 amended; decisions.md entry added; progress.md updated.
-  **What shipped (2026-08-23):** as specified — `navForState` returns two items pre-assessment; `PortalProvider` redirects `/courses*` to `/` for `PRE_ASSESSMENT` with the loading state shown; `nav-items.test.ts` updated (not duplicated); a new `portal-provider.test.tsx` pins the redirect (4 cases); the journey e2e asserts 2 items + the bounce before the assessment and الدورات appearing after it, and the two catalogue e2e flows now run post-assessment. CLAUDE.md §4.2/§4.6 amended; D-071 recorded.
-  **Implementation notes (verified):**
+    **What shipped (2026-08-23):** as specified — `navForState` returns two items pre-assessment; `PortalProvider` redirects `/courses*` to `/` for `PRE_ASSESSMENT` with the loading state shown; `nav-items.test.ts` updated (not duplicated); a new `portal-provider.test.tsx` pins the redirect (4 cases); the journey e2e asserts 2 items + the bounce before the assessment and الدورات appearing after it, and the two catalogue e2e flows now run post-assessment. CLAUDE.md §4.2/§4.6 amended; D-071 recorded.
+    **Implementation notes (verified):**
   - The gate lives in ONE function: `navForState(state)` in `src/components/layout/nav-items.ts` — change `['dashboard', 'courses', 'profile']` for the `PRE_ASSESSMENT` branch only; the shell renders whatever list it is handed. The state is decided server-side (`DASHBOARD_STATES` in `packages/types/src/journey.ts`) and loaded once by `PortalProvider` — do not re-derive it in the page.
   - Put the redirect where `PortalProvider` already owns journey state (it handles the 401 redirect the same way): when state is `PRE_ASSESSMENT` and the route matches `/courses`, `router.replace('/')`. Render the loading state while redirecting — never a flash of catalog.
   - `navForState` now has a dedicated test, `src/components/layout/nav-items.test.ts` — it currently asserts `PRE_ASSESSMENT` → `['dashboard', 'courses', 'profile']`, so it will fail on this change by design. Update that assertion (and the `sidebar-nav.test.tsx` fixtures if they assume three items); do not add a second test file.
@@ -116,14 +117,13 @@
   - Submitting the assessment clears the draft; a later retake starts clean at question 1.
   - A draft referencing question ids no longer in the bank is discarded silently (bank can be edited in Phase 5).
   - Results and path-build still render bare — asserted, not assumed.
-  **What shipped (2026-08-23):** as specified. `chrome="bare"` removed from the assessment page (results and path build keep it; the rationale comment in `portal-page.tsx` rewritten); a sessionStorage draft keyed to the assessment id + question ids, written through on every answer/step, restored on mount, discarded when the bank differs, cleared on submit. 4 new component tests; the journey e2e now answers two statements, leaves to the profile via the sidebar, returns and resumes on statement 3 (`completeAssessment` gained a `from` parameter). Also fixed a leftover invalid class from the token migration on the option cards. D-073 recorded; CLAUDE.md §4.3 updated.
-  **Implementation notes (verified):**
+    **What shipped (2026-08-23):** as specified. `chrome="bare"` removed from the assessment page (results and path build keep it; the rationale comment in `portal-page.tsx` rewritten); a sessionStorage draft keyed to the assessment id + question ids, written through on every answer/step, restored on mount, discarded when the bank differs, cleared on submit. 4 new component tests; the journey e2e now answers two statements, leaves to the profile via the sidebar, returns and resumes on statement 3 (`completeAssessment` gained a `from` parameter). Also fixed a leftover invalid class from the token migration on the option cards. D-073 recorded; CLAUDE.md §4.3 updated.
+    **Implementation notes (verified):**
   - The chrome switch is one line: `src/app/(portal)/assessment/page.tsx` line ~34 passes `chrome="bare"` to `PortalPage` — remove it and the default `'nav'` chrome renders `AppShell` with `navForState(dashboard.state)`, which after TAM-106 yields the two gated items for `PRE_ASSESSMENT` automatically. No new layout code.
   - Draft state lives in `AssessmentFlow` (same file): `answers` (`Record<string, string>`) and `index` are plain `useState`. Hydrate them from sessionStorage on mount and write through on change; key by the assessment's question-id list so a changed bank invalidates the draft. Clear the key in the submit success handler (where it already calls `usePortal().refresh()` and routes to results).
   - sessionStorage is per-tab and per-origin: no PII concern (option keys only, no free text), nothing crosses users on a shared machine once the tab closes.
   - Guard the sessionStorage reads for SSR/first render (`typeof window`) — the page is a client component but hydration order still matters.
   - Retakes are allowed only pre-commitment (§2) and this draft mechanism doesn't change that — the retake path just starts with an empty draft after the previous submit cleared it.
-
 
 ## TAM-108 — Dashboard: Holland chips after the assessment + status strip on an active path — **DONE** (`feature/tam-108-dashboard`)
 
@@ -134,9 +134,10 @@
   Two of the dashboard's three states get a content change. The rule holding both together: **one primary action per screen; information may be added, competing actions and duplicated UI may not** (§3).
 
   **A. Assessed, no path yet (`ASSESSED_NO_PATH`).** Today the Holland Code appears as a raw Latin string inside a sentence ("ظهرت نتيجتك: RIA") — meaningless to an Arabic-speaking user. Replace it with the three letters as **styled chips carrying their Arabic type names in rank order** (strongest first), e.g. الواقعي، البحثي، الفني, reusing the existing `riasec.*` names. The card keeps its title ("اختر مسارك"), gains a short lead-in ("ميولك المهنية، مرتّبة من الأقوى:"), and keeps its **single** action → Results.
-  *Explicitly rejected in discussion (do not add):* per-chip one-line summaries (Results owns explanation), a recommended-paths preview (Results owns the gold ranking), a dashboard retake link (retake stays on Results, next to the ranking it would replace — D-015).
+  _Explicitly rejected in discussion (do not add):_ per-chip one-line summaries (Results owns explanation), a recommended-paths preview (Results owns the gold ranking), a dashboard retake link (retake stays on Results, next to the ranking it would replace — D-015).
 
   **B. Path confirmed, in progress (`ACTIVE_PATH`).** The page shows a progress bar and the next course but never says **which path the user is on** or how their courses break down. Add a compact, non-interactive **status strip above the continue card**: a path tile (name + Arabic RIASEC type, e.g. "مسار تحليل البيانات · البحثي") and three count tiles — مكتملة / قيد التنفيذ / لم تبدأ. The continue card below stays the page's only action.
+
   ```
   ┌──────────────────────┐ ┌───────┐ ┌────────────┐ ┌────────┐
   │ مسار تحليل البيانات   │ │   4   │ │     1      │ │   2    │
@@ -148,7 +149,8 @@
   │ [ ابدأ الدورة ]                                  │
   └────────────────────────────────────────────────┘
   ```
-  *Restraint is a requirement, not a style note.* The reference product's dashboard (screenshot on file) surrounds its summary with a journey stepper, KPI-percentage cards, a recommended-actions row and application/interview widgets. None of that is ported — most has no equivalent here and all of it violates §3. A journey stepper, if ever wanted, is its own discussion.
+
+  _Restraint is a requirement, not a style note._ The reference product's dashboard (screenshot on file) surrounds its summary with a journey stepper, KPI-percentage cards, a recommended-actions row and application/interview widgets. None of that is ported — most has no equivalent here and all of it violates §3. A journey stepper, if ever wanted, is its own discussion.
 
   **C. Before the assessment (`PRE_ASSESSMENT`)** — untouched.
 
@@ -156,7 +158,7 @@
 
   **Acceptance:**
   - State A: three chips in profile rank order with Arabic names; the Latin code string appears nowhere on the dashboard; exactly one action (→ /results); no summaries, previews, or retake link; chips read as plain text in rank order to assistive tech.
-  - State B: strip shows path name + Arabic RIASEC type + three counts that always sum to the path total; western digits via the shared number formatter (D-018); tiles are informational content, not fake buttons; wraps 2×2 at narrow widths, usable at 360px RTL; continue card unchanged and still the only action. The four link tiles below it (مساري، الدورات، شهاداتي، السيرة الذاتية — Phase 3 added the last two) are unchanged; the status strip must read as *status*, not as a fifth row of tiles — differentiate it (no hover affordance, no link styling).
+  - State B: strip shows path name + Arabic RIASEC type + three counts that always sum to the path total; western digits via the shared number formatter (D-018); tiles are informational content, not fake buttons; wraps 2×2 at narrow widths, usable at 360px RTL; continue card unchanged and still the only action. The four link tiles below it (مساري، الدورات، شهاداتي، السيرة الذاتية — Phase 3 added the last two) are unchanged; the status strip must read as _status_, not as a fifth row of tiles — differentiate it (no hover affordance, no link styling).
   - State C unchanged. Dashboard unit tests and the API's dashboard integration tests updated.
 
   **What shipped (2026-08-23):** State A: `HollandCodeChips` (new shared component, `src/components/riasec/`, with an `ordinals` prop ready for TAM-114) replaces the "ظهرت نتيجتك: SIA" sentence; one action, no summaries/previews/retake (asserted). State B: the status strip — path name + Arabic type, مكتملة / قيد التنفيذ / لم تبدأ — as a labelled list with nothing clickable; `DashboardView.path` gained `riasecLetter` and `inProgressCount` from the server (API integration test asserts them against a real database). State C untouched. 4 new web tests; API journey spec extended.
@@ -184,7 +186,7 @@
   - `PATCH /api/me/profile` validates (non-empty name, department), writes an audit entry (actor + which fields changed — not old/new values, that is PII), covered by integration tests.
   - After a name change the Moodle user's display name matches (contract test against the mock; verified once against the real Moodle).
   - Loading / saving / error states; labelled inputs; keyboard-complete; RTL at 360px.
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - `AuthenticatedUser` (`apps/api/src/auth/session.service.ts`) and the login response in `auth.service.ts` both select `{id, email, fullName, role}` — add `employeeId` and `department` in both places and in the web session type so `usePortal().user` carries them. The DB columns already exist (`users.employee_id`, `users.department`).
   - There is no users/profile module yet — create a small `me` module rather than growing `auth`. Controller stays thin; rules live in the service (project convention).
   - `LmsPort` is `apps/api/src/moodle/lms.port.ts`, executable contract in `lms.contract.ts`; the mock must implement the new operation with the same semantics so the contract suite remains the swap guarantee. Real adapter: `core_user_update_users` must be added to the Moodle external service's function list on the ministry instance (add it to the Moodle setup checklist).
@@ -204,7 +206,7 @@
   - Other sessions are dead after the change (integration test: two sessions, change via one, the other gets 401); the current one survives.
   - Five wrong current passwords trip the same lockout as login.
   - New password ≠ current password; confirm must match (client + server).
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - `SessionService.revokeAllForUser(userId)` exists but revokes **all** sessions including the current — add a `revokeOthersForUser(userId, keepSessionId)` variant rather than logging the user out of the device they just used.
   - Argon2 verification and the lockout counters live in `auth.service.ts` — reuse the login path's helpers (including the dummy-verify timing equalisation) instead of re-implementing the comparison.
   - Endpoint belongs under `auth` (credential management), not `me`.
@@ -223,9 +225,9 @@
   - Taken address: identical response, no change, audit notes the attempt without recording the address.
   - Domain policy enforced; current password required; audited; rate-limited.
   - Provisioned user: Moodle email updated, Moodle username unchanged (contract test).
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - Reuse the `auth_tokens` single-use hashed-token infrastructure and the existing verify-email page/endpoint shape with a new token type (`EMAIL_CHANGE`); store the pending address as `users.pending_email` (it is not a secret, but it must not become the login before confirmation).
-  - The verification email is a *reuse* of the locked "email verification" notification type, not a new type.
+  - The verification email is a _reuse_ of the locked "email verification" notification type, not a new type.
 
 ## TAM-112 — Sign-out: the header user menu, one exit for every role — **DONE** (`feature/tam-112-sidebar-signout`, revised per D-096)
 
@@ -251,16 +253,16 @@
   With twelve seeded paths (two per letter) a user faces **six equal-looking gold cards plus six plain ones**, each with a full description, under a tall result card — overwhelming, and the ranking that matters is invisible. Restructure the path list so the user's own ranking organizes the page. Same data, same routes, same API; the **result card is untouched**.
   1. **Group recommended paths by letter rank.** One section per letter in the user's code, in rank order, with a heading: "الأقرب إلى ميلك الأول — الاجتماعي" for #1, "مناسب أيضًا — المبادر" with a quiet "ميلك الثاني" tag for #2, likewise #3. Two cards per group with the current seed. The heading answers "why is this recommended?" — no per-card explanation is needed.
   2. **Compact cards.** Name, RIASEC type, "موصى به" badge, course count, duration, one button "استعرض المسار". **The description leaves the card** and lives on the path page the button opens. Gold border + badge treatment unchanged (D-025 contrast rules).
-  3. **Other paths collapsed, not hidden.** "مسارات أخرى" sits behind a native `<details>` toggle labelled "عرض المسارات الأخرى (6)" with the live count; expanded, they render as the same compact cards, fully selectable. This amends §4.4's "shown normally below" → "available one click below"; §3A's *recommendation, not restriction* is preserved. Record in decisions.md.
-  The first screenful becomes: the user's code + the two paths that fit them best.
-  **Acceptance:**
+  3. **Other paths collapsed, not hidden.** "مسارات أخرى" sits behind a native `<details>` toggle labelled "عرض المسارات الأخرى (6)" with the live count; expanded, they render as the same compact cards, fully selectable. This amends §4.4's "shown normally below" → "available one click below"; §3A's _recommendation, not restriction_ is preserved. Record in decisions.md.
+     The first screenful becomes: the user's code + the two paths that fit them best.
+     **Acceptance:**
   - Gold paths appear under exactly one heading per letter of the user's code, in the user's rank order; a letter with no paths produces no empty heading.
   - Cards show only name/type/badge/count/duration/button — no description text anywhere in the list (asserted).
   - The toggle shows the correct count, is keyboard-operable, announces expanded/collapsed state, and every other path is reachable and clickable once expanded. Collapsed by default on every visit (no persistence).
   - Sort order inside each group is the API's — never re-sorted client-side (asserted).
   - Result card, `noResult` empty state, `canRetake`, no-sidebar (`chrome="bare"`) unchanged.
   - CLAUDE.md §4.4 amended; decisions.md entry added; `path-card.test.tsx` and the results page test updated.
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - Page: `src/app/(portal)/results/page.tsx` — today a `filter(recommended)` into one grid plus an "others" grid. Group with `recommendationRank` (0–2, already on every `PathSummary`; null for non-recommended) — no API change. Headings' letter names come from `riasec.<letter>.name`; ordinal words (الأول/الثاني/الثالث) go in the `results` namespace.
   - Card: `src/components/paths/path-card.tsx` — remove the description paragraph; keep the "plain paragraphs, not a definition list" rule recorded in the file (a `<dl>` made screen readers announce labels twice).
   - Use `<details>/<summary>` for the collapse: free keyboard + state semantics, no JS state; give `summary` a visible focus ring (gold, 3:1 passes for non-text) and hide the default marker in favour of a mirrored caret (logical properties only).
@@ -279,23 +281,23 @@
   - Committed user: exactly one card shows "مسارك" + link to مساري; no other card — in any group or in the collapsed section — has a button; uncommitted user sees TAM-113's behaviour unchanged.
   - The dashboard and Results render the code through the same component (a test imports it from one path; grep finds no second chip implementation).
   - `noResult` empty state, `canRetake`, API sort order, no-sidebar — unchanged, asserted.
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - The committed path id is already on the client: `usePortal().dashboard.path?.id` is non-null exactly when `dashboard.state === 'ACTIVE_PATH'`. Pass a `committedPathId` prop into `PathCard` rather than having the card read portal state — keeps it presentational and its tests simple. A user mid-build (path chosen, not yet confirmed) is still `ASSESSED_NO_PATH` and sees all cards as choosable — correct, nothing is locked before confirm.
   - The current chips live inline in the `HollandCode` function in `results/page.tsx` (gold **border** + ordinal); extract to `src/components/riasec/holland-code-chips.tsx` (or wherever TAM-108 placed it) and delete the inline version — the acceptance grep catches a leftover copy.
-  - The "مسارك" marker must not be gold: gold means *recommended* (§3), and a chosen-but-not-recommended path would otherwise look recommended after the fact. Navy/secondary styling.
+  - The "مسارك" marker must not be gold: gold means _recommended_ (§3), and a chosen-but-not-recommended path would otherwise look recommended after the fact. Navy/secondary styling.
 
 ---
 
 > **Epic label: `dga-alignment`** — adopt the DGA's national design system, **Platforms Code (كود المنصات)**, as the visual foundation of the product. Decided 2026-08-23: **full adoption including the palette**, applied to the **landing page and auth screens first**, the signed-in portal in a follow-up epic. **Source of truth: the official site `design.dga.gov.sa` and the official Figma "Components Library – Platforms Code"** — the community shadcn registry (`dga-registry.vercel.app`, 24 RTL components, unofficial) may be consulted as an accelerator but never as the authority.
 > Why: this is a Ministry of Interior platform; the national design system is what the ministry and its users will recognize, and the landing page rebuilt from the reference repo (PR #5) reads as a generic template rather than a government product.
-> **Ministry questions (blockers, add to progress.md):** (1) confirm whether Platforms Code compliance is *mandatory* for this platform or adopted by choice — it changes how much deviation is allowed; (2) who on the team has access to the official Figma library; (3) the ministry's own emblem/seal is still missing (D-051) and the landing/auth designs need it.
+> **Ministry questions (blockers, add to progress.md):** (1) confirm whether Platforms Code compliance is _mandatory_ for this platform or adopted by choice — it changes how much deviation is allowed; (2) who on the team has access to the official Figma library; (3) the ministry's own emblem/seal is still missing (D-051) and the landing/auth designs need it.
 > **Consequence the whole team must know:** the palette lives in `apps/web/src/app/globals.css` as semantic tokens every shadcn component reads. Swapping it recolors the **entire app** — portal included — in one change. That is accepted; what is staged per surface is component/pattern alignment, not color.
 
 ## TAM-115 — Platforms Code foundations: tokens, typography scale, contrast audit, spec amendments
 
 - **Labels:** `dga-alignment`, `design-system`, `frontend`, `spec-change`
 - **Priority:** High (blocks TAM-116 and the re-based auth epic)
-- **Pre-requisite:** someone with the official Figma/site extracts the foundations (this could not be fetched from the site, which is a JS app). Deliver them as a short written token sheet attached to this ticket *before* implementation starts.
+- **Pre-requisite:** someone with the official Figma/site extracts the foundations (this could not be fetched from the site, which is a JS app). Deliver them as a short written token sheet attached to this ticket _before_ implementation starts.
 - **Description:**
   Replace the Tamkeen brand tokens with Platforms Code foundations:
   1. **Color** — the official palette (primary, secondary, neutrals, semantic success/warning/danger/info, surfaces, borders, focus ring) defined once in `globals.css` `@theme`, with the shadcn semantic layer (`--background`, `--primary`, `--accent`, …) re-mapped onto them. Delete `--color-navy/gold/...` rather than aliasing them, so nothing keeps referencing the old brand.
@@ -303,13 +305,13 @@
   3. **Spacing, radius, elevation, motion** tokens as published.
   4. **Contrast audit redone** — `src/lib/contrast.test.ts` currently encodes the gold restriction (D-025). Rewrite it for the new palette: every text/background pairing the semantic layer produces must clear 4.5:1 (3:1 for large text and non-text), asserted, with any restricted pairing documented the way gold was.
   5. **Spec amendments** — CLAUDE.md §3 (the palette table and the gold-means-recommended rule), D-009, D-025 superseded by a new decision; the §3A "gold = recommended" treatment needs a Platforms-Code-native equivalent (e.g. the primary accent + the "موصى به" badge — colour alone was never sufficient, WCAG 1.4.1). Record it.
-  **Acceptance:**
+     **Acceptance:**
   - No hex literal outside `globals.css`; `grep -rn "#[0-9a-fA-F]\{6\}" src --include=*.tsx` returns nothing.
   - Contrast test rewritten and green; the catalog test still green.
   - The full web suite passes with the new tokens (component tests assert structure, not colors — if any asserts a color class, fix the test, not the token).
   - The recommended-path treatment on Results and the certificates' achievement accent have a defined replacement — documented in decisions.md, not left to whoever touches them next.
   - Artifact mockups (dashboard, results) noted as pre-DGA in their headers; structure stands, colors don't.
-  **Implementation notes (verified):** brand tokens are at the top of `globals.css` (`@theme { --color-navy … }`) with the semantic mapping in `:root`; the contrast assertions are in `src/lib/contrast.test.ts` (24 assertions incl. negative tests); `packages/types/src/locale.ts` owns the digit/locale switch (untouched); certificate/CV PDF templates (Phase 3, `apps/api`) have their own styling — check whether they consume the same tokens or hardcode brand colors, and ticket the PDFs separately if the latter.
+    **Implementation notes (verified):** brand tokens are at the top of `globals.css` (`@theme { --color-navy … }`) with the semantic mapping in `:root`; the contrast assertions are in `src/lib/contrast.test.ts` (24 assertions incl. negative tests); `packages/types/src/locale.ts` owns the digit/locale switch (untouched); certificate/CV PDF templates (Phase 3, `apps/api`) have their own styling — check whether they consume the same tokens or hardcode brand colors, and ticket the PDFs separately if the latter.
 
 ## TAM-116 — Landing page redesign on Platforms Code
 
@@ -324,12 +326,12 @@
   - **Content sections rebuilt on Platforms Code patterns** — the four-step journey keeps its sequence (it is genuinely ordered), the "problem" and "trust" sections lose the repeated card grid in favour of whatever list/feature patterns the system provides. Left-aligned RTL text blocks; body copy at the system's minimum readable size and contrast.
   - **Honest stats only** — 12 paths / 48 courses may stay (they are data); "6 ميول" and "4 خطوات" go.
   - Copy: keep the existing `landing.*` Arabic messages where they still fit; anything new is realistic placeholder pending the Training Directorate.
-  **Acceptance:** the page passes the Platforms Code checklist the implementer extracted (attached to the PR); emblem slot present; product preview present; no gold-fill/white-text anywhere; AA contrast across all text; keyboard + screen-reader pass; 360px RTL; `landing.test.tsx` updated; the landing e2e (signed-out `/` shows the page, CTAs route to `/register` and `/login`) still green.
-  **Implementation notes (verified):** `app/landing/page.tsx` renders `LandingView` unconditionally; `/` renders the same view for signed-out visitors via `PortalProvider` and routes signed-in users by role (learner `/`, entity `/entity`) — keep that wiring. Messages are under `landing.*` in `ar.json` with `{min}`/`{max}` interpolations for the 5–10 rule — keep them interpolated, never hardcode the numbers. The Next.js dev overlay badge ("N" circles) is not part of the page.
+    **Acceptance:** the page passes the Platforms Code checklist the implementer extracted (attached to the PR); emblem slot present; product preview present; no gold-fill/white-text anywhere; AA contrast across all text; keyboard + screen-reader pass; 360px RTL; `landing.test.tsx` updated; the landing e2e (signed-out `/` shows the page, CTAs route to `/register` and `/login`) still green.
+    **Implementation notes (verified):** `app/landing/page.tsx` renders `LandingView` unconditionally; `/` renders the same view for signed-out visitors via `PortalProvider` and routes signed-in users by role (learner `/`, entity `/entity`) — keep that wiring. Messages are under `landing.*` in `ar.json` with `{min}`/`{max}` interpolations for the 5–10 rule — keep them interpolated, never hardcode the numbers. The Next.js dev overlay badge ("N" circles) is not part of the page.
 
 ---
 
-> **Epic label: `portal-dga`** — the signed-in experience (learner portal and entity portal) on Platforms Code: shell, shared components, every page, then a gate. Replaces the TAM-117 stub. **Why now:** the tokens (TAM-115) recoloured the portal, and the auth pages (TAM-101–105) put the DGA *form anatomy* into the shared `Input`/`Field`/`Select`/`Alert` — so the portal is already half-aligned by construction. What remains is the shell, the non-form components, and the page-level patterns. Shared rules: logical properties only; one primary action per screen (§3); loading/empty/error states on every data view (§2B); WCAG 2.1 AA gated by axe, not reviewed by eye; the behaviour tickets already written (TAM-107, 108, 109–114) are implemented **on top of** this epic's components, never blocked on it — if one lands first it uses the new tokens, and this epic restyles it.
+> **Epic label: `portal-dga`** — the signed-in experience (learner portal and entity portal) on Platforms Code: shell, shared components, every page, then a gate. Replaces the TAM-117 stub. **Why now:** the tokens (TAM-115) recoloured the portal, and the auth pages (TAM-101–105) put the DGA _form anatomy_ into the shared `Input`/`Field`/`Select`/`Alert` — so the portal is already half-aligned by construction. What remains is the shell, the non-form components, and the page-level patterns. Shared rules: logical properties only; one primary action per screen (§3); loading/empty/error states on every data view (§2B); WCAG 2.1 AA gated by axe, not reviewed by eye; the behaviour tickets already written (TAM-107, 108, 109–114) are implemented **on top of** this epic's components, never blocked on it — if one lands first it uses the new tokens, and this epic restyles it.
 > **Source of truth:** the official Platforms Code site/Figma; the community registry's Navigation Menu, Breadcrumb, Card, Table, Tabs, Tag, Tooltip, Skeleton and Sonner definitions are the practical reference for component anatomy (unofficial — reconcile with the official spec where they differ).
 > **Branching:** `feature/tam-117-portal-shell` off `feature/tam-106-nav-gating`; each following ticket stacks on the previous.
 
@@ -344,14 +346,14 @@
   2. **A light sidebar** — white/neutral-50 ground, Platforms Code navigation-menu anatomy: each item an icon + label row, the active item marked with a primary start-edge bar and primary text (`aria-current="page"` as today), hover on neutral-100. **This replaces the dark `neutral-900` rail**, which is a leftover of the navy era: Platforms Code applications use light navigation with the primary as the active indicator, and a dark rail next to white content is the one place the portal still looks like the old brand. Below `md` the sidebar becomes the existing horizontal strip, restyled the same way.
   3. **The page frame** — `PortalPage`'s title row as a DGA page header (title, optional single action on the end edge, optional breadcrumb for nested pages such as a course inside the catalogue), content on the neutral-50 ground with white cards.
   4. **A slim footer strip** — © وزارة الداخلية · classification — on every shell page, matching the auth footer.
-  The certificates indicator (the dot on شهاداتي) and the skip link are kept; `navForState` and its gating are untouched.
-  **Acceptance:**
+     The certificates indicator (the dot on شهاداتي) and the skip link are kept; `navForState` and its gating are untouched.
+     **Acceptance:**
   - Learner and entity portals share one shell implementation (the entity frame is a configuration of it, not a copy).
   - Sidebar: light ground, primary active bar, `aria-current="page"` preserved; all nav tests (`nav-items.test.ts`, `sidebar-nav.test.tsx`, `portal-provider.test.tsx`) green unchanged.
   - Header shows the lockup and the user's name; sign-out works from every page (the logout call + "navigate regardless" already in `profile/page.tsx`, extracted to a shared hook — TAM-112's content).
   - No physical-direction classes (grep), no hex literals; the skip link remains the first focusable element (e2e already asserts this).
   - axe clean on the dashboard in all three states (the e2e gate arrives fully in TAM-121, but this ticket runs it on the shell).
-  **Implementation notes (verified):** shell is `src/components/layout/app-shell.tsx` (`<aside class="bg-neutral-900 md:w-64">`, brand lockup on a white tile — the tile exists *because* the rail is dark; it goes when the rail is light); nav rendering is `sidebar-nav.tsx` (active state at its `cn(...)` around line 62, indicator dot line 91); the page frame is `portal-page.tsx` (`PortalPage`, with `chrome="bare"` for flow pages — keep that prop, TAM-107 changes which pages use it); the entity frame is `entity-page.tsx` + `entity-nav-items.ts`. The user's name comes from `usePortal().user` / `EntityProvider`. The landing header (`components/landing/site-header.tsx`) already has the exact lockup markup to reuse.
+    **Implementation notes (verified):** shell is `src/components/layout/app-shell.tsx` (`<aside class="bg-neutral-900 md:w-64">`, brand lockup on a white tile — the tile exists _because_ the rail is dark; it goes when the rail is light); nav rendering is `sidebar-nav.tsx` (active state at its `cn(...)` around line 62, indicator dot line 91); the page frame is `portal-page.tsx` (`PortalPage`, with `chrome="bare"` for flow pages — keep that prop, TAM-107 changes which pages use it); the entity frame is `entity-page.tsx` + `entity-nav-items.ts`. The user's name comes from `usePortal().user` / `EntityProvider`. The landing header (`components/landing/site-header.tsx`) already has the exact lockup markup to reuse.
 
 ## TAM-118 — Shared portal components on Platforms Code: Card, Badge/Tag, Progress, Table, Skeleton, states, Textarea, Tabs, toasts
 
@@ -368,8 +370,8 @@
   - `Textarea` — the `Input` anatomy at multi-line.
   - **`Tabs`** (new, extracted from the landing explorer's tablist) for pages that switch views (the entity course page's sections).
   - **Toasts** — the DGA registry uses Sonner for transient confirmations ("تم الحفظ"); add `sonner` only if a page in TAM-119/120 needs a transient confirmation that the `Alert` can't serve — otherwise don't.
-  **Acceptance:** every primitive has a component test for its semantics (not its classes); `states.test.tsx` green; contrast test extended with any new pairing a primitive introduces; no page in the portal imports a one-off card/badge/progress implementation after TAM-119/120.
-  **Implementation notes (verified):** `src/components/ui/{card,badge,progress,skeleton,textarea}.tsx` and `src/components/states/*` are the whole inventory — there is no table or tabs primitive yet (`entity/learners` and `entity/courses` lay out rows by hand; the landing `about-section.tsx` owns a bespoke tablist worth extracting). `--radius-card` in `globals.css` is 1rem today; the system's card radius is 8 — change the token, not the call sites.
+    **Acceptance:** every primitive has a component test for its semantics (not its classes); `states.test.tsx` green; contrast test extended with any new pairing a primitive introduces; no page in the portal imports a one-off card/badge/progress implementation after TAM-119/120.
+    **Implementation notes (verified):** `src/components/ui/{card,badge,progress,skeleton,textarea}.tsx` and `src/components/states/*` are the whole inventory — there is no table or tabs primitive yet (`entity/learners` and `entity/courses` lay out rows by hand; the landing `about-section.tsx` owns a bespoke tablist worth extracting). `--radius-card` in `globals.css` is 1rem today; the system's card radius is 8 — change the token, not the call sites.
 
 ## TAM-119 — Learner portal page sweep on the new shell and components
 
@@ -429,12 +431,12 @@
   1. **`PortalPage` owns the container.** It wraps `children` in the dashboard's container (`mx-auto w-full max-w-6xl`) — in **both** chrome variants, `nav` and `bare` (results and path-build are `bare` and need it most). Pages stop declaring their own.
   2. **A `width="narrow"` opt-in** (`max-w-2xl`) for genuinely narrow flows — the assessment questions, the profile form, the course player. Default is the standard width; narrow is an explicit, visible choice in the page's code.
   3. **Sweep the pages:** remove the per-page `mx-auto max-w-*` wrappers (dashboard, results, paths/[pathId] — including the fixed footer's inner container, which must track the same width — courses, courses/[courseId], my-path; assessment/profile/player switch to the prop). In-page `EmptyState`/error wrappers that used their own `max-w-2xl` follow the same rule.
-  **Acceptance:**
+     **Acceptance:**
   - `grep -rn "max-w-" src/app/(portal)` returns nothing — the only content-width declarations live in `PortalPage` (asserted in a test or CI grep).
   - Dashboard renders exactly as before (it is the reference, not a change target).
   - Path-build's fixed counter bar aligns flush with the page content at every viewport.
   - No horizontal overflow at 360px on any portal page; existing page tests updated, e2e journey green.
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - `src/components/layout/portal-page.tsx` — the `bare` branch renders `<main id="main-content" className="p-6">{children}</main>`; the `nav` branch delegates to `AppShell`, whose `<main>` padding is in `app-shell.tsx`. Put the container around `children` in `PortalPage` itself so both branches share it, rather than inside `AppShell`.
   - Current per-page widths to sweep: `assessment` 2xl → narrow prop; `courses/[courseId]` 3xl → default; `courses/[courseId]/player` 2xl → narrow; `my-path` 3xl (+2xl empty states) → default; `page.tsx` (dashboard) 6xl → default; `paths/[pathId]` 3xl + footer inner 3xl → default; `profile` 2xl → narrow; `results` 4xl (+2xl empty state) → default.
   - The fixed footer in `paths/[pathId]` is outside the flow, so it cannot inherit the wrapper — it keeps its own inner container; give both the same width via one exported constant/class rather than two literals.
@@ -451,14 +453,14 @@
   1. **Header card with meta.** The description plus: the path's RIASEC type as a tag, the «موصى به» badge when the path matches the user's code, the course count ("11 دورة متاحة"), and the **live total of selected hours** (updates as courses are picked — the user sees the commitment grow). This answers "what am I committing to" before the list.
   2. **Selectable-card grid.** Compact cards — title, one-line summary (clamped), hours — in a responsive grid (1 / 2 / 3 columns). **The whole card is the toggle**: one accessible control per course (the card itself is the button, `aria-pressed`), a visible checkbox glyph (decorative, `aria-hidden`) plus the primary-600 selected border — state is never colour alone. Unavailable courses and the at-max state keep their text hints and are not pressable.
   3. **Counter bar unchanged in behaviour** (persistent §4.5, `aria-live`), restyled only as needed to sit on the grid.
-  **Acceptance:**
+     **Acceptance:**
   - Grid at 1/2/3 columns across breakpoints; the eleven seeded courses fit ~2 screenfuls at desktop.
   - Card toggles with pointer **and** keyboard (Enter/Space), announces pressed state; exactly one interactive element per card — no nested buttons/links (asserted).
   - Selected state readable without colour (glyph + `aria-pressed`); unavailable/at-max cards expose their reason as text and are disabled.
   - Header shows type tag, count, and selected-hours total that updates on every toggle; «موصى به» appears only when the path is actually recommended for this user.
   - 5–10 enforcement, confirm enable/disable, the hard-commitment dialog, the locked (`canBuild=false`) state, and API course order — all unchanged, asserted.
   - e2e journey (build step) green with updated selectors.
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - Page: `src/app/(portal)/paths/[pathId]/page.tsx` — rows are inline (~lines 147–194); `toggle()` persists each click through `setCourses` and `isPending` already guards double-fires; keep the guard when the whole card becomes the control. `toHours(durationMinutes)` exists.
   - The current row keeps the rule "exactly one control per course, label states the current state" (comment in file) — the card-as-button keeps that rule; the state word (أُضيفت/أضف/الحد الأقصى/غير متاحة) moves into the card as the glyph's label.
   - **Verify the detail payload carries `riasecLetter` and `recommendationRank`** (the list's `PathSummary` has both; the detail endpoint may not) — if missing, add them to the detail response (read-only field, no rule change).
@@ -471,7 +473,7 @@
 - **Pre-requisite:** TAM-124 (the standard width)
 - **Approved mockup (2026-08-24):** https://claude.ai/code/artifact/58480b76-3385-4980-921e-01468b3d0bad — first screen; the annotations are part of the spec.
 - **Description:**
-  The run view (screenshot 2026-08-24 on file) renders the path as five identical disconnected cards — **every unfinished course carries an «ابدأ الدورة» button** (the next one primary, the rest outline), which is four more actions than §3 and §4.9's "must not compete with continue" allow. Nothing conveys sequence on the one page whose subject *is* a sequence, statuses are a grey word, and the certificate is a detached box with a lock and no explanation. Same data flow, same routes; restructure the page as the journey it describes:
+  The run view (screenshot 2026-08-24 on file) renders the path as five identical disconnected cards — **every unfinished course carries an «ابدأ الدورة» button** (the next one primary, the rest outline), which is four more actions than §3 and §4.9's "must not compete with continue" allow. Nothing conveys sequence on the one page whose subject _is_ a sequence, statuses are a grey word, and the certificate is a detached box with a lock and no explanation. Same data flow, same routes; restructure the page as the journey it describes:
   1. **Header card with meta.** Path name + its RIASEC type tag (needs `riasecLetter` in the payload — see notes), the progress bar with "X من Y دورات مكتملة" as today.
   2. **Vertical timeline** replacing the card list — one ordered rail, the courses as numbered stops:
      - **Done:** check glyph, «مكتملة» + the quiz grade (already in the payload), and a quiet text link **«عرض الشهادة»** to that course's certificate. No buttons.
@@ -479,14 +481,14 @@
      - **Upcoming:** quiet rows, number + title + «لم تبدأ». No buttons. A course that is `IN_PROGRESS` but not next-up shows its status only — its access stays on the course page.
   3. **The certificate is the final stop on the rail,** not a separate box. Locked: lock glyph + how it unlocks («تُفتح عند إتمام دوراتك الخمس» — count interpolated). Unlocked: the achievement treatment + the existing link to the gallery.
   4. **The quiet add (§4.9, owed since Phase 1):** after the last course stop, a subdued text link «إضافة دورة (لديك ٥ من ١٠)» to the catalogue — shown only while the path is active and under `PATH_MAX_COURSES`. The server already enforces everything (add-only, cap of 10); the course detail page already performs the add.
-  **Acceptance:**
+     **Acceptance:**
   - Exactly **one** `<button>`/primary action on the page in every state (asserted): the next-up course's. Done rows expose links only; upcoming rows expose nothing.
   - The list stays an `<ol>` in API order; each stop's state is announced in text (never colour/glyph alone); grades render via `format.percent`.
   - Certificate stop: locked shows the unlock condition with the real remaining count; unlocked keeps today's link; `pathCertificateUnlocked` logic untouched.
   - The add link appears only when `status === 'ACTIVE' && totalCount < 10`, disappears at 10, and never renders for a completed path.
   - `BUILDING` redirect state, `NoPath` empty state, loading/error states — unchanged, asserted.
   - e2e journey green (its my-path step selectors updated).
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - Page: `src/app/(portal)/my-path/page.tsx` — `CourseRow` currently gives **every** non-completed course a button (next primary, others outline); that is the bug this ticket fixes, and the comment above it already states the correct rule.
   - Payload: `MyPathView` has `pathId/pathName/status/completedCount/totalCount/pathCertificateUnlocked`, courses have `id/courseId/title/status/gradePercent/isNextUp`. **Missing for this ticket:** `riasecLetter` (header tag) and, per completed course, its `certificateId` (the «عرض الشهادة» link) — add both to the my-path response (read-only fields; the certificates module already knows the mapping; issuance is untouched).
   - The «عرض الشهادة» link points wherever the gallery's view action points for that certificate — one URL scheme, not two.
@@ -504,8 +506,8 @@
   2. **The global view is grouped by path, recommended first.** For an uncommitted user, one section per path — the user's recommended paths first in their letter-rank order (heading: path name + «موصى به» + course count), the rest after — courses inside in path order. The catalogue becomes the evaluation tool it's actually used as: "this is what هذا المسار actually teaches." Any search text or filter collapses the grouping into today's flat grid (a filtered result is an answer, not a tour).
   3. **Personal status chip on cards.** When the course is in the user's path, one chip: «مكتملة» / «قيد التنفيذ» / «في مسارك» (not started). At most one chip; courses outside the user's path get none — absence is the signal. Path membership renders as quiet tags instead of today's comma-joined names.
   4. **Filter row on the shared primitives.** Search (`Input`, as today) + path + duration rebuilt on the shared `Select` — the current `<select>`s use dead pre-token classes (`border-input`, `rounded-md`). Same three filters; §4.6's "category" is satisfied by the path filter — record that reading in decisions.md alongside the default (a RIASEC-type filter was considered and rejected: users think in paths, and two filters narrowing the same dimension compete).
-  **Out of scope, decided:** no pagination — the grouped default and filters keep screens short at seed scale; paging becomes its own ticket when real ministry data lands (Phase 7). Card click always opens course **detail** (never deep-links to the player) — one predictable behaviour; the chip informs, the detail page acts.
-  **Acceptance:**
+     **Out of scope, decided:** no pagination — the grouped default and filters keep screens short at seed scale; paging becomes its own ticket when real ministry data lands (Phase 7). Card click always opens course **detail** (never deep-links to the player) — one predictable behaviour; the chip informs, the detail page acts.
+     **Acceptance:**
   - Committed user: first render shows only their path's courses with the path filter visibly set; switching to «كل المسارات» shows everything (asserted). Uncommitted user: grouped global view, recommended path groups first in the user's letter-rank order, no preselection (asserted).
   - Grouping collapses to the flat grid the moment any search/filter is active, and returns when cleared (asserted). Group headings are `h2`, card titles `h3`; a path with no visible courses produces no empty heading.
   - Every card links to `/courses/[id]` — no player deep-links from the catalogue (asserted).
@@ -514,7 +516,7 @@
   - Search/filter/empty/clear-filters behaviour, debounce, and routes unchanged; loading/error states intact.
   - The stale header comment ("browsable before the assessment" — reversed by D-071) is corrected.
   - decisions.md entry (state-aware default + category-filter reading); page tests updated; e2e catalogue flows green.
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - Page: `src/app/(portal)/courses/page.tsx`. The committed path id is already client-side: `usePortal().dashboard` — `state === 'ACTIVE_PATH'` with `path.id` — use it as the filter's initial value (initial state only, not a controlled override; the user's later choice wins).
   - **No API change needed for the chips:** `myPathApi.get()` already returns every selected course with `courseId` + `status` — fetch it once alongside the list (only when committed) and map `courseId → status` client-side. If the team prefers one payload, adding per-user status to the courses list response is the alternative; don't do both.
   - The status chip vocabulary matches my-path's (`statusCompleted` / `statusInProgress` — reuse the `myPath` message keys or lift them to a shared namespace rather than duplicating strings).
@@ -531,13 +533,12 @@
   1. **Header block with meta.** Under the page title: the summary, then the meta row — duration, path membership as quiet tags (TAM-127's treatment), and the user's personal status chip when the course is in their path («مكتملة» / «قيد التنفيذ» / «في مسارك»).
   2. **The single context action moves to the page header** (`PortalPage`'s `action` slot) so it is visible without scrolling — still exactly one action, server-chosen (§4.7: أضف إلى مساري / ابدأ الدورة / أكمل الدورة / مكتمل), never a menu. Verify the «مكتمل» state links to the course certificate as §4.7 specifies — if the payload lacks the certificate reference, add it (read-only; same field TAM-126 adds to my-path).
   3. **Content as sections:** الأهداف and المتطلبات as they are today (omitted when empty — keep that rule), the certificate line as a quiet footnote. No new content; §3's "no redundant UI" holds.
-  **Acceptance:**
+     **Acceptance:**
   - Exactly one action on the page, in the header slot, matching the server-decided state; each of the four states renders its correct label and behaviour (asserted per state).
   - «مكتمل» offers the certificate link; a course not in the user's path shows «أضف إلى مساري» only when the server would accept it (own path + under 10 + not committed-elsewhere rules — the server stays the authority, the button just reflects `course.action` as today).
   - Meta row: tags not comma lists; status chip logic shared with TAM-127 (one implementation).
   - Empty-section omission, error display for a failed add, the reload-after-add behaviour, and the back link — unchanged, asserted.
-  **Implementation notes (verified):**
+    **Implementation notes (verified):**
   - Page: `src/app/(portal)/courses/[courseId]/page.tsx` — the comment at the top of the card explains why the course name is not repeated (the `h1` is the page header); keep that. `CourseAction` already renders "the one action the server chose — never a menu"; this ticket relocates it, it does not reinvent it.
   - The add flow's reload-confirms-outcome comment (`addCourse` resolves undefined on success and failure) is a real subtlety — preserve the behaviour and the comment.
   - `PortalPage` already has the `action` prop ("the single primary action for this page, §3") — this is its intended use.
-
