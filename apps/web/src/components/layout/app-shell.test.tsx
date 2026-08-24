@@ -51,10 +51,11 @@ describe('AppShell — header user menu', () => {
     nav.replace.mockReset();
   });
 
-  it('names the user in the sidebar footer, with no sign-out anywhere until the menu opens', () => {
+  it('offers no sign-out anywhere until the menu opens; identity lives in the menu alone', () => {
     renderShell();
 
-    expect(screen.getByText('سارة العتيبي')).toBeInTheDocument();
+    /* The name appears only inside the user menu — no sidebar name strip. */
+    expect(screen.queryByText('سارة العتيبي')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'تسجيل الخروج' })).not.toBeInTheDocument();
 
     const trigger = menuButton();

@@ -120,14 +120,6 @@ export function AppShell({
             </div>
           </nav>
 
-          {user ? (
-            /* The footer names who is signed in and nothing more — the action
-               lives in the header's user menu (D-096). Outside the navigation
-               landmark so it is never announced as a destination. */
-            <div className="mt-auto hidden border-t border-border px-4 py-3 md:block">
-              <span className="block truncate text-sm text-muted-foreground">{user.fullName}</span>
-            </div>
-          ) : null}
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
