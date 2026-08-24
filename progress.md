@@ -6,10 +6,10 @@
 ---
 
 ## Current status
-- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **all nine sub-phases built; verification pass complete; awaiting the user's test approval before the PR.**
+- **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **complete and verified; [PR #13](https://github.com/AbdullahDamati/tamkeen/pull/13) open against `main`, awaiting human review.**
 - **Last completed task:** **The Phase 5 verification pass.** It found a missing deliverable (email re-verification, §4.12 — now built, D-088) and two defects (the portals unmounting themselves on a refetch, D-089; a duplicate field label). Browser coverage added for the five admin screens and the profile, which had none.
-- **Next task:** **the user's test.** Once approved: one branch, one PR for the whole of Phase 5 (D-008). Nothing further is to be built on this branch.
-- **Active branch:** `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd`, which contains Phases 0-4. No PR yet — one PR covers the whole of Phase 5 (D-008).
+- **Next task:** **human review of PR #13.** Do not merge it (CLAUDE.md §0). Once it lands: **Phase 6 — hardening**, which already inherits a named list (see Deferred/owed).
+- **Active branch:** `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd`, which contains Phases 0-4. Pushed, with **PR #13** covering the whole of Phase 5 (D-008) — 13 commits, one per sub-phase plus the verification pass.
 - **Phase 4 is merged** (PR #6, `origin/main` @ `f1f0dcd`). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
 - **Test totals:** 599 API unit · 403 web component · 515 API integration against real PostgreSQL · 84 browser e2e in Chromium — **1601 automated**, plus the real-Chromium verification scripts from Phase 3. All green; the integration suite was run three consecutive times end to end. Typecheck, lint and format clean. **One transient integration failure is recorded in the 2026-08-24 entry and was never reproduced — read it before dismissing a similar one.**
 
@@ -780,7 +780,7 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - [x] **Phase 2 — Moodle integration** (spike first; web services, provisioning, catalog sync, enrollment, scheduled completion sync + pass threshold + shared-course reuse, seamless login, course player) — **merged** (PR #3, `origin/main` @ `dcb8aad`)
 - [x] **Phase 3 — Certificates + CV** (idempotent course/path certs, Arabic PDF solved, verification page + QR, gallery, CV builder + English PDF export) — **merged** (PR #4, `origin/main` @ `f2a6b4d`)
 - [x] **Phase 4 — Entity / reviewer portal** (entity accounts + server-side data scoping, course creation in the LMS, authoring handoff, product metadata, publish gate + course-edit protection, learner review) — **merged** (PR #6, `origin/main` @ `f1f0dcd`)
-- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **all 9 sub-phases built and verified on `phase-5-admin-portal`; awaiting the user's test approval before the PR** (sub-phase tracker in Current Status)
+- [ ] **Phase 5 — Super-admin portal** (user/path/assessment/settings/certificate-template management, global + integration-health dashboards) — **complete and verified; PR #13 open, awaiting review** (sub-phase tracker in Current Status)
 - [ ] **Phase 6 — Hardening** (Arabic QA, RTL PDF polish, security review, sync reliability + load, a11y, states)
 - [ ] **Phase 7 — Deployment, acceptance & launch** (deploy app+Moodle, seed data, full end-to-end acceptance, docs/handover, sign-off)
 
