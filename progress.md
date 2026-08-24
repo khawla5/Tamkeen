@@ -143,6 +143,10 @@
 
 ## Log (newest first)
 
+### 2026-08-24 — TAM-117: the shell framed like a government application (D-097)
+
+Branch `feature/tam-117-portal-shell`, on the TAM-124 branch. The dark neutral-900 rail — the last surface of the navy era — is gone: the shell is now a top owner's bar (lockup start, the D-096 identity line + avatar menu end), a light rail on the Platforms Code nav anatomy (primary start-edge bar, tinted ground, primary text on the active item; the certificates dot turns primary-600 because the accent tint vanishes on white), the page header inside the content column aligned to the TAM-124 width — which AppShell now owns for all three portals, so the entity and admin frames inherited everything by construction — and the auth pages' footer strip. CLAUDE.md §3's dark-surface row is amended to the landing footer only. A new e2e (`portal-a11y.spec.ts`) gates the shell with axe (WCAG 2.1 A/AA) on the dashboard in all three journey states — clean on the first run. 493 web unit tests unchanged and green (the nav suites untouched, as the ticket required), typecheck, lint; journey + auth e2e green (the two known counter-race flakes clean on serial rerun).
+
 ### 2026-08-24 — The profile organized: two columns by intent (on the TAM-124 branch)
 
 The narrow four-card scroll became a two-column layout at the standard width: who you are (the facts card + the digits preference) beside account security (change password, change email), stacking below lg. The facts card gained الرقم الوظيفي and الإدارة — TAM-109's display half, marked on the ticket; editing remains open. profile.employeeId/department message keys added surgically (a JSON round-trip that stripped the catalogue's blank separator lines was caught and reverted). 493 web tests, typecheck, lint.
