@@ -14,7 +14,6 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { authApi } from '@/lib/api-client';
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth-constants';
-import { useSignOut } from '@/lib/use-sign-out';
 
 /**
  * Profile (§4.12), completed in Phase 5.
@@ -37,7 +36,6 @@ import { useSignOut } from '@/lib/use-sign-out';
 export default function ProfilePage() {
   const t = useTranslations('profile');
   const { user, refreshSession } = usePortal();
-  const { signOut, isPending: signingOut } = useSignOut();
 
   const roleLabel =
     user.role === 'SUPER_ADMIN'
@@ -72,16 +70,8 @@ export default function ProfilePage() {
                 <dd className="font-medium">{roleLabel}</dd>
               </div>
             </dl>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="self-start"
-              disabled={signingOut}
-              onClick={() => void signOut()}
-            >
-              {signingOut ? t('signingOut') : t('signOut')}
-            </Button>
+            {/* No sign-out here: the header's user menu is the one way out
+                (D-096) — a second button would be the redundancy §3 forbids. */}
           </CardContent>
         </Card>
 

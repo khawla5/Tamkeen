@@ -240,16 +240,18 @@ test.describe('Authenticated shell', () => {
     ).toHaveAttribute('aria-current', 'page');
   });
 
-  test('sign-out is reachable from the sidebar on any page, and ends the session (TAM-112)', async ({
+  test('sign-out lives in the header user menu on any page, and ends the session (TAM-112, D-096)', async ({
     page,
   }) => {
     await signedInEmployee(page, 'signout');
     await page.goto('/profile');
 
-    /* Outside the navigation landmark: it is a footer, not a seventh item. */
-    const nav = page.getByRole('navigation', { name: 'التنقل الرئيسي' });
-    await expect(nav.getByRole('button', { name: 'تسجيل الخروج' })).toHaveCount(0);
-    await page.getByRole('complementary').getByRole('button', { name: 'تسجيل الخروج' }).click();
+    /* One sign-out: nothing on the page or in the sidebar offers it until the
+       avatar menu opens (D-096 — the profile's own button was removed). */
+    await expect(page.getByRole('button', { name: 'تسجيل الخروج' })).toHaveCount(0);
+
+    await page.getByRole('banner').getByRole('button', { name: 'قائمة المستخدم' }).click();
+    await page.getByRole('menuitem', { name: 'تسجيل الخروج' }).click();
 
     await expect(page).toHaveURL(/\/login$/);
     const cookies = await page.context().cookies();

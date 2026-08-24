@@ -98,13 +98,12 @@ describe('dashboard — PRE_ASSESSMENT', () => {
     expect(screen.getByRole('list', { name: 'رحلتك التدريبية' })).toBeInTheDocument();
   });
 
-  it('shows the personal header: name, department, employee id', () => {
+  it('greets the user by name; department and employee id live in the shell header (D-096)', () => {
     renderWithProviders(<DashboardPage />);
 
-    const header = screen.getByRole('region', { name: 'بياناتك' });
-    expect(header).toHaveTextContent('سارة العتيبي');
-    expect(header).toHaveTextContent('تقنية المعلومات');
-    expect(header).toHaveTextContent('EMP-2048');
+    expect(screen.getByText(/سارة العتيبي/)).toBeInTheDocument();
+    /* The identity line moved into the chrome — the page must not repeat it. */
+    expect(screen.queryByText(/الرقم الوظيفي/)).not.toBeInTheDocument();
   });
 
   it('shows no progress bar and no path tiles', () => {

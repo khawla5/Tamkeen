@@ -45,6 +45,7 @@ export function PortalPage({ title, action, chrome = 'nav', children }: PortalPa
       action={action}
       items={navForState(dashboard.state)}
       user={user}
+      profileHref="/profile"
       /* §2: the indicator points at exactly one destination. */
       indicators={unreadCertificates > 0 ? ['certificates'] : undefined}
     >

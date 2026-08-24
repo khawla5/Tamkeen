@@ -5,6 +5,13 @@
 
 ---
 
+## D-096 — One exit for every role: the header's user menu; the sidebar footer only names
+**Decision:** sign-out lives in the header's user menu — an initials avatar on every shell page that opens to the identity block (name, department), the role's own profile link (learner `/profile`, entity `/entity/profile`, none for the admin, who has no profile page) and the one «تسجيل الخروج». The sidebar footer keeps naming who is signed in but acts on nothing, and the profile page's own sign-out button was removed. The identity line (department · الرقم الوظيفي) moved off the dashboard into the header chrome, visible on every screen from md up; the dashboard keeps only the greeting.
+
+**Why:** TAM-112 put the sign-out in the sidebar footer; the user asked for the header-avatar pattern, and §3 forbids keeping both. The header menu is what Absher-class government portals do, and it made a real gap visible: the admin shell passed no user at all, so once the profile button went the super-admin would have had **no exit** — every role now gets the same one. The identity line moved for the same reason the menu did: it is chrome (whose session is this), not dashboard content, and on the dashboard it existed on exactly one page.
+
+**Rejected:** sign-out in both places (redundant UI, §3); keeping the profile page's button (a second exit); a shared /profile route for the admin (the portal provider correctly bounces wrong-portal roles — the menu simply omits the link instead).
+
 ## D-095 — The dashboard carries context, not just the one action: tracker, identity, the decision, what is next, what happened
 **Decision:** every dashboard state shows a journey tracker (التقييم → المسار → الدورات → الشهادة, done/current/upcoming, derived from the server-decided state) and a personal header (name, department, employee id from the session). The assessed-no-path state previews the **top three recommended paths** in rank order, each opening its path page, beside one "عرض كل المسارات" link. The active state adds the next courses in order with their status, the latest certificate (or the locked slot and how it unlocks), and every state shows the last three things that happened (assessment completed, path confirmed, course passed, certificate issued). All of it arrives in the one dashboard payload; the activity feed is read from the product tables, not the audit log, because those rows carry titles a person recognises.
 

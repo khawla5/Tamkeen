@@ -1,14 +1,12 @@
-import { LogOut } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { Logo } from '@/components/brand/logo';
 import { MinistryEmblem } from '@/components/brand/ministry-emblem';
-import { Button } from '@/components/ui/button';
-import { useSignOut } from '@/lib/use-sign-out';
 import type { ReactNode } from 'react';
 
 import { STEADY_STATE_NAV, type NavItem } from './nav-items';
 import { SidebarNav } from './sidebar-nav';
+import { UserMenu } from './user-menu';
 
 export interface AppShellProps {
   /** Page heading — every page has exactly one h1. */
@@ -18,8 +16,10 @@ export interface AppShellProps {
   items?: readonly NavItem[];
   /** Nav keys carrying an unseen-items indicator (§2). */
   indicators?: readonly string[];
-  /** Who is signed in — named in the sidebar footer beside the way out (TAM-112). */
-  user?: { fullName: string };
+  /** Who is signed in — named in the sidebar footer; acts through the header's user menu (TAM-112, D-096). */
+  user?: { fullName: string; department?: string; employeeId?: string };
+  /** The role's own profile route for the user menu; omit where none exists. */
+  profileHref?: string;
   children: ReactNode;
 }
 
@@ -37,12 +37,11 @@ export function AppShell({
   items = STEADY_STATE_NAV,
   indicators,
   user,
+  profileHref,
   children,
 }: AppShellProps) {
   const t = useTranslations('app');
   const tA11y = useTranslations('a11y');
-  const tProfile = useTranslations('profile');
-  const { signOut, isPending } = useSignOut();
 
   return (
     <div className="relative flex min-h-dvh flex-col md:flex-row">
@@ -79,30 +78,37 @@ export function AppShell({
         </nav>
 
         {user ? (
-          /* The footer, not a seventh nav item: who is signed in and the way
-             out, reachable from every page. Outside the navigation landmark so
-             a screen reader does not announce it as a destination. */
-          <div className="mt-auto flex items-center justify-between gap-3 border-t border-surface/10 px-4 py-3">
-            <span className="truncate text-sm text-surface/85">{user.fullName}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={isPending}
-              onClick={() => void signOut()}
-              className="shrink-0 text-surface/85 hover:bg-surface/10 hover:text-surface"
-            >
-              <LogOut aria-hidden="true" />
-              {isPending ? tProfile('signingOut') : tProfile('signOut')}
-            </Button>
+          /* The footer names who is signed in and nothing more — the action
+             lives in the header's user menu (D-096), so there is exactly one
+             sign-out. Outside the navigation landmark so a screen reader does
+             not announce it as a destination. */
+          <div className="mt-auto border-t border-surface/10 px-4 py-3">
+            <span className="block truncate text-sm text-surface/85">{user.fullName}</span>
           </div>
         ) : null}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-4">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-3">
           <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-          {action}
+          <div className="flex items-center gap-3">
+            {action}
+            {user?.department && user.employeeId ? (
+              /* The identity line, in the chrome rather than on a page (D-096):
+                 department and employee number, on every screen. The name is
+                 in the sidebar footer and the menu; repeating it here would be
+                 the redundancy §3 forbids. */
+              <p className="hidden text-sm text-muted-foreground md:block">
+                {user.department}
+                <span aria-hidden="true"> · </span>
+                {t('employeeIdLabel')}{' '}
+                <span dir="ltr" className="font-medium text-foreground">
+                  {user.employeeId}
+                </span>
+              </p>
+            ) : null}
+            {user ? <UserMenu user={user} profileHref={profileHref} /> : null}
+          </div>
         </header>
 
         <main id="main-content" className="min-w-0 flex-1 p-6">

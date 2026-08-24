@@ -227,7 +227,7 @@
   - Reuse the `auth_tokens` single-use hashed-token infrastructure and the existing verify-email page/endpoint shape with a new token type (`EMAIL_CHANGE`); store the pending address as `users.pending_email` (it is not a secret, but it must not become the login before confirmation).
   - The verification email is a *reuse* of the locked "email verification" notification type, not a new type.
 
-## TAM-112 — Sign-out in the sidebar footer — **DONE** (`feature/tam-112-sidebar-signout`)
+## TAM-112 — Sign-out: the header user menu, one exit for every role — **DONE** (`feature/tam-112-sidebar-signout`, revised per D-096)
 
 - **Labels:** `profile`, `frontend`
 - **Priority:** Low

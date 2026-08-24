@@ -56,29 +56,18 @@ export default function DashboardPage() {
   );
 }
 
-/** Who this page belongs to — visibly theirs, from the session. */
+/**
+ * Who this page belongs to — the greeting only. The department and employee
+ * number moved into the shell header (D-096): chrome, not page content, so
+ * they are visible on every screen instead of one.
+ */
 function PersonalHeader({ user }: { user: CurrentUser }) {
   const t = useTranslations('dashboard');
 
   return (
-    <section
-      aria-label={t('personalHeading')}
-      className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1"
-    >
-      <p className="text-lg font-semibold text-foreground">
-        {t('greeting', { name: user.fullName })}
-      </p>
-      <p className="text-sm text-muted-foreground">
-        {user.department}
-        <span aria-hidden="true"> · </span>
-        <span>
-          {t('employeeIdLabel')}{' '}
-          <span dir="ltr" className="font-medium text-foreground">
-            {user.employeeId}
-          </span>
-        </span>
-      </p>
-    </section>
+    <p className="text-lg font-semibold text-foreground">
+      {t('greeting', { name: user.fullName })}
+    </p>
   );
 }
 
