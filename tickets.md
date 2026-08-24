@@ -125,7 +125,7 @@
   - Retakes are allowed only pre-commitment (§2) and this draft mechanism doesn't change that — the retake path just starts with an empty draft after the previous submit cleared it.
 
 
-## TAM-108 — Dashboard: Holland chips after the assessment + status strip on an active path
+## TAM-108 — Dashboard: Holland chips after the assessment + status strip on an active path — **DONE** (`feature/tam-108-dashboard`)
 
 - **Labels:** `assessment-gating`, `dashboard`, `frontend`, `api`
 - **Priority:** Medium
@@ -159,6 +159,7 @@
   - State B: strip shows path name + Arabic RIASEC type + three counts that always sum to the path total; western digits via the shared number formatter (D-018); tiles are informational content, not fake buttons; wraps 2×2 at narrow widths, usable at 360px RTL; continue card unchanged and still the only action. The four link tiles below it (مساري، الدورات، شهاداتي، السيرة الذاتية — Phase 3 added the last two) are unchanged; the status strip must read as *status*, not as a fifth row of tiles — differentiate it (no hover affordance, no link styling).
   - State C unchanged. Dashboard unit tests and the API's dashboard integration tests updated.
 
+  **What shipped (2026-08-23):** State A: `HollandCodeChips` (new shared component, `src/components/riasec/`, with an `ordinals` prop ready for TAM-114) replaces the "ظهرت نتيجتك: SIA" sentence; one action, no summaries/previews/retake (asserted). State B: the status strip — path name + Arabic type, مكتملة / قيد التنفيذ / لم تبدأ — as a labelled list with nothing clickable; `DashboardView.path` gained `riasecLetter` and `inProgressCount` from the server (API integration test asserts them against a real database). State C untouched. 4 new web tests; API journey spec extended.
   **Implementation notes (verified):**
   - All three branches are in `src/app/(portal)/page.tsx`, switched on the server-decided `dashboard.state` — keep rendering one branch per state; never assemble a screen from nullable fields.
   - **State A:** the code arrives as `dashboard.codeString` (e.g. "RIA", `DashboardView` in `packages/types/src/journey.ts`). Split its characters and map each through `riasec.<letter>.name` — all six names already exist in `messages/ar.json`. The current `dashboard.assessedBody` message interpolates `{code}`; rework it and remove what's no longer referenced or the catalog test fails. Chip fill: `--accent` (light gold) with navy text — the AA-safe achievement fill (6.01:1, D-025). Never raw gold behind body-size text; the contrast test enforces it.

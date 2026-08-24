@@ -6,9 +6,12 @@ import { useTranslations } from 'next-intl';
 import { PortalPage } from '@/components/layout/portal-page';
 import { usePortal } from '@/components/layout/portal-provider';
 import { Button } from '@/components/ui/button';
+import { HollandCodeChips } from '@/components/riasec/holland-code-chips';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useFormat } from '@/i18n/format-provider';
+
+import type { RiasecLetter } from '@tamkeen/types';
 
 /**
  * The dashboard, in its three states (§4.2).
@@ -20,6 +23,7 @@ import { useFormat } from '@/i18n/format-provider';
  */
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
+  const tRiasec = useTranslations('riasec');
   const { user, dashboard } = usePortal();
   const format = useFormat();
 
@@ -54,15 +58,17 @@ export default function DashboardPage() {
         <div className="mx-auto max-w-2xl">
           <p className="mb-4 text-muted-foreground">{greeting}</p>
 
+          {/* The result as Arabic chips, not the Latin code (D-071/TAM-108).
+              Explanation, the gold ranking and the retake live on Results —
+              this card has one job: send the user there. */}
           <Card>
             <CardHeader>
               <CardTitle>{t('assessedTitle')}</CardTitle>
-              <CardDescription>
-                {t('assessedBody', { code: dashboard.codeString ?? '' })}
-              </CardDescription>
+              <CardDescription>{t('assessedBody')}</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button asChild size="lg">
+            <CardContent className="flex flex-col gap-6">
+              <HollandCodeChips code={(dashboard.codeString ?? '').split('') as RiasecLetter[]} />
+              <Button asChild size="lg" className="self-start">
                 <Link href="/results">{t('choosePath')}</Link>
               </Button>
             </CardContent>
@@ -74,11 +80,43 @@ export default function DashboardPage() {
 
   const path = dashboard.path!;
   const next = path.nextCourse;
+  const notStarted = path.totalCount - path.completedCount - path.inProgressCount;
+  const counts = [
+    { key: 'statusCompleted', value: path.completedCount },
+    { key: 'statusInProgress', value: path.inProgressCount },
+    { key: 'statusNotStarted', value: notStarted },
+  ] as const;
 
   return (
     <PortalPage title={t('title')}>
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <p className="text-muted-foreground">{greeting}</p>
+
+        {/* The status strip (TAM-108): which path, and how the courses break
+            down. Pure information — nothing here is a link, so it cannot
+            compete with the one action below. */}
+        <ul
+          aria-label={t('statusHeading')}
+          className="grid grid-cols-2 gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr]"
+        >
+          <li className="col-span-2 flex flex-col justify-center rounded-card border border-border bg-card px-4 py-3 sm:col-span-1">
+            <span className="text-sm font-bold text-foreground">{path.name}</span>
+            <span className="text-xs font-medium text-primary-700">
+              {tRiasec(`${path.riasecLetter}.name`)}
+            </span>
+          </li>
+          {counts.map(({ key, value }) => (
+            <li
+              key={key}
+              className="flex flex-col justify-center rounded-card border border-border bg-card px-4 py-3"
+            >
+              <span data-count className="text-xl font-bold text-foreground tabular-nums">
+                {format.number(value)}
+              </span>
+              <span className="text-xs text-muted-foreground">{t(key)}</span>
+            </li>
+          ))}
+        </ul>
 
         {/* "Continue where you left off" — the single primary action (§4.2). */}
         <Card>

@@ -78,7 +78,11 @@ export interface DashboardView {
   path: {
     id: string;
     name: string;
+    /** The path's primary letter — the dashboard names the path by its type. */
+    riasecLetter: RiasecLetter;
     completedCount: number;
+    /** Courses started in the LMS but not yet completed. Remaining = total − completed − inProgress. */
+    inProgressCount: number;
     totalCount: number;
     /** The single "continue where you left off" target, null when all done. */
     nextCourse: { id: string; courseId: string; title: string } | null;

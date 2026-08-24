@@ -801,6 +801,10 @@ describe('Phase 1 journey (e2e)', () => {
       expect(body.state).toBe('ACTIVE_PATH');
       expect(body.path?.totalCount).toBe(PATH_MIN_COURSES);
       expect(body.path?.completedCount).toBe(0);
+      /* The status strip (TAM-108): the path's type and the in-progress count
+         come from the server so the page renders one payload. */
+      expect(body.path?.riasecLetter).toMatch(/^[RIASEC]$/);
+      expect(body.path?.inProgressCount).toBe(0);
       expect(body.path?.nextCourse).not.toBeNull();
     });
   });
