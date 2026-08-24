@@ -7,11 +7,11 @@
 
 ## Current status
 - **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **all nine sub-phases built; verification pass complete; awaiting the user's test approval before the PR.**
-- **Last completed task:** **Sub-phase 5.9 — the deferred Profile items (§4.12) + the full verification pass.** Change-password (current password required, other sessions ended) and a per-user digits preference in place of the language selector the Arabic-only UI cannot honour.
+- **Last completed task:** **The Phase 5 verification pass.** It found a missing deliverable (email re-verification, §4.12 — now built, D-088) and two defects (the portals unmounting themselves on a refetch, D-089; a duplicate field label). Browser coverage added for the five admin screens and the profile, which had none.
 - **Next task:** **the user's test.** Once approved: one branch, one PR for the whole of Phase 5 (D-008). Nothing further is to be built on this branch.
 - **Active branch:** `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd`, which contains Phases 0-4. No PR yet — one PR covers the whole of Phase 5 (D-008).
 - **Phase 4 is merged** (PR #6, `origin/main` @ `f1f0dcd`). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
-- **Test totals:** 593 API unit · 397 web component · 502 API integration against real PostgreSQL · 52 browser e2e in Chromium — **1544 automated**, plus the real-Chromium verification scripts from Phase 3. The integration suite was run three consecutive times end to end, all green. Typecheck, lint and format clean.
+- **Test totals:** 599 API unit · 403 web component · 515 API integration against real PostgreSQL · 84 browser e2e in Chromium — **1601 automated**, plus the real-Chromium verification scripts from Phase 3. All green; the integration suite was run three consecutive times end to end. Typecheck, lint and format clean. **One transient integration failure is recorded in the 2026-08-24 entry and was never reproduced — read it before dismissing a similar one.**
 
 ### Phase 5 sub-phase tracker
 - [x] **5.1 Admin foundation + Dashboard** (§4C.1) — RBAC, route group, shell, integration health
@@ -22,7 +22,7 @@
 - [x] **5.6 System Settings** (§4C.6) — `settings` table, one `SettingsService`, env fallback
 - [x] **5.7 Certificate Templates** (§4C.7) — signatory fields, future issuances only
 - [x] **5.8 Audit & Reports** (§4C.8) — filterable log, reports, CSV export with BOM
-- [x] **5.9 Deferred Profile items + verification pass** — change password, digits preference
+- [x] **5.9 Deferred Profile items + verification pass** — change password, **email re-verification**, digits preference
 
 - **Open blockers / questions for the human:**
   1. **⚠ THE MINISTRY LOGO AND SEAL ARE STILL MISSING.** Certificates ship with a neutral placeholder mark and an empty signature block (name + title). The slot is sized and positioned, so dropping in the real artwork is not a layout change — but **no certificate should reach a real employee until this is supplied** (D-051).
@@ -37,6 +37,7 @@
 ---
 
 ## Deferred / owed (carried into later phases)
+- **An email change does not warn the OLD address.** Only the new address is written to (§4.12, D-088). §2's notification list is short and locked, and the current-password requirement means an attacker already holds the password before this endpoint is any use to them — so this is defence in depth. **Phase 6's security review** should decide whether to add the notice.
 - **`EnrollmentService.addCourse` is not actually idempotent under concurrency** (found during the Phase 5 verification pass; pre-existing, and enrolment is untouched by Phase 5). Its duplicate guard is a read-then-write, so two concurrent adds of the same course both pass and the second raises P2002 → 500 rather than the no-op its own comment promises. **Phase 6** should catch P2002 there and return the intended success.
 - **The UI language switch (§4.12)** is deferred until an English UI exists (D-086). The digits preference ships in its place; this is a decision, not a gap.
 - **The ministry logo, seal and signatory are not on the certificate.** A placeholder mark and an empty signature block hold their positions (D-051). **Phase 6/7** must drop in the real artwork before anything is issued to a real employee.
@@ -188,6 +189,36 @@
 **The one genuinely hard test problem this phase created.** Every integration suite namespaces its rows by a per-run id and they run in parallel against one database. The assessment cannot be namespaced — §4.3 has *one* instrument and `getActive` finds the one ACTIVE row — so publishing a version mid-run made `journey.e2e-spec.ts` fail eight tests with `ASSESSMENT_NOT_FOUND`. **That refusal is correct product behaviour**: a taker whose instrument was replaced mid-attempt must not be scored against a bank they never saw. So the fix serialises the two suites with a Postgres advisory lock rather than weakening either assertion — held on its own connection, released by the server if a worker dies, and costing four seconds of wall clock across the whole run.
 
 **Three smaller decisions worth knowing.** The weights DTO names all six letters explicitly rather than accepting a `Record<string, number>`, because a record would let `{ "X": 4 }` past validation and leave the enum column to answer 500 — the DTO is the outermost gate and naming the six is the only shape in which it can say no. Reordering takes the complete order rather than a move-up/move-down, so the result is what the administrator arranged rather than a replay of their clicks, and it writes negative orders first because `display_order` would otherwise collide with itself mid-shuffle. And an option's weights are replaced wholesale rather than merged, because "this option now contributes to S only" has to be expressible and a merge cannot say it.
+
+### 2026-08-24 — Phase 5 verification pass: a missing deliverable built, two defects found and fixed
+
+Asked to test Phase 5 thoroughly before the PR. Four things came out of it, in order of how much they mattered.
+
+**1. A Phase 5 deliverable was missing.** CLAUDE.md's Phase 5 lists "change-password, email re-verification, language switch" among the deferred Profile items. Change-password shipped in 5.9 and the language switch is deliberately deferred (D-086) — **email re-verification had simply not been built**, and nothing recorded it as owed. It is built now (D-088): request-then-confirm, with the pending address held on an `EMAIL_CHANGE` token rather than on the user row, so `users.email` never points at an inbox nobody has proved they can read. The current password is required — whoever can move the address can then use "forgot password" and own the account outright — and the ministry-domain gate applies, extracted from the registration policy into `checkEmailDomain` so the two rules cannot drift. A taken address is answered exactly like a free one, because the profile form must not become the address oracle registration refuses to be. Completing the change revokes **every** session, the caller's included: the identifier the person signs in with has just changed.
+
+**2. The portals unmounted themselves on an ordinary refetch.** All three providers gated their loading state on `isLoading` rather than `isInitialLoad`, so `refreshSession` after saving a preference swapped the whole portal for a spinner and tore down everything below it. `PreferenceProvider` made it worse by returning `children` unwrapped when the preference was null — a different element type at that position, so the *first* save changed the tree shape and remounted the entire subtree. Either way the confirmation the person had just earned vanished, along with any half-filled form or open dialog. Fixed at all four points (D-089).
+
+> **How it was found is the part worth remembering.** The browser test asserted `getByRole('status')` after saving — and passed, against the **loading state**, which carries that role too. The bug and the test that should have caught it were hiding each other. Assertions now name the confirmation's actual words.
+
+**3. Two screens' worth of browser coverage was missing.** Sub-phases 5.4-5.8 and 5.9 had unit, integration and component tests but no end-to-end browser test at all. Two new specs, 26 tests, aimed at the rules rather than the rendering: the 5-10 bounds and rate limits shown but with **no control to write them**; no secret appearing in any settings payload; the audit trail offering no write route (404 on POST/PATCH/DELETE, asserted from the browser); the CSV exports carrying the UTF-8 BOM byte-for-byte; a setting saved on the screen read back **through the API**; an employee refused by URL and by API; and the digits preference proving itself by changing a number several screens away from the control that set it.
+
+Two of the new tests were themselves vacuous when first written — `getByRole('listitem')` unscoped was matching the navigation rail — which is why the audit trail is now marked up as a named list. That is also a real accessibility improvement: a screen reader announces how many entries there are and lets its user move between them.
+
+**4. A duplicate label.** The profile page ended up with two fields both labelled "كلمة المرور الحالية" — the password card's and the email card's. A screen reader announces the same thing twice with no way to tell them apart, so the email card's is now "كلمة المرور للتأكيد".
+
+**Verification.** 599 API unit · 515 API integration · 403 web component · 84 browser e2e in Chromium — **1601 automated**, all green. Typecheck, lint and format clean.
+
+> **One transient failure, honestly reported.** The first full integration run after the new migration failed 7 tests in `admin-assessment.e2e-spec.ts`. It has not recurred in three subsequent full runs, the suite passes in isolation, and the assessment table was verified clean afterwards (one ACTIVE version 1). **The cause was not identified.** Given this suite's history of cross-suite collisions (D-079, D-083), it should not be assumed benign — if it reappears, capture the failure text before re-running.
+
+**Also carried forward:** the old address is *not* warned when an email change is requested. §2's notification list is short and locked, and the current-password requirement means an attacker already holds the password before this endpoint helps them — so it is defence in depth, not the primary control. On the Phase 6 list rather than silently absent.
+
+**Files:** `auth.{service,controller,dto}.ts`, `registration-policy.ts`, `email.{service,templates}.ts`, `audit.actions.ts`, a migration (`phase_5_email_change`), `verify-email-change/page.tsx`, the profile page, `preference-provider.tsx`, the three portal providers, the audit page, and their tests plus `e2e/phase-5-admin.spec.ts` and `e2e/phase-5-profile.spec.ts`.
+
+**Decisions recorded:** D-088 (email change: request, confirm, token-held address), D-089 (a provider never unmounts the page it provides to).
+
+**Next:** the PR for the whole of Phase 5.
+
+---
 
 ### 2026-08-23 — Sub-phases 5.5-5.9: oversight, settings, templates, audit, and the Profile debt paid
 

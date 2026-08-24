@@ -223,3 +223,26 @@ export async function resetAssessmentVersions(): Promise<void> {
     await client.query(`DELETE FROM assessments WHERE id = ANY($1)`, [later]);
   });
 }
+
+/**
+ * Removes paths created through the UI during a run.
+ *
+ * `releaseAdmin` clears accounts, and paths are not accounts — but a path left
+ * behind is worse than a stray user: `is_active` decides what every learner is
+ * offered, so an abandoned test path would sit in the results screen of every
+ * later run and of anyone opening the app. `path_courses` goes first, being a
+ * child of both sides.
+ */
+export async function releasePathsByPrefix(prefix: string): Promise<void> {
+  await withClient(async (client) => {
+    const { rows } = await client.query<{ id: string }>(`SELECT id FROM paths WHERE key LIKE $1`, [
+      `${prefix}%`,
+    ]);
+    const ids = rows.map((row) => row.id);
+
+    if (ids.length === 0) return;
+
+    await client.query(`DELETE FROM path_courses WHERE path_id = ANY($1)`, [ids]);
+    await client.query(`DELETE FROM paths WHERE id = ANY($1)`, [ids]);
+  });
+}

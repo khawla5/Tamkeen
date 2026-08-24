@@ -236,10 +236,18 @@ function TrailTab() {
       >
         {log.data ? (
           <>
-            <Card className="divide-y divide-border">
-              {log.data.rows.map((row) => (
-                <AuditEntry key={row.id} row={row} />
-              ))}
+            {/* A list, and marked up as one: the trail is a sequence of
+                discrete events, so a screen reader should announce how many
+                there are and let its user move between them — the same
+                treatment the paths screen gives its cards. */}
+            <Card className="p-0">
+              <ul aria-label={t('auditTabTrail')} className="divide-y divide-border">
+                {log.data.rows.map((row) => (
+                  <li key={row.id}>
+                    <AuditEntry row={row} />
+                  </li>
+                ))}
+              </ul>
             </Card>
 
             {log.data.nextBefore ? (

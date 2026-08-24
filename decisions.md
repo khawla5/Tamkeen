@@ -5,6 +5,34 @@
 
 ---
 
+## D-089 — A provider never unmounts the page it is providing to
+
+**Decision:** the three portal providers gate their loading state on `isInitialLoad`, not `isLoading`, and `PreferenceProvider` always renders `FormatProvider` — resolving "no preference" to the *inherited* context rather than returning `children` bare.
+
+**Why:** both shapes destroyed the page underneath on a perfectly ordinary event. Gating on `isLoading` meant any refetch — `refreshSession` after saving a preference, for instance — swapped the whole portal for a spinner and unmounted everything below it. And returning `children` unwrapped when the preference was null changed the element type at that position, so the *first* time anybody saved a preference React tore down and rebuilt the entire subtree. Either way the confirmation the person had just earned vanished, along with any half-filled form, open dialog or scroll position: a successful save looked like nothing had happened.
+
+**How it was found, which is the part worth keeping:** a browser test asserted `getByRole('status')` after saving. It passed — against the *loading* state, which carries that role too. The bug and the test that should have caught it were hiding each other. The assertions now name the confirmation's actual words, and the loose ones elsewhere were tightened with it.
+
+**Also:** the null fallback is the inherited context, not `DEFAULT_FORMAT_CONTEXT`. The root layout resolves `NUMBER_FORMAT` from the environment, so a deployment can ship Arabic-Indic as its default; substituting a fresh default here would silently override that for everybody who never expressed a preference — the opposite of what null means.
+
+**Rejected:** keying the subtree to force a controlled remount (same loss, deliberately); moving the confirmation into a toast outside the provider (hides a structural bug behind a different rendering path, and every other piece of page state would still be destroyed).
+
+## D-088 — Changing an email is a request, then a confirmation, and the pending address lives on the token
+
+**Decision:** `POST /auth/change-email` verifies the current password, applies the ministry-domain gate, and writes the new address onto an `EMAIL_CHANGE` token which is mailed to that address. `users.email` moves only when `POST /auth/confirm-email-change` redeems the token — at which point every session for that user is revoked.
+
+**Why each part:**
+- **On the token, not the user.** A `pending_email` column would open a window in which the account row points at an address nobody has proved they can read, and an abandoned request would leave that sitting there. On the token, an abandoned request expires into nothing and a second request supersedes the first through the same invalidation the verification flow already does.
+- **The current password is required**, and for a sharper reason than the password change: whoever can move the address can then use "forgot password" and own the account outright, with the real employee locked out and receiving no notice at all.
+- **The ministry-domain gate applies** (`checkEmailDomain`, extracted from the registration policy so the two cannot drift). Without it an employee could walk a ministry account to a personal inbox one profile edit at a time — D-017 defeated through the back door. The *rest* of the registration gate deliberately does not carry over: `admin-only` governs who may create an account, not whether an employee who has one may correct a typo, and the employee number is not being changed.
+- **A taken address is answered exactly like a free one.** The caller is authenticated, but replying "that address already has an account" would turn the profile form into the address oracle the registration endpoint refuses to be. The audit entry carries the real reason.
+- **Every session is revoked on completion, including the caller's.** The identifier the person signs in with has just changed, so being asked to sign in again with it is the honest next step — and if the request was not theirs, it ends the attacker's session too. It also cannot be "all except the current one": the link is usually opened in whichever browser the new mailbox is signed into, which is not the one that asked.
+- **Its own redemption route,** not a branch inside `/verify-email`. The two tokens do different things to an account, and a single route that had to branch on token type is how a link meant for one ends up doing the other.
+
+**Known gap, carried to Phase 6:** the *old* address is not warned that a change was requested. §2 keeps the notification list short and locked, and the current-password requirement means an attacker already holds the password before this endpoint is any use to them — so this is defence in depth rather than the primary control. It belongs in the security review, and it is on the deferred list rather than silently absent.
+
+**Rejected:** changing the address immediately and sending a "confirm or we will revert" mail (leaves the account on an unproven address, and the revert never arrives if the mail bounces); skipping the domain gate as "it is only an edit" (that is exactly how the policy erodes); keeping the caller's session alive (leaves it authenticated against an address that no longer exists).
+
 ## D-087 — The digits options carry literal digits, and the guard makes room for exactly those
 **Decision:** the two format options read "أرقام عربية (0123)" and "أرقام هندية (٠١٢٣)". `LITERAL_VALUE_PATHS` in the Arabic-catalogue guard grows a third pattern, `/^profile\.digits(Western|Arabic)$/`, alongside the two it already carried for setting hints and setting-validation errors.
 **Why:** the guard exists because a digit typed into Arabic copy is a number that will not follow D-018 when the preference changes. These two are the exception that proves it: they are *specimens of the glyph set the reader is choosing between*, and the whole point is that both appear regardless of the current setting. Routing them through the formatting layer would render both options in the same digits and make the choice meaningless.
