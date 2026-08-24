@@ -59,7 +59,12 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
     await here.goto('/profile');
     await expect(here.getByRole('heading', { name: 'الملف الشخصي' })).toBeVisible();
 
-    await expect(here.getByText(account.fullName)).toBeVisible();
+    /* The signed-in identity lives in the header's user menu, not printed on
+       the page itself (TAM-117/D-096). */
+    await here.getByRole('banner').getByRole('button', { name: 'قائمة المستخدم' }).click();
+    await expect(here.getByRole('menu').getByText(account.fullName)).toBeVisible();
+    await here.keyboard.press('Escape');
+
     await expect(here.getByLabel('كلمة المرور الحالية')).toBeVisible();
     await expect(here.getByLabel('الأرقام المعروضة')).toBeVisible();
 
