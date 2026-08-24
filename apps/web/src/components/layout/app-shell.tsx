@@ -1,4 +1,7 @@
 import { useTranslations } from 'next-intl';
+
+import { Logo } from '@/components/brand/logo';
+import { MinistryEmblem } from '@/components/brand/ministry-emblem';
 import type { ReactNode } from 'react';
 
 import { STEADY_STATE_NAV, type NavItem } from './nav-items';
@@ -48,9 +51,14 @@ export function AppShell({
       </a>
 
       {/* Navigation rail: vertical from md up, horizontal strip below. */}
-      <aside className="bg-navy md:w-64 md:shrink-0">
-        <div className="flex items-center gap-2 px-4 py-5">
-          <span className="text-base font-semibold text-white">{t('name')}</span>
+      <aside className="bg-neutral-900 md:w-64 md:shrink-0">
+        <div className="flex items-center gap-3 px-4 py-4">
+          <span className="inline-flex items-center gap-2 rounded-lg bg-surface px-2 py-1">
+            <MinistryEmblem height={32} />
+            <span aria-hidden="true" className="h-6 w-px bg-border" />
+            <Logo height={28} />
+          </span>
+          <span className="sr-only">{t('name')}</span>
         </div>
 
         <nav aria-label={tA11y('primaryNav')} className="px-3 pb-4">

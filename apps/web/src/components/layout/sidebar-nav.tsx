@@ -75,9 +75,9 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
                    active does not shift the layout. */
                 orientation === 'vertical' ? 'border-s-2' : 'border-b-2',
                 isActive
-                  ? /* Bold weight accompanies the gold edge, so position is not
+                  ? /* Bold weight accompanies the primary edge, so position is not
                        signalled by colour alone (WCAG 1.4.1). */
-                    'border-gold bg-white/10 font-semibold text-white'
+                    'border-primary-600 bg-white/10 font-semibold text-white'
                   : 'border-transparent text-white/75 hover:bg-white/5 hover:text-white',
               )}
             >
@@ -96,7 +96,7 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
                 <>
                   <span
                     aria-hidden="true"
-                    className="ms-auto size-2 shrink-0 rounded-full bg-gold-light"
+                    className="ms-auto size-2 shrink-0 rounded-full bg-accent"
                   />
                   <span className="sr-only">{tA11y('newCertificates')}</span>
                 </>

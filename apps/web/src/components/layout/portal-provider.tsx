@@ -115,13 +115,29 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       ? HOME_FOR_ROLE[session.data.role]
       : null;
 
+  /*
+   * The catalogue does not exist for a user who has not taken the assessment
+   * (D-071): the sidebar hides it, and a typed or bookmarked /courses URL must
+   * agree with the sidebar, or the nav lies. The dashboard's one card already
+   * says what to do instead. The courses API itself stays open — reading
+   * catalogue data leaks nothing, and every mutation is server-gated behind a
+   * confirmed path — so this is a navigation rule, enforced where navigation
+   * state already lives.
+   */
+  const coursesGated =
+    dashboard.data?.state === 'PRE_ASSESSMENT' &&
+    (pathname === '/courses' || pathname.startsWith('/courses/'));
+
   useEffect(() => {
     if (shouldRedirect) {
       router.replace('/login');
     } else if (wrongPortal) {
       router.replace(wrongPortal);
+    } else if (coursesGated) {
+      router.replace('/');
     }
-  }, [shouldRedirect, wrongPortal, router]);
+    }
+  }, [shouldRedirect, wrongPortal, coursesGated, router]);
 
   if (unauthorized && isPublicRoot) {
     return <LandingView />;
@@ -138,7 +154,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
    * and was fixed in `useApiQuery`; these three providers were the remaining
    * callers still reading the old flag.
    */
-  if (session.isInitialLoad || dashboard.isInitialLoad || shouldRedirect || wrongPortal) {
+  if (session.isInitialLoad || dashboard.isInitialLoad || shouldRedirect || wrongPortal || coursesGated) {
     /* The redirect is in flight during `shouldRedirect`; showing the loading
        state rather than an error avoids a flash of "something went wrong" on
        what is simply an expired session. */

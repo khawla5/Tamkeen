@@ -154,7 +154,7 @@ function Builder({ path, onReload }: { path: PathDetail; onReload: () => void })
                 key={course.id}
                 className={cn(
                   'flex flex-wrap items-start justify-between gap-3 rounded-card border p-4',
-                  isSelected ? 'border-2 border-gold bg-card' : 'border-border bg-card',
+                  isSelected ? 'border-2 border-primary-600 bg-card' : 'border-border bg-card',
                 )}
               >
                 <div className="flex min-w-0 flex-col gap-1">
@@ -174,7 +174,7 @@ function Builder({ path, onReload }: { path: PathDetail; onReload: () => void })
                     current state rather than relying on the border colour. */}
                 <Button
                   type="button"
-                  variant={isSelected ? 'achievement' : 'outline'}
+                  variant={isSelected ? 'primary' : 'outline'}
                   size="sm"
                   aria-pressed={isSelected}
                   disabled={!isAvailable || atMax || setCourses.isPending}

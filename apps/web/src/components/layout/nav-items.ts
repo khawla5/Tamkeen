@@ -55,9 +55,10 @@ export const STEADY_STATE_NAV: readonly NavItem[] = [
 /**
  * The navigation a user actually sees, given where they are (§4.2).
  *
- * Two rules are at work. §4.2 states the first outright: before the assessment
- * the nav is Dashboard, Courses and Profile only — My Path is not a destination
- * when there is no path.
+ * Two rules are at work. §4.2 (amended by D-071) states the first outright:
+ * before the assessment the nav is Dashboard and Profile only — a new user has
+ * exactly one thing to do, and a browsable catalogue competes with it. Courses
+ * appears the moment the assessment is done; My Path only once a path exists.
  *
  * The second is ours: **a nav item appears only once the page behind it
  * exists.** An item leading to a 404, or to a page explaining that the feature
@@ -74,7 +75,9 @@ export function navForState(state: DashboardState): readonly NavItem[] {
   const keys: string[] =
     state === 'ACTIVE_PATH'
       ? ['dashboard', 'courses', 'myPath', 'certificates', 'cv', 'profile']
-      : ['dashboard', 'courses', 'profile'];
+      : state === 'ASSESSED_NO_PATH'
+        ? ['dashboard', 'courses', 'profile']
+        : ['dashboard', 'profile'];
 
   return STEADY_STATE_NAV.filter((item) => keys.includes(item.key));
 }

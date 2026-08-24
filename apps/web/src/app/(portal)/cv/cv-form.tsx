@@ -151,7 +151,7 @@ export function CvForm({ profile, autofill, onChange }: CvFormProps) {
           <label className="flex items-center gap-3 text-sm text-foreground">
             <input
               type="checkbox"
-              className="size-4 accent-[var(--color-gold)]"
+              className="size-4 accent-primary-600"
               checked={profile.showCareerProfile}
               onChange={(event) => set('showCareerProfile', event.target.checked)}
             />
@@ -206,7 +206,7 @@ export function CvForm({ profile, autofill, onChange }: CvFormProps) {
                           aria-hidden="true"
                           className={
                             certificate.type === 'PATH'
-                              ? 'mt-0.5 size-4 text-gold'
+                              ? 'mt-0.5 size-4 text-primary-700'
                               : 'mt-0.5 size-4 text-muted-foreground'
                           }
                         />
@@ -340,7 +340,7 @@ function ExperienceSection({
             <label className="flex items-center gap-3 text-sm text-foreground">
               <input
                 type="checkbox"
-                className="size-4 accent-[var(--color-gold)]"
+                className="size-4 accent-primary-600"
                 checked={entry.endDate === null}
                 onChange={(event) =>
                   update(index, { endDate: event.target.checked ? null : '2026-01' })

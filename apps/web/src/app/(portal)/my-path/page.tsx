@@ -109,7 +109,7 @@ function PathRun({ path }: { path: MyPathView }) {
       </section>
 
       {/* The locked certificate slot (§4.9). */}
-      <Card className={cn(path.pathCertificateUnlocked && 'border-2 border-gold')}>
+      <Card className={cn(path.pathCertificateUnlocked && 'border-2 border-primary-600')}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {!path.pathCertificateUnlocked ? (
@@ -154,7 +154,7 @@ function CourseRow({ course }: { course: MyPathCourseView }) {
     <div
       className={cn(
         'flex flex-wrap items-center justify-between gap-3 rounded-card border bg-card p-4',
-        course.isNextUp ? 'border-2 border-gold' : 'border-border',
+        course.isNextUp ? 'border-2 border-primary-600' : 'border-border',
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">

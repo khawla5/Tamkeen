@@ -13,14 +13,11 @@ import { cn } from '@/lib/utils';
 /**
  * A path card (§4.4).
  *
- * The recommended treatment is a **gold border plus a badge**, never gold body
- * text: `--color-gold` measures below 4.5:1 on every background in this palette,
- * so it is valid for edges and large text only, and the badge uses the light-gold
- * fill with navy text (6.01:1). That constraint is measured and tested in
- * `src/lib/contrast.test.ts` — see D-025.
- *
- * The badge also carries the word "موصى به". Colour alone would fail WCAG 1.4.1,
- * and would say nothing at all to a user who cannot distinguish the border.
+ * The recommended treatment is the **primary border plus a badge** (D-069 — the
+ * product uses one accent, the Platforms Code primary, for recommendation and
+ * achievement alike). The badge carries the word "موصى به": colour alone would
+ * fail WCAG 1.4.1, and would say nothing at all to a user who cannot
+ * distinguish the border.
  */
 export function PathCard({ path }: { path: PathSummary }) {
   const t = useTranslations('results');
@@ -33,7 +30,7 @@ export function PathCard({ path }: { path: PathSummary }) {
     <article
       className={cn(
         'flex flex-col gap-3 rounded-card border bg-card p-5',
-        path.recommended ? 'border-2 border-gold' : 'border-border',
+        path.recommended ? 'border-2 border-primary-600' : 'border-border',
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -63,7 +60,7 @@ export function PathCard({ path }: { path: PathSummary }) {
         {hours !== null ? <p>{t('pathDuration', { hours: format.number(hours) })}</p> : null}
       </div>
 
-      {/* One action per card. Gold is a highlight, not a pre-selection — §3A is
+      {/* One action per card. The highlight is not a pre-selection — §3A is
           explicit that the user must actively choose. */}
       <Button asChild variant="outline" className="self-start">
         <Link href={`/paths/${path.id}`}>{t('openPath')}</Link>

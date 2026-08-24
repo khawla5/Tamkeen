@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Suspense, useEffect, useRef, useState } from 'react';
 
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthLayout } from '@/components/auth/auth-layout';
 import { LoadingState } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api-client';
@@ -41,31 +41,31 @@ function VerifyEmail() {
 
   if (status === 'pending') {
     return (
-      <AuthCard title={t('verifyTitle')}>
+      <AuthLayout title={t('verifyTitle')}>
         <LoadingState rows={0} label={t('verifyPending')} />
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   if (status === 'verified') {
     return (
-      <AuthCard title={t('verifySuccessTitle')} subtitle={t('verifySuccessBody')}>
-        <Button asChild>
+      <AuthLayout title={t('verifySuccessTitle')} subtitle={t('verifySuccessBody')}>
+        <Button asChild size="lg" className="w-full">
           <Link href="/login">{t('submitSignIn')}</Link>
         </Button>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard
+    <AuthLayout
       title={t('verifyFailedTitle')}
       subtitle={token ? t('verifyFailedBody') : t('verifyMissingToken')}
     >
-      <Button asChild variant="outline">
+      <Button asChild size="lg" variant="secondary" className="w-full">
         <Link href="/login">{t('signInLink')}</Link>
       </Button>
-    </AuthCard>
+    </AuthLayout>
   );
 }
 

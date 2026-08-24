@@ -53,14 +53,13 @@ export function CertificateVerification({ verificationId }: { verificationId: st
         ) : error || !data ? (
           <ErrorState onRetry={refetch} />
         ) : (
-          <Card className="border-2 border-gold">
+          <Card className="border-2 border-primary-600">
             <CardHeader className="items-center gap-2 text-center">
               {/*
                 The one thing the visitor came to find out, stated first.
 
-                Success green rather than gold: "valid" is a status signal, and
-                D-025 added the functional colours precisely because brand gold
-                cannot carry one at AA (3.42:1 on white). The gold border still
+                Success green for the verdict: "valid" is a status signal (D-025's
+                functional colours survive D-069). The primary border still
                 says "credential"; the tick says "genuine".
               */}
               <BadgeCheck aria-hidden="true" className="size-9 text-success" />

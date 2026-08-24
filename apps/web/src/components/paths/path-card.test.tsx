@@ -49,28 +49,27 @@ describe('PathCard', () => {
     expect(screen.queryByText('موصى به')).not.toBeInTheDocument();
   });
 
-  it('uses a gold border for a recommendation and a plain one otherwise', () => {
+  it('uses the primary border for a recommendation and a plain one otherwise', () => {
     const { container: gold } = renderWithProviders(
       <PathCard path={summary({ recommended: true, recommendationRank: 1 })} />,
     );
-    expect(gold.querySelector('article')?.className).toContain('border-gold');
+    expect(gold.querySelector('article')?.className).toContain('border-primary-600');
 
     const { container: plain } = renderWithProviders(<PathCard path={summary()} />);
-    expect(plain.querySelector('article')?.className).not.toContain('border-gold');
+    expect(plain.querySelector('article')?.className).not.toContain('border-primary-600');
   });
 
-  it('never renders gold body text', () => {
+  it('carries the recommendation on the primary colour only — no gold anywhere', () => {
     /*
-     * D-025: `--color-gold` measures below 4.5:1 on every background here, so it
-     * is valid for borders, rings, icons and large text only. The badge uses the
-     * light-gold fill with navy text instead. A regression to `text-gold` would
-     * be an accessibility failure that looks fine on a designer's screen.
+     * D-069: the product does not use Platforms Code's gold secondary. The
+     * recommendation is the primary border plus the badge text; a `gold`
+     * utility reappearing here would be a regression to a retired token.
      */
     const { container } = renderWithProviders(
       <PathCard path={summary({ recommended: true, recommendationRank: 0 })} />,
     );
 
-    expect(container.innerHTML).not.toContain('text-gold');
+    expect(container.innerHTML).not.toMatch(/gold/i);
   });
 
   it('offers exactly one action, and it does not pre-select the path', () => {
