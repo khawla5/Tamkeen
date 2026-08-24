@@ -18,6 +18,35 @@ export interface RegistrationCandidate {
 export type PolicyRejection = { reason: AuditReasonCode; message: string };
 
 /**
+ * The ministry-domain half of the gate, on its own.
+ *
+ * Extracted because changing an existing account's address has to clear the
+ * same bar (§4.12) and must not clear a *different* one: an employee who could
+ * move a ministry account to a personal inbox would defeat D-017 one profile
+ * edit at a time. Two copies of this rule would drift, and the drift would be
+ * silent — the registration form would still refuse what the profile allowed.
+ *
+ * The rest of the gate deliberately does not carry over. `admin-only` governs
+ * whether somebody may create an account, not whether an employee who already
+ * has one may correct a typo in their address; and the employee number is not
+ * being changed.
+ */
+export function checkEmailDomain(
+  email: string,
+  allowedDomains: readonly string[],
+): PolicyRejection | null {
+  const domain = email.split('@')[1]?.toLowerCase();
+
+  /* An empty allow-list would silently turn restricted mode into open sign-up,
+     which is precisely what D-017 forbids — so treat it as closed, not open. */
+  if (!domain || allowedDomains.length === 0 || !allowedDomains.includes(domain)) {
+    return { reason: AuditReason.DOMAIN_NOT_ALLOWED, message: 'EMAIL_DOMAIN_NOT_ALLOWED' };
+  }
+
+  return null;
+}
+
+/**
  * The restricted-registration gate (D-017).
  *
  * Pure logic, deliberately separated from the service so the policy can be
@@ -42,12 +71,9 @@ export function checkRegistrationPolicy(
     };
   }
 
-  const domain = candidate.email.split('@')[1]?.toLowerCase();
-
-  /* An empty allow-list would silently turn restricted mode into open sign-up,
-     which is precisely what D-017 forbids — so treat it as closed, not open. */
-  if (!domain || config.allowedDomains.length === 0 || !config.allowedDomains.includes(domain)) {
-    return { reason: AuditReason.DOMAIN_NOT_ALLOWED, message: 'EMAIL_DOMAIN_NOT_ALLOWED' };
+  const domainRejection = checkEmailDomain(candidate.email, config.allowedDomains);
+  if (domainRejection) {
+    return domainRejection;
   }
 
   let employeeIdMatches: boolean;

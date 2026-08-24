@@ -46,6 +46,8 @@ const USER: CurrentUser = {
   email: 'employee@ministry.gov.example',
   fullName: 'سارة العتيبي',
   role: 'EMPLOYEE',
+  /* Null follows the system default (§4.12, D-018). */
+  numberFormat: null,
 };
 
 function setDashboard(dashboard: DashboardView) {

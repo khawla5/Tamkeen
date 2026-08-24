@@ -45,14 +45,20 @@ export default function LoginPage() {
       const { user } = await authApi.login({ email, password });
 
       /*
-       * Routed by role (D-065). The sign-in response already carries it, so this
-       * costs no extra request — and sending everyone to `/` would land an
-       * entity on the learner dashboard, which would then bounce them here,
-       * producing a visible flicker on every sign-in rather than a destination.
+       * Routed by role (D-065, D-075). The sign-in response already carries it,
+       * so this costs no extra request — and sending everyone to `/` would land
+       * an entity or an admin on the learner dashboard, which would then bounce
+       * them onwards, producing a visible flicker on every sign-in rather than a
+       * destination.
+       *
+       * Written as an exhaustive mapping rather than a single "not an employee"
+       * branch: until Phase 5 there was no admin portal, so a SUPER_ADMIN fell
+       * through to `/` and was bounced into the *entity* portal — a real
+       * destination, for somebody else.
        */
       /* refresh() so the server components re-render with the new session
          rather than serving a cached anonymous view. */
-      router.replace(user.role === 'ENTITY' ? '/entity' : '/');
+      router.replace(HOME_FOR_ROLE[user.role]);
       router.refresh();
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'EMAIL_NOT_VERIFIED') {

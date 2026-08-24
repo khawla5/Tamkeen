@@ -7,6 +7,7 @@ import {
 import { Queue, Worker } from 'bullmq';
 
 import { CatalogSyncService } from '../catalog-sync/catalog-sync.service';
+import { SettingsService } from '../settings/settings.service';
 import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import { CompletionSyncService } from '../completion-sync/completion-sync.service';
 import { AppConfigService } from '../config/app-config.module';
@@ -43,6 +44,7 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
 
   constructor(
     private readonly config: AppConfigService,
+    private readonly settings: SettingsService,
     private readonly catalog: CatalogSyncService,
     private readonly enrollment: EnrollmentService,
     private readonly completion: CompletionSyncService,
@@ -144,7 +146,7 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
 
   private async start(): Promise<void> {
     const connection = { url: this.config.get('REDIS_URL') };
-    const everyMinutes = this.config.get('COMPLETION_SYNC_INTERVAL_MINUTES');
+    const everyMinutes = await this.settings.get('COMPLETION_SYNC_INTERVAL_MINUTES');
 
     this.queue = new Queue(QUEUE_NAME, { connection });
 
@@ -160,16 +162,45 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
       this.logger.error(`Sync cycle failed: ${describe(error)}`);
     });
 
-    /* A fixed job id makes the repeatable job idempotent across restarts: a
-       redeploy re-registers the same schedule rather than adding a second one
-       that doubles the polling rate. */
+    await this.registerSchedule(everyMinutes);
+  }
+
+  /**
+   * Registers — or re-registers — the repeatable job.
+   *
+   * **A fixed job id is what makes this idempotent**, and it is also what makes
+   * §4C.6 able to change the interval without a deployment: `upsertJobScheduler`
+   * on the same id replaces the schedule rather than adding a second one that
+   * would double the polling rate. Without that, an administrator lowering the
+   * interval from five minutes to two would end up with both.
+   */
+  private async registerSchedule(everyMinutes: number): Promise<void> {
+    if (!this.queue) {
+      return;
+    }
+
     await this.queue.upsertJobScheduler(
       JOB_NAME,
       { every: everyMinutes * 60_000 },
       { name: JOB_NAME },
     );
 
-    this.logger.log(`Sync scheduler started; every ${everyMinutes} minute(s)`);
+    this.logger.log(`Sync scheduler running every ${everyMinutes} minute(s)`);
+  }
+
+  /**
+   * Called when §4C.6 changes the interval.
+   *
+   * A no-op when the scheduler is not running — in tests, without Redis, or when
+   * switched off — so the settings screen never has to know whether there is a
+   * queue to talk to.
+   */
+  async applyIntervalChange(): Promise<void> {
+    if (!this.queue) {
+      return;
+    }
+
+    await this.registerSchedule(await this.settings.get('COMPLETION_SYNC_INTERVAL_MINUTES'));
   }
 }
 

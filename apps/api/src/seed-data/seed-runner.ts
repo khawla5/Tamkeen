@@ -31,10 +31,18 @@ export interface SeedCounts {
 }
 
 /**
- * Seeds the assessment, its questions, options and per-dimension weights.
+ * Seeds version 1 of the assessment, its questions, options and weights.
  *
- * Rows are matched by their stable `key`, so revising a question's Arabic
- * wording updates it in place and the responses that reference it stay valid.
+ * **It bootstraps; it does not maintain.** Rows are matched by their stable
+ * `key` so revising the Arabic wording here updates version 1 in place — but
+ * only while version 1 is still the only version there is. The moment an
+ * administrator publishes an edit through §4C.3, the ministry owns the content
+ * and this function stands back: re-running the seed after that would overwrite
+ * their published bank with the draft wording that shipped with the code, which
+ * in a government system is data loss dressed as a convenience.
+ *
+ * D-032 always said the bank is seeded data "precisely so Phase 5 can edit it
+ * without a deploy". This is the other half of that sentence.
  */
 /* Exported so a real-LMS run can seed the assessment without also seeding the
    mock catalogue: the two are independent, and against a real Moodle the
@@ -42,22 +50,62 @@ export interface SeedCounts {
 export async function seedAssessment(
   prisma: PrismaClient,
 ): Promise<Pick<SeedCounts, 'questions' | 'options'>> {
-  const assessment = await prisma.assessment.upsert({
+  const existing = await prisma.assessment.findMany({
     where: { key: ASSESSMENT_SEED.key },
-    create: {
-      key: ASSESSMENT_SEED.key,
-      version: ASSESSMENT_SEED.version,
-      title: ASSESSMENT_SEED.title,
-      description: ASSESSMENT_SEED.description,
-    },
-    update: {
-      version: ASSESSMENT_SEED.version,
-      title: ASSESSMENT_SEED.title,
-      description: ASSESSMENT_SEED.description,
-      isActive: true,
-    },
-    select: { id: true },
+    select: { id: true, version: true, status: true, effectiveFrom: true },
   });
+
+  /* Any version beyond the first means an administrator has published, so the
+     content is theirs now. Reported rather than silently skipped: a seed that
+     appears to run and changes nothing is worse than one that says why. */
+  const ministryOwned = existing.some((row) => row.version > ASSESSMENT_SEED.version);
+
+  if (ministryOwned) {
+    console.log(
+      `Assessment "${ASSESSMENT_SEED.key}" has published versions beyond ${ASSESSMENT_SEED.version}; ` +
+        'leaving it alone. Edit it from the admin portal (§4C.3).',
+    );
+
+    const active = existing.find((row) => row.status === 'ACTIVE');
+    const counts = active
+      ? await prisma.assessmentQuestion.findMany({
+          where: { assessmentId: active.id },
+          select: { _count: { select: { options: true } } },
+        })
+      : [];
+
+    return {
+      questions: counts.length,
+      options: counts.reduce((sum, row) => sum + row._count.options, 0),
+    };
+  }
+
+  const first = existing.find((row) => row.version === ASSESSMENT_SEED.version);
+
+  const assessment = first
+    ? await prisma.assessment.update({
+        where: { id: first.id },
+        data: {
+          title: ASSESSMENT_SEED.title,
+          description: ASSESSMENT_SEED.description,
+          status: 'ACTIVE',
+          /* Kept if it has one. Re-seeding is not a new effective date — the
+             instrument has been in force since it was first published. */
+          effectiveFrom: first.effectiveFrom ?? new Date(),
+        },
+        select: { id: true },
+      })
+    : await prisma.assessment.create({
+        data: {
+          key: ASSESSMENT_SEED.key,
+          version: ASSESSMENT_SEED.version,
+          title: ASSESSMENT_SEED.title,
+          description: ASSESSMENT_SEED.description,
+          status: 'ACTIVE',
+          effectiveFrom: new Date(),
+        },
+        select: { id: true },
+      });
 
   let optionCount = 0;
 

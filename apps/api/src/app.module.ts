@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
+import { AdminModule } from './admin/admin.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
@@ -24,11 +25,14 @@ import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { MoodleModule } from './moodle/moodle.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
     AppConfigModule,
     PrismaModule,
+    /* Phase 5: the product knobs, read by four feature modules (D-072). */
+    SettingsModule,
     AuditModule,
     EmailModule,
     /*
@@ -79,6 +83,8 @@ import { PrismaModule } from './prisma/prisma.module';
     CvModule,
     /* Phase 4. */
     EntityModule,
+    /* Phase 5. */
+    AdminModule,
   ],
   providers: [
     /*

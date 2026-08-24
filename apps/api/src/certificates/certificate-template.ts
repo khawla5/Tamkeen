@@ -48,6 +48,26 @@ export interface CertificateTemplateInput {
   verificationUrl: string;
   /** Inline SVG. Vector so it stays scannable off paper at any size. */
   qrSvg: string;
+  /**
+   * The signature block and issuing body, as §4C.7 lets the ministry set them.
+   *
+   * Passed in rather than read here, because this function is pure and a
+   * certificate's bytes are stored immutably (D-052) — the values that were in
+   * force at issue are the ones printed on that document forever, and a template
+   * that reached for the current settings would render a *historical*
+   * certificate with today's signatory.
+   */
+  signatory: CertificateSignatory;
+}
+
+/** The ministry's signature block (§4C.7, D-073). */
+export interface CertificateSignatory {
+  /** Who signs. Empty until the ministry supplies a name. */
+  name: string;
+  /** Their title. Empty likewise. */
+  title: string;
+  /** The issuing body, printed under the signature. */
+  issuingBody: string;
 }
 
 /**
@@ -202,12 +222,22 @@ html, body {
         <div class="date-value">${formatDate(input.issuedAt)} م</div>
       </div>
 
-      <!-- Signature slot: the ministry fills the name and title; the block
-           exists now so adding them later is not a layout change. -->
+      <!--
+        The signature block, filled from §4C.7's settings.
+        The placeholder wording is what shows until the ministry names a
+        signatory — the block has always held its position so that supplying one
+        is not a layout change (D-051), and now supplying one is a screen rather
+        than a deployment.
+      -->
       <div>
         <div class="sign-line">
-          <div class="sign-name">الاسم</div>
-          <div class="sign-title">الجهة المصدرة: وزارة الداخلية</div>
+          <div class="sign-name">${escapeHtml(input.signatory.name || 'الاسم')}</div>
+          ${
+            input.signatory.title
+              ? `<div class="sign-title">${escapeHtml(input.signatory.title)}</div>`
+              : ''
+          }
+          <div class="sign-title">${escapeHtml(input.signatory.issuingBody)}</div>
         </div>
       </div>
     </div>

@@ -3,9 +3,11 @@ import { createTransport, type Transporter } from 'nodemailer';
 
 import { AppConfigService } from '../config/app-config.module';
 import {
+  emailChangeEmail,
   passwordResetEmail,
   verificationEmail,
   coursePassedEmail,
+  invitationEmail,
   pathCompletedEmail,
 } from './email.templates';
 
@@ -51,11 +53,46 @@ export class EmailService {
     await this.send(to, verificationEmail(url, hours));
   }
 
+  /**
+   * Confirming a NEW address (§4.12).
+   *
+   * Sent only to the address being moved to. Its own page, not `/verify-email`:
+   * the two tokens do different things — one activates an account, the other
+   * moves one — and a single redemption route that had to branch on token type
+   * is how a link for one ends up doing the other.
+   */
+  async sendEmailChange(to: string, token: string): Promise<void> {
+    const hours = Math.round(this.config.get('EMAIL_VERIFICATION_TTL_MINUTES') / 60);
+    const url = `${this.config.get('APP_URL')}/verify-email-change?token=${encodeURIComponent(token)}`;
+
+    await this.send(to, emailChangeEmail(url, hours));
+  }
+
   async sendPasswordReset(to: string, token: string): Promise<void> {
     const minutes = this.config.get('PASSWORD_RESET_TTL_MINUTES');
     const url = `${this.config.get('APP_URL')}/reset-password?token=${encodeURIComponent(token)}`;
 
     await this.send(to, passwordResetEmail(url, minutes));
+  }
+
+  /**
+   * The invitation for an administrator-provisioned account (§4C.2).
+   *
+   * Redeemed on the same `/reset-password` page as an ordinary reset, because
+   * it is the same token type doing the same job — setting a password the
+   * server has never seen. Only the wording differs, and it has to: a reset
+   * notice arriving at an address that never had an account reads as phishing.
+   */
+  async sendInvitation(
+    to: string,
+    fullName: string,
+    token: string,
+    options: { isEntity: boolean },
+  ): Promise<void> {
+    const minutes = this.config.get('PASSWORD_RESET_TTL_MINUTES');
+    const url = `${this.config.get('APP_URL')}/reset-password?token=${encodeURIComponent(token)}`;
+
+    await this.send(to, invitationEmail(url, fullName, minutes, options.isEntity));
   }
 
   async sendCoursePassed(

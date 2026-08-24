@@ -60,8 +60,18 @@ export async function getMessageBody(messageId: string): Promise<string> {
   return JSON.stringify(await response.json());
 }
 
+/**
+ * The link paths a token can arrive on.
+ *
+ * `verify-email` and `verify-email-change` are distinct on purpose: the regex
+ * anchors on the `?` immediately after the path, so a change link can never be
+ * mistaken for a verification one. They do different things to an account, and
+ * a helper that conflated them would let a test prove the wrong flow.
+ */
+export type TokenPath = 'verify-email' | 'verify-email-change' | 'reset-password';
+
 /** Extracts a `?token=` value from a link in the email body. */
-export function extractToken(body: string, path: 'verify-email' | 'reset-password'): string {
+export function extractToken(body: string, path: TokenPath): string {
   const match = new RegExp(`${path}\\?token=([A-Za-z0-9_-]+)`).exec(body);
 
   if (!match?.[1]) {
@@ -71,10 +81,7 @@ export function extractToken(body: string, path: 'verify-email' | 'reset-passwor
   return match[1];
 }
 
-export async function tokenFromEmail(
-  recipient: string,
-  path: 'verify-email' | 'reset-password',
-): Promise<string> {
+export async function tokenFromEmail(recipient: string, path: TokenPath): Promise<string> {
   const messageId = await waitForMessage(recipient);
 
   return extractToken(await getMessageBody(messageId), path);

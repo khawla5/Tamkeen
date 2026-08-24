@@ -84,8 +84,25 @@ export class PathsService {
   async getDetail(userId: string, pathId: string): Promise<PathDetail> {
     const state = await this.journey.getState(userId);
 
+    /*
+     * A retired path stays readable to whoever already chose it.
+     *
+     * §4C.4 lets an administrator take a path out of new selections, and D-002
+     * means everyone who *confirmed* it keeps it — My Path reads through
+     * `user_paths` and never consults this flag. The gap was the person still
+     * building: they had selected the path, not committed to it, and a plain
+     * `isActive: true` filter turned their build page into a 404 with nothing
+     * to act on. `confirm` has never re-checked the flag, so they could still
+     * commit — they simply could not see the screen that would let them.
+     *
+     * Retirement means "not offered to anyone who has not already chosen it",
+     * which is the same shape as HIDDEN_BUT_COMPLETABLE for courses (§2/D-015).
+     */
     const path = await this.prisma.path.findFirst({
-      where: { id: pathId, isActive: true },
+      where: {
+        id: pathId,
+        ...(state.userPath?.pathId === pathId ? {} : { isActive: true }),
+      },
       select: {
         id: true,
         name: true,

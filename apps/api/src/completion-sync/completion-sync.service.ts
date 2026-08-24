@@ -3,11 +3,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AuditAction } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
-import { AppConfigService } from '../config/app-config.module';
 import { EmailService } from '../email/email.service';
 import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import type { LmsCourseProgress } from '../moodle/lms.types';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { evaluateCompletion, isGradedButNotComplete } from './pass-threshold';
 
 export interface CompletionSyncResult {
@@ -46,7 +46,7 @@ export class CompletionSyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly config: AppConfigService,
+    private readonly settings: SettingsService,
     private readonly email: EmailService,
     private readonly certificates: CertificateIssuanceService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
@@ -126,7 +126,10 @@ export class CompletionSyncService {
       return { completions: 0, newlyPassed: 0, pathCompleted: false };
     }
 
-    const passThreshold = this.config.get('PASS_THRESHOLD');
+    /* One read per run, through the one source of truth (D-072). Every
+       verdict in this cycle is decided under the same threshold, which is what
+       `passThresholdUsed` on each row then records. */
+    const passThreshold = await this.settings.get('PASS_THRESHOLD');
     let completions = 0;
     let newlyPassed = 0;
 

@@ -18,6 +18,11 @@ export const NAV_ICONS = [
   'profile',
   /* Phase 4 — the entity portal's Learners/Review destination (§4B.5). */
   'learners',
+  /* Phase 5 — the super-admin portal's own destinations (§4C). */
+  'assessment',
+  'settings',
+  'templates',
+  'audit',
 ] as const;
 
 export type NavIconName = (typeof NAV_ICONS)[number];

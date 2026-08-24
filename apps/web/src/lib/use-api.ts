@@ -22,7 +22,24 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface ApiQuery<T> {
   data: T | undefined;
+  /** A request is in flight — true on the first load *and* on every refetch. */
   isLoading: boolean;
+  /**
+   * A request is in flight and there is nothing to show yet.
+   *
+   * **This is what `DataView` almost always wants.** Passing `isLoading` makes
+   * the view swap to its loading state on every refetch, which unmounts whatever
+   * was rendered — including a confirmation message the user just earned by the
+   * action that triggered the refetch. Phase 4 hit that on the entity manage
+   * screen and fixed it by writing `isLoading && data === undefined` at the call
+   * site; Phase 5 hit it again on the admin user panel, which is two occurrences
+   * of a rule nobody can be expected to remember. Naming it here is cheaper than
+   * finding it a third time.
+   *
+   * Use `isLoading` only where a visible in-flight indicator on a refresh is
+   * genuinely wanted.
+   */
+  isInitialLoad: boolean;
   error: unknown;
   /** Re-runs the request — wired to `ErrorState`'s retry. */
   refetch: () => void;
@@ -72,7 +89,7 @@ export function useApiQuery<T>(
 
   const refetch = useCallback(() => setReloadToken((token) => token + 1), []);
 
-  return { data, isLoading, error, refetch };
+  return { data, isLoading, isInitialLoad: isLoading && data === undefined, error, refetch };
 }
 
 export interface ApiMutation<TArgs extends unknown[], TResult> {

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Patch,
   HttpCode,
   HttpStatus,
   Post,
@@ -18,6 +19,9 @@ import {
   RegisterDto,
   RequestPasswordResetDto,
   ResendVerificationDto,
+  ChangeEmailDto,
+  ChangePasswordDto,
+  UpdatePreferencesDto,
   ResetPasswordDto,
   VerifyEmailDto,
 } from './auth.dto';
@@ -153,7 +157,27 @@ export class AuthController {
       email: user.email,
       fullName: user.fullName,
       role: user.role,
+      /* Null means "follow whatever §4C.6 has set", so the ministry can change
+         the default for everyone without overwriting anybody's choice. */
+      numberFormat: user.numberFormat ?? null,
     };
+  }
+
+  /**
+   * The person's own digits preference (§4.12, D-018).
+   *
+   * A *preference*, not a language switch. The interface is Arabic-only, so a
+   * language selector would be a control that does nothing — but which digits
+   * somebody reads is a real difference, and D-018 built the single switch point
+   * this writes to.
+   */
+  @Patch('me/preferences')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async setPreferences(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdatePreferencesDto,
+  ): Promise<void> {
+    await this.auth.setNumberFormat(user.id, dto.numberFormat ?? null);
   }
 
   @Public()
@@ -169,6 +193,77 @@ export class AuthController {
     /* Always the same response — an unknown address must be indistinguishable
        from a known one. */
     return { status: 'RESET_EMAIL_SENT' };
+  }
+
+  /**
+   * Changes the signed-in user's own password (§4.12).
+   *
+   * Not `@Public()`, and throttled like the rest of auth: the current password
+   * is checked here, so an unthrottled endpoint would be a password oracle for
+   * anyone holding a stolen session.
+   */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+    @Req() request: Request,
+  ): Promise<void> {
+    await this.auth.changePassword(user.id, user.sessionId, dto.currentPassword, dto.newPassword, {
+      ipAddress: request.ip ?? null,
+      userAgent: request.get('user-agent') ?? null,
+    });
+  }
+
+  /**
+   * Asks to move the account to a new address (§4.12).
+   *
+   * Throttled hard: this endpoint verifies a password and sends mail to an
+   * attacker-chosen address, so it is both a password oracle and a way to make
+   * the ministry's mail server send things.
+   *
+   * 202, not 200: nothing has changed yet, and will not until the link in the
+   * new inbox is opened. The response is identical whether or not the address
+   * is already taken — the caller is authenticated, but answering that would
+   * turn the profile form into the address oracle registration refuses to be.
+   */
+  @Throttle({ default: { limit: 3, ttl: 300_000 } })
+  @Post('change-email')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async changeEmail(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangeEmailDto,
+    @Req() request: Request,
+  ): Promise<{ status: string }> {
+    await this.auth.requestEmailChange(
+      user.id,
+      dto.newEmail,
+      dto.currentPassword,
+      this.contextOf(request),
+    );
+
+    return { status: 'EMAIL_CHANGE_PENDING' };
+  }
+
+  /**
+   * Completes the move, from the link in the new inbox.
+   *
+   * `@Public()` like every other token redemption: the link is very likely
+   * opened in whichever browser that mailbox is signed into, which is not
+   * necessarily the one that asked.
+   */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('confirm-email-change')
+  @HttpCode(HttpStatus.OK)
+  async confirmEmailChange(
+    @Body() dto: VerifyEmailDto,
+    @Req() request: Request,
+  ): Promise<{ status: string }> {
+    await this.auth.confirmEmailChange(dto.token, this.contextOf(request));
+
+    return { status: 'EMAIL_CHANGED' };
   }
 
   @Public()

@@ -8,6 +8,7 @@ import { AuditService } from '../audit/audit.service';
 import { generateToken } from '../common/secure-token';
 import { AppConfigService } from '../config/app-config.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { CertificateStorageService } from './certificate-storage.service';
 import { renderCertificateHtml } from './certificate-template';
 import { PdfRendererService } from './pdf-renderer.service';
@@ -64,6 +65,7 @@ export class CertificateIssuanceService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly config: AppConfigService,
+    private readonly settings: SettingsService,
     private readonly storage: CertificateStorageService,
     private readonly renderer: PdfRendererService,
   ) {}
@@ -255,6 +257,17 @@ export class CertificateIssuanceService {
       verificationId,
       verificationUrl,
       qrSvg: await qrSvgFor(verificationUrl),
+      /*
+       * Read at issue time, once, and then frozen into the stored bytes (D-052).
+       * That is what makes §4C.7's promise true in both directions: editing the
+       * template changes future certificates and cannot touch a document
+       * somebody already holds.
+       */
+      signatory: {
+        name: await this.settings.get('CERT_SIGNATORY_NAME'),
+        title: await this.settings.get('CERT_SIGNATORY_TITLE'),
+        issuingBody: await this.settings.get('CERT_ISSUING_BODY'),
+      },
     });
 
     const pdf = await this.renderer.render(html, { landscape: true });

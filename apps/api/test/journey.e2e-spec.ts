@@ -23,6 +23,7 @@ import {
 } from '@tamkeen/types';
 
 import { AppModule } from '../src/app.module';
+import { SharedStateLock } from './shared-state-lock';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -59,12 +60,18 @@ describe('Phase 1 journey (e2e)', () => {
   let prisma: PrismaService;
   let emails: EmailCapture;
 
+  /* Serialised against the other suites that write globally visible product
+     state — the assessment and the catalogue of paths. See
+     shared-state-lock.ts. */
+  const lock = new SharedStateLock();
+
   /** questionId → the dimension it feeds, read from the database. */
   let questionLetter: Map<string, RiasecLetter>;
   /** questionId → option ids ordered by their weight, 0 through 4. */
   let optionsByWeight: Map<string, string[]>;
 
   beforeAll(async () => {
+    await lock.acquire();
     emails = new EmailCapture();
     process.env.RATE_LIMIT_ENABLED = 'false';
 
@@ -134,7 +141,7 @@ describe('Phase 1 journey (e2e)', () => {
           .map((option) => option.id),
       );
     }
-  }, 90_000);
+  }, 240_000);
 
   afterAll(async () => {
     const created = await prisma.user.findMany({
@@ -149,6 +156,7 @@ describe('Phase 1 journey (e2e)', () => {
     }
 
     await app.close();
+    await lock.release();
   }, 60_000);
 
   const server = () => app.getHttpServer() as unknown as App;
@@ -418,7 +426,18 @@ describe('Phase 1 journey (e2e)', () => {
 
       const body = (await get('/api/paths', session).expect(200)).body as PathRecommendations;
 
-      expect(body.paths).toHaveLength(12);
+      /*
+       * Counted against the database rather than against the seed's twelve.
+       *
+       * The invariant is "every *offered* path comes back, recommended or not" —
+       * that gold highlights rather than filters. Hardcoding twelve stated a
+       * fixture as though it were a product rule, and broke the first time
+       * another suite legitimately offered a thirteenth path.
+       */
+      const offered = await prisma.path.count({ where: { isActive: true } });
+
+      expect(body.paths).toHaveLength(offered);
+      expect(offered).toBeGreaterThan(0);
       expect(body.paths.filter((path) => !path.recommended).length).toBeGreaterThan(0);
     });
 

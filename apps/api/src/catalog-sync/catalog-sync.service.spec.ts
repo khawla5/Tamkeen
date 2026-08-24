@@ -38,6 +38,8 @@ function harness(
     courses?: LmsCourse[];
     held?: string[];
     mode?: 'mock' | 'real';
+    /** Rows deleted between the sync's read and its write. */
+    missingOnUpdate?: string[];
   } = {},
 ) {
   const rows = options.rows ?? [];
@@ -52,9 +54,17 @@ function harness(
         upserts.push(args);
         return Promise.resolve({});
       },
-      update: (args: { where: { id: string }; data: { status: string } }) => {
+      /* `updateMany`, matching the service: a row that vanished between the
+         read and the write must match nothing rather than throw, so the fake
+         reports a count the way Prisma does. `options.vanishedRowIds` lets a
+         test say a row is no longer there. */
+      updateMany: (args: { where: { id: string }; data: { status: string } }) => {
+        if (options.missingOnUpdate?.includes(args.where.id)) {
+          return Promise.resolve({ count: 0 });
+        }
+
         updates.push({ id: args.where.id, status: args.data.status });
-        return Promise.resolve({});
+        return Promise.resolve({ count: 1 });
       },
     },
     userPathCourse: {
@@ -327,6 +337,29 @@ describe('CatalogSyncService', () => {
           targetId: 'gone',
         }),
       );
+    });
+
+    it('carries on when the row disappeared between the read and the write', async () => {
+      /*
+       * The list is gathered in one query and walked one row at a time, so the
+       * world can change in between. A reconciliation job that crashes because
+       * the thing it was about to reconcile is gone is reconciling badly — and
+       * the crash would abandon every course after it in the list.
+       *
+       * Nothing in the product deletes a course (D-040), so this is defensive in
+       * production; it is not defensive in the integration suites, where it is
+       * the difference between a deterministic run and a one-in-five failure in
+       * a *different* suite.
+       */
+      const { service, audits, updates } = harness({ ...vanishing, missingOnUpdate: ['gone'] });
+
+      const result = await service.sync();
+
+      expect(updates).toHaveLength(0);
+      /* Not counted and not audited: no course was withdrawn, because no course
+         was there. A trail that says otherwise is worse than a silent skip. */
+      expect(result.withdrawn).toBe(0);
+      expect(audits.some((entry) => entry.action === AuditAction.LMS_COURSE_WITHDRAWN)).toBe(false);
     });
   });
 
