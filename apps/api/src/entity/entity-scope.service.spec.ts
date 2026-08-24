@@ -62,8 +62,6 @@ const account = (role: AuthenticatedUser['role'], id = 'user-1'): AuthenticatedU
   employeeId: 'ENT-0001',
   department: 'جهة',
   fullName: 'حساب',
-  employeeId: 'EMP-1',
-  department: 'الإدارة',
   role,
   sessionId: 'session-1',
 });

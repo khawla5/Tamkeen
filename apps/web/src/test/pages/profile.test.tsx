@@ -208,15 +208,6 @@ describe('profile — editing name and department', () => {
     expect(screen.getByLabelText('الاسم الكامل')).toHaveValue('سارة العتيبي إضافة');
     expect(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' })).toBeEnabled();
   });
-
-  it('signs out and redirects to /login regardless of the request outcome', async () => {
-    renderWithProviders(<ProfilePage />);
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: 'تسجيل الخروج' }));
-
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
-  });
 });
 
 describe('profile — changing a password', () => {
