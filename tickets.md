@@ -171,7 +171,7 @@
 
 > **Epic label: `profile`** — §4.12's profile/settings surface. progress.md deferred all of this to "Phase 5/6"; these tickets pull it forward deliberately (record that in decisions.md with the first PR). Shared rules: extend the existing single-card Tamkeen design (no reference-repo porting); every mutation is audited (§2), rate-limited like the other auth endpoints, and validated on both client and server; employee ID is identity and is **never** user-editable. No new email notification types may be added without amending the locked notifications rule (§2) — flag, don't improvise.
 
-## TAM-109 — Profile: show employee ID + department, edit name + department
+## TAM-109 — Profile: show employee ID + department, edit name + department — **display half DONE** (with the TAM-124 branch: both fields shown read-only; editing still open)
 
 - **Labels:** `profile`, `frontend`, `api`
 - **Priority:** High (the other profile tickets build on the same page sections)

@@ -143,6 +143,10 @@
 
 ## Log (newest first)
 
+### 2026-08-24 — The profile organized: two columns by intent (on the TAM-124 branch)
+
+The narrow four-card scroll became a two-column layout at the standard width: who you are (the facts card + the digits preference) beside account security (change password, change email), stacking below lg. The facts card gained الرقم الوظيفي and الإدارة — TAM-109's display half, marked on the ticket; editing remains open. profile.employeeId/department message keys added surgically (a JSON round-trip that stripped the catalogue's blank separator lines was caught and reverted). 493 web tests, typecheck, lint.
+
 ### 2026-08-24 — TAM-124: one content width, owned by the frame
 
 Branch `feature/tam-124-page-width`, on the TAM-112 branch. `PortalPage` now wraps every page in الرئيسية's container (`mx-auto w-full max-w-6xl`) in both chrome variants, with an explicit `width="narrow"` opt-in taken by the assessment, the profile and the player; the eight per-page `max-w-*` wrappers (2xl–6xl, all disagreeing) are gone, and the path-build page's fixed counter bar shares the exported `PAGE_MAX_WIDTH` constant instead of a second literal. A filesystem guard test (`page-width.test.ts`) fails the suite if any portal page declares `max-w-` again. The 360px gate caught one real overflow — the dashboard's journey tracker could not fit four labels beside their nodes — fixed by keeping only the current stage's visible label below `sm` (every stage keeps its accessible name). 493 web unit tests, lint, typecheck clean; journey e2e 4/4 (one flake at the known counter-race step, clean on rerun); zero horizontal overflow at 360px across the six portal pages, checked against the live app.

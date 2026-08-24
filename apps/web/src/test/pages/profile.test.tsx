@@ -91,6 +91,10 @@ describe('profile — personal information', () => {
 
     expect(screen.getByText('سارة العتيبي')).toBeInTheDocument();
     expect(screen.getByText('sara@ministry.gov.example')).toBeInTheDocument();
+    /* TAM-109's display half: the employee number and department are facts of
+       the account and belong with the rest. */
+    expect(screen.getByText('EMP-2201')).toBeInTheDocument();
+    expect(screen.getByText('الإدارة العامة للتدريب')).toBeInTheDocument();
   });
 
   it('renders the address left-to-right so it stays the address', () => {
