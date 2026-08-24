@@ -377,26 +377,36 @@ describe('Profile (e2e)', () => {
       /* Not `@Public()`. An anonymous caller has no account to change. */
       await send('post', '/api/auth/change-password', {
         currentPassword: PASSWORD,
-        newPassword: 'a-different-long-password',
+        newPassword: 'another-long-password',
       }).expect(401);
     });
 
     it('refuses a wrong current password, and records the attempt', async () => {
-      const email = await account('pw-wrong');
+      const email = await account('wrong');
       const session = await signIn(email);
 
-      const response = await send(
+      await send(
         'post',
         '/api/auth/change-password',
-        { currentPassword: 'not-the-real-password', newPassword: 'a-different-long-password' },
+        { currentPassword: 'not-the-password', newPassword: 'another-long-password' },
         session,
       ).expect(401);
 
-      expect(JSON.stringify(response.body)).toContain('INVALID_CREDENTIALS');
+      /* An attempt to change a password with a guess is exactly the event a
+         ministry wants in the trail (§2). */
+      const entry = await prisma.auditLog.findFirst({
+        where: { action: 'AUTH_PASSWORD_CHANGED', outcome: 'FAILURE' },
+        orderBy: { id: 'desc' },
+      });
+      expect(entry).not.toBeNull();
+
+      /* And the old password must still work — a failed change that locked the
+         account out would be worse than the attack it refused. */
+      await signIn(email);
     });
 
     it('refuses a new password identical to the old one', async () => {
-      const email = await account('pw-same');
+      const email = await account('same');
       const session = await signIn(email);
 
       const response = await send(
@@ -406,11 +416,14 @@ describe('Profile (e2e)', () => {
         session,
       ).expect(400);
 
-      expect(JSON.stringify(response.body)).toContain('PASSWORD_UNCHANGED');
+      /* Refused rather than accepted as a no-op: somebody who believes they have
+         rotated a compromised password and has not is worse off than somebody
+         told they did not. */
+      expect((response.body as { message: string }).message).toBe('PASSWORD_UNCHANGED');
     });
 
     it('refuses a new password under the minimum length', async () => {
-      const email = await account('pw-short');
+      const email = await account('short');
       const session = await signIn(email);
 
       await send(
@@ -422,153 +435,171 @@ describe('Profile (e2e)', () => {
     });
 
     it('changes the password, and the old one stops working', async () => {
-      const email = await account('pw-change');
+      const email = await account('rotate');
       const session = await signIn(email);
-      const newPassword = 'a-different-long-password';
+      const next = 'a-brand-new-long-password';
 
       await send(
         'post',
         '/api/auth/change-password',
-        { currentPassword: PASSWORD, newPassword },
+        { currentPassword: PASSWORD, newPassword: next },
         session,
-      ).expect(200);
+      ).expect(204);
 
       await send('post', '/api/auth/login', { email, password: PASSWORD }).expect(401);
-      await send('post', '/api/auth/login', { email, password: newPassword }).expect(200);
+      await signIn(email, next);
     });
 
     it('ends the other sessions but keeps the one doing the changing', async () => {
-      const email = await account('pw-sessions');
-      const first = await signIn(email);
-      const second = await signIn(email);
-      const newPassword = 'a-different-long-password';
+      const email = await account('sessions');
+      const elsewhere = await signIn(email);
+      const here = await signIn(email);
+
+      await get('/api/auth/me', elsewhere).expect(200);
 
       await send(
         'post',
         '/api/auth/change-password',
-        { currentPassword: PASSWORD, newPassword },
-        first,
-      ).expect(200);
+        { currentPassword: PASSWORD, newPassword: 'yet-another-long-password' },
+        here,
+      ).expect(204);
 
-      await get('/api/auth/me', first).expect(200);
-      await get('/api/auth/me', second).expect(401);
+      /* The point of the change. Whoever knew the old password is signed out. */
+      await get('/api/auth/me', elsewhere).expect(401);
+      /* And the person who just did it is not — being logged out of the page you
+         are standing on reads as a failure, and invites a second change. */
+      await get('/api/auth/me', here).expect(200);
     });
   });
 
   describe('the digits preference (D-018)', () => {
     it('refuses an unauthenticated request', async () => {
-      await request(server())
-        .patch('/api/auth/me/preferences')
-        .set('Cookie', csrfCookie)
-        .set('X-CSRF-Token', csrfToken)
-        .send({ numberFormat: 'western' })
-        .expect(401);
+      await send('patch', '/api/auth/me/preferences', { numberFormat: 'arabic-indic' }).expect(401);
     });
 
     it('starts as null, meaning "follow whatever the system is set to"', async () => {
-      const email = await account('digits-null');
-      const session = await signIn(email);
+      const session = await signIn(await account('default'));
 
-      const response = await get('/api/auth/me', session).expect(200);
-      expect(response.body).toMatchObject({ numberFormat: null });
+      const me = (await get('/api/auth/me', session).expect(200)).body as {
+        numberFormat: string | null;
+      };
+      expect(me.numberFormat).toBeNull();
     });
 
     it('stores a choice and hands it back on the session', async () => {
-      const email = await account('digits-store');
-      const session = await signIn(email);
-
-      await send('patch', '/api/auth/me/preferences', { numberFormat: 'arabic-indic' }, session).expect(
-        204,
-      );
-
-      const response = await get('/api/auth/me', session).expect(200);
-      expect(response.body).toMatchObject({ numberFormat: 'arabic-indic' });
-    });
-
-    it('clears back to null rather than storing a third literal', async () => {
-      const email = await account('digits-clear');
-      const session = await signIn(email);
-
-      await send('patch', '/api/auth/me/preferences', { numberFormat: 'western' }, session).expect(204);
-      await send('patch', '/api/auth/me/preferences', { numberFormat: null }, session).expect(204);
-
-      const response = await get('/api/auth/me', session).expect(200);
-      expect(response.body).toMatchObject({ numberFormat: null });
-    });
-
-    it('refuses a format nothing can render', async () => {
-      const email = await account('digits-bad');
-      const session = await signIn(email);
+      const session = await signIn(await account('choose'));
 
       await send(
         'patch',
         '/api/auth/me/preferences',
-        { numberFormat: 'roman-numerals' },
+        { numberFormat: 'arabic-indic' },
         session,
-      ).expect(400);
+      ).expect(204);
+
+      const me = (await get('/api/auth/me', session).expect(200)).body as {
+        numberFormat: string | null;
+      };
+      expect(me.numberFormat).toBe('arabic-indic');
+    });
+
+    it('clears back to null rather than storing a third literal', async () => {
+      const session = await signIn(await account('clear'));
+
+      await send('patch', '/api/auth/me/preferences', { numberFormat: 'western' }, session).expect(
+        204,
+      );
+      await send('patch', '/api/auth/me/preferences', { numberFormat: null }, session).expect(204);
+
+      /* Null and "western" must stay distinguishable: null is what lets §4C.6
+         change the default for everyone without overwriting a preference. */
+      const me = (await get('/api/auth/me', session).expect(200)).body as {
+        numberFormat: string | null;
+      };
+      expect(me.numberFormat).toBeNull();
+    });
+
+    it('refuses a format nothing can render', async () => {
+      const session = await signIn(await account('bogus'));
+
+      /* Validated against the shared list, so an unknown value cannot reach the
+         column and surface later as a formatting crash on somebody's dashboard. */
+      await send('patch', '/api/auth/me/preferences', { numberFormat: 'roman' }, session).expect(
+        400,
+      );
     });
 
     it('is scoped to the caller — there is no route to set somebody else’s', async () => {
-      const emailA = await account('digits-scope-a');
-      const emailB = await account('digits-scope-b');
-      const sessionA = await signIn(emailA);
-      const sessionB = await signIn(emailB);
+      const session = await signIn(await account('scope'));
+      const other = await account('victim');
+      const otherUser = await prisma.user.findUniqueOrThrow({ where: { email: other } });
 
-      await send('patch', '/api/auth/me/preferences', { numberFormat: 'arabic-indic' }, sessionA).expect(
-        204,
-      );
+      /* The endpoint takes no user id at all; a body that smuggles one is
+         rejected by the whitelist rather than quietly ignored. */
+      await send(
+        'patch',
+        '/api/auth/me/preferences',
+        { numberFormat: 'arabic-indic', userId: otherUser.id },
+        session,
+      ).expect(400);
 
-      const responseB = await get('/api/auth/me', sessionB).expect(200);
-      expect(responseB.body).toMatchObject({ numberFormat: null });
+      const untouched = await prisma.user.findUniqueOrThrow({ where: { id: otherUser.id } });
+      expect(untouched.numberFormat).toBeNull();
     });
   });
 
   describe('changing the address the account signs in with (§4.12)', () => {
-    async function requestChange(email: string, target: string, session?: string): Promise<string> {
-      const cookie = session ?? (await signIn(email));
+    /** The pending address a request parked on its token, if any. */
+    async function pendingFor(email: string): Promise<string | null> {
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      const token = await prisma.authToken.findFirst({
+        where: { userId: user.id, type: 'EMAIL_CHANGE', consumedAt: null },
+        orderBy: { createdAt: 'desc' },
+      });
 
-      await send(
-        'post',
-        '/api/auth/change-email',
-        { newEmail: target, currentPassword: PASSWORD },
-        cookie,
-      ).expect(200);
-
-      return mail.emailChanges.get(target)!;
+      return token?.newEmail ?? null;
     }
 
     it('refuses an unauthenticated request', async () => {
       await send('post', '/api/auth/change-email', {
-        newEmail: `prof-${RUN_ID}-anon-target@ministry.gov.example`,
+        newEmail: `prof-${RUN_ID}-x@ministry.gov.example`,
         currentPassword: PASSWORD,
       }).expect(401);
     });
 
     it('refuses a wrong current password, and parks nothing', async () => {
-      const email = await account('em-wrong-pw');
+      const email = await account('em-badpass');
       const session = await signIn(email);
-      const target = `prof-${RUN_ID}-em-wrong-pw-new@ministry.gov.example`;
 
       await send(
         'post',
         '/api/auth/change-email',
-        { newEmail: target, currentPassword: 'not-the-real-password' },
+        { newEmail: `prof-${RUN_ID}-moved@ministry.gov.example`, currentPassword: 'wrong' },
         session,
       ).expect(401);
 
-      expect(mail.emailChanges.has(target)).toBe(false);
+      /* Whoever can move the address can then reset the password and own the
+         account outright, with the real employee locked out — so the password
+         check is the whole gate, and a failed attempt must leave nothing
+         pending behind it. */
+      expect(await pendingFor(email)).toBeNull();
     });
 
     it('refuses an address outside the ministry domain', async () => {
-      const email = await account('em-outside');
+      const email = await account('em-domain');
       const session = await signIn(email);
 
-      await send(
+      const response = await send(
         'post',
         '/api/auth/change-email',
-        { newEmail: 'someone@gmail.com', currentPassword: PASSWORD },
+        { newEmail: 'someone@gmail.example', currentPassword: PASSWORD },
         session,
       ).expect(400);
+
+      /* D-017 through the back door: an employee who could walk a ministry
+         account to a personal inbox would defeat restricted registration one
+         profile edit at a time. */
+      expect((response.body as { message: string }).message).toBe('EMAIL_DOMAIN_NOT_ALLOWED');
+      expect(await pendingFor(email)).toBeNull();
     });
 
     it('refuses the address it already has', async () => {
@@ -585,97 +616,154 @@ describe('Profile (e2e)', () => {
 
     it('accepts a request without changing anything yet', async () => {
       const email = await account('em-pending');
-      const session = await signIn(email);
       const target = `prof-${RUN_ID}-em-pending-new@ministry.gov.example`;
-
-      await requestChange(email, target, session);
-
-      const response = await get('/api/auth/me', session).expect(200);
-      expect(response.body).toMatchObject({ email });
-    });
-
-    it('answers a taken address exactly as it answers a free one', async () => {
-      const emailA = await account('em-taken-a');
-      const emailB = await account('em-taken-b');
-      const sessionA = await signIn(emailA);
-
-      const freeResponse = await send(
-        'post',
-        '/api/auth/change-email',
-        { newEmail: `prof-${RUN_ID}-em-free@ministry.gov.example`, currentPassword: PASSWORD },
-        sessionA,
-      );
-      const takenResponse = await send(
-        'post',
-        '/api/auth/change-email',
-        { newEmail: emailB, currentPassword: PASSWORD },
-        sessionA,
-      );
-
-      expect(freeResponse.status).toBe(takenResponse.status);
-      expect(JSON.stringify(freeResponse.body)).toBe(JSON.stringify(takenResponse.body));
-    });
-
-    it('supersedes an earlier pending request rather than stacking them', async () => {
-      const email = await account('em-supersede');
-      const session = await signIn(email);
-      const first = `prof-${RUN_ID}-em-supersede-first@ministry.gov.example`;
-      const second = `prof-${RUN_ID}-em-supersede-second@ministry.gov.example`;
-
-      const firstToken = await requestChange(email, first, session);
-      await requestChange(email, second, session);
-
-      await send('post', '/api/auth/confirm-email-change', { token: firstToken }).expect(400);
-    });
-  });
-
-  describe('confirming the change', () => {
-    it('refuses an unknown token', async () => {
-      await send('post', '/api/auth/confirm-email-change', { token: 'not-a-real-token' }).expect(400);
-    });
-
-    it('refuses a token issued for something else', async () => {
-      const email = await account('em-wrong-token-type');
       const session = await signIn(email);
 
       await send(
         'post',
-        '/api/auth/change-password',
-        { currentPassword: PASSWORD, newPassword: 'a-different-long-password' },
+        '/api/auth/change-email',
+        { newEmail: target, currentPassword: PASSWORD },
         session,
-      ).expect(200);
+      ).expect(202);
+
+      /* The address is on the TOKEN, and `users.email` has not moved. Anything
+         else leaves a window in which the account points at an inbox nobody has
+         proved they can read. */
+      expect(await pendingFor(email)).toBe(target);
+
+      const me = (await get('/api/auth/me', session).expect(200)).body as { email: string };
+      expect(me.email).toBe(email);
+    });
+
+    it('answers a taken address exactly as it answers a free one', async () => {
+      const email = await account('em-taken');
+      const other = await account('em-victim');
+      const session = await signIn(email);
+
+      /*
+       * The caller is authenticated, but answering "that address already has an
+       * account" would turn the profile form into the address oracle the
+       * registration endpoint refuses to be. Same status, and nothing parked.
+       */
+      await send(
+        'post',
+        '/api/auth/change-email',
+        { newEmail: other, currentPassword: PASSWORD },
+        session,
+      ).expect(202);
+
+      expect(await pendingFor(email)).toBeNull();
+    });
+
+    it('supersedes an earlier pending request rather than stacking them', async () => {
+      const email = await account('em-super');
+      const session = await signIn(email);
+      const first = `prof-${RUN_ID}-em-super-1@ministry.gov.example`;
+      const second = `prof-${RUN_ID}-em-super-2@ministry.gov.example`;
+
+      await send(
+        'post',
+        '/api/auth/change-email',
+        { newEmail: first, currentPassword: PASSWORD },
+        session,
+      ).expect(202);
+      await send(
+        'post',
+        '/api/auth/change-email',
+        { newEmail: second, currentPassword: PASSWORD },
+        session,
+      ).expect(202);
+
+      /* Only the newest link works — a forwarded older one must not still be
+         able to move the account somewhere the person changed their mind
+         about. */
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      const live = await prisma.authToken.findMany({
+        where: { userId: user.id, type: 'EMAIL_CHANGE', consumedAt: null },
+      });
+
+      expect(live).toHaveLength(1);
+      expect(live[0]!.newEmail).toBe(second);
+    });
+  });
+
+  describe('confirming the change', () => {
+    /** Requests a change and returns the token as the recipient would have it. */
+    async function requestChange(email: string, target: string): Promise<string> {
+      const session = await signIn(email);
+
+      await send(
+        'post',
+        '/api/auth/change-email',
+        { newEmail: target, currentPassword: PASSWORD },
+        session,
+      ).expect(202);
+
+      const sent = mail.emailChanges.get(target);
+      if (!sent) throw new Error(`No change email captured for ${target}`);
+
+      return sent;
+    }
+
+    it('refuses an unknown token', async () => {
+      await send('post', '/api/auth/confirm-email-change', { token: 'nope' }).expect(401);
+    });
+
+    it('refuses a token issued for something else', async () => {
+      const email = await account('em-wrongtype');
+
+      /* A password-reset token is perfectly valid — for resetting a password.
+         Presented here it must be refused, and left unconsumed so its own flow
+         still works. */
+      await send('post', '/api/auth/forgot-password', { email }).expect(202);
+
+      const reset = mail.resets.get(email);
+      expect(reset).toBeDefined();
+
+      await send('post', '/api/auth/confirm-email-change', { token: reset! }).expect(401);
+
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      const stillLive = await prisma.authToken.findFirst({
+        where: { userId: user.id, type: 'PASSWORD_RESET', consumedAt: null },
+      });
+      expect(stillLive).not.toBeNull();
     });
 
     it('moves the address, and the new one is the one that signs in', async () => {
-      const email = await account('em-confirm');
-      const session = await signIn(email);
-      const target = `prof-${RUN_ID}-em-confirm-new@ministry.gov.example`;
-      const token = await requestChange(email, target, session);
+      const email = await account('em-move');
+      const target = `prof-${RUN_ID}-em-move-new@ministry.gov.example`;
+      const token = await requestChange(email, target);
 
       await send('post', '/api/auth/confirm-email-change', { token }).expect(200);
 
+      const moved = await prisma.user.findUnique({ where: { email: target } });
+      expect(moved).not.toBeNull();
+      /* Verified by the act itself: the link only arrives in an inbox the
+         person can read, which is the same proof registration asks for. */
+      expect(moved!.emailVerifiedAt).not.toBeNull();
+
+      await signIn(target);
       await send('post', '/api/auth/login', { email, password: PASSWORD }).expect(401);
-      await send('post', '/api/auth/login', { email: target, password: PASSWORD }).expect(200);
     });
 
     it('ends every session, because the identifier just changed', async () => {
-      const email = await account('em-ends-sessions');
-      const first = await signIn(email);
-      const second = await signIn(email);
-      const target = `prof-${RUN_ID}-em-ends-sessions-new@ministry.gov.example`;
-      const token = await requestChange(email, target, first);
+      const email = await account('em-sessions');
+      const target = `prof-${RUN_ID}-em-sessions-new@ministry.gov.example`;
+      const session = await signIn(email);
+      const token = await requestChange(email, target);
 
       await send('post', '/api/auth/confirm-email-change', { token }).expect(200);
 
-      await get('/api/auth/me', first).expect(401);
-      await get('/api/auth/me', second).expect(401);
+      /* Including the one that asked. Leaving it authenticated against an
+         address that no longer exists is the confusing outcome — and if the
+         request was not the owner's, this ends the attacker's session too. */
+      await get('/api/auth/me', session).expect(401);
     });
 
     it('will not spend the same token twice', async () => {
-      const email = await account('em-single-use');
-      const session = await signIn(email);
-      const target = `prof-${RUN_ID}-em-single-use-new@ministry.gov.example`;
-      const token = await requestChange(email, target, session);
+      const email = await account('em-reuse');
+      const target = `prof-${RUN_ID}-em-reuse-new@ministry.gov.example`;
+      const token = await requestChange(email, target);
 
       await send('post', '/api/auth/confirm-email-change', { token }).expect(200);
       await send('post', '/api/auth/confirm-email-change', { token }).expect(401);

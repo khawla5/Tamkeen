@@ -126,7 +126,7 @@ describe('profile — editing name and department', () => {
     renderWithProviders(<ProfilePage />);
     const user = userEvent.setup();
 
-    const save = screen.getByRole('button', { name: 'حفظ' });
+    const save = screen.getByRole('button', { name: 'حفظ الاسم والإدارة' });
     expect(save).toBeDisabled();
 
     await user.type(screen.getByLabelText('الاسم الكامل'), ' إضافة');
@@ -139,7 +139,7 @@ describe('profile — editing name and department', () => {
 
     const nameInput = screen.getByLabelText('الاسم الكامل');
     await user.clear(nameInput);
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await user.click(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' }));
 
     expect(await screen.findByText('الاسم الكامل مطلوب.')).toBeInTheDocument();
     expect(api.update).not.toHaveBeenCalled();
@@ -160,7 +160,7 @@ describe('profile — editing name and department', () => {
     renderWithProviders(<ProfilePage />);
     const user = userEvent.setup();
 
-    const save = screen.getByRole('button', { name: 'حفظ' });
+    const save = screen.getByRole('button', { name: 'حفظ الاسم والإدارة' });
     expect(save).toBeDisabled();
 
     await user.selectOptions(screen.getByLabelText('الإدارة'), 'المديرية العامة للجوازات');
@@ -180,7 +180,7 @@ describe('profile — editing name and department', () => {
     const nameInput = screen.getByLabelText('الاسم الكامل');
     await user.clear(nameInput);
     await user.type(nameInput, '  سارة الجديدة  ');
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await user.click(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' }));
 
     await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
     expect(api.update).toHaveBeenCalledWith({
@@ -190,7 +190,7 @@ describe('profile — editing name and department', () => {
 
     expect(await screen.findByText('تم الحفظ')).toBeInTheDocument();
     /* Nothing left to save — the server's copy is now the baseline. */
-    expect(screen.getByRole('button', { name: 'حفظ' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' })).toBeDisabled();
     /* Keeps the portal-wide user in sync, same as the digits card's save. */
     expect(portal.value.refreshSession).toHaveBeenCalled();
   });
@@ -202,11 +202,11 @@ describe('profile — editing name and department', () => {
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText('الاسم الكامل'), ' إضافة');
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await user.click(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' }));
 
     expect(await screen.findByText('تعذّر حفظ البيانات. حاول مرة أخرى.')).toBeInTheDocument();
     expect(screen.getByLabelText('الاسم الكامل')).toHaveValue('سارة العتيبي إضافة');
-    expect(screen.getByRole('button', { name: 'حفظ' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' })).toBeEnabled();
   });
 
   it('signs out and redirects to /login regardless of the request outcome', async () => {

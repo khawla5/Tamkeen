@@ -223,7 +223,15 @@ export default function ProfilePage() {
               ) : null}
 
               <div className="flex items-center gap-3">
-                <Button type="submit" disabled={save.isPending || !isDirty}>
+                {/* Same visible "حفظ" every save button on this page uses, but
+                    a card-specific accessible name — the digits card below
+                    has one too, and two controls both announced as plain
+                    "حفظ" would be indistinguishable to a screen reader. */}
+                <Button
+                  type="submit"
+                  aria-label={t('saveAriaLabel')}
+                  disabled={save.isPending || !isDirty}
+                >
                   {save.isPending ? t('saving') : t('save')}
                 </Button>
 

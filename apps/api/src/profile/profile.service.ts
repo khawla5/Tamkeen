@@ -15,6 +15,9 @@ export interface ProfileView {
   employeeId: string;
   department: string;
   role: UserRole;
+  /** Unaffected by this endpoint — carried through so the response still
+   *  satisfies the same `CurrentUser` shape `/auth/me` returns (§4.12). */
+  numberFormat: string | null;
 }
 
 /**
@@ -51,6 +54,7 @@ export class ProfileService {
         department: true,
         role: true,
         moodleUserId: true,
+        numberFormat: true,
       },
     });
 
@@ -68,6 +72,7 @@ export class ProfileService {
         employeeId: current.employeeId,
         department: current.department,
         role: current.role,
+        numberFormat: current.numberFormat,
       };
     }
 
@@ -103,6 +108,7 @@ export class ProfileService {
       employeeId: current.employeeId,
       department: dto.department,
       role: current.role,
+      numberFormat: current.numberFormat,
     };
   }
 
