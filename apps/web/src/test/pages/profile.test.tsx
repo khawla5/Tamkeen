@@ -100,16 +100,26 @@ describe('Profile', () => {
     expect(api.update).not.toHaveBeenCalled();
   });
 
-  it('rejects an empty department inline, without calling the API', async () => {
+  it('offers the department only as a closed list, with no selectable empty option', () => {
+    renderWithProviders(<ProfilePage />);
+
+    /* A native <select> can't be "cleared" the way a text input can — the
+       guarantee against an empty department now lives in the placeholder
+       being unselectable, not in post-submit validation reachable through
+       the UI. */
+    expect(screen.getByRole('option', { name: 'اختر الإدارة' })).toBeDisabled();
+    expect(screen.getByLabelText('الإدارة').tagName).toBe('SELECT');
+  });
+
+  it('picking a department from the list marks the form dirty', async () => {
     renderWithProviders(<ProfilePage />);
     const user = userEvent.setup();
 
-    const deptInput = screen.getByLabelText('الإدارة');
-    await user.clear(deptInput);
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    const save = screen.getByRole('button', { name: 'حفظ' });
+    expect(save).toBeDisabled();
 
-    expect(await screen.findByText('الإدارة مطلوبة.')).toBeInTheDocument();
-    expect(api.update).not.toHaveBeenCalled();
+    await user.selectOptions(screen.getByLabelText('الإدارة'), 'المديرية العامة للجوازات');
+    expect(save).toBeEnabled();
   });
 
   it('saves the trimmed values and shows a saved confirmation', async () => {

@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { authApi, profileApi } from '@/lib/api-client';
+import { DEPARTMENTS } from '@/lib/auth-constants';
 import { useApiMutation } from '@/lib/use-api';
 
 type FieldName = 'fullName' | 'department';
@@ -78,6 +80,19 @@ export default function ProfilePage() {
     const code = fieldErrors[key];
     return code ? tErrors(code) : undefined;
   };
+
+  /*
+   * The dropdown only ever *offers* the closed list — but the server still
+   * accepts any non-empty department (auth-constants.ts), so an existing
+   * value from before this list existed, or simply not on it, must stay
+   * selected rather than silently blank out or snap to the first option.
+   * Once the employee picks a real option this extra entry drops away on
+   * its own, since `department` no longer needs it.
+   */
+  const departmentOptions =
+    department.length === 0 || DEPARTMENTS.includes(department)
+      ? DEPARTMENTS
+      : [department, ...DEPARTMENTS];
 
   async function onSave(event: FormEvent) {
     event.preventDefault();
@@ -159,11 +174,20 @@ export default function ProfilePage() {
                 error={errorFor('department')}
               >
                 {(fieldProps) => (
-                  <Input
+                  <Select
                     {...fieldProps}
                     value={department}
                     onChange={(event) => setDepartment(event.target.value)}
-                  />
+                  >
+                    <option value="" disabled>
+                      {t('departmentPlaceholder')}
+                    </option>
+                    {departmentOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </Select>
                 )}
               </Field>
 
