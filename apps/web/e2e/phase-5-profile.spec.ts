@@ -100,7 +100,13 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
     await here.getByLabel('تأكيد كلمة المرور').fill(NEXT_PASSWORD);
     await here.getByRole('button', { name: 'تغيير كلمة المرور' }).click();
 
-    await expect(here.getByRole('status')).toContainText('جلساتك الأخرى', { timeout: 15_000 });
+    /* Named by its words, not just by the role: D-072's navigation progress
+       renders an app-wide sr-only role="status", so a bare match is ambiguous
+       — and D-089 is the reminder that a loose status assertion hides the very
+       bug it should catch. */
+    await expect(here.getByRole('status').filter({ hasText: 'جلساتك الأخرى' })).toBeVisible({
+      timeout: 15_000,
+    });
 
     /*
      * The point of the whole thing. Whoever knew the old password is signed
@@ -192,7 +198,9 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
 
     /* Names the address it went to. "A link has been sent" without saying where
        is unhelpful exactly when it matters — when the address was mistyped. */
-    await expect(here.getByRole('status')).toContainText(movedEmail, { timeout: 15_000 });
+    await expect(here.getByRole('status').filter({ hasText: movedEmail })).toBeVisible({
+      timeout: 15_000,
+    });
 
     /* And the account has not moved. The old address still signs in, which is
        the property that makes this safe: nothing depends on an inbox nobody
