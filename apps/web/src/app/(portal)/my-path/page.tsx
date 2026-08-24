@@ -41,7 +41,7 @@ function NoPath() {
   const t = useTranslations('myPath');
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div>
       <EmptyState
         title={t('emptyTitle')}
         body={t('emptyBody')}
@@ -63,7 +63,7 @@ function PathRun({ path }: { path: MyPathView }) {
      choosing rather than showing a progress bar over an unconfirmed selection. */
   if (path.status === 'BUILDING') {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div>
         <EmptyState
           title={t('buildingTitle')}
           body={t('buildingBody')}
@@ -78,7 +78,7 @@ function PathRun({ path }: { path: MyPathView }) {
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
           <CardTitle>{path.pathName}</CardTitle>

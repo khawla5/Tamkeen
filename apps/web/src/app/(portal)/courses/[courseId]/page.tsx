@@ -60,7 +60,7 @@ function Detail({ course, onReload }: { course: CourseDetail; onReload: () => vo
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
       {/* No card title: the page header already carries the course name as the
           page's single h1, and repeating it is the redundant UI §3 forbids. */}
       <Card>

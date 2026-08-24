@@ -36,7 +36,7 @@ export default function CoursePlayerPage() {
   const player = useApiQuery(() => coursesApi.player(courseId), [courseId]);
 
   return (
-    <PortalPage title={t('title')}>
+    <PortalPage title={t('title')} width="narrow">
       <DataView isLoading={player.isLoading} error={player.error} onRetry={player.refetch}>
         {player.data ? <Player course={player.data} /> : null}
       </DataView>
@@ -65,7 +65,7 @@ function Player({ course }: { course: CoursePlayerView }) {
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="space-y-6">
       <Card>
         <CardHeader>
           {course.pathName ? (

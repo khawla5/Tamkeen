@@ -74,7 +74,7 @@ test.describe('Phase 5 — assessment management', () => {
   test('an admin reaches the assessment page and sees what is in force', async () => {
     await adminPage.goto('/login');
     await adminPage.getByLabel('البريد الإلكتروني').fill(admin.email);
-    await adminPage.getByLabel('كلمة المرور').fill(ADMIN_PASSWORD);
+    await adminPage.getByLabel('كلمة المرور', { exact: true }).fill(ADMIN_PASSWORD);
     await adminPage.getByRole('button', { name: 'تسجيل الدخول' }).click();
     await expect(adminPage).toHaveURL(/\/admin$/, { timeout: 15_000 });
 

@@ -2,9 +2,23 @@
 
 import type { ReactNode } from 'react';
 
+import { cn } from '@/lib/utils';
+
 import { AppShell } from './app-shell';
 import { navForState } from './nav-items';
 import { usePortal } from './portal-provider';
+
+/**
+ * The one content width (TAM-124): الرئيسية is the reference, and every page
+ * inherits it from here rather than declaring its own — pages had drifted
+ * across 2xl/3xl/4xl/6xl and most floated in whitespace. The fixed counter bar
+ * on the path-build page sits outside the flow and cannot inherit the wrapper,
+ * so it shares this constant instead of a second literal.
+ */
+export const PAGE_MAX_WIDTH = 'max-w-6xl';
+
+/** The explicit opt-in for genuinely narrow flows — a form, a question. */
+const NARROW_MAX_WIDTH = 'max-w-2xl';
 
 export interface PortalPageProps {
   title: string;
@@ -19,12 +33,30 @@ export interface PortalPageProps {
    * nothing — so it keeps the rail.
    */
   chrome?: 'nav' | 'bare';
+  /**
+   * `narrow` is for flows that read as a single column by nature — the
+   * assessment's one question, the profile's forms, the player. Everything
+   * else takes the standard width and must not re-wrap itself.
+   */
+  width?: 'default' | 'narrow';
   children: ReactNode;
 }
 
 /** The frame every authenticated page uses, with the nav gated by §4.2. */
-export function PortalPage({ title, action, chrome = 'nav', children }: PortalPageProps) {
+export function PortalPage({
+  title,
+  action,
+  chrome = 'nav',
+  width = 'default',
+  children,
+}: PortalPageProps) {
   const { user, dashboard, unreadCertificates } = usePortal();
+
+  const container = (
+    <div className={cn('mx-auto w-full', width === 'narrow' ? NARROW_MAX_WIDTH : PAGE_MAX_WIDTH)}>
+      {children}
+    </div>
+  );
 
   if (chrome === 'bare') {
     return (
@@ -33,7 +65,7 @@ export function PortalPage({ title, action, chrome = 'nav', children }: PortalPa
           <h1 className="text-xl font-semibold text-foreground">{title}</h1>
         </header>
         <main id="main-content" className="p-6">
-          {children}
+          {container}
         </main>
       </div>
     );
@@ -49,7 +81,7 @@ export function PortalPage({ title, action, chrome = 'nav', children }: PortalPa
       /* §2: the indicator points at exactly one destination. */
       indicators={unreadCertificates > 0 ? ['certificates'] : undefined}
     >
-      {children}
+      {container}
     </AppShell>
   );
 }

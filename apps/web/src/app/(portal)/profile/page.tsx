@@ -327,7 +327,7 @@ function EmailCard({ current }: { current: string }) {
   }
 
   return (
-    <Card className="mt-6">
+    <Card>
       <CardHeader>
         <CardTitle>{t('emailHeading')}</CardTitle>
       </CardHeader>
@@ -434,7 +434,7 @@ function DigitsCard({
   }
 
   return (
-    <Card className="mt-6">
+    <Card>
       <CardHeader>
         <CardTitle>{t('digitsHeading')}</CardTitle>
       </CardHeader>
@@ -512,7 +512,7 @@ function PasswordCard() {
   }
 
   return (
-    <Card className="mt-6">
+    <Card>
       <CardHeader>
         <CardTitle>{t('passwordHeading')}</CardTitle>
       </CardHeader>
