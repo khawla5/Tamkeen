@@ -315,11 +315,27 @@ describe('Admin users (§4C.2)', () => {
   });
 
   describe('organisations', () => {
+    it('stays out of the way until the administrator filters to entity accounts', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+
+      await screen.findByRole('table');
+      /* No tab bar any more: the organisations are not a mode to switch into,
+         they are context for a filter the administrator has already applied. */
+      expect(screen.queryByRole('button', { name: 'الجهات' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'إضافة جهة' })).not.toBeInTheDocument();
+
+      await user.selectOptions(screen.getByLabelText('الدور'), 'ENTITY');
+
+      expect(await screen.findByRole('heading', { name: 'الجهات' })).toBeInTheDocument();
+    });
+
     it('explains the empty state by naming what to do first', async () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminUsersPage />);
 
-      await user.click(await screen.findByRole('button', { name: 'الجهات' }));
+      await screen.findByRole('table');
+      await user.selectOptions(screen.getByLabelText('الدور'), 'ENTITY');
 
       expect(await screen.findByText('لا توجد جهات بعد')).toBeInTheDocument();
     });
@@ -341,7 +357,8 @@ describe('Admin users (§4C.2)', () => {
       ]);
 
       renderWithProviders(<AdminUsersPage />);
-      await user.click(await screen.findByRole('button', { name: 'الجهات' }));
+      await screen.findByRole('table');
+      await user.selectOptions(screen.getByLabelText('الدور'), 'ENTITY');
 
       expect(await screen.findByText('معهد الإدارة')).toBeInTheDocument();
       expect(screen.getByText('0 حساب · 0 دورة')).toBeInTheDocument();

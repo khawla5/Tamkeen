@@ -80,7 +80,9 @@ test.describe('Phase 5 — user management', () => {
     await adminPage.getByRole('link', { name: 'الحسابات' }).click();
     await expect(adminPage.getByRole('heading', { name: 'إدارة الحسابات' })).toBeVisible();
 
-    await adminPage.getByRole('button', { name: 'الجهات' }).click();
+    /* The organisations appear under the entity-role filter — there is no tab
+       to switch to any more (TAM-131). */
+    await adminPage.getByLabel('الدور').selectOption('ENTITY');
     await adminPage.getByRole('button', { name: 'إضافة جهة' }).click();
 
     /* Labels, not CSS selectors: a label that getByLabel cannot find is a field

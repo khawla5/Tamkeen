@@ -26,13 +26,16 @@ import { useApiQuery } from '@/lib/use-api';
  * page is a filter, a list, or a decision taken about a row the administrator
  * has already selected — none of which competes with it.
  *
- * The two tabs are not two pages. An administrator onboarding a supplier has to
- * create the organisation before an account can act for it, and splitting those
- * across menu items would make the ordering a thing to discover by failing.
+ * **The organisations are a filter away, not a tab away.** A tab bar is a second
+ * navigation on a page that already has one, and it forced a mode choice before
+ * the administrator had said what they were looking for. Filtering the role to
+ * «جهة» is that statement — and it is the only moment the organisations behind
+ * those accounts are relevant, so that is when the panel appears, directly above
+ * the accounts it explains. Onboarding still reads in its natural order:
+ * organisation first, then the accounts that act for it.
  */
 export default function AdminUsersPage() {
   const t = useTranslations('admin');
-  const [tab, setTab] = useState<'users' | 'entities'>('users');
   const [creating, setCreating] = useState(false);
 
   return (
@@ -40,25 +43,14 @@ export default function AdminUsersPage() {
       title={t('usersTitle')}
       action={<Button onClick={() => setCreating(true)}>{t('createUser')}</Button>}
     >
-      <div className="space-y-6">
-        <nav aria-label={t('usersTitle')} className="flex gap-1 border-b border-border">
-          <TabButton active={tab === 'users'} onClick={() => setTab('users')}>
-            {t('tabAccounts')}
-          </TabButton>
-          <TabButton active={tab === 'entities'} onClick={() => setTab('entities')}>
-            {t('tabEntities')}
-          </TabButton>
-        </nav>
-
-        {tab === 'users' ? <UsersTab /> : <EntitiesPanel />}
-      </div>
+      <AccountsView />
 
       {creating ? <CreateUserDialog onClose={() => setCreating(false)} /> : null}
     </AdminPage>
   );
 }
 
-function UsersTab() {
+function AccountsView() {
   const t = useTranslations('admin');
   const [q, setQ] = useState('');
   const [role, setRole] = useState<UserRole | ''>('');
@@ -78,7 +70,7 @@ function UsersTab() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
         <Field id="user-search" label={t('searchLabel')}>
           {(field) => (
@@ -132,6 +124,21 @@ function UsersTab() {
           )}
         </Field>
       </div>
+
+      {/*
+        The organisations, shown exactly when the administrator has said they
+        are looking at entity accounts. `createEntity` lives inside the panel,
+        so the supplier-onboarding order — organisation, then its accounts — is
+        still readable top to bottom without a tab to find it behind.
+      */}
+      {role === 'ENTITY' ? (
+        <section aria-labelledby="admin-entities" className="space-y-3">
+          <h2 id="admin-entities" className="text-lg font-semibold text-foreground">
+            {t('tabEntities')}
+          </h2>
+          <EntitiesPanel />
+        </section>
+      ) : null}
 
       <DataView
         isLoading={users.isInitialLoad}
@@ -294,33 +301,6 @@ function Pagination({
         </Button>
       </div>
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? 'page' : undefined}
-      className={
-        active
-          ? /* Weight as well as the gold edge, so position is not signalled by
-               colour alone (WCAG 1.4.1). */
-            'border-b-2 border-gold px-4 py-2 text-sm font-semibold text-foreground'
-          : 'border-b-2 border-transparent px-4 py-2 text-sm text-muted-foreground hover:text-foreground'
-      }
-    >
-      {children}
-    </button>
   );
 }
 
