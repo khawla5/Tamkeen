@@ -21,6 +21,7 @@ const api = vi.hoisted(() => ({
   player: vi.fn(),
   launch: vi.fn(),
   sync: vi.fn(),
+  outline: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async () => ({
@@ -29,6 +30,7 @@ vi.mock('@/lib/api-client', async () => ({
     player: api.player,
     launch: api.launch,
     sync: api.sync,
+    outline: api.outline,
   },
 }));
 
@@ -71,6 +73,28 @@ const show = async (overrides: Partial<CoursePlayerView> = {}) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  api.outline.mockResolvedValue({
+    items: [
+      {
+        moduleId: 11,
+        name: 'مقدمة',
+        kind: 'page',
+        url: 'http://moodle.test/mod/page/view.php?id=11',
+      },
+      {
+        moduleId: 12,
+        name: 'المذكرة',
+        kind: 'resource',
+        url: 'http://moodle.test/mod/resource/view.php?id=12',
+      },
+      {
+        moduleId: 13,
+        name: 'الاختبار',
+        kind: 'quiz',
+        url: 'http://moodle.test/mod/quiz/view.php?id=13',
+      },
+    ],
+  });
   api.launch.mockResolvedValue({ url: 'http://moodle.test/local/tamkeensso/login.php?token=x' });
 });
 
@@ -239,5 +263,51 @@ describe('course player — the framed course (D-102)', () => {
 
     expect(await screen.findByText(/تعذّر عرض الدورة داخل الصفحة/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /افتح في منصة التعلّم/ })).toBeInTheDocument();
+  });
+
+  describe('course player — previous / next (D-103)', () => {
+    const ready = (cmid: number | null) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            origin: 'http://moodle.test',
+            data: { type: 'tamkeen:ready', cmid },
+          }),
+        );
+      });
+
+    it('follows the frame: on the course page only "next" leads in; on an activity both sides work', async () => {
+      await show();
+      await screen.findByTitle(COURSE.title);
+      ready(null);
+
+      expect(await screen.findByText(/صفحة الدورة/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /السابق/ })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /التالي/ })).toBeEnabled();
+
+      ready(12);
+      expect(await screen.findByText('النشاط 2 من 3')).toBeInTheDocument();
+      expect(screen.getByText('المذكرة')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /السابق/ })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /التالي/ })).toBeEnabled();
+
+      ready(13);
+      expect(await screen.findByText('النشاط 3 من 3')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /التالي/ })).toBeDisabled();
+    });
+
+    it('moves the frame to the neighbour without minting a new launch', async () => {
+      const { default: userEvent } = await import('@testing-library/user-event');
+      await show();
+      const frame = (await screen.findByTitle(COURSE.title)) as HTMLIFrameElement;
+      ready(12);
+      await screen.findByText('النشاط 2 من 3');
+      api.launch.mockClear();
+
+      await userEvent.click(screen.getByRole('button', { name: /التالي/ }));
+
+      expect(frame.src).toBe('http://moodle.test/mod/quiz/view.php?id=13');
+      expect(api.launch).not.toHaveBeenCalled();
+    });
   });
 });

@@ -1,15 +1,16 @@
 'use client';
 
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
-import type { CoursePlayerView } from '@tamkeen/types';
+import type { CourseOutlineView, CoursePlayerView } from '@tamkeen/types';
 
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { PortalPage } from '@/components/layout/portal-page';
-import { MoodleEmbed } from '@/components/moodle-embed';
+import { MoodleEmbed, type MoodleEmbedHandle } from '@/components/moodle-embed';
 import { DataView } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -58,6 +59,23 @@ function Player({ course, onOutcome }: { course: CoursePlayerView; onOutcome: ()
     [course.courseId],
   );
   const launchFullPage = useCallback(() => coursesApi.launch(course.courseId), [course.courseId]);
+  /* The outline (D-103): the activities in order, so the panel can say where
+     the learner is and move the frame to the neighbour. Loaded only when the
+     course can be entered; the frame reports which activity it shows. */
+  const outline = useApiQuery<CourseOutlineView>(
+    () => (course.canLaunch ? coursesApi.outline(course.courseId) : Promise.resolve({ items: [] })),
+    [course.courseId, course.canLaunch],
+  );
+  const frame = useRef<MoodleEmbedHandle>(null);
+  const [currentModuleId, setCurrentModuleId] = useState<number | null>(null);
+  const items = outline.data?.items ?? [];
+  const currentIndex = items.findIndex((item) => item.moduleId === currentModuleId);
+  const previous = currentIndex > 0 ? items[currentIndex - 1] : null;
+  const next = currentIndex === -1 ? (items[0] ?? null) : (items[currentIndex + 1] ?? null);
+  const onReady = useCallback((info: { moduleId: number | null }) => {
+    setCurrentModuleId(info.moduleId);
+  }, []);
+
   const onQuizFinished = useCallback(() => {
     /* The sync is best-effort: the scheduled run remains the safety net. */
     coursesApi
@@ -114,6 +132,48 @@ function Player({ course, onOutcome }: { course: CoursePlayerView; onOutcome: ()
               <p className="text-muted-blue text-sm">{t('notEnrolled')}</p>
             ) : null}
 
+            {items.length > 0 ? (
+              <nav aria-label={t('outlineNav')} className="space-y-2 border-t border-border pt-3">
+                <p className="text-sm">
+                  {currentIndex === -1 ? (
+                    <span className="text-muted-blue">
+                      {t('outlineAtCourse', { total: format.number(items.length) })}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-muted-blue">
+                        {t('outlinePosition', {
+                          order: format.number(currentIndex + 1),
+                          total: format.number(items.length),
+                        })}
+                      </span>
+                      <span className="block font-medium">{items[currentIndex]!.name}</span>
+                    </>
+                  )}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!previous}
+                    onClick={() => previous && frame.current?.navigate(previous.url)}
+                  >
+                    <ChevronRight aria-hidden="true" className="size-4 ltr:rotate-180" />
+                    {t('previous')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!next}
+                    onClick={() => next && frame.current?.navigate(next.url)}
+                  >
+                    {t('next')}
+                    <ChevronLeft aria-hidden="true" className="size-4 ltr:rotate-180" />
+                  </Button>
+                </div>
+              </nav>
+            ) : null}
+
             <div className="flex flex-wrap gap-2 pt-1">
               <Button asChild variant="outline" size="sm">
                 <Link href="/my-path">{t('backToPath')}</Link>
@@ -132,6 +192,8 @@ function Player({ course, onOutcome }: { course: CoursePlayerView; onOutcome: ()
       <div className="min-w-0">
         {course.canLaunch ? (
           <MoodleEmbed
+            ref={frame}
+            onReady={onReady}
             title={course.title}
             labels={{
               loading: t('embedLoading'),

@@ -15,6 +15,7 @@ import type { Request } from 'express';
 import type {
   CourseDetail,
   CourseLaunchView,
+  CourseOutlineView,
   CoursePlayerView,
   CourseSummary,
 } from '@tamkeen/types';
@@ -74,6 +75,15 @@ export class CoursesController {
    * be prefetched by a browser, cached, or arrived at by following a link — and
    * as a POST it is covered by the CSRF protection every mutating endpoint gets.
    */
+  /** The framed player's previous / next (D-103). */
+  @Get(':id/outline')
+  outline(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) courseId: string,
+  ): Promise<CourseOutlineView> {
+    return this.player.outline(user.id, courseId);
+  }
+
   @Post(':id/launch')
   launch(
     @CurrentUser() user: AuthenticatedUser,

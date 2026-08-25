@@ -64,11 +64,14 @@ class hook_callbacks {
         // A learner has just submitted a quiz when the review page renders
         // (D-102); the portal then asks for an on-demand completion sync.
         $quizfinished = $mode === 'learner' && strpos((string) $PAGE->pagetype, 'mod-quiz-review') === 0;
+        // Which activity this page is — the portal's previous/next keeps in
+        // step with what the frame shows (D-103). Null on the course page.
+        $cmid = ($PAGE->cm !== null) ? (int) $PAGE->cm->id : null;
 
         $hook->add_html(self::chrome_css($mode));
 
         if ($origin !== null) {
-            $hook->add_html(self::messaging_script($origin, $changed, $quizfinished));
+            $hook->add_html(self::messaging_script($origin, $changed, $quizfinished, $cmid));
         }
     }
 
@@ -125,19 +128,20 @@ class hook_callbacks {
             . '</style>';
     }
 
-    private static function messaging_script(string $origin, bool $changed, bool $quizfinished = false): string {
+    private static function messaging_script(string $origin, bool $changed, bool $quizfinished = false, ?int $cmid = null): string {
         // Target origin is the configured ancestor, never `*`: a message to a
         // wildcard would reach whatever framed the page, and the whole point
         // of frame-ancestors is that only the portal can.
         $originjson = json_encode($origin, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
         $changedjson = $changed ? 'true' : 'false';
         $quizjson = $quizfinished ? 'true' : 'false';
+        $cmidjson = $cmid === null ? 'null' : (string) $cmid;
 
         return '<script id="tamkeen-embed-messages">(function(){'
             . 'var origin=' . $originjson . ';'
             . 'if(!origin||window.parent===window){return;}'
             . 'function post(message){try{window.parent.postMessage(message,origin);}catch(e){}}'
-            . 'function announce(){post({type:"tamkeen:ready"});'
+            . 'function announce(){post({type:"tamkeen:ready",cmid:' . $cmidjson . '});'
             . 'if(' . $changedjson . '){post({type:"tamkeen:content-changed"});}'
             . 'if(' . $quizjson . '){post({type:"tamkeen:quiz-finished"});}}'
             . 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",announce);}'

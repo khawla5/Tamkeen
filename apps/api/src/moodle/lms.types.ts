@@ -104,6 +104,20 @@ export interface EnrolInput {
  * and modelling Moodle's module structure here would leak its schema across the
  * boundary D-030 exists to hold.
  */
+/**
+ * One activity of a course, in course order — enough for the portal to say
+ * "النشاط 3 من 8" and move the frame to the previous or next one (D-103).
+ * Still not content: a name, a kind and the LMS's own page for it.
+ */
+export interface LmsCourseOutlineItem {
+  lmsModuleId: number;
+  name: string;
+  /** The LMS's module kind (`quiz`, `page`, `resource`, `url`, `book`…). */
+  kind: string;
+  /** The activity's page on the LMS, session-less; the framed session opens it. */
+  url: string;
+}
+
 export interface LmsCourseContentSummary {
   lmsCourseId: LmsCourseId;
   /** Total activities across all sections. */

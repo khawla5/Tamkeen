@@ -788,3 +788,8 @@
 
 - **Labels:** `moodle-embed`, `frontend`, `backend`, `moodle-plugin`
 - **What shipped (2026-08-25):** plugin 0.3.0 — `embed=learner` (no editing; navbar, footer, breadcrumb **and course tabs** hidden; course index kept) and `tamkeen:quiz-finished` from the quiz review page; `LaunchOptions.embed: 'author' | 'learner'`; `POST /api/courses/:id/launch { embed }` → `{ url, mode }`; `POST /api/courses/:id/sync` (per-learner on-demand completion sync, 10 s cooldown, same `syncUser` as the schedule); `components/moodle-embed.tsx` shared by the entity Content page and the player (labels + launches injected); the player keeps its header (path context, description, outcome) and frames the course beneath, fallback under it. Tests: player suite rewritten (URL absent before launch / only as frame src after; frames nothing before commitment; quiz message → sync + refetch; foreign origin ignored; failed launch → fallback), web 519, API 209 + e2e 105. Proven live as `demo-student` on course 85.
+
+## TAM-137 — Player: previous / next between activities, and "where am I" in the panel — **DONE** (at the user's direction, on `feature/tam-130-entity-content-embed`, D-103)
+
+- **Labels:** `moodle-embed`, `frontend`, `backend`, `moodle-plugin`
+- **What shipped (2026-08-25):** `LmsPort.getCourseOutline` (real + mock, contract case), `GET /api/courses/:id/outline` (same gate as launch), plugin 0.3.1 (`tamkeen:ready` carries `cmid`), `MoodleEmbed` exposes `navigate(url)` through a ref and reports `onReady({ moduleId })`, the player panel shows «النشاط n من N · name» (or «صفحة الدورة · N أنشطة») with «السابق / التالي» that move the frame without a new launch and stay in step with in-frame navigation. Tests: player +2, web 521, API 164; proven live.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 import { ErrorState, LoadingState } from '@/components/states';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,12 @@ import { Button } from '@/components/ui/button';
 export const EMBED_READY_TIMEOUT_MS = 8_000;
 
 type Phase = 'launching' | 'loading' | 'ready' | 'failed';
+
+/** What a page may do to the frame (D-103): move it to another LMS page. */
+export interface MoodleEmbedHandle {
+  /** Points the (already signed-in) frame at an LMS URL. */
+  navigate: (url: string) => void;
+}
 
 export interface MoodleEmbedLabels {
   loading: string;
@@ -40,32 +46,41 @@ export interface MoodleEmbedLabels {
  * The same link sits under the frame at all times for anyone who needs Moodle
  * at full size.
  */
-export function MoodleEmbed({
-  title,
-  labels,
-  launchEmbed,
-  launchFullPage,
-  translateError,
-  onContentChanged,
-  onQuizFinished,
-  readyTimeoutMs = EMBED_READY_TIMEOUT_MS,
-  frameClassName = 'h-[calc(100dvh-14rem)] min-h-[32rem]',
-}: {
-  /** The course name — the frame's accessible name. */
-  title: string;
-  labels: MoodleEmbedLabels;
-  /** Mints the framed launch (`embed: true`). Called once per mount. */
-  launchEmbed: () => Promise<{ url: string }>;
-  /** Mints the plain handoff, for the fallback. Called per click. */
-  launchFullPage: () => Promise<{ url: string }>;
-  translateError: (error: unknown) => string;
-  onContentChanged?: () => void;
-  onQuizFinished?: () => void;
-  /** Overridable for tests; pages never pass it. */
-  readyTimeoutMs?: number;
-  /** The frame's height — the page knows how much of the viewport it owns. */
-  frameClassName?: string;
-}) {
+export const MoodleEmbed = forwardRef<
+  MoodleEmbedHandle,
+  {
+    /** The course name — the frame's accessible name. */
+    title: string;
+    labels: MoodleEmbedLabels;
+    /** Mints the framed launch (`embed: true`). Called once per mount. */
+    launchEmbed: () => Promise<{ url: string }>;
+    /** Mints the plain handoff, for the fallback. Called per click. */
+    launchFullPage: () => Promise<{ url: string }>;
+    translateError: (error: unknown) => string;
+    onContentChanged?: () => void;
+    onQuizFinished?: () => void;
+    /** Every framed render, with the LMS module it shows (null on the course page). */
+    onReady?: (info: { moduleId: number | null }) => void;
+    /** Overridable for tests; pages never pass it. */
+    readyTimeoutMs?: number;
+    /** The frame's height — the page knows how much of the viewport it owns. */
+    frameClassName?: string;
+  }
+>(function MoodleEmbed(
+  {
+    title,
+    labels,
+    launchEmbed,
+    launchFullPage,
+    translateError,
+    onContentChanged,
+    onQuizFinished,
+    onReady,
+    readyTimeoutMs = EMBED_READY_TIMEOUT_MS,
+    frameClassName = 'h-[calc(100dvh-14rem)] min-h-[32rem]',
+  },
+  ref,
+) {
   const [phase, setPhase] = useState<Phase>('launching');
   const [src, setSrc] = useState<string | null>(null);
   const [origin, setOrigin] = useState<string | null>(null);
@@ -83,12 +98,25 @@ export function MoodleEmbed({
   const translateRef = useRef(translateError);
   const contentChangedRef = useRef(onContentChanged);
   const quizFinishedRef = useRef(onQuizFinished);
+  const readyRef = useRef(onReady);
+  const frameRef = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
     launchEmbedRef.current = launchEmbed;
     translateRef.current = translateError;
     contentChangedRef.current = onContentChanged;
     quizFinishedRef.current = onQuizFinished;
+    readyRef.current = onReady;
   });
+
+  /* Navigation from the page (D-103): setting `src` on a cross-origin frame is
+     allowed, and the frame's session carries over, so no new token is minted. */
+  useImperativeHandle(ref, () => ({
+    navigate: (url: string) => {
+      if (frameRef.current) {
+        frameRef.current.src = url;
+      }
+    },
+  }));
 
   /* Mint on mount. The cleanup flag matters: React's development double-mount
      would otherwise put the FIRST (already superseded) URL into the frame. */
@@ -144,6 +172,8 @@ export function MoodleEmbed({
 
       if (data.type === 'tamkeen:ready') {
         setPhase((current) => (current === 'failed' ? current : 'ready'));
+        const cmid = (data as { cmid?: unknown }).cmid;
+        readyRef.current?.({ moduleId: typeof cmid === 'number' ? cmid : null });
       } else if (data.type === 'tamkeen:content-changed') {
         contentChangedRef.current?.();
       } else if (data.type === 'tamkeen:quiz-finished') {
@@ -192,6 +222,7 @@ export function MoodleEmbed({
 
         {src ? (
           <iframe
+            ref={frameRef}
             src={src}
             title={title}
             allow="fullscreen"
@@ -212,4 +243,4 @@ export function MoodleEmbed({
       </Button>
     </div>
   );
-}
+});

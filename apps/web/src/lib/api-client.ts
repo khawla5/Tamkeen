@@ -47,6 +47,7 @@ import type {
   AssessmentView,
   CourseDetail,
   CourseLaunchView,
+  CourseOutlineView,
   CoursePlayerView,
   CourseLanguage,
   CoursePublication,
@@ -350,6 +351,8 @@ export const coursesApi = {
     api.post<CourseLaunchView>(`/api/courses/${courseId}/launch`, {
       embed: options.embed === true,
     }),
+  /** The framed player's previous / next (D-103). */
+  outline: (courseId: string) => api.get<CourseOutlineView>(`/api/courses/${courseId}/outline`),
   /** On-demand completion sync after the framed quiz reports itself (D-102). */
   sync: (courseId: string) => api.post<{ synced: boolean }>(`/api/courses/${courseId}/sync`),
 };

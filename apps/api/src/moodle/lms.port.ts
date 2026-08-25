@@ -3,6 +3,7 @@ import type {
   EnrolInput,
   LmsCourse,
   LmsCourseContentSummary,
+  LmsCourseOutlineItem,
   LmsCourseId,
   LmsCourseProgress,
   LmsHealth,
@@ -88,6 +89,13 @@ export interface LmsPort {
    * actually completable. Returns null when the course does not exist.
    */
   getCourseContentSummary(lmsCourseId: LmsCourseId): Promise<LmsCourseContentSummary | null>;
+
+  /**
+   * The course's activities in order (D-103) — the framed player's previous /
+   * next. Labels and anything without a page of its own are omitted. Empty for
+   * a course the LMS does not know.
+   */
+  getCourseOutline(lmsCourseId: LmsCourseId): Promise<LmsCourseOutlineItem[]>;
 
   /**
    * Enrols a user in a course. Idempotent — enrolling an already-enrolled user

@@ -277,6 +277,20 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
       });
     });
 
+    describe('getCourseOutline', () => {
+      it('is empty for a course that does not exist, and ordered pages with a URL for one that does', async () => {
+        await expect(lms.getCourseOutline(99_999_999)).resolves.toEqual([]);
+
+        const outline = await lms.getCourseOutline(101);
+        for (const item of outline) {
+          expect(item.lmsModuleId).toEqual(expect.any(Number));
+          expect(item.url).toMatch(/^https?:\/\//);
+          expect(item.url).not.toMatch(/wstoken/i);
+          expect(item.kind).not.toBe('label');
+        }
+      });
+    });
+
     describe('getCourseContentSummary', () => {
       it('returns null for a course that does not exist', async () => {
         await expect(lms.getCourseContentSummary(99_999_999)).resolves.toBeNull();

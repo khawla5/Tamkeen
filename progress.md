@@ -874,3 +874,7 @@ The Arabic authoring guide as one Markdown file, rendered at `/entity/courses/gu
 ### 2026-08-25 — The learner's course framed (D-102, TAM-136) — on `feature/tam-130-entity-content-embed`
 
 At the user's direction after testing the entity side: `embed=learner` in the plugin (0.3.0), the learner launch flag, the on-demand `POST /courses/:id/sync`, one shared `MoodleEmbed` for both portals, the player rewritten around the frame with the handoff as fallback. Verified live as `demo-student` on the demo course (ready received, no editing, navbar + tabs hidden, course index kept, 8 activities). CLAUDE.md §4.8/§5.4 rewritten; D-102. The `nest start --watch` watcher missed the change again — restarted the API by hand. **Next:** the user's test → push + PR (the branch now carries TAM-130, 131, 132 entity half, 134, 136 and the fixes); TAM-133 and TAM-135 queued; Arabic pack download still pending.
+
+### 2026-08-25 — Player layout and previous/next (D-103, TAM-137) — on `feature/tam-130-entity-content-embed`
+
+The player became "the course is the page": full-height frame in the main column, a sticky context panel beside it (compact strip under `lg`), Moodle's own course heading hidden in learner mode. Then previous/next: outline endpoint + `cmid` in the plugin's ready message + `navigate` on the frame component; the panel follows the frame. Verified live and by tests. **Next:** the user's test → push + PR; TAM-133, TAM-135 queued; Arabic pack pending.

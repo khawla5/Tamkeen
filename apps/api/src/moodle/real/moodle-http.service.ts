@@ -8,6 +8,7 @@ import {
   type EnrolInput,
   type LmsCourse,
   type LmsCourseContentSummary,
+  LmsCourseOutlineItem,
   type LmsCourseId,
   type LmsCourseProgress,
   type LmsHealth,
@@ -74,7 +75,12 @@ interface MoodleCreatedCourse {
 }
 
 interface MoodleCourseModule {
+  id?: number;
+  name?: string;
   modname?: string;
+  url?: string;
+  visible?: number;
+  uservisible?: boolean;
   /** COMPLETION_TRACKING_*: 0 none, 1 manual, 2 automatic. */
   completion?: number;
 }
@@ -401,6 +407,43 @@ export class MoodleHttpService implements LmsPort {
     }
 
     return course;
+  }
+
+  /**
+   * The course's activities in order (D-103). One read of
+   * `core_course_get_contents`; labels carry no page and are dropped, hidden
+   * activities too — a learner's previous/next must never land on a page
+   * Moodle would then refuse.
+   */
+  async getCourseOutline(lmsCourseId: LmsCourseId): Promise<LmsCourseOutlineItem[]> {
+    let sections: MoodleCourseSection[] | undefined;
+
+    try {
+      sections = await this.client.call<MoodleCourseSection[]>('core_course_get_contents', {
+        courseid: lmsCourseId,
+      });
+    } catch (error) {
+      if (error instanceof MoodleWsError) {
+        return [];
+      }
+      throw error;
+    }
+
+    return (sections ?? [])
+      .flatMap((section) => section.modules ?? [])
+      .filter(
+        (module) =>
+          typeof module.id === 'number' &&
+          typeof module.url === 'string' &&
+          module.modname !== 'label' &&
+          (module.visible ?? 1) !== 0,
+      )
+      .map((module) => ({
+        lmsModuleId: module.id!,
+        name: module.name ?? '',
+        kind: module.modname ?? 'unknown',
+        url: module.url!,
+      }));
   }
 
   /**
