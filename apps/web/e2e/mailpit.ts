@@ -8,6 +8,16 @@
  */
 const MAILPIT_URL = process.env.MAILPIT_URL ?? 'http://localhost:8025';
 
+/**
+ * CI runs the whole suite on one shared, single-worker runner — API response
+ * times and SMTP delivery both slow down over a long run in a way a local
+ * machine never sees. 15s was tuned for local; widening it under CI (still
+ * well inside the 60s per-test budget in playwright.config.ts) trades a
+ * little patience for not failing on runner load that has nothing to do with
+ * whether the feature actually works.
+ */
+const DEFAULT_TIMEOUT_MS = process.env.CI ? 30_000 : 15_000;
+
 interface MailpitSummary {
   ID: string;
   Subject: string;
@@ -24,7 +34,7 @@ export async function waitForMessage(
   recipient: string,
   options: { timeoutMs?: number; subjectContains?: string } = {},
 ): Promise<string> {
-  const timeoutMs = options.timeoutMs ?? 15_000;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {

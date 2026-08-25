@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RegisterPage from '@/app/register/page';
+import { DEPARTMENTS } from '@/lib/auth-constants';
 import { renderWithProviders } from '@/test/render';
 
 const api = vi.hoisted(() => ({ register: vi.fn() }));
@@ -29,7 +30,7 @@ async function fillStepTwo(
   if (overrides.department !== null) {
     await user.selectOptions(
       screen.getByLabelText('الإدارة'),
-      overrides.department ?? 'تقنية المعلومات',
+      overrides.department ?? DEPARTMENTS[0]!,
     );
   }
 }
@@ -94,7 +95,7 @@ describe('RegisterPage', () => {
       password: PASSWORD,
       fullName: 'أحمد الموظف',
       employeeId: 'EMP-1234',
-      department: 'تقنية المعلومات',
+      department: DEPARTMENTS[0]!,
     });
     expect(
       await screen.findByRole('heading', { name: 'تحقّق من بريدك الإلكتروني' }),

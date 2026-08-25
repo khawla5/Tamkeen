@@ -225,7 +225,6 @@ test.describe('Phase 4 — the entity portal', () => {
 
     /* Gone from *new* selections… */
     await browsingPage.goto('/courses');
-    await browsingPage.waitForLoadState('networkidle');
     await expect(browsingPage.getByText(entity.borrowedCourse.title)).toHaveCount(0);
 
     /*

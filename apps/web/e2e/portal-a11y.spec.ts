@@ -21,8 +21,8 @@ async function expectNoViolations(page: Page, state: string): Promise<void> {
 }
 
 test.describe('the shell, held to WCAG 2.1 A/AA (TAM-117)', () => {
-  test.beforeAll(async ({ request }) => {
-    await assertMailpitReachable(request);
+  test.beforeAll(async () => {
+    await assertMailpitReachable();
   });
 
   test('the dashboard passes axe in all three states', async ({ page }) => {

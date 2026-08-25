@@ -71,6 +71,19 @@ export const AuditAction = {
    */
   CERTIFICATE_ISSUED: 'CERTIFICATE_ISSUED',
 
+  // Profile (§4.12)
+  /** An employee changed their own name and/or department. */
+  PROFILE_UPDATED: 'PROFILE_UPDATED',
+  /**
+   * The primary change already succeeded — a profile save, or a confirmed
+   * email change (§4.12, D-038 addendum) — but propagating it to the LMS did
+   * not. Recorded so the mismatch is discoverable rather than silent; the
+   * primary change is never rolled back over this, and retrying is D-036's
+   * reconciliation pattern to own, not this call site. `detail.field`
+   * ('fullName' or 'email') distinguishes which propagation failed.
+   */
+  PROFILE_LMS_SYNC_FAILED: 'PROFILE_LMS_SYNC_FAILED',
+
   // Entity portal (Phase 4)
   /** An entity created a course shell — in the LMS and in our catalogue. */
   ENTITY_COURSE_CREATED: 'ENTITY_COURSE_CREATED',

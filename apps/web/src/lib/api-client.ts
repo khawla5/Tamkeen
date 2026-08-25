@@ -298,6 +298,12 @@ export const authApi = {
     api.post<{ status: string }>('/api/auth/reset-password', { token, password }),
 };
 
+/** §4.12 — an employee's own profile: name and department, saved together. */
+export const profileApi = {
+  update: (input: { fullName: string; department: string }) =>
+    api.patch<CurrentUser>('/api/me/profile', input),
+};
+
 /**
  * Phase 1 endpoints.
  *

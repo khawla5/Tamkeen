@@ -126,6 +126,91 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
       });
     });
 
+    describe('updateUser', () => {
+      it('changes the name the LMS reports back', async () => {
+        const provisioned = await lms.provisionUser({
+          email: 'rename@ministry.gov.example',
+          fullName: 'الاسم الأول',
+          externalUserId: 'ext-rename',
+        });
+
+        await lms.updateUser({ lmsUserId: provisioned.lmsUserId, fullName: 'الاسم الجديد' });
+
+        const found = await lms.findUserByEmail('rename@ministry.gov.example');
+        expect(found?.fullName).toBe('الاسم الجديد');
+      });
+
+      it('is idempotent — writing the same name twice does not throw', async () => {
+        const provisioned = await lms.provisionUser({
+          email: 'rename-twice@ministry.gov.example',
+          fullName: 'اسم ثابت',
+          externalUserId: 'ext-rename-twice',
+        });
+
+        await lms.updateUser({ lmsUserId: provisioned.lmsUserId, fullName: 'اسم جديد' });
+
+        await expect(
+          lms.updateUser({ lmsUserId: provisioned.lmsUserId, fullName: 'اسم جديد' }),
+        ).resolves.not.toThrow();
+      });
+
+      it('rejects an id nothing provisioned', async () => {
+        /* The caller's contract, not this test's: a profile save must not
+           reach this for a user with no moodle_user_id at all (§4.12). This
+           only proves the adapter fails rather than silently no-opping if
+           that rule is ever broken upstream. */
+        await expect(
+          lms.updateUser({ lmsUserId: 99_999_999, fullName: 'لا أحد' }),
+        ).rejects.toThrow();
+      });
+
+      it('moves the email without re-deriving the username (D-038 addendum)', async () => {
+        /*
+         * The property a confirmed email change (§4.12) depends on: the
+         * account stays keyed on the username derived from its *original*
+         * address. Resolving it by the *new* address must fail exactly like
+         * looking up an address Moodle was never told about — because under
+         * D-038's least-privilege token, that is indistinguishable from
+         * "no such account".
+         */
+        const provisioned = await lms.provisionUser({
+          email: 're-email-a@ministry.gov.example',
+          fullName: 'قبل التغيير',
+          externalUserId: 'ext-re-email',
+        });
+
+        await lms.updateUser({
+          lmsUserId: provisioned.lmsUserId,
+          email: 're-email-b@ministry.gov.example',
+        });
+
+        const byOriginal = await lms.findUserByEmail('re-email-a@ministry.gov.example');
+        expect(byOriginal?.lmsUserId).toBe(provisioned.lmsUserId);
+
+        expect(await lms.findUserByEmail('re-email-b@ministry.gov.example')).toBeNull();
+      });
+
+      it('is idempotent for an email write — writing the same address twice does not throw', async () => {
+        const provisioned = await lms.provisionUser({
+          email: 're-email-twice@ministry.gov.example',
+          fullName: 'ثابت',
+          externalUserId: 'ext-re-email-twice',
+        });
+
+        await lms.updateUser({
+          lmsUserId: provisioned.lmsUserId,
+          email: 're-email-twice-new@ministry.gov.example',
+        });
+
+        await expect(
+          lms.updateUser({
+            lmsUserId: provisioned.lmsUserId,
+            email: 're-email-twice-new@ministry.gov.example',
+          }),
+        ).resolves.not.toThrow();
+      });
+    });
+
     describe('listCourses', () => {
       it('returns courses in our vocabulary, not the LMS payload shape', async () => {
         const courses = await lms.listCourses();
