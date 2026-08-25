@@ -169,6 +169,23 @@ describe('Admin assessment (§4C.3)', () => {
     expect(await screen.findByText('مسودة الإصدار 2')).toBeInTheDocument();
   });
 
+  it('offers no back control, and two exits that actually leave', async () => {
+    const user = userEvent.setup();
+    api.assessmentDraft.mockRejectedValue(new Error('no draft'));
+
+    renderWithProviders(<AdminAssessmentPage />);
+    await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
+    await screen.findByText('مسودة الإصدار 2');
+
+    /* «رجوع» could not work: the page routes to the editor whenever a draft
+       exists, and entering created one — so it returned to the overview for as
+       long as the refetch took and landed back here. Publishing and discarding
+       are the exits that do what they say. */
+    expect(screen.queryByRole('button', { name: 'رجوع' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'نشر الإصدار' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'حذف المسودة' })).toBeInTheDocument();
+  });
+
   it('goes straight to an existing draft rather than starting a second', async () => {
     api.assessmentOverview.mockResolvedValue({
       ...OVERVIEW,

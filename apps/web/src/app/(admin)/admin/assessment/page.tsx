@@ -120,7 +120,6 @@ function Body({
  * a page.
  */
 function DraftPane({ onDone }: { onDone: () => void }) {
-  const t = useTranslations('admin');
   const translateError = useErrorMessage();
 
   const draft = useApiQuery(async () => {
@@ -141,11 +140,17 @@ function DraftPane({ onDone }: { onDone: () => void }) {
   const shown = current ?? draft.data;
 
   return (
+    /*
+     * **No "back" control, deliberately.** It used to sit here and it could not
+     * work: entering the editor creates the draft, and the page routes to the
+     * editor whenever a draft exists — so «رجوع» returned to the overview for
+     * exactly as long as the refetch took, then landed the administrator back
+     * where they started. A control that undoes itself teaches that the screen
+     * is broken. The two exits are the real ones and both are in the editor's
+     * own header: publish the version, or discard the draft. The portal
+     * navigation is always there for leaving the subject entirely.
+     */
     <div className="space-y-4">
-      <Button variant="ghost" onClick={onDone}>
-        {t('backToOverview')}
-      </Button>
-
       <DataView isLoading={draft.isInitialLoad} error={draft.error} onRetry={draft.refetch}>
         {shown ? (
           <AssessmentEditor draft={shown} onChanged={setCurrent} onPublished={onDone} />

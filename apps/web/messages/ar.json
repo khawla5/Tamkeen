@@ -904,7 +904,6 @@
     "editHeading": "تعديل التقييم",
     "editFrozenNotice": "التعديل ينشئ إصدارًا جديدًا يُطبَّق على من يبدأ التقييم لاحقًا. نتائج من أكملوا التقييم لا تتغيّر ولا يُعاد احتسابها.",
     "startEdit": "بدء التعديل",
-    "backToOverview": "رجوع",
     "draftHeading": "مسودة الإصدار {version}",
     "draftCount": "{count} سؤالًا",
     "addQuestion": "إضافة سؤال",
