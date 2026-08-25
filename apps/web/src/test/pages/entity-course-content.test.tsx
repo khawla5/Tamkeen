@@ -273,4 +273,26 @@ describe('course content — the page action', () => {
       await screen.findByText('تعذّر الوصول إلى منصة التعلّم لقراءة محتوى الدورة.'),
     ).toBeInTheDocument();
   });
+
+  describe('course content — title, description and the guide (TAM-134)', () => {
+    it('shows the course title and description learners will read', async () => {
+      renderWithProviders(<CourseContentPage />);
+
+      expect(await screen.findByText('إدارة المخاطر')).toBeInTheDocument();
+      expect(screen.getByText('وصف')).toBeInTheDocument();
+    });
+
+    it('links the completion blocker to the section of the guide that fixes it', async () => {
+      renderWithProviders(<CourseContentPage />);
+      await screen.findByText('إدارة المخاطر');
+
+      const how = screen.getAllByRole('link', { name: 'كيف؟' });
+      expect(how.length).toBeGreaterThan(0);
+      expect(how[0]).toHaveAttribute('href', '/entity/courses/guide#completion');
+      expect(screen.getByRole('link', { name: 'دليل إنشاء الدورة' })).toHaveAttribute(
+        'href',
+        '/entity/courses/guide#content',
+      );
+    });
+  });
 });

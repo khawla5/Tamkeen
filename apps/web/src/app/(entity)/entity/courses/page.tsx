@@ -199,7 +199,12 @@ function CreateCourseForm({
   return (
     <Card className="p-6">
       <h2 className="text-lg font-semibold text-foreground">{t('createTitle')}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{t('createHint')}</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {t('createHint')}{' '}
+        <Link href="/entity/courses/guide#create" className="text-primary-700 underline">
+          {t('guideLink')}
+        </Link>
+      </p>
 
       <form onSubmit={onSubmit} className="mt-4 space-y-4">
         <Field id="new-course-title" label={t('fieldTitle')} required>

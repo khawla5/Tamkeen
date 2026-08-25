@@ -5,6 +5,16 @@
 
 ---
 
+## D-101 — The authoring guide is one Markdown file, rendered in the portal by a forty-line converter of our own
+
+**Decision (TAM-134):** the entity authoring guide lives once, in Arabic, at `docs/entity-authoring-guide.md`, and the portal renders it at `/entity/courses/guide` through `lib/simple-markdown.ts` — a converter for exactly the subset the guide uses (three heading levels with `{#anchor}` ids, paragraphs, one-level lists, bold, inline code, links to `#`, relative or http(s) targets). The source is HTML-escaped before any tag is written, so the only markup in the output is the converter's own. Blockers whose fix is in Moodle or in بيانات الدورة carry a «كيف؟» link straight to the section; the create card and the Content page link to the guide; it is not a nav destination (§4B keeps the entity nav to four) and it sits under `/entity/courses/…` so TAM-131's longest-match rule lights «دوراتي».
+
+**Why not a Markdown library:** a general renderer is a new dependency to review for a government repository, would still need our own escaping and link policy, and would bring a hundred features the guide does not use. Forty tested lines that we can read are cheaper to own than a dependency we cannot. **Why not `ar.json`:** two copies of a long document drift; the file is the one source and the page reads it at render time (two candidate paths, because `process.cwd()` differs between the workspace and the repo root).
+
+**Also here:** the Content page and Manage Course now show the course's **description** under its title — the text learners read in the catalogue, visible where the entity edits the course so the two never drift unnoticed.
+
+**Owed:** screenshots of the framed editor in the guide once the Arabic language pack is installed on the target Moodle (the local one has none — download pending); the upload ceiling per environment (Phase 7).
+
 ## D-100 — A course belongs to at most three paths, within two RIASEC letters; membership is a proposal; «عامة» is the admin's word for "everywhere"
 
 **Decision (TAM-132, at the user's direction 2026-08-25):** four rules for which paths a course may belong to.

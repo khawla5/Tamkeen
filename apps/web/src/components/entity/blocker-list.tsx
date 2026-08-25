@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
 import type { PublishBlocker } from '@tamkeen/types';
@@ -14,6 +15,19 @@ import type { PublishBlocker } from '@tamkeen/types';
  * Shared by the dashboard's needs-attention list and the manage screen, so the
  * two cannot describe the same course differently.
  */
+/**
+ * Where the guide explains the fix (TAM-134). Moodle-side blockers point at the
+ * completion section; the metadata ones at بيانات الدورة. `LMS_UNREACHABLE`
+ * has no fix an entity can make, so it carries no link.
+ */
+const GUIDE_SECTION: Partial<Record<PublishBlocker, string>> = {
+  NO_COMPLETION_CRITERIA: 'completion',
+  NO_PATH: 'metadata',
+  NO_LANGUAGE: 'metadata',
+  NO_OBJECTIVES: 'metadata',
+  NO_DURATION: 'metadata',
+};
+
 export function BlockerList({
   blockers,
   maxPaths = 3,
@@ -31,7 +45,20 @@ export function BlockerList({
   return (
     <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
       {blockers.map((blocker) => (
-        <li key={blocker}>• {t(`blocker${blocker}`, { max: maxPaths })}</li>
+        <li key={blocker}>
+          • {t(`blocker${blocker}`, { max: maxPaths })}
+          {GUIDE_SECTION[blocker] ? (
+            <>
+              {' '}
+              <Link
+                href={`/entity/courses/guide#${GUIDE_SECTION[blocker]}`}
+                className="text-primary-700 underline"
+              >
+                {t('blockerHow')}
+              </Link>
+            </>
+          ) : null}
+        </li>
       ))}
     </ul>
   );

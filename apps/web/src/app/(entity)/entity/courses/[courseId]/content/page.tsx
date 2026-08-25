@@ -100,9 +100,23 @@ function ReadBackStrip({
           >
             {course.title}
           </p>
+          {course.summary ? (
+            /* The description learners will read — shown where the entity
+               edits the course, so the two never drift unnoticed (TAM-134). */
+            <p
+              dir={directionForCourseLanguage(course.language)}
+              lang={course.language === 'EN' ? 'en' : 'ar'}
+              className="mt-1 text-sm text-muted-foreground"
+            >
+              {course.summary}
+            </p>
+          ) : null}
           <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span>{t(`publication${course.publication}`)}</span>
             <span>{t(`status${course.status}`)}</span>
+            <Link href="/entity/courses/guide#content" className="text-primary-700 underline">
+              {t('guideLink')}
+            </Link>
           </p>
         </div>
 

@@ -710,3 +710,76 @@
   - The Content page (`…/content/page.tsx`) already funnels both the message and «تحديث» through one `refresh` callback — swap its target from `getCourse` to `resync`; `MoodleEmbed` needs no change.
   - Plugin observers: `moodle-plugin/local_tamkeensso/db/events.php`; the flag→message path in `hook_callbacks.php` is already generic.
   - Rejected: shortening the scheduled interval (a full 78-course sync every minute to serve one editor); polling from the page (the frame already knows when something changed); webhooks from Moodle to the API (a new inbound surface to secure for a problem the existing message solves).
+
+## TAM-134 — Entity authoring guide: how to create a course and add its content (videos, documents, images, quiz, completion), in the portal and in the repo — **DONE, screenshots owed** (on `feature/tam-130-entity-content-embed`, D-101)
+
+- **What shipped (2026-08-25):** `docs/entity-authoring-guide.md` (Arabic; create → بيانات → editor → content by kind: video/documents/images/text → quiz → completion, both halves the read-back checks → publish → limits & faults); `lib/simple-markdown.ts` (zero-dep subset converter, escaped, 4 unit cases) and `/entity/courses/guide` (server-rendered from the file, TOC from the `##` headings, error state if the file is missing); «دليل إنشاء الدورة» links on the create card and the Content page; «كيف؟» on each blocker whose fix is in the guide (completion → `#completion`, the metadata four → `#metadata`; `LMS_UNREACHABLE` has none). The course **description** now shows under the title on the Content page and Manage Course. Web suite 517 green. **Owed:** screenshots (needs the Arabic pack on Moodle), the PR-template line, and the timed 30-minute acceptance run with a fresh entity.
+
+- **Labels:** `entity`, `docs`, `moodle-embed`, `frontend`
+- **Priority:** Medium (nothing is broken; but every entity will hit the same four questions we hit on 2026-08-25, and the framed editor hides the Moodle help that used to answer them)
+- **Pre-requisite:** TAM-130 (the framed editor is what the guide describes); the Arabic language pack installed on the target Moodle (otherwise the guide's Moodle labels are English)
+- **Description:**
+  An entity's whole job is "create a course, put content in it, publish". Today the path is discoverable only by trial: which Moodle activity carries a video, where a PDF goes, how an image reaches a page, how to add a quiz with questions, and — the one that blocks publishing — where completion criteria are set (D-042/D-061). Write the guide **once, in Arabic, for the framed editor**, and put it where the entity is when the question arises.
+
+  **1. The guide (`docs/entity-authoring-guide.md`, Arabic, with screenshots of the framed editor).** Sections, each one screen long:
+  - **إنشاء الدورة** — «إضافة دورة» in the portal (name, description, language), not in Moodle (D-060); what happens (a shell in Moodle, a draft in the catalogue).
+  - **بيانات الدورة** — paths (at most 3, within two RIASEC letters — D-100), duration, objectives, language; why these live in the portal and not in Moodle.
+  - **فتح محرّر المحتوى** — the framed editor; what is hidden and why; the course navigation and course index; «افتح في منصة التعلّم» if the frame does not load.
+  - **إضافة المحتوى**, one recipe per kind:
+    - **فيديو** — three routes and when to use each: **URL** to a hosted video (recommended for anything over a few minutes — the LMS is not a video host); **File** upload (`.mp4`, plays inline; note the upload ceiling below); **Page** with the video embedded through the editor's media button (video with text around it).
+    - **مستندات** — **File** (`.pdf`, `.docx`, `.pptx`); "display: open / embed"; one file per resource, or a **Folder** for a set.
+    - **صور** — inside a **Page** (or a Book chapter) through the editor's image button — with **alt text**, which the WCAG obligation (§2B DoD 5) makes mandatory; a bare image file as a resource is the exception, not the rule.
+    - **نص** — Page (one screen) or Book (chapters).
+  - **الاختبار** — Quiz → Add question → Multiple choice (and true/false, matching); marks; the grade to pass; attempts; shuffle. What "شروط الإكمال" on the quiz means (receive a grade / passing grade).
+  - **شروط الإكمال** — the two halves the read-back checks (course completion tracking on; at least one activity with a condition), then **Course completion** → activity completion → the quiz, so the learner's course actually completes and the certificate can be issued (D-042). This is the section the blocker «اضبط شروط إكمال الدورة» links to.
+  - **النشر** — the read-back strip, the blockers and what each means, «نشر الدورة»; what learners see, and what «أوقف النشر» does to learners who hold the course (D-059).
+  - **الحدود والأعطال** — upload ceiling (Moodle's `maxbytes` / PHP `upload_max_filesize` — state the real numbers per environment; the local compose sets nothing, so PHP's default 2 MB applies until Phase 7 fixes it — record that as a Phase 7 item), supported video formats, "the frame shows a blank page / the read-back does not change" → «تحديث» and the fallback.
+
+  **2. In the portal, at the point of need.** A quiet «دليل إنشاء الدورة» link (Platforms Code link style, no icon soup) in three places: the create-course card, the Content page's read-back strip, and each publish blocker whose fix is in Moodle links straight to its section (the completion blocker → «شروط الإكمال»). Served as a portal page `/entity/guide` rendered from the markdown (one source; no second copy in `ar.json`), with the headings as anchors.
+
+  **3. Keep it true.** The guide is checked by the same eyes that change the editor: any PR touching `moodle-plugin/`, the Content page, or publish readiness must re-read the affected section — add a line to the PR body template. Screenshots are regenerated when Moodle is upgraded (Phase 7's pinned 4.5.x).
+
+  **Acceptance:**
+  - A new entity account, following only the guide, creates a course with a video (URL), a PDF, a page with an image (with alt text), a five-question quiz, completion criteria, sets the metadata and publishes — no help from us. Timed; under 30 minutes.
+  - Every publish blocker with a Moodle-side fix links to the section that fixes it; the link opens the guide at that heading.
+  - The guide reads correctly RTL, in the Arabic Moodle UI labels (language pack installed), screenshots included.
+  - The upload ceiling stated matches what the environment enforces (verified by uploading a file just over it and reading Moodle's message).
+  - Docs: progress.md; Phase 7 note for `maxbytes`/PHP upload limits and the language pack in the deployment setup.
+
+  **Implementation notes (verified):**
+  - What the read-back actually checks (`moodle-http.service.ts:439–447`): `enablecompletion` on the course **and** any module with `completion > 0`. The guide must say both, in that order — the 2026-08-25 session lost time because the quiz was configured and the read-back still said no (that turned out to be a capability bug, fixed in `moodle-setup.php`; the guide should still include «اضغط تحديث» as the first thing to try).
+  - Blocker strings live under `entity.blocker*` in `messages/ar.json`; `BlockerList` renders them — the link per blocker goes there.
+  - Moodle activity names in the Arabic pack (for the screenshots): ملف، صفحة، رابط، مجلد، كتاب، اختبار. Confirm after the pack is installed; do not translate them by hand.
+  - Rejected: writing the guide as Moodle-side help (the frame hides Moodle's chrome, and the ministry may not accept custom PHP for it — D-044); a video walkthrough as the only form (not searchable, not RTL-checkable, goes stale on the first Moodle upgrade); copying the guide text into `ar.json` (two sources).
+
+## TAM-135 — Entity profile: edit the contact details (and the account name), the same form pattern as the learner profile
+
+- **Labels:** `entity`, `profile`, `frontend`, `api`
+- **Priority:** Medium
+- **Pre-requisite:** none. **Pairs with TAM-109's edit half** (learner name + department) — build the two on one shared "بياناتك" card pattern; whichever lands first sets it.
+- **Description:**
+  §4B.6 says "Organization info and contacts. Minimal." Today `/entity/profile` is a read-only `<dl>` of three rows (اسم الجهة، اسم جهة الاتصال، بريد جهة الاتصال) and a line saying it is read-only. There is no `PATCH`; `EntityProfileService` has only `get`. An entity that changes its contact person has to ask us. Make the page the same shape as the learner profile (TAM-109): a card of labelled fields, the editable ones in the DGA form primitives (`Input`, `Field`, TAM-101), one **حفظ**, a polite saved confirmation, field errors from the server.
+
+  **What is editable, and what is not — decided here, record in decisions.md:**
+  - **Editable by the entity:** `contactName`, `contactEmail` (the organisation's own contact person), and **the signed-in account's own display name** (`users.fullName` for the entity user — the name in the header's identity line).
+  - **Not editable by the entity:** `Entity.name` (the organisation's official name — it appears as the course owner in the catalogue and, from Phase 5, in reports; renaming a government body is the admin's act, §4C.2), `key`, `status`, and the account email (TAM-111's re-verification flow applies to entity accounts too — reuse it, do not add a second one).
+  - Shown read-only beside the editable fields: اسم الجهة, the account email, الصلاحية («جهة»).
+
+  **API.** `PATCH /api/entity/profile` (`@Roles('ENTITY')` only — a super-admin edits entities in §4C.2, not here) with `{ contactName?, contactEmail?, fullName? }`: trimmed, `contactName` ≤ 120, `contactEmail` a valid address ≤ 254, `fullName` ≥ 3 (same rule as registration); a patch, so an omitted field is untouched. Writes `contactName/contactEmail` on `entities`, `fullName` on `users`; audits `ENTITY_PROFILE_UPDATED` with **which fields changed, never the values** (§6 PII discipline, as `ENTITY_COURSE_METADATA_UPDATED` does). Returns the refreshed `EntityProfileView` (add `accountFullName` and `accountEmail` to it).
+
+  **Name to Moodle.** An entity user is provisioned in Moodle as `editingteacher` (D-060) and Moodle shows that name to nobody but the entity itself inside the framed editor — still, keep it consistent: propagate `fullName` through the same `LmsPort.updateUser` TAM-109 introduces (do not add a second path; if TAM-109 has not landed, this ticket adds `updateUser` and TAM-109 reuses it).
+
+  **Acceptance:**
+  - Page shows اسم الجهة (read-only), اسم جهة الاتصال + بريد جهة الاتصال + اسمك (editable), بريدك (read-only, with the "change email" entry point once TAM-111 exists), الصلاحية; one حفظ; saved confirmation survives the refetch (the `course.data === undefined` guard pattern from Manage Course).
+  - `PATCH` validates (empty contact name, malformed email, 2-char full name → 400 with field codes); audit entry has fields, not values; a learner or admin session → 403 (e2e).
+  - After saving, the header identity line shows the new account name without a full reload (refresh the session user the way TAM-109 does).
+  - Moodle's record for the entity user carries the new name (contract test against the mock).
+  - Loading / error states; labelled inputs; keyboard-complete; RTL at 360 px; `entity-profile` component test + the phase-4 browser suite's "profile is read-only" step rewritten to "edits the contact and sees it saved".
+  - Docs: decision entry (what an entity may edit and why the organisation name is not on the list); CLAUDE.md §4B.6 one sentence; progress.md.
+
+  **Implementation notes (verified):**
+  - Page: `apps/web/src/app/(entity)/entity/profile/page.tsx` — `Row` + `profileReadOnly` string; replace with the form. Service: `apps/api/src/entity/entity-profile.service.ts` has `get(scope)` only; controller routes carry `@Roles('ENTITY', 'SUPER_ADMIN')` at class level (`entity.controller.ts:62`) — the PATCH needs a **method-level** `@Roles('ENTITY')` override, and a test that the admin is refused.
+  - Model: `Entity { name, key, contactName @default(""), contactEmail @default(""), status }` (`schema.prisma:678`); no migration needed.
+  - Types: `EntityProfileView { id, name, contactName, contactEmail }` (`packages/types/src/entity.ts:13`) — add the account fields.
+  - Strings: `entity.profile*` in `messages/ar.json`; error codes go through the shared catalogue (D-024) → `useErrorMessage`.
+  - Rejected: letting the entity rename the organisation (admin's act; it is the name on the catalogue and, later, on reports); a separate "contact" sub-page (§4B.6 says minimal — one card); free-text role/title fields for the contact (not asked for; PII minimisation).

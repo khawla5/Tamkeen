@@ -79,6 +79,15 @@ function ManageBody({ course, onChanged }: { course: EntityCourseDetail; onChang
         >
           {course.title}
         </p>
+        {course.summary ? (
+          <p
+            dir={directionForCourseLanguage(course.language)}
+            lang={course.language === 'EN' ? 'en' : 'ar'}
+            className="mt-1 text-sm text-muted-foreground"
+          >
+            {course.summary}
+          </p>
+        ) : null}
         <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span>{t(`publication${course.publication}`)}</span>
           <span>{t(`status${course.status}`)}</span>
