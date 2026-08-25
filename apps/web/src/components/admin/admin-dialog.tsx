@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,28 @@ import { Button } from '@/components/ui/button';
  *
  * `showModal()` is called from an effect rather than rendering `open`: the
  * `open` attribute produces a *non-modal* dialog with none of the above.
+ *
+ * **`m-auto` is load-bearing.** The UA stylesheet centres a modal `<dialog>`
+ * with `margin: auto`, and Tailwind's preflight resets every margin to 0 — so
+ * without it the dialog pins itself to the block-start inline-start corner,
+ * which in an RTL page is the TOP RIGHT of the viewport. Every admin modal
+ * (manage account, manage path, create path) opened there. The learner portal's
+ * confirm dialog carries the same comment for the same reason; the admin one
+ * was written later and never got the fix.
+ *
+ * **The body scrolls, the frame does not.** A dialog holding a path's whole
+ * course list is taller than a laptop viewport, and a `<dialog>` that overflows
+ * takes its actions off-screen with it — including the cancel button. Height is
+ * capped and the middle scrolls, so the title and the decisions stay put.
+ *
+ * **And there is no `<form>` around the content, deliberately.** There used to
+ * be a `<form method="dialog">`, and it made the dialog close on *any* submit:
+ * `Button` has no default `type`, so every control inside that did not say
+ * `type="button"` — save, retire, activate — submitted the form and shut the
+ * panel behind the request it had just fired. Enter inside a text field did the
+ * same thing, which on a create form meant abandoning the entry. Nothing here
+ * needs form semantics: every action is an `onClick`, and Escape is the
+ * `<dialog>` element's own.
  */
 export function AdminDialog({
   title,
@@ -32,6 +54,11 @@ export function AdminDialog({
 }) {
   const t = useTranslations('actions');
   const ref = useRef<HTMLDialogElement>(null);
+  /* Unique per instance: admin dialogs nest (a picker opened from a manage
+     panel), and a hardcoded id would give the page two elements with the same
+     one — leaving a screen reader to announce the wrong dialog's title. */
+  const titleId = useId();
+  const descriptionId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -43,34 +70,39 @@ export function AdminDialog({
   return (
     <dialog
       ref={ref}
-      aria-labelledby="admin-dialog-title"
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
       onClose={onClose}
       /* Escape fires `cancel` then `close`; both route through onClose so the
          parent's state cannot drift out of step with the browser's. */
       onCancel={onClose}
-      className="w-[min(32rem,92vw)] rounded-xl border border-border bg-card p-0 text-foreground backdrop:bg-navy/40"
+      className="m-auto max-h-[min(88dvh,48rem)] w-[min(40rem,92vw)] overflow-hidden rounded-card border border-border bg-card p-0 text-foreground backdrop:bg-neutral-900/50"
     >
-      <form method="dialog" className="contents">
-        <div className="flex flex-col gap-4 p-6">
-          <div>
-            <h2 id="admin-dialog-title" className="text-lg font-semibold">
-              {title}
-            </h2>
-            {description ? (
-              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-            ) : null}
-          </div>
-
-          {children}
-
-          <div className="flex flex-wrap justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              {t('cancel')}
-            </Button>
-            {footer}
-          </div>
+      {/* `max-h-[inherit]` hands the dialog's cap down to the flex column, which
+          is what lets the middle section — and only the middle section — scroll. */}
+      <div className="flex max-h-[inherit] flex-col">
+        <div className="border-b border-border px-6 py-4">
+          <h2 id={titleId} className="text-lg font-semibold">
+            {title}
+          </h2>
+          {description ? (
+            <p id={descriptionId} className="mt-1 text-sm text-muted-foreground">
+              {description}
+            </p>
+          ) : null}
         </div>
-      </form>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-5">
+          {children}
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border px-6 py-4">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {t('cancel')}
+          </Button>
+          {footer}
+        </div>
+      </div>
     </dialog>
   );
 }

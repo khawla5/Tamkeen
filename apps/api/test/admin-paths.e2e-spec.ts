@@ -541,12 +541,97 @@ describe('Admin path management (e2e)', () => {
       await get('/api/admin/paths/00000000-0000-4000-8000-000000000000', sessionAdmin).expect(404);
       await get('/api/admin/paths/not-a-uuid', sessionAdmin).expect(400);
     });
+  });
 
-    it('offers no way to delete a path', async () => {
-      /* `user_paths.path_id` is Restrict and a path certificate names the path
-         on a document somebody holds. Retirement is the operation; deletion
-         would falsify a credential. */
-      await send('delete', `/api/admin/paths/${pathId}`, {}, sessionAdmin).expect(404);
+  /**
+   * Deletion, and the one case it is for (D-098).
+   *
+   * The interesting property is the refusal: `user_paths.path_id` is `Restrict`
+   * and a path certificate names the path on a document somebody holds, so a
+   * path anybody ever chose cannot be removed without falsifying a credential.
+   * What is left is the path created by mistake, which retirement can only hide.
+   */
+  describe('deleting a path', () => {
+    /** A second path, created here to be deleted. Never offered to anyone. */
+    let spareId: string;
+
+    it('refuses to delete a path somebody has chosen, and says which operation to use', async () => {
+      const refusal = await send('delete', `/api/admin/paths/${pathId}`, {}, sessionAdmin).expect(
+        409,
+      );
+
+      expect((refusal.body as { message: string }).message).toBe('PATH_HELD_BY_LEARNERS');
+
+      /* Still there, with its learner intact. */
+      const detail = (await get(`/api/admin/paths/${pathId}`, sessionAdmin).expect(200))
+        .body as AdminPathDetail;
+
+      expect(detail.committedLearners).toBe(1);
+      /* Reported before the attempt too, so §4C.4 can show the reason in place
+         of a button rather than letting the administrator be refused. */
+      expect(detail.canDelete).toBe(false);
+    });
+
+    it('audits the refusal with what held it', async () => {
+      const entry = await prisma.auditLog.findFirst({
+        where: { action: 'ADMIN_PATH_DELETED', targetId: pathId, outcome: 'FAILURE' },
+        orderBy: { occurredAt: 'desc' },
+        select: { metadata: true },
+      });
+
+      expect(entry?.metadata).toMatchObject({ learners: 1, certificates: 0 });
+    });
+
+    it('deletes one nobody ever chose, and takes its membership with it', async () => {
+      const created = (
+        await send(
+          'post',
+          '/api/admin/paths',
+          {
+            key: `spare-${RUN_ID}`,
+            name: 'مسار أُنشئ بالخطأ',
+            description: 'مسار تجريبي يُحذف في هذا الاختبار وحده.',
+            riasecLetter: 'C',
+          },
+          sessionAdmin,
+        ).expect(201)
+      ).body as AdminPathDetail;
+
+      spareId = created.id;
+      expect(created.canDelete).toBe(true);
+
+      await send(
+        'post',
+        `/api/admin/paths/${spareId}/courses`,
+        { courseId: courseIds[0] },
+        sessionAdmin,
+      ).expect(201);
+
+      await send('delete', `/api/admin/paths/${spareId}`, {}, sessionAdmin).expect(204);
+
+      await get(`/api/admin/paths/${spareId}`, sessionAdmin).expect(404);
+      /* `path_courses` cascades — and the course itself is the LMS's, so it is
+         still in the catalogue afterwards. */
+      expect(await prisma.pathCourse.count({ where: { pathId: spareId } })).toBe(0);
+      expect(await prisma.course.count({ where: { id: courseIds[0] } })).toBe(1);
+    });
+
+    it('names the path in the audit entry, since the row it points at is gone', async () => {
+      const entry = await prisma.auditLog.findFirst({
+        where: { action: 'ADMIN_PATH_DELETED', targetId: spareId, outcome: 'SUCCESS' },
+        select: { metadata: true },
+      });
+
+      expect(entry?.metadata).toMatchObject({
+        key: `spare-${RUN_ID}`,
+        name: 'مسار أُنشئ بالخطأ',
+        riasecLetter: 'C',
+        courses: 1,
+      });
+    });
+
+    it('answers 404 for a path that is already gone', async () => {
+      await send('delete', `/api/admin/paths/${spareId}`, {}, sessionAdmin).expect(404);
     });
   });
 });

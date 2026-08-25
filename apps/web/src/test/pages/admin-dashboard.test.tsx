@@ -54,9 +54,13 @@ const VIEW: AdminDashboardView = {
     coursesPassed: 210,
     certificatesIssued: 230,
   },
-  codeDistribution: [
-    { code: 'SIA', count: 40 },
-    { code: 'RIC', count: 10 },
+  letterDistribution: [
+    { letter: 'S', employees: 40, activePaths: 2 },
+    { letter: 'R', employees: 10, activePaths: 1 },
+    { letter: 'I', employees: 0, activePaths: 0 },
+    { letter: 'A', employees: 0, activePaths: 1 },
+    { letter: 'E', employees: 0, activePaths: 1 },
+    { letter: 'C', employees: 0, activePaths: 1 },
   ],
   lms: {
     reachable: true,
@@ -152,19 +156,99 @@ describe('Admin dashboard (§4C.1)', () => {
     expect(screen.getByText('—')).toBeInTheDocument();
   });
 
-  it('renders the Holland code distribution left-to-right inside the RTL page', async () => {
+  it('names each career type in Arabic rather than printing a Latin code', async () => {
     renderWithProviders(<AdminDashboardPage />);
 
-    const code = await screen.findByText('SIA');
-    /* Latin letters in an RTL container reorder without this. */
-    expect(code).toHaveAttribute('dir', 'ltr');
+    /* «SIA» is three Latin letters an administrator cannot act on; the Arabic
+       type name is the vocabulary the ministry and §3A already use. */
+    expect(await screen.findByText('الاجتماعي')).toBeInTheDocument();
+    expect(screen.queryByText('SIA')).not.toBeInTheDocument();
+  });
+
+  it('states what the distribution counts, and shows the paths offered beside it', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    await screen.findByText('الاجتماعي');
+    expect(screen.getByText(/توزيع الموظفين حسب النمط المهني الأول/)).toBeInTheDocument();
+    /* Regex, not an exact string: the percent carries the LRM marks Intl
+       inserts for a Latin numeral inside Arabic text. */
+    expect(screen.getByText(/40 موظف · 80/)).toBeInTheDocument();
+    expect(screen.getByText('2 مسار معروض')).toBeInTheDocument();
+  });
+
+  it('says in words when a career type has no path offered for it', async () => {
+    api.dashboard.mockResolvedValue(
+      view({
+        letterDistribution: [
+          { letter: 'S', employees: 40, activePaths: 0 },
+          { letter: 'R', employees: 10, activePaths: 1 },
+          { letter: 'I', employees: 0, activePaths: 1 },
+          { letter: 'A', employees: 0, activePaths: 1 },
+          { letter: 'E', employees: 0, activePaths: 1 },
+          { letter: 'C', employees: 0, activePaths: 1 },
+        ],
+      }),
+    );
+    renderWithProviders(<AdminDashboardPage />);
+
+    /* The gap the section exists to surface, carried by wording rather than by
+       the warning colour alone (WCAG 1.4.1). */
+    expect(await screen.findByText('لا مسار معروض')).toBeInTheDocument();
   });
 
   it('explains the empty distribution instead of drawing an empty chart', async () => {
-    api.dashboard.mockResolvedValue(view({ codeDistribution: [] }));
+    api.dashboard.mockResolvedValue(
+      view({
+        letterDistribution: [
+          { letter: 'R', employees: 0, activePaths: 2 },
+          { letter: 'I', employees: 0, activePaths: 0 },
+          { letter: 'A', employees: 0, activePaths: 0 },
+          { letter: 'S', employees: 0, activePaths: 0 },
+          { letter: 'E', employees: 0, activePaths: 0 },
+          { letter: 'C', employees: 0, activePaths: 0 },
+        ],
+      }),
+    );
     renderWithProviders(<AdminDashboardPage />);
 
+    /* Nobody assessed: the six rows exist but describe nobody, and a chart of
+       six empty bars would claim to say something. */
     expect(await screen.findByText(/لم يُكمل أحد التقييم بعد/)).toBeInTheDocument();
+    expect(screen.queryByText('لا مسار معروض')).not.toBeInTheDocument();
+  });
+
+  it('no longer counts unverified accounts, which §4C.2 marks per row', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    await screen.findByText('الموظفون');
+    /* A total that cannot say WHICH accounts sends the administrator to the
+       accounts screen either way, and that screen badges each one. */
+    expect(screen.queryByText('لم تُؤكَّد بريدها')).not.toBeInTheDocument();
+  });
+
+  it('keeps the activity list inside its own scroll area, reachable by keyboard', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    const list = await screen.findByRole('group', { name: /أحدث النشاط/ });
+    /* An overflow container cannot be scrolled from the keyboard unless it is
+       focusable (WCAG 2.1.1), and it must say what it holds. */
+    expect(list).toHaveAttribute('tabindex', '0');
+    expect(list.className).toContain('overflow-y-auto');
+  });
+
+  it('surfaces an unpublished assessment draft, which nothing used to show', async () => {
+    api.dashboard.mockResolvedValue(view({ assessment: { ...VIEW.assessment!, hasDraft: true } }));
+    renderWithProviders(<AdminDashboardPage />);
+
+    const link = await screen.findByRole('link', { name: 'متابعة التعديل' });
+    expect(link).toHaveAttribute('href', '/admin/assessment');
+  });
+
+  it('says nothing about a draft when there is none', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    await waitFor(() => expect(screen.getByText(/التقييم المعمول به/)).toBeInTheDocument());
+    expect(screen.queryByRole('link', { name: 'متابعة التعديل' })).not.toBeInTheDocument();
   });
 
   it('translates an audit action into Arabic', async () => {

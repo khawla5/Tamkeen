@@ -21,11 +21,18 @@ import type {
 /**
  * §4C.4 — managing study paths.
  *
- * **There is no delete, and the schema agrees.** `user_paths.path_id` is
- * `Restrict` and `certificates.path_id` references a path by name on a document
- * somebody holds, so a path that anyone has ever chosen cannot be removed
- * without falsifying a credential. Deactivation is the operational answer, and
- * it is a narrower thing than it sounds:
+ * **Deletion exists for exactly one case: a path nobody ever chose.**
+ * `user_paths.path_id` is `Restrict` and `certificates.path_id` names a path on
+ * a document somebody holds, so a path anyone has ever selected cannot be
+ * removed without falsifying a credential — the service refuses that, and the
+ * schema refuses it again underneath. What is left is the mistake: a path
+ * created with the wrong letter or the wrong key, sitting in the list with no
+ * learners, which retirement can only hide rather than clear away. Those two
+ * outcomes are deliberately different operations with different words, because
+ * one is reversible and the other is not.
+ *
+ * Retirement remains the answer for everything else, and it is a narrower thing
+ * than it sounds:
  *
  * **Retiring a path takes it out of new selections and touches nobody who holds
  * it.** My Path, a learner's courses and their certificates all read through
@@ -107,6 +114,7 @@ export class AdminPathsService {
           },
         },
         userPaths: { select: { status: true } },
+        _count: { select: { certificates: true } },
       },
     });
 
@@ -147,6 +155,11 @@ export class AdminPathsService {
       },
       blockers: pathBlockers({ selectableCourses }),
       selectableCourses,
+      certificateCount: path._count.certificates,
+      /* The same rule `remove()` enforces, reported before the choice rather
+         than after it: anyone who ever chose this path, or holds a certificate
+         naming it, makes deletion a falsification and retirement the operation. */
+      canDelete: path.userPaths.length === 0 && path._count.certificates === 0,
     };
   }
 
@@ -490,6 +503,107 @@ export class AdminPathsService {
   }
 
   /**
+   * Deletes a path permanently — and only one that nobody ever chose.
+   *
+   * **The refusal is the feature.** D-002 makes a confirmed path permanent and a
+   * path certificate names the path on a credential somebody holds; deleting
+   * either out from under them would falsify a document or strand a learner
+   * mid-path. So anything with a `user_paths` row — building, active or
+   * completed — or with a certificate against it is refused here, and the
+   * administrator is pointed at retirement, which takes the path out of new
+   * selections and touches nobody holding it.
+   *
+   * What remains deletable is the case retirement handles badly: the path
+   * created by mistake. Hiding it leaves it in the management list forever,
+   * where it is a permanent invitation to wonder what it was for.
+   *
+   * `path_courses` cascades; the courses themselves are the LMS's and are not
+   * touched. The audit entry carries the key, name and letter rather than only
+   * the id, because after this returns there is no row left to resolve an id
+   * against.
+   */
+  async remove(pathId: string, actorId: string, ipAddress: string | null): Promise<void> {
+    const path = await this.prisma.path.findUnique({
+      where: { id: pathId },
+      select: {
+        id: true,
+        key: true,
+        name: true,
+        riasecLetter: true,
+        _count: { select: { userPaths: true, certificates: true, pathCourses: true } },
+      },
+    });
+
+    if (!path) {
+      throw new NotFoundException('PATH_NOT_FOUND');
+    }
+
+    const held = path._count.userPaths + path._count.certificates;
+
+    if (held > 0) {
+      await this.audit.record({
+        action: AuditAction.ADMIN_PATH_DELETED,
+        outcome: 'FAILURE',
+        actorUserId: actorId,
+        ipAddress,
+        targetType: 'path',
+        targetId: pathId,
+        reason: AuditReason.PATH_HELD_BY_LEARNERS,
+        detail: {
+          learners: path._count.userPaths,
+          certificates: path._count.certificates,
+        },
+      });
+
+      throw new ConflictException('PATH_HELD_BY_LEARNERS');
+    }
+
+    try {
+      await this.prisma.path.delete({ where: { id: pathId } });
+    } catch (error) {
+      /*
+       * The count above and the delete are two statements, and a learner can
+       * choose the path between them. `Restrict` is what actually stops it —
+       * this turns the foreign-key violation into the same refusal the check
+       * above gives, so the race produces a sentence an administrator can read
+       * rather than a 500.
+       */
+      if (isForeignKeyViolation(error)) {
+        await this.audit.record({
+          action: AuditAction.ADMIN_PATH_DELETED,
+          outcome: 'FAILURE',
+          actorUserId: actorId,
+          ipAddress,
+          targetType: 'path',
+          targetId: pathId,
+          reason: AuditReason.PATH_HELD_BY_LEARNERS,
+          detail: { race: 'true' },
+        });
+
+        throw new ConflictException('PATH_HELD_BY_LEARNERS');
+      }
+
+      throw error;
+    }
+
+    await this.audit.record({
+      action: AuditAction.ADMIN_PATH_DELETED,
+      outcome: 'SUCCESS',
+      actorUserId: actorId,
+      ipAddress,
+      targetType: 'path',
+      targetId: pathId,
+      /* Named, not just identified: the row this id points at is gone. */
+      detail: {
+        key: path.key,
+        name: path.name,
+        riasecLetter: path.riasecLetter,
+        courses: path._count.pathCourses,
+      },
+    });
+  }
+
+  /**
    * How many learners hold each of this path's courses, through this path.
    *
    * Scoped to the path deliberately. A course may belong to several paths
@@ -529,6 +643,23 @@ function isSelectable(status: string): boolean {
 
 function bound(): number {
   return PATH_COURSE_BOUNDS.min;
+}
+
+/**
+ * A foreign-key violation, by code rather than by `instanceof`.
+ *
+ * The generated client can be loaded through more than one module instance in a
+ * monorepo, so an `instanceof` check can silently stop matching. The code is the
+ * stable contract — the same reasoning `certificate-issuance.service.ts` gives
+ * for P2002.
+ */
+function isForeignKeyViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'P2003'
+  );
 }
 
 function changedFields(dto: Record<string, unknown>): string {

@@ -642,6 +642,9 @@ export const adminApi = {
     },
   ) => api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}`, patch),
 
+  /** Permanent removal, refused for any path somebody ever chose (§4C.4). */
+  deletePath: (pathId: string) => api.delete<void>(`/api/admin/paths/${pathId}`),
+
   attachPathCourse: (pathId: string, courseId: string) =>
     api.post<AdminPathDetail>(`/api/admin/paths/${pathId}/courses`, { courseId }),
 

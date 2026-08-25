@@ -24,6 +24,10 @@ import { renderWithProviders } from '@/test/render';
  * **A course held by learners cannot be removed, and the count says so.** The
  * server refuses; the panel disables the control and prints the number beside
  * the title, so the refusal is predictable rather than discovered.
+ *
+ * **Hiding and deleting must not be confusable.** They are separate sections
+ * with separate words, and the irreversible one is simply absent — with its
+ * reason in place of it — for any path somebody has chosen (D-098).
  */
 
 const api = vi.hoisted(() => ({
@@ -36,6 +40,7 @@ const api = vi.hoisted(() => ({
   detachPathCourse: vi.fn(),
   reorderPathCourses: vi.fn(),
   attachableCourses: vi.fn(),
+  deletePath: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async () => {
@@ -99,12 +104,22 @@ function detail(overrides: Partial<AdminPathDetail> = {}): AdminPathDetail {
     learners: { building: 3, active: 9, completed: 3 },
     blockers: [],
     selectableCourses: 5,
+    certificateCount: 0,
+    canDelete: false,
     ...overrides,
   };
 }
 
 function dialog() {
   return within(document.querySelector('dialog')!);
+}
+
+/* The confirmation opens as a SIBLING of the manage panel — nesting it inside
+   would nest one form in another — so it is the last dialog in the document,
+   not the first. */
+function confirmDialog() {
+  const dialogs = document.querySelectorAll('dialog');
+  return within(dialogs[dialogs.length - 1]!);
 }
 
 describe('Admin paths (§4C.4)', () => {
@@ -285,6 +300,83 @@ describe('Admin paths (§4C.4)', () => {
 
       expect(up[0]).toBeDisabled();
       expect(down.at(-1)).toBeDisabled();
+    });
+
+    it('asks for no duration, and offers no way to add a course', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminPathsPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      await screen.findByLabelText('اسم المسار');
+      /* The duration was a hand-maintained estimate for a path whose real
+         length is whichever five to ten courses a learner picks; adding a
+         course is the course's own act, done where its metadata is set. */
+      expect(dialog().queryByLabelText(/المدة/)).not.toBeInTheDocument();
+      expect(dialog().queryByRole('button', { name: 'إضافة دورة' })).not.toBeInTheDocument();
+      /* What can still be decided about the courses from here is untouched. */
+      expect(dialog().getAllByRole('button', { name: 'إزالة الدورة من المسار' })).not.toHaveLength(
+        0,
+      );
+    });
+
+    it('refuses deletion in words for a path somebody has chosen, and still offers hiding', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminPathsPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      expect(await dialog().findByText(/لا يمكن حذف هذا المسار/)).toBeInTheDocument();
+      /* Absent, not disabled: there is nothing to try, and the sentence in its
+         place names the reversible operation that does work. */
+      expect(dialog().queryByRole('button', { name: 'حذف نهائي' })).not.toBeInTheDocument();
+      expect(dialog().getByRole('button', { name: 'إيقاف العرض' })).toBeInTheDocument();
+    });
+
+    it('keeps deleting and hiding apart, and confirms the irreversible one', async () => {
+      const user = userEvent.setup();
+      api.getPath.mockResolvedValue(
+        detail({ canDelete: true, learners: { building: 0, active: 0, completed: 0 } }),
+      );
+      api.deletePath.mockResolvedValue(undefined);
+
+      renderWithProviders(<AdminPathsPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      /* Two sections, two words, and the reversible one is not dressed as the
+         destructive one. */
+      expect(await dialog().findByText('حذف المسار')).toBeInTheDocument();
+      expect(dialog().getByText('عرض المسار على الموظفين')).toBeInTheDocument();
+
+      await user.click(dialog().getByRole('button', { name: 'حذف نهائي' }));
+
+      /* Names the path, and offers the alternative in the same breath — an
+         administrator reaching for delete when they meant hide is the mistake
+         this dialog exists to catch. */
+      expect(
+        await confirmDialog().findByText(/سيُحذف مسار «مسار الموارد البشرية»/),
+      ).toBeInTheDocument();
+      expect(confirmDialog().getByText(/إن أردت إخفاءه مع الاحتفاظ به/)).toBeInTheDocument();
+
+      await user.click(confirmDialog().getByRole('button', { name: 'حذف نهائي' }));
+
+      await waitFor(() => expect(api.deletePath).toHaveBeenCalledWith('p1'));
+      /* The row vanishing is nothing at all to a screen reader. */
+      expect(await screen.findByText('حُذف المسار نهائيًا.')).toBeInTheDocument();
+    });
+
+    it('shows the server’s refusal when the path was chosen between load and click', async () => {
+      const user = userEvent.setup();
+      const { ApiError } = await import('@/lib/api-client');
+      api.getPath.mockResolvedValue(detail({ canDelete: true }));
+      api.deletePath.mockRejectedValue(new ApiError('PATH_HELD_BY_LEARNERS', 409));
+
+      renderWithProviders(<AdminPathsPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await user.click(await dialog().findByRole('button', { name: 'حذف نهائي' }));
+      await user.click(confirmDialog().getByRole('button', { name: 'حذف نهائي' }));
+
+      await waitFor(() =>
+        expect(confirmDialog().getByRole('alert')).toHaveTextContent(/لا يمكن حذف هذا المسار/),
+      );
     });
 
     it('explains an empty course list rather than showing an empty box', async () => {

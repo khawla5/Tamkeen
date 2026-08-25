@@ -37,6 +37,7 @@ export default function AdminPathsPage() {
   const t = useTranslations('admin');
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const paths = useApiQuery(() => adminApi.listPaths(), []);
   const bounds = useApiQuery(() => adminApi.pathBounds(), []);
@@ -48,6 +49,14 @@ export default function AdminPathsPage() {
     >
       <div className="space-y-6">
         {bounds.data ? <BoundsNotice min={bounds.data.min} max={bounds.data.max} /> : null}
+
+        {/* A deletion closes the panel and the row simply vanishes, which is
+            nothing at all to a screen reader. This is the announcement. */}
+        {notice ? (
+          <p role="status" className="text-sm text-success">
+            {notice}
+          </p>
+        ) : null}
 
         <DataView
           isLoading={paths.isInitialLoad}
@@ -71,6 +80,7 @@ export default function AdminPathsPage() {
           onClose={() => setCreating(false)}
           onCreated={(pathId) => {
             setCreating(false);
+            setNotice(null);
             paths.refetch();
             /* Straight into the detail panel: a path is created empty and cannot
                be offered until it has courses, so the next step is always the
@@ -88,6 +98,11 @@ export default function AdminPathsPage() {
             paths.refetch();
           }}
           onChanged={() => paths.refetch()}
+          onDeleted={() => {
+            setSelected(null);
+            setNotice(t('pathRemoved'));
+            paths.refetch();
+          }}
         />
       ) : null}
     </AdminPage>

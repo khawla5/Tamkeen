@@ -154,6 +154,17 @@ export const AuditAction = {
    */
   ADMIN_PATH_ACTIVATED: 'ADMIN_PATH_ACTIVATED',
   ADMIN_PATH_RETIRED: 'ADMIN_PATH_RETIRED',
+  /**
+   * A path was removed permanently (§4C.4).
+   *
+   * Only ever recorded for a path nobody ever chose — the service refuses any
+   * other, and the schema would refuse it after that. Kept distinct from a
+   * retirement because the two are the opposite kind of decision: one is
+   * reversible and leaves the record intact, the other leaves no row to point
+   * an audit entry at afterwards, which is precisely why the entry has to name
+   * the key and the letter rather than only the id.
+   */
+  ADMIN_PATH_DELETED: 'ADMIN_PATH_DELETED',
   /** A course joined or left a path's membership. */
   ADMIN_PATH_COURSE_ATTACHED: 'ADMIN_PATH_COURSE_ATTACHED',
   ADMIN_PATH_COURSE_DETACHED: 'ADMIN_PATH_COURSE_DETACHED',
@@ -252,6 +263,11 @@ export const AuditReason = {
   PATH_NOT_OFFERABLE: 'PATH_NOT_OFFERABLE',
   /** A course could not leave a path because learners hold it through it. */
   COURSE_HELD_BY_LEARNERS: 'COURSE_HELD_BY_LEARNERS',
+  /**
+   * A path could not be deleted because somebody has chosen it, or a
+   * certificate names it. Retirement is what the administrator wants instead.
+   */
+  PATH_HELD_BY_LEARNERS: 'PATH_HELD_BY_LEARNERS',
   /** A published course cannot be returned to DRAFT — that state is reachable
    *  forward only, and going back would bypass the unpublish rules. */
   COURSE_CANNOT_RETURN_TO_DRAFT: 'COURSE_CANNOT_RETURN_TO_DRAFT',

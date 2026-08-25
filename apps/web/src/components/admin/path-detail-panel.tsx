@@ -30,6 +30,12 @@ import { useApiQuery } from '@/lib/use-api';
  * taken knowing "nine people are part way through choosing this" is a different
  * decision from one taken blind.
  *
+ * **Hiding and deleting are two decisions, so they are two sections.** One is
+ * reversible and leaves every learner untouched; the other cannot be undone and
+ * is refused outright for any path somebody ever chose (D-098). Putting them
+ * side by side as a pair of buttons would invite the irreversible one to be
+ * clicked in place of the reversible one.
+ *
  * **Two refusals are shown before they happen.** A path with fewer than five
  * selectable courses cannot be offered, and a course cannot leave while learners
  * hold it through this path — both server rules, both surfaced here so the
@@ -39,40 +45,64 @@ export function PathDetailPanel({
   pathId,
   onClose,
   onChanged,
+  onDeleted,
 }: {
   pathId: string;
   onClose: () => void;
   onChanged: () => void;
+  /** Called once the path is gone. Separate from `onClose` so the list can say
+   *  what happened — the panel closing is not, by itself, an announcement. */
+  onDeleted: () => void;
 }) {
   const t = useTranslations('admin');
   const detail = useApiQuery(() => adminApi.getPath(pathId), [pathId]);
   const [current, setCurrent] = useState<AdminPathDetail | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const shown = current ?? detail.data;
 
   return (
-    <AdminDialog title={t('pathManageTitle')} onClose={onClose}>
-      <DataView isLoading={detail.isInitialLoad} error={detail.error} onRetry={detail.refetch}>
-        {shown ? (
-          <Body
-            path={shown}
-            onChanged={(next) => {
-              setCurrent(next);
-              onChanged();
-            }}
-          />
-        ) : null}
-      </DataView>
-    </AdminDialog>
+    <>
+      <AdminDialog title={t('pathManageTitle')} onClose={onClose}>
+        <DataView isLoading={detail.isInitialLoad} error={detail.error} onRetry={detail.refetch}>
+          {shown ? (
+            <Body
+              path={shown}
+              onChanged={(next) => {
+                setCurrent(next);
+                onChanged();
+              }}
+              onRequestDelete={() => setConfirmingDelete(true)}
+            />
+          ) : null}
+        </DataView>
+      </AdminDialog>
+
+      {/*
+        A sibling of the panel rather than a child of it: `AdminDialog` wraps its
+        content in a `<form>`, and a dialog nested inside that form would nest
+        one form in another — invalid, and the kind of thing that works until a
+        submit button starts closing the wrong dialog.
+      */}
+      {confirmingDelete && shown ? (
+        <ConfirmDeleteDialog
+          path={shown}
+          onClose={() => setConfirmingDelete(false)}
+          onDeleted={onDeleted}
+        />
+      ) : null}
+    </>
   );
 }
 
 function Body({
   path,
   onChanged,
+  onRequestDelete,
 }: {
   path: AdminPathDetail;
   onChanged: (next: AdminPathDetail) => void;
+  onRequestDelete: () => void;
 }) {
   const t = useTranslations('admin');
   const format = useFormat();
@@ -81,12 +111,10 @@ function Body({
   const [name, setName] = useState(path.name);
   const [description, setDescription] = useState(path.description);
   const [letter, setLetter] = useState<RiasecLetter>(path.riasecLetter);
-  const [duration, setDuration] = useState(String(path.typicalDurationMinutes ?? ''));
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
 
   async function run(action: () => Promise<AdminPathDetail>, message: string) {
     setError(null);
@@ -115,13 +143,23 @@ function Body({
   }
 
   const dirty =
-    name !== path.name ||
-    description !== path.description ||
-    letter !== path.riasecLetter ||
-    duration !== String(path.typicalDurationMinutes ?? '');
+    name !== path.name || description !== path.description || letter !== path.riasecLetter;
 
   return (
     <div className="flex flex-col gap-5">
+      {/*
+        Name, letter, description — and no duration (D-098). The estimate is a
+        number an administrator was asked to keep true by hand, in minutes, for
+        a path whose real length is the sum of the courses a learner picks from
+        it — five to ten out of however many it holds — so no single figure was
+        ever right for two people.
+
+        **It is still shown on the learner's path card.** Removing the editor
+        does not remove the column or the card: existing values stand and are
+        now settable only through the API. Deriving it from the path's courses
+        is the fix, and it belongs with the learner-facing screens rather than
+        here (recorded in progress.md as owed).
+      */}
       <section className="grid gap-4 sm:grid-cols-2">
         <Field id="path-name" label={t('pathName')}>
           {(field) => (
@@ -158,19 +196,6 @@ function Body({
             )}
           </Field>
         </div>
-
-        <Field id="path-duration" label={t('pathDuration')}>
-          {(field) => (
-            <Input
-              {...field}
-              type="number"
-              min={1}
-              dir="ltr"
-              value={duration}
-              onChange={(event) => setDuration(event.target.value)}
-            />
-          )}
-        </Field>
       </section>
 
       {/* Save appears only when there is something to save (§3). */}
@@ -185,7 +210,6 @@ function Body({
                     name,
                     description,
                     riasecLetter: letter,
-                    typicalDurationMinutes: duration === '' ? undefined : Number(duration),
                   }),
                 t('pathSaved'),
               )
@@ -198,15 +222,17 @@ function Body({
 
       <LearnerCounts path={path} />
 
+      {/*
+        The courses stay, and so does everything that can be decided about them
+        from here: the order they are offered in, and removing one. Adding is
+        the course's own act — an entity publishes a course into its paths with
+        the rest of its product metadata (§4B.3) — so this screen no longer
+        offers a second way in that reads as if it were the only one.
+      */}
       <section className="flex flex-col gap-3 rounded-md border border-border p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-foreground">
-            {t('pathCourses', { count: format.number(path.courses.length) })}
-          </h3>
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => setAdding(true)}>
-            {t('pathAddCourse')}
-          </Button>
-        </div>
+        <h3 className="text-sm font-semibold text-foreground">
+          {t('pathCourses', { count: format.number(path.courses.length) })}
+        </h3>
 
         {/* The refusal, stated before it happens. */}
         {path.blockers.length > 0 ? (
@@ -290,7 +316,7 @@ function Body({
 
         {path.isActive ? (
           <Button
-            variant="destructive"
+            variant="outline"
             disabled={busy}
             onClick={() =>
               void run(() => adminApi.updatePath(path.id, { isActive: false }), t('pathRetired'))
@@ -310,6 +336,29 @@ function Body({
         )}
       </section>
 
+      {/*
+        Deletion, kept apart from retirement and never dressed the same way.
+        Hiding is the reversible decision above and it keeps the outline button;
+        this one is destructive, sits below, and is simply absent — with the
+        reason in its place — for any path somebody has chosen. The server
+        refuses that case regardless (D-098); saying so here means the
+        administrator learns the rule without being refused by it.
+      */}
+      <section className="flex flex-wrap items-center gap-3 rounded-md border border-border p-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-foreground">{t('pathRemoveHeading')}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {path.canDelete ? t('pathRemoveHint') : t('pathRemoveBlocked')}
+          </p>
+        </div>
+
+        {path.canDelete ? (
+          <Button variant="destructive" disabled={busy} onClick={onRequestDelete}>
+            {t('pathRemove')}
+          </Button>
+        ) : null}
+      </section>
+
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -319,17 +368,6 @@ function Body({
         <p role="status" className="text-sm text-success">
           {done}
         </p>
-      ) : null}
-
-      {adding ? (
-        <AddCourseDialog
-          path={path}
-          onClose={() => setAdding(false)}
-          onAdd={async (courseId) => {
-            await run(() => adminApi.attachPathCourse(path.id, courseId), t('pathCourseAdded'));
-            setAdding(false);
-          }}
-        />
       ) : null}
     </div>
   );
@@ -365,62 +403,61 @@ function LearnerCounts({ path }: { path: AdminPathDetail }) {
 }
 
 /**
- * Picks a course to attach.
+ * The last chance to not do it.
  *
- * Reads the admin course list rather than the learner catalogue: an
- * administrator attaching a course needs to see drafts and hidden ones too, and
- * which organisation supplies each.
+ * Names the path in the question, because "are you sure" beside a list of
+ * twelve is a question about nothing in particular — and offers the reversible
+ * alternative in the same breath, since an administrator reaching for delete
+ * when they meant hide is the mistake this dialog exists to catch.
  */
-function AddCourseDialog({
+function ConfirmDeleteDialog({
   path,
   onClose,
-  onAdd,
+  onDeleted,
 }: {
   path: AdminPathDetail;
   onClose: () => void;
-  onAdd: (courseId: string) => Promise<void>;
+  onDeleted: () => void;
 }) {
   const t = useTranslations('admin');
-  const [selected, setSelected] = useState('');
+  const translateError = useErrorMessage();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const courses = useApiQuery(() => adminApi.attachableCourses(path.id), [path.id]);
+  async function submit() {
+    setError(null);
+    setBusy(true);
+
+    try {
+      await adminApi.deletePath(path.id);
+      onDeleted();
+    } catch (caught) {
+      /* Shown here rather than swallowed: the likeliest failure is that
+         somebody chose the path between the screen loading and this click, and
+         the server's refusal names that. */
+      setError(translateError(caught));
+      setBusy(false);
+    }
+  }
 
   return (
     <AdminDialog
-      title={t('pathAddCourse')}
-      description={t('pathAddCourseHint')}
+      title={t('pathRemoveConfirmTitle')}
+      description={t('pathRemoveConfirmBody', { name: path.name })}
       onClose={onClose}
       footer={
-        <Button type="button" disabled={!selected} onClick={() => void onAdd(selected)}>
-          {t('pathAddCourseAction')}
+        <Button type="button" variant="destructive" disabled={busy} onClick={submit}>
+          {t('pathRemoveConfirm')}
         </Button>
       }
     >
-      <DataView
-        isLoading={courses.isInitialLoad}
-        error={courses.error}
-        onRetry={courses.refetch}
-        isEmpty={courses.data?.length === 0}
-        emptyProps={{ title: t('pathNoCourseToAdd') }}
-      >
-        <Field id="attach-course" label={t('pathCourseToAdd')} required>
-          {(field) => (
-            <select
-              {...field}
-              value={selected}
-              onChange={(event) => setSelected(event.target.value)}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">{t('pathChooseCourse')}</option>
-              {(courses.data ?? []).map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.title}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-      </DataView>
+      <p className="text-sm text-muted-foreground">{t('pathRemoveConfirmHint')}</p>
+
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
     </AdminDialog>
   );
 }

@@ -12,8 +12,8 @@ import { AdminDashboardService } from './admin-dashboard.service';
  * wrong:
  *
  *  1. a retake must not count as a second assessed person (D-033),
- *  2. the code distribution must use each person's newest result, not all of
- *     them, or it describes the indecisive rather than the ministry,
+ *  2. the career-type distribution must use each person's newest result, not
+ *     all of them, or it describes the indecisive rather than the ministry,
  *  3. a completion rate over nobody is undefined, not 0%.
  */
 
@@ -32,6 +32,7 @@ function harness(
     activity?: Array<{ id: bigint; action: string; actorName: string | null }>;
     activeAssessment?: { version: number; effectiveFrom: Date | null; createdAt: Date } | null;
     draftCount?: number;
+    activePathLetters?: string[];
   } = {},
 ) {
   const results = options.results ?? [];
@@ -55,7 +56,16 @@ function harness(
       count: () => Promise.resolve(0),
     },
     entity: { groupBy: () => Promise.resolve(groupBy([{ status: 'ACTIVE' }], 'status')) },
-    path: { count: () => Promise.resolve(4) },
+    path: {
+      count: () => Promise.resolve(4),
+      groupBy: () =>
+        Promise.resolve(
+          groupBy(
+            (options.activePathLetters ?? []).map((riasecLetter) => ({ riasecLetter })),
+            'riasecLetter',
+          ),
+        ),
+    },
     course: { count: () => Promise.resolve(48) },
     assessmentResult: {
       findMany: (args: { distinct: string[]; orderBy?: unknown; select: { code?: boolean } }) => {
@@ -143,34 +153,93 @@ describe('AdminDashboardService', () => {
     expect(view.journey.assessed).toBe(2);
   });
 
-  it('distributes codes by each person’s newest result, not by every attempt', async () => {
+  it('distributes career types by each person’s newest result, not by every attempt', async () => {
     const view = await harness({
       results: [
-        /* u1 changed their mind: the old SIA must not still be counted, or one
-           indecisive employee inflates two different codes at once. */
+        /* u1 changed their mind: the old S must not still be counted, or one
+           indecisive employee inflates two different types at once. */
         { userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') },
         { userId: 'u1', code: 'RIC', completedAt: new Date('2026-02-01') },
         { userId: 'u2', code: 'SIA', completedAt: new Date('2026-01-15') },
       ],
     }).get();
 
-    expect(view.codeDistribution).toEqual([
-      { code: 'RIC', count: 1 },
-      { code: 'SIA', count: 1 },
+    const employees = Object.fromEntries(
+      view.letterDistribution.map((row) => [row.letter, row.employees]),
+    );
+
+    expect(employees).toEqual({ R: 1, I: 0, A: 0, S: 1, E: 0, C: 0 });
+  });
+
+  it('counts the dominant letter, not every letter of the code', async () => {
+    const view = await harness({
+      results: [{ userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') }],
+    }).get();
+
+    /* I and A are in this person's code but are not what they lead with. A
+       distribution that counted all three would total more people than exist. */
+    const employees = Object.fromEntries(
+      view.letterDistribution.map((row) => [row.letter, row.employees]),
+    );
+
+    expect(employees).toEqual({ R: 0, I: 0, A: 0, S: 1, E: 0, C: 0 });
+    expect(view.letterDistribution.reduce((sum, row) => sum + row.employees, 0)).toBe(1);
+  });
+
+  it('returns all six letters, including the ones nobody scored', async () => {
+    const view = await harness({
+      results: [{ userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') }],
+    }).get();
+
+    /* A dimension nobody leads with is a finding, not an absence — and a row
+       that disappeared could not be compared against the paths offered for it. */
+    expect(view.letterDistribution).toHaveLength(6);
+    expect([...view.letterDistribution.map((row) => row.letter)].sort()).toEqual([
+      'A',
+      'C',
+      'E',
+      'I',
+      'R',
+      'S',
     ]);
   });
 
-  it('orders the distribution by count, then by code for a stable tie', async () => {
+  it('orders by employee count, breaking a tie on the canonical letter order', async () => {
     const view = await harness({
       results: [
         { userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') },
-        { userId: 'u2', code: 'SIA', completedAt: new Date('2026-01-01') },
+        { userId: 'u2', code: 'SEC', completedAt: new Date('2026-01-01') },
         { userId: 'u3', code: 'RIC', completedAt: new Date('2026-01-01') },
         { userId: 'u4', code: 'AEC', completedAt: new Date('2026-01-01') },
       ],
     }).get();
 
-    expect(view.codeDistribution.map((row) => row.code)).toEqual(['SIA', 'AEC', 'RIC']);
+    /* S leads on count; R and A tie at one each and fall back to canonical
+       R-I-A-S-E-C (D-031), so the order is reproducible between refreshes. */
+    expect(view.letterDistribution.map((row) => row.letter)).toEqual([
+      'S',
+      'R',
+      'A',
+      'I',
+      'E',
+      'C',
+    ]);
+  });
+
+  it('counts only OFFERED paths beside each type', async () => {
+    const view = await harness({
+      results: [{ userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') }],
+      activePathLetters: ['S', 'S', 'R'],
+    }).get();
+
+    const paths = Object.fromEntries(
+      view.letterDistribution.map((row) => [row.letter, row.activePaths]),
+    );
+
+    /* Retired paths are excluded by the query's `isActive` filter: a type
+       served only by paths no learner can choose is an unserved type, and
+       counting them would hide exactly the gap this section exists to show. */
+    expect(paths).toEqual({ R: 1, I: 0, A: 0, S: 2, E: 0, C: 0 });
   });
 
   it('reports no completion rate at all when nobody has committed to a path', async () => {
