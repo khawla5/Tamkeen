@@ -186,25 +186,42 @@ export class MoodleHttpService implements LmsPort {
 
     const { firstname, lastname } = splitFullName(input.fullName);
 
+    const account = {
+      username,
+      /* Generated and immediately discarded: the account is reachable only
+         through our handoff, by construction rather than by setting. */
+      password: generateUnusedPassword(),
+      firstname,
+      lastname,
+      email,
+      auth: 'manual',
+    };
+
     try {
-      const created = await this.client.call<MoodleUser[]>('core_user_create_users', {
-        users: [
-          {
-            username,
-            /* Generated and immediately discarded: the account is reachable only
-               through our handoff, by construction rather than by setting. */
-            password: generateUnusedPassword(),
-            firstname,
-            lastname,
-            email,
-            auth: 'manual',
-            /* Arabic-first (§2): Moodle's UI — framed inside the portal for
-               authors (D-098) — must open in Arabic. Left unset, Moodle gives a
-               new account English regardless of the site default. */
-            lang: 'ar',
-          },
-        ],
-      });
+      let created: MoodleUser[] | undefined;
+
+      try {
+        /* Arabic-first (§2): Moodle's UI — framed inside the portal for authors
+           (D-098) — must open in Arabic. Left unset, Moodle gives a new account
+           English regardless of the site default. */
+        created = await this.client.call<MoodleUser[]>('core_user_create_users', {
+          users: [{ ...account, lang: 'ar' }],
+        });
+      } catch (error) {
+        /* Moodle validates `lang` against its INSTALLED packs and answers
+           `invalidparameter` when Arabic is missing. Provisioning must never
+           fail on a UI nicety — the learner would be locked out of every
+           course — so create the account in the site default and say so. */
+        if (!(error instanceof MoodleWsError && error.errorcode === 'invalidparameter')) {
+          throw error;
+        }
+        this.logger.warn(
+          'Moodle rejected lang=ar for a new user — the Arabic language pack is not installed on the LMS; provisioning in the site default',
+        );
+        created = await this.client.call<MoodleUser[]>('core_user_create_users', {
+          users: [account],
+        });
+      }
 
       const first = created?.[0];
 
