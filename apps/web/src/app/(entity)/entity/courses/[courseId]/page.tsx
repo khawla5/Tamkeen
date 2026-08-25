@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { entityApi } from '@/lib/api-client';
@@ -250,15 +251,14 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
 
         <Field id="course-language" label={t('fieldLanguage')}>
           {(field) => (
-            <select
+            <Select
               {...field}
               value={language}
               onChange={(event) => setLanguage(event.target.value as 'AR' | 'EN' | '')}
-              className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground"
             >
               <option value="AR">{t('languageAr')}</option>
               <option value="EN">{t('languageEn')}</option>
-            </select>
+            </Select>
           )}
         </Field>
 
