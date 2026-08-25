@@ -42,7 +42,7 @@ test.describe('profile — accessibility and layout', () => {
     });
   }
 
-  test('the keyboard reaches name, department and sign-out in order, skipping save while disabled', async ({
+  test('the keyboard reaches name and department in order, skipping save while disabled', async ({
     page,
   }) => {
     await signedInEmployee(page, 'profile-kbd');
@@ -58,15 +58,22 @@ test.describe('profile — accessibility and layout', () => {
     await expect(nameInput).toBeFocused();
 
     await page.keyboard.press('Tab');
-    await expect(page.getByLabel('الإدارة')).toBeFocused();
+    /* `exact` matters here: the save button's accessible name is "حفظ
+       الاسم والإدارة" (disambiguating it from DigitsCard's identical "حفظ"
+       elsewhere on the page), which itself contains "الإدارة" as a
+       substring — so a non-exact match resolves to two elements once that
+       button exists in the DOM. */
+    await expect(page.getByLabel('الإدارة', { exact: true })).toBeFocused();
 
     /* Nothing has been edited, so save is disabled — and a disabled button is
        correctly not a tab stop at all, per the browser's own semantics. The
-       next control a keyboard user reaches is sign-out, not a dead button. */
+       next control a keyboard user reaches is the email card below, not a
+       dead button — and not sign-out either, which now lives only in the
+       header user menu (D-096), outside this page's own tab order. */
     await expect(page.getByRole('button', { name: 'حفظ' })).toBeDisabled();
 
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', { name: 'تسجيل الخروج' })).toBeFocused();
+    await expect(page.getByLabel('البريد الإلكتروني الجديد')).toBeFocused();
   });
 
   test('editing the name with the keyboard alone enables and reaches save', async ({ page }) => {
