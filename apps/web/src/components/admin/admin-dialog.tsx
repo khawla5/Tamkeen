@@ -29,6 +29,15 @@ import { Button } from '@/components/ui/button';
  * course list is taller than a laptop viewport, and a `<dialog>` that overflows
  * takes its actions off-screen with it — including the cancel button. Height is
  * capped and the middle scrolls, so the title and the decisions stay put.
+ *
+ * **And there is no `<form>` around the content, deliberately.** There used to
+ * be a `<form method="dialog">`, and it made the dialog close on *any* submit:
+ * `Button` has no default `type`, so every control inside that did not say
+ * `type="button"` — save, retire, activate — submitted the form and shut the
+ * panel behind the request it had just fired. Enter inside a text field did the
+ * same thing, which on a create form meant abandoning the entry. Nothing here
+ * needs form semantics: every action is an `onClick`, and Escape is the
+ * `<dialog>` element's own.
  */
 export function AdminDialog({
   title,
@@ -71,7 +80,7 @@ export function AdminDialog({
     >
       {/* `max-h-[inherit]` hands the dialog's cap down to the flex column, which
           is what lets the middle section — and only the middle section — scroll. */}
-      <form method="dialog" className="flex max-h-[inherit] flex-col">
+      <div className="flex max-h-[inherit] flex-col">
         <div className="border-b border-border px-6 py-4">
           <h2 id={titleId} className="text-lg font-semibold">
             {title}
@@ -93,7 +102,7 @@ export function AdminDialog({
           </Button>
           {footer}
         </div>
-      </form>
+      </div>
     </dialog>
   );
 }

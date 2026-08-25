@@ -72,6 +72,25 @@ describe('AdminDialog', () => {
     expect(container.querySelector('dialog')).not.toHaveAttribute('aria-describedby');
   });
 
+  it('wraps its content in no form, so an untyped button cannot close it', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <AdminDialog title="إدارة المسار" onClose={onClose}>
+        {/* No `type`, exactly like the save and retire controls in the path
+            panel. Under the old `<form method="dialog">` this submitted the
+            form and shut the dialog behind the request it had just fired. */}
+        <button onClick={() => {}}>حفظ التعديلات</button>
+      </AdminDialog>,
+    );
+
+    expect(document.querySelector('dialog')!.querySelector('form')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'حفظ التعديلات' }));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('closes through the caller rather than behind its back', async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();

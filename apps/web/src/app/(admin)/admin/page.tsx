@@ -317,7 +317,8 @@ function RecentActivity({ rows }: { rows: AdminDashboardView['recentActivity'] }
                     ) : null}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {row.actorName ?? t('actorSystem')} · {format.dateTime(new Date(row.occurredAt))}
+                    {row.actorName ?? t('actorSystem')} ·{' '}
+                    {format.dateTime(new Date(row.occurredAt))}
                   </span>
                 </li>
               ))}

@@ -406,6 +406,20 @@ export interface AdminPathDetail extends AdminPathRow {
   blockers: string[];
   /** How many of its courses a learner could select right now. */
   selectableCourses: number;
+  /**
+   * Whether a permanent delete is possible: true only while nobody has ever
+   * chosen this path and no certificate names it.
+   *
+   * Reported so §4C.4 can say which of the two removals is available *before*
+   * the administrator picks one — the server refuses the other either way, but
+   * being refused after choosing "delete permanently" teaches the rule the
+   * expensive way.
+   */
+  canDelete: boolean;
+  /** Certificates naming this path. Non-zero makes deletion a falsification of
+   *  a document somebody holds, which is why it is counted separately from the
+   *  learners still on it. */
+  certificateCount: number;
 }
 
 /**
