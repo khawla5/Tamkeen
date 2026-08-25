@@ -59,8 +59,6 @@ function harness(
 const account = (role: AuthenticatedUser['role'], id = 'user-1'): AuthenticatedUser => ({
   id,
   email: 'someone@authority.gov.example',
-  employeeId: 'ENT-0001',
-  department: 'جهة',
   fullName: 'حساب',
   role,
   sessionId: 'session-1',

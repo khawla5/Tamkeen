@@ -403,6 +403,7 @@
     "digitsWestern": "أرقام عربية (0123)",
     "digitsArabic": "أرقام هندية (٠١٢٣)",
     "digitsSave": "حفظ",
+    "digitsSaveAriaLabel": "حفظ شكل الأرقام",
     "digitsSaved": "حُفظ اختيارك.",
     "passwordHeading": "تغيير كلمة المرور",
     "passwordHint": "نطلب كلمة مرورك الحالية للتأكد من أنك صاحب الحساب، حتى لو تُركت الجلسة مفتوحة.",

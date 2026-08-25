@@ -173,7 +173,7 @@
 
 > **Epic label: `profile`** — §4.12's profile/settings surface. progress.md deferred all of this to "Phase 5/6"; these tickets pull it forward deliberately (record that in decisions.md with the first PR). Shared rules: extend the existing single-card Tamkeen design (no reference-repo porting); every mutation is audited (§2), rate-limited like the other auth endpoints, and validated on both client and server; employee ID is identity and is **never** user-editable. No new email notification types may be added without amending the locked notifications rule (§2) — flag, don't improvise.
 
-## TAM-109 — Profile: show employee ID + department, edit name + department
+## TAM-109 — Profile: show employee ID + department, edit name + department — **display half DONE** (with the TAM-124 branch: both fields shown read-only; editing still open)
 
 - **Labels:** `profile`, `frontend`, `api`
 - **Priority:** High (the other profile tickets build on the same page sections)
@@ -335,7 +335,7 @@
 > **Source of truth:** the official Platforms Code site/Figma; the community registry's Navigation Menu, Breadcrumb, Card, Table, Tabs, Tag, Tooltip, Skeleton and Sonner definitions are the practical reference for component anatomy (unofficial — reconcile with the official spec where they differ).
 > **Branching:** `feature/tam-117-portal-shell` off `feature/tam-106-nav-gating`; each following ticket stacks on the previous.
 
-## TAM-117 — Portal shell on Platforms Code: header bar, light sidebar, page frame, footer
+## TAM-117 — Portal shell on Platforms Code: header bar, light sidebar, page frame, footer — **DONE** (`feature/tam-117-portal-shell`, D-097; sign-out had already moved to the header user menu per D-096, which this shell keeps)
 
 - **Labels:** `portal-dga`, `frontend`, `design-system`
 - **Priority:** High (every portal page sits in it)
@@ -421,7 +421,7 @@
 - **What shipped (2026-08-23), per the discussion:** every state — journey tracker (4 stages, state-derived) + personal header (name · department · employee id; the session and `/me` now carry both — TAM-109's first bullet, done here) + the last three events. Assessed state — the top three recommended paths as cards in rank order + "عرض كل المسارات". Active state — next courses with status, latest certificate or the locked slot. API: `DashboardView` gained `recommendedPaths`, `upcomingCourses`, `latestCertificate`, `recentActivity`; the feed is derived from assessment results, path confirmation, passed completions and issued certificates. D-074 recorded (it reverses TAM-108's "no previews"); CLAUDE.md §4.2 rewritten. 9 new web tests, API journey + auth integration assertions against the test database; screenshots reviewed for both pre-assessment and assessed states.
 - **Not done, by choice:** quick-link tiles in every state (duplicates the sidebar). Recent activity is limited to three events; a full history page is not a dashboard concern.
 
-## TAM-124 — One page width across the portal: الرئيسية is the reference
+## TAM-124 — One page width across the portal: الرئيسية is the reference — **DONE** (`feature/tam-124-page-width`)
 
 - **Labels:** `app-chrome`, `frontend`, `design-system`
 - **Priority:** High (TAM-125 builds on it; every open page ticket inherits it)

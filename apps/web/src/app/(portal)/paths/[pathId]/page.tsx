@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { PATH_MAX_COURSES, PATH_MIN_COURSES, type PathDetail } from '@tamkeen/types';
 
 import { useErrorMessage } from '@/components/auth/use-error-message';
-import { PortalPage } from '@/components/layout/portal-page';
+import { PAGE_MAX_WIDTH, PortalPage } from '@/components/layout/portal-page';
 import { usePortal } from '@/components/layout/portal-provider';
 import { ConfirmPathDialog } from '@/components/paths/confirm-path-dialog';
 import { DataView, EmptyState } from '@/components/states';
@@ -112,7 +112,7 @@ function Builder({ path, onReload }: { path: PathDetail; onReload: () => void })
 
   if (!path.canBuild) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div>
         <EmptyState
           title={t('lockedTitle')}
           body={t('lockedBody')}
@@ -129,7 +129,7 @@ function Builder({ path, onReload }: { path: PathDetail; onReload: () => void })
   const saveError = selectPath.error ?? setCourses.error;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 pb-28">
+    <div className="flex flex-col gap-6 pb-28">
       <p className="text-muted-foreground">{path.description}</p>
 
       <Card>
@@ -208,7 +208,12 @@ function Builder({ path, onReload }: { path: PathDetail; onReload: () => void })
         `aria-live="polite"` announces each change without interrupting.
       */}
       <div className="fixed inset-x-0 bottom-0 border-t border-border bg-card/95 px-6 py-4 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
+        <div
+          className={cn(
+            'mx-auto flex flex-wrap items-center justify-between gap-3',
+            PAGE_MAX_WIDTH,
+          )}
+        >
           <p aria-live="polite" aria-label={t('counterLabel')} className="text-sm font-medium">
             {t('counter', {
               selected: format.number(count),

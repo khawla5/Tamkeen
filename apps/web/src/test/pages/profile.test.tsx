@@ -28,7 +28,6 @@ import { renderWithProviders } from '@/test/render';
  */
 
 const api = vi.hoisted(() => ({
-  logout: vi.fn(),
   changePassword: vi.fn(),
   changeEmail: vi.fn(),
   setNumberFormat: vi.fn(),
@@ -58,12 +57,6 @@ vi.mock('@/components/layout/portal-page', () => ({
   ),
 }));
 
-const replace = vi.fn();
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace }),
-}));
-
 const { default: ProfilePage } = await import('@/app/(portal)/profile/page');
 
 const BASE_USER: CurrentUser = {
@@ -88,7 +81,6 @@ beforeEach(() => {
   api.changePassword.mockResolvedValue(undefined);
   api.changeEmail.mockResolvedValue({ status: 'EMAIL_CHANGE_PENDING' });
   api.setNumberFormat.mockResolvedValue(undefined);
-  api.logout.mockResolvedValue(undefined);
   setUser();
 });
 
@@ -322,11 +314,11 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     const user = userEvent.setup();
     renderWithProviders(<ProfilePage />);
 
-    expect(screen.queryByRole('button', { name: 'حفظ' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'حفظ شكل الأرقام' })).not.toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText(/الأرقام المعروضة/), 'arabic-indic');
 
-    expect(screen.getByRole('button', { name: 'حفظ' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'حفظ شكل الأرقام' })).toBeInTheDocument();
   });
 
   it('saves the chosen format and refreshes the session so the app re-renders', async () => {
@@ -334,7 +326,7 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     renderWithProviders(<ProfilePage />);
 
     await user.selectOptions(screen.getByLabelText(/الأرقام المعروضة/), 'arabic-indic');
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await user.click(screen.getByRole('button', { name: 'حفظ شكل الأرقام' }));
 
     await waitFor(() => expect(api.setNumberFormat).toHaveBeenCalledWith('arabic-indic'));
     /* Without the refresh the preference is stored but the page keeps rendering
@@ -349,7 +341,7 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     renderWithProviders(<ProfilePage />);
 
     await user.selectOptions(screen.getByLabelText(/الأرقام المعروضة/), 'system');
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await user.click(screen.getByRole('button', { name: 'حفظ شكل الأرقام' }));
 
     /* Not the string "system" — the column is nullable precisely so "no
        preference" and "prefers Western" stay distinguishable. */

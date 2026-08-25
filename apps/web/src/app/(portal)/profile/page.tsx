@@ -130,8 +130,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <PortalPage title={t('title')}>
-      <div className="mx-auto max-w-2xl">
+    <PortalPage title={t('title')} width="narrow">
+      <>
         <Card>
           <CardHeader>
             <CardTitle>{t('personalHeading')}</CardTitle>
@@ -240,7 +240,7 @@ export default function ProfilePage() {
         <EmailCard current={user.email} />
         <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
         <PasswordCard />
-      </div>
+      </>
     </PortalPage>
   );
 }
@@ -305,7 +305,7 @@ function EmailCard({ current }: { current: string }) {
   }
 
   return (
-    <Card className="mt-6">
+    <Card>
       <CardHeader>
         <CardTitle>{t('emailHeading')}</CardTitle>
       </CardHeader>
@@ -412,7 +412,7 @@ function DigitsCard({
   }
 
   return (
-    <Card className="mt-6">
+    <Card>
       <CardHeader>
         <CardTitle>{t('digitsHeading')}</CardTitle>
       </CardHeader>
@@ -436,7 +436,12 @@ function DigitsCard({
 
         {/* Save appears only when there is something to save (§3). */}
         {value !== (current ?? 'system') ? (
-          <Button className="self-start" disabled={busy} onClick={() => void save()}>
+          <Button
+            className="self-start"
+            aria-label={t('digitsSaveAriaLabel')}
+            disabled={busy}
+            onClick={() => void save()}
+          >
             {t('digitsSave')}
           </Button>
         ) : null}
@@ -490,7 +495,7 @@ function PasswordCard() {
   }
 
   return (
-    <Card className="mt-6">
+    <Card>
       <CardHeader>
         <CardTitle>{t('passwordHeading')}</CardTitle>
       </CardHeader>

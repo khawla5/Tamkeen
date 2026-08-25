@@ -59,7 +59,12 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
     await here.goto('/profile');
     await expect(here.getByRole('heading', { name: 'الملف الشخصي' })).toBeVisible();
 
-    await expect(here.getByText(account.fullName)).toBeVisible();
+    /* The signed-in identity lives in the header's user menu, not printed on
+       the page itself (TAM-117/D-096). */
+    await here.getByRole('banner').getByRole('button', { name: 'قائمة المستخدم' }).click();
+    await expect(here.getByRole('menu').getByText(account.fullName)).toBeVisible();
+    await here.keyboard.press('Escape');
+
     await expect(here.getByLabel('كلمة المرور الحالية')).toBeVisible();
     await expect(here.getByLabel('الأرقام المعروضة')).toBeVisible();
 
@@ -156,12 +161,7 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
 
   test('choosing Arabic-Indic changes the digits on a page several screens away', async () => {
     await here.getByLabel('الأرقام المعروضة').selectOption('arabic-indic');
-    /* `exact` matters here: the name/department card's save button has the
-       accessible name "حفظ الاسم والإدارة" (disambiguating it from this one,
-       since both sit on /profile), which itself contains "حفظ" as a
-       substring — a non-exact match resolves to two elements once both
-       buttons are in the DOM. */
-    await here.getByRole('button', { name: 'حفظ', exact: true }).click();
+    await here.getByRole('button', { name: 'حفظ شكل الأرقام' }).click();
 
     /* The confirmation's own words, not a bare `role="status"` — the loading
        state carries that role too, so the loose query passed while the page was
@@ -184,12 +184,7 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
   test('and going back to the system default restores them', async () => {
     await here.goto('/profile');
     await here.getByLabel('الأرقام المعروضة').selectOption('system');
-    /* `exact` matters here: the name/department card's save button has the
-       accessible name "حفظ الاسم والإدارة" (disambiguating it from this one,
-       since both sit on /profile), which itself contains "حفظ" as a
-       substring — a non-exact match resolves to two elements once both
-       buttons are in the DOM. */
-    await here.getByRole('button', { name: 'حفظ', exact: true }).click();
+    await here.getByRole('button', { name: 'حفظ شكل الأرقام' }).click();
     await expect(here.getByText('حُفظ اختيارك.')).toBeVisible({ timeout: 15_000 });
 
     /* "Follow the system" is a real third option, not a null dressed up: it

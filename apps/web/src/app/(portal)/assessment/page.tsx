@@ -91,7 +91,7 @@ export default function AssessmentPage() {
   const assessment = useApiQuery(() => assessmentApi.get(), []);
 
   return (
-    <PortalPage title={t('title')}>
+    <PortalPage title={t('title')} width="narrow">
       <DataView
         isLoading={assessment.isLoading}
         error={assessment.error}
@@ -173,7 +173,7 @@ function AssessmentFlow({ assessment }: { assessment: AssessmentView }) {
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <p className="text-muted-foreground">{t('intro')}</p>
 
       <Progress

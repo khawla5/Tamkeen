@@ -131,12 +131,12 @@ These apply to **every** phase. A phase/task is not "done" until it meets all of
 | Recommended / achievement (same accent) | `primary-600` edge · `primary-700` text · `primary-50` fill with `primary-800` | `#1B8354` · `#166A45` · `#F3FCF6` / `#14573A` |
 | Button states | primary `600 → 700 → 900`; destructive `danger-600 → danger → danger-900` | `#1B8354 → #166A45 → #104631`; `#D92C20 → #B42318 → #7A2619` |
 | Display text · paragraph · secondary text | `neutral-800` · `neutral-700` · `neutral-500` | `#1F2A37` · `#384250` · `#6C727E` |
-| Dark surface (sidebar, footer) · nested | `neutral-900` · `neutral-800` | `#111927` · `#1F2A37` |
+| Dark surface (landing footer) · nested | `neutral-900` · `neutral-800` | `#111927` · `#1F2A37` |
 | Page ground · card · border | `neutral-50` · `surface` · `neutral-300` | `#F9FAFB` · `#FFFFFF` · `#D2D6DB` |
 | Status (text/border, with a `-50` fill each) | `success` · `info` · `warning` · `danger` | `#067647` · `#175CD3` · `#B54707` · `#B42318` |
 
 **Usage guidance:**
-- Primary green for every action, link, focus ring and the active nav item; the dark neutral for top-level dark surfaces (sidebar, footer), never green as a large surface.
+- Primary green for every action, link, focus ring and the active nav item; the dark neutral only for the landing footer — **the portal navigation is light** (white rail, primary start-edge bar on the active item — D-097/TAM-117); never green as a large surface.
 - **One accent.** Platforms Code's gold secondary is deliberately NOT used. The recommended-path highlight is the `primary-600` border **plus the "موصى به" badge** (never colour alone — WCAG 1.4.1); achievements (certificates, the path seal) use the primary and its deep step. Keep the highlight scarce so it keeps signaling "recommended".
 - **Buttons follow Platforms Code's state model** (default → hovered → pressed) — see `components/ui/button.tsx`; no gold/achievement button variant exists.
 - Neutral-50 is the app ground; white for cards and content surfaces; neutral-300 for hairline borders (controls identify themselves by label and focus ring, not by border).
