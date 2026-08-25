@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-import { signedInEmployee } from './account';
+import { signedInEmployee, signIn, type Account } from './account';
 
 /**
  * Profile's accessibility and layout gate, the portal equivalent of
@@ -13,8 +13,30 @@ import { signedInEmployee } from './account';
 const WIDTHS = [360, 768, 1280] as const;
 
 test.describe('profile — accessibility and layout', () => {
+  /**
+   * One account, registered once, signed into fresh per test (§2B rigor
+   * without the cost): every test here only needs *an* authenticated
+   * session, not a fresh registration, and `signedInEmployee` per test was
+   * six registrations from one file — six trips through Mailpit's real SMTP
+   * delivery. Under a long, single-worker full-suite run that queue backs up
+   * enough to blow even a widened wait, which is what broke this file
+   * outright rather than just occasionally. `signIn` alone has no mail step,
+   * so five of those six trips are simply gone.
+   */
+  let account: Account;
+
+  test.beforeAll(async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    account = await signedInEmployee(page, 'profile-a11y');
+    await context.close();
+  });
+
+  test.beforeEach(async ({ page }: { page: Page }) => {
+    await signIn(page, account);
+  });
+
   test('has no WCAG 2.1 A/AA violations and one h1', async ({ page }) => {
-    await signedInEmployee(page, 'profile-a11y');
     await page.goto('/profile');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('الملف الشخصي');
 
@@ -30,7 +52,6 @@ test.describe('profile — accessibility and layout', () => {
 
   for (const width of WIDTHS) {
     test(`at ${width}px does not scroll sideways`, async ({ page }) => {
-      await signedInEmployee(page, `profile-w${width}`);
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/profile');
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -45,7 +66,6 @@ test.describe('profile — accessibility and layout', () => {
   test('the keyboard reaches name and department in order, skipping save while disabled', async ({
     page,
   }) => {
-    await signedInEmployee(page, 'profile-kbd');
     await page.goto('/profile');
 
     /* RTL — confirmed once here rather than per test, since every test above
@@ -77,7 +97,6 @@ test.describe('profile — accessibility and layout', () => {
   });
 
   test('editing the name with the keyboard alone enables and reaches save', async ({ page }) => {
-    await signedInEmployee(page, 'profile-kbd-edit');
     await page.goto('/profile');
 
     const nameInput = page.getByLabel('الاسم الكامل');
