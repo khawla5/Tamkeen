@@ -167,12 +167,18 @@ function ActivePath({ dashboard }: { dashboard: DashboardView }) {
   return (
     <>
       {/* The status strip: which path, and how the courses break down. Pure
-          information — nothing here is a link. */}
+          information — nothing here is a link.
+          Four tiles, deliberately equal-width grid cells at every breakpoint:
+          `grid-cols-2` wraps them 2×2 below `sm` (the path tile is not
+          spanned wide there — a spanned first row reads as one wide tile
+          plus a dangling three, not the 2×2 the acceptance criteria call
+          for), and `sm:grid-cols-[2fr_1fr_1fr_1fr]` widens just the path
+          tile once there is room for the desktop row from the mockup. */}
       <ul
         aria-label={t('statusHeading')}
         className="grid grid-cols-2 gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr]"
       >
-        <li className="col-span-2 flex flex-col justify-center rounded-card border border-border bg-card px-4 py-3 sm:col-span-1">
+        <li className="flex flex-col justify-center rounded-card border border-border bg-card px-4 py-3">
           <span className="text-sm font-bold text-foreground">{path.name}</span>
           <span className="text-xs font-medium text-primary-700">
             {tRiasec(`${path.riasecLetter}.name`)}
