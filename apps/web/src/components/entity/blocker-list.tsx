@@ -14,7 +14,14 @@ import type { PublishBlocker } from '@tamkeen/types';
  * Shared by the dashboard's needs-attention list and the manage screen, so the
  * two cannot describe the same course differently.
  */
-export function BlockerList({ blockers }: { blockers: readonly PublishBlocker[] }) {
+export function BlockerList({
+  blockers,
+  maxPaths = 3,
+}: {
+  blockers: readonly PublishBlocker[];
+  /** TAM-132: the cap, named in the NO_PATH message. */
+  maxPaths?: number;
+}) {
   const t = useTranslations('entity');
 
   if (blockers.length === 0) {
@@ -24,7 +31,7 @@ export function BlockerList({ blockers }: { blockers: readonly PublishBlocker[] 
   return (
     <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
       {blockers.map((blocker) => (
-        <li key={blocker}>• {t(`blocker${blocker}`)}</li>
+        <li key={blocker}>• {t(`blocker${blocker}`, { max: maxPaths })}</li>
       ))}
     </ul>
   );

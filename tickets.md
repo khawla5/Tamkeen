@@ -642,3 +642,71 @@
   - `apps/web/src/components/layout/sidebar-nav.tsx:60` — the one line: `const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);`. Items: `entity-nav-items.ts:16` (`/entity`), `nav-items.ts:47` (`/`).
   - Both rails render through the same `SidebarNav` (`AppShell`, D-097), so one fix covers both portals; the horizontal (mobile) orientation uses the same `isActive`.
   - Rejected: adding `'/entity'` to the exact-match exception list — the admin portal (Phase 5, `/admin`) would need the next exception, and the next; the segment-aware rule needs none.
+
+## TAM-132 — Path membership rules for a course: cap of 3, RIASEC coherence, admin approval, and «عامة» courses — **entity half DONE** (on `feature/tam-130-entity-content-embed`, D-100)
+
+- **What shipped (2026-08-25):** `path-membership-rules.ts` (pure: cap → coherence → grandfather remove-only → general exemption; 9 unit cases) used by `replacePathMembership`; `PathCourse.status/decidedById/decidedAt` + `Course.isGeneral` (migration `20260825140000`); settings `COURSE_MAX_PATHS=3`, `COURSE_MAX_RIASEC_LETTERS=2`, `PATH_MEMBERSHIP_APPROVAL=off` (env, `SETTING_KEYS`, admin labels/hints/validation strings); learner-facing readers filter APPROVED; `EntityCourseDetail.pathRules` + `isGeneral`, `paths[].status`; the metadata form disables checkboxes at the cap / on a third letter / when frozen with the reason in the accessible name, shows «بانتظار موافقة الإدارة» and the «عامة» note, live letters preview; `blockerNO_PATH` names the cap. Errors `PATH_LIMIT_EXCEEDED` / `PATH_MIX_INCOHERENT` / `PATH_MEMBERSHIP_FROZEN` in the catalogue. Tests: 4 e2e cases (47 green), 5 component cases, API 610 / web 511 green. **Left for Phase 5, schema-ready:** the approval queue in Path Management, setting «عامة» in Course Oversight, and turning `PATH_MEMBERSHIP_APPROVAL` on.
+
+- **Labels:** `entity`, `paths`, `product-rule`, `backend`, `frontend`, `phase-5`
+- **Priority:** High (a product-rule hole: today an entity can put one course into all 12 paths)
+- **Pre-requisite:** none for the entity half; the approval queue and the «عامة» flag land with Phase 5's Path Management / Course Oversight (§4C.4, §4C.5) and System Settings (§4C.6)
+- **Decisions taken 2026-08-25 (record in decisions.md when built):** cap **3**; membership chosen by an entity is a **proposal that an admin approves**; cross-cutting courses exist, as an admin-only **«عامة»** flag; existing courses over the cap are **grandfathered**.
+- **Description:**
+  A course may belong to more than one path (§2 — a modelling fact so a shared course is not duplicated), and today the only rule is "at least one" (`NO_PATH`). Ticking every path is therefore legal, and it breaks three things at once: the course's RIASEC letters are derived from its paths (D-066), so twelve paths make it all six letters — no signal; every path's 5–10 build list then carries the same generic course, so paths stop being curated tracks; and path membership is _path_ content the admin owns (§4C.4), yet an entity has just edited all twelve paths. Four rules:
+
+  **1. Cap (entity + server).** A course may be a member of at most **3** paths. The metadata form disables the remaining checkboxes at the cap with a hint («الحد الأقصى 3 مسارات»); the server rejects an over-cap `pathIds` with `PATH_LIMIT_EXCEEDED` (400, in the shared `errors` catalogue → Arabic via `useErrorMessage`). The number comes from a new setting `COURSE_MAX_PATHS` (default 3; editable in Phase 5 §4C.6, read through `SettingsService` like `PASS_THRESHOLD`).
+
+  **2. Coherence (entity + server).** The chosen paths must not give the course more than **2** distinct RIASEC letters — the cap alone does not protect the Holland signal (three paths from R, S and C still smear it). Server: `PATH_MIX_INCOHERENT`; form: the letters preview already on the page (`riasecLetters`) turns into the live check — as soon as a third letter would appear, the offending checkboxes are disabled with «لا يمكن الجمع بين أكثر من نمطين مهنيين».
+
+  **3. Approval.** What an entity saves is a **proposal**: `path_courses` gains `status: PENDING | APPROVED` (+ `decidedById`, `decidedAt`). Only APPROVED rows count for the learner catalogue, path build, `riasecLetters` and the `NO_PATH` blocker; PENDING rows show on Manage Course as «بانتظار موافقة الإدارة» and on the entity dashboard's pending list. Removing a membership needs no approval (an entity may always withdraw its own course from a path — course-edit protection D-040 still applies if learners hold it). The admin decides in **Path Management** (§4C.4) — a per-path queue with approve/reject and an optional reason returned to the entity; every decision audited. **Until Phase 5 ships**, proposals are **auto-approved** behind a setting `PATH_MEMBERSHIP_APPROVAL=off` so the entity flow keeps working; switching it on is the Phase 5 launch step. This is the one place the ticket depends on Phase 5, and it degrades cleanly.
+
+  **4. «عامة» — cross-cutting courses (admin only).** A course the admin marks `isGeneral` appears in **every** path's build list and catalogue path-filter without any `path_courses` rows, carries no derived RIASEC letters (it is shown with «عامة» instead of a type), and is exempt from rules 1–2. Entities cannot set or clear it; Manage Course shows it read-only. Set from Course Oversight (§4C.5). Recommendation ranking is untouched (it reads path letters, not course letters).
+
+  **Grandfathering.** Courses already over the cap or incoherent keep their current memberships (learners may hold them in confirmed paths — D-002/D-040 forbid pulling them). They may **remove** memberships but not add until they are within the rules; the form says so («هذه الدورة تتجاوز الحد الحالي؛ يمكنك إزالة مسارات فقط»). No migration rewrites `path_courses`.
+
+  **Copy:** `blockerNO_PATH` → «أضف الدورة إلى مسار واحد على الأقل (بحد أقصى 3).»; new strings for the cap hint, the coherence hint, the pending state, the grandfather note, «عامة».
+
+  **Acceptance:**
+  - Server: `PATCH /api/entity/courses/:id` with 4 paths → 400 `PATH_LIMIT_EXCEEDED`; with 3 paths spanning 3 letters → 400 `PATH_MIX_INCOHERENT`; with 3 paths in 2 letters → 200 (e2e). A grandfathered course: removing a path → 200, adding one → 400 with the grandfather error.
+  - Form: 4th checkbox disabled at the cap; a checkbox that would add a third letter disabled, with the hint; the letters preview reflects only approved memberships (component tests).
+  - Approval off (default now): saving creates APPROVED rows and behaviour is as today — the existing phase-4 browser suite stays green unchanged. Approval on (Phase 5): rows are PENDING, the course is absent from the learner catalogue/path build until approved, and `NO_PATH` blocks publishing; approving in Path Management flips it, audited.
+  - `isGeneral` course: present in every path's build list and in the catalogue's every path filter; no letters; entity cannot change it (403); counts toward a learner's 5–10 like any course.
+  - Docs: decision entry (the four rules and why each); CLAUDE.md §2 (add the cap + coherence beside the "one course, multiple paths" rule), §4B.3, §4C.4/§4C.5/§4C.6; progress.md.
+
+  **Implementation notes (verified):**
+  - Rule today: `apps/api/src/entity/publish-readiness.ts:37` pushes `NO_PATH`; `UpdateEntityCourseDto.pathIds` (`entity.dto.ts:80`, UUID array, no length rule — add `@ArrayMaxSize` from the setting, or check in the service so the number is not baked into a decorator); `replacePathMembership` (`entity-course-management.service.ts:320`) rewrites `path_courses` wholesale — the natural place for cap, coherence and grandfather checks, with the old set in hand for the "remove only" rule.
+  - `PathCourse` (`schema.prisma:700`, unique `[pathId, courseId]`) — add `status`, `decidedById`, `decidedAt`; every reader of `path_courses` (catalogue, path build, `riasecLetters` in `entity-courses.service.ts`, recommendation/path detail, publish readiness) must filter `status = APPROVED` — grep `pathCourses`/`path_courses` and list them in the PR; a missed reader is how a pending course leaks into a learner's build list.
+  - Blocker strings live under `entity.blocker*` in `messages/ar.json:736`; error codes in the shared `errors` catalogue (D-024).
+  - Settings: follow `PASS_THRESHOLD`'s path through `SettingsService` and `env.schema.ts` for `COURSE_MAX_PATHS` and `PATH_MEMBERSHIP_APPROVAL`.
+  - Rejected: letting the entity mark «عامة» (it is exactly the "all paths" hole with a nicer name); cap without coherence (does not protect the Holland signal); approval without an auto-approve setting (would block entities until Phase 5 exists); a migration that trims existing memberships (touches confirmed learner paths).
+
+## TAM-133 — What changes in the framed editor shows in the portal at once: per-course resync on the frame's signal
+
+- **Labels:** `moodle-embed`, `entity`, `backend`, `frontend`, `moodle-plugin`
+- **Priority:** High (the framed editor makes the five-minute lag visible: an entity renames the course in the frame and the portal header keeps the old name)
+- **Pre-requisite:** TAM-129 + TAM-130 (the frame and its `tamkeen:content-changed` message)
+- **Description:**
+  Two kinds of course data reach the portal by two routes, and only one of them is immediate. The **structure** read-back (activities, quiz, completion criteria) is read live from Moodle (`readContent`, `core_course_get_contents`) and the Content page refetches it when the frame posts `tamkeen:content-changed`. The **title, description and visibility** are a cached copy in `courses`, refreshed only by the full catalogue sync every `COMPLETION_SYNC_INTERVAL_MINUTES` (5 min) — so a rename made in the frame at 13:31 appears at 13:35, and until then the Content page header, Manage Course, «دوراتي» and the learner catalogue all show the old name. Observed 2026-08-25.
+  Close the gap in three parts:
+
+  **1. Plugin — the frame also signals course-level edits.** `db/events.php` observes only course-module / section / completion events; add `\core\event\course_updated` (name, summary, visibility, format changed via the Settings tab) so the same `tamkeen:content-changed` message fires. One message type is enough — the portal reacts the same way to both.
+
+  **2. API — a per-course resync, not a full catalogue run.** `POST /api/entity/courses/:id/resync` (entity-scoped like every other course route; audited as `ENTITY_COURSE_RESYNCED`) reads that one course from the LMS (`core_course_get_courses_by_field` by id — already on the external service) and applies the **same mapping and the same upsert the catalogue sync uses** (`catalog-mapping.ts`, the `course.upsert` in `catalog-sync.service.ts:145`) — extract `syncOne(moodleCourseId)` from `sync()` rather than writing a second path, so the two can never map a field differently; `status` still derives through the one function D-059 names. Returns the refreshed `EntityCourseDetail` (with `content`) so the page needs no second request. Rate-limited per user (e.g. 30/min) — the frame can emit several messages in a burst; the handler should also **coalesce** (a resync already in flight for the course answers the second caller with the same result).
+
+  **3. Web — the Content page and Manage Course call it.** On `tamkeen:content-changed` and on «تحديث», the Content page calls `resync` instead of `getCourse`, so title, description, status, read-back and publish blockers all refresh together from one response; Manage Course's «تحديث» (add one, quiet, beside the status line) does the same. The learner-facing copies («دوراتي» list, catalogue) simply read the updated row. The scheduled catalogue sync stays as the safety net for edits made outside the frame.
+
+  **Courses created directly in Moodle.** An entity in the framed editor cannot reach "create course" (the primary nav is hidden), and D-060 makes the portal the only place a course shell is created — a course born in Moodle has no owner and is a Phase 5 admin matter (Course Oversight shows it as unclaimed). This ticket does **not** auto-claim such courses for an entity; note it in the decision so nobody adds it later as a convenience.
+
+  **Acceptance:**
+  - Rename the course in the frame's Settings tab → the Content page header shows the new name within ~2 s, no reload; Manage Course and «دوراتي» show it on their next load; the learner catalogue shows it (if published).
+  - Adding an activity still refreshes the read-back; both signals arrive through the one message (plugin test: `course_updated` sets the session flag).
+  - `POST …/resync` on another entity's course → the same refusal as every scoped route; rate limit returns 429 past the ceiling; two concurrent calls produce one LMS read (coalescing asserted in a unit test); the response equals `GET …/courses/:id` afterwards (e2e).
+  - `syncOne` and `sync()` share the mapping — a unit test feeds both the same LMS course and asserts identical rows; the scheduled sync's own tests stay green unchanged.
+  - Audit entry per resync; no new PII in it.
+  - Docs: decision entry (per-course resync as the immediate path, scheduled sync as the net; Moodle-born courses stay unclaimed); CLAUDE.md §4B.4 sentence; progress.md.
+
+  **Implementation notes (verified):**
+  - `catalog-sync.service.ts:82` `sync()` does the LMS read + mapping + upsert inline (`withdrawVanished` at 198 is the full-run-only part — a per-course sync must **not** withdraw anything). `readContent` is in `entity-course-management.service.ts:230`; the content route at `entity.controller.ts:126`.
+  - The Content page (`…/content/page.tsx`) already funnels both the message and «تحديث» through one `refresh` callback — swap its target from `getCourse` to `resync`; `MoodleEmbed` needs no change.
+  - Plugin observers: `moodle-plugin/local_tamkeensso/db/events.php`; the flag→message path in `hook_callbacks.php` is already generic.
+  - Rejected: shortening the scheduled interval (a full 78-course sync every minute to serve one editor); polling from the page (the frame already knows when something changed); webhooks from Moodle to the API (a new inbound surface to secure for a problem the existing message solves).

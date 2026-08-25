@@ -129,6 +129,16 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
   const translateError = useErrorMessage();
 
   const [pathIds, setPathIds] = useState<string[]>(course.paths.map((path) => path.id));
+  const rules = course.pathRules;
+  /* The letters the current selection would give the course (D-066) — the live
+     form of the read-only preview, and the input to the coherence rule. */
+  const selectedLetters = [
+    ...new Set(
+      course.availablePaths
+        .filter((path) => pathIds.includes(path.id))
+        .map((path) => path.riasecLetter),
+    ),
+  ];
   const [duration, setDuration] = useState(course.durationMinutes?.toString() ?? '');
   /* One objective per line: a repeating-row editor for three short strings is
      more UI than the data deserves, and a textarea is what an author already
@@ -180,22 +190,82 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
       <p className="mt-1 text-sm text-muted-foreground">{t('metadataHint')}</p>
 
       <form onSubmit={onSubmit} className="mt-4 space-y-5">
-        <fieldset>
+        <fieldset disabled={course.isGeneral}>
           <legend className="text-sm font-medium text-foreground">{t('fieldPaths')}</legend>
-          <p className="mt-1 text-sm text-muted-foreground">{t('fieldPathsHint')}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t('fieldPathsHint')} {t('pathsCapHint', { max: rules.maxPaths })}
+          </p>
+
+          {course.isGeneral ? (
+            /* Admin-only reach (§4C.5): nothing to choose here. */
+            <p role="status" className="mt-2 text-sm text-foreground">
+              {t('courseGeneral')}
+            </p>
+          ) : null}
+
+          {rules.frozen ? (
+            /* Grandfathered: over the limits from before the rule existed.
+               Removals only, and said so — a disabled checkbox with no reason
+               would read as a bug. */
+            <p role="status" className="mt-2 text-sm text-warning">
+              {t('pathsFrozen')}
+            </p>
+          ) : null}
+
+          {rules.approvalRequired ? (
+            <p className="mt-2 text-sm text-muted-foreground">{t('pathsApprovalNote')}</p>
+          ) : null}
 
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {course.availablePaths.map((path) => (
-              <label key={path.id} className="flex items-center gap-2 text-sm text-foreground">
-                <input
-                  type="checkbox"
-                  checked={pathIds.includes(path.id)}
-                  onChange={(event) => togglePath(path.id, event.target.checked)}
-                  className="size-4 rounded border-input"
-                />
-                <span>{path.name}</span>
-              </label>
-            ))}
+            {course.availablePaths.map((path) => {
+              const checked = pathIds.includes(path.id);
+              const membership = course.paths.find((entry) => entry.id === path.id);
+              const wouldAddLetter = !selectedLetters.includes(path.riasecLetter);
+              /* The same three rules the server applies (TAM-132), decided
+                 per checkbox so the form never offers a choice it would then
+                 refuse: frozen → removals only; the cap; coherence. */
+              const disabled =
+                !checked &&
+                (rules.frozen ||
+                  pathIds.length >= rules.maxPaths ||
+                  (wouldAddLetter && selectedLetters.length >= rules.maxLetters));
+              const reason = !checked
+                ? rules.frozen
+                  ? t('pathsFrozen')
+                  : pathIds.length >= rules.maxPaths
+                    ? t('pathsCapReached')
+                    : wouldAddLetter && selectedLetters.length >= rules.maxLetters
+                      ? t('pathsLettersReached', { max: rules.maxLetters })
+                      : null
+                : null;
+
+              return (
+                <label
+                  key={path.id}
+                  className={`flex items-center gap-2 text-sm ${disabled ? 'text-muted-foreground' : 'text-foreground'}`}
+                  title={reason ?? undefined}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={(event) => togglePath(path.id, event.target.checked)}
+                    className="size-4 rounded border-input"
+                  />
+                  <span>{path.name}</span>
+                  {membership?.status === 'PENDING' ? (
+                    <span className="rounded-sm bg-warning-50 px-1.5 py-0.5 text-xs text-warning">
+                      {t('pathPending')}
+                    </span>
+                  ) : null}
+                  {reason ? (
+                    <span id={`path-reason-${path.id}`} className="sr-only">
+                      {reason}
+                    </span>
+                  ) : null}
+                </label>
+              );
+            })}
           </div>
         </fieldset>
 
@@ -208,7 +278,11 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
         <p className="text-sm text-muted-foreground">
           {t('riasecLetters')}:{' '}
           <span className="font-medium text-foreground">
-            {course.riasecLetters.length > 0 ? course.riasecLetters.join(' · ') : t('riasecNone')}
+            {course.isGeneral
+              ? t('riasecNone')
+              : selectedLetters.length > 0
+                ? selectedLetters.join(' · ')
+                : t('riasecNone')}
           </span>
         </p>
 
@@ -304,7 +378,7 @@ function PublishCard({ course, onChanged }: { course: EntityCourseDetail; onChan
       {!isPublished && !canPublish ? (
         <div className="mt-3">
           <p className="text-sm font-medium text-foreground">{t('publishBlockedTitle')}</p>
-          <BlockerList blockers={course.publishBlockers} />
+          <BlockerList blockers={course.publishBlockers} maxPaths={course.pathRules.maxPaths} />
         </div>
       ) : null}
 

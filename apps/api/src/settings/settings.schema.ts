@@ -16,6 +16,9 @@ import { envSchema, type Env } from '../config/env.schema';
 export const SETTING_KEYS = [
   /** The grade a learner must reach (D-007). Changed without a release. */
   'PASS_THRESHOLD',
+  'COURSE_MAX_PATHS',
+  'COURSE_MAX_RIASEC_LETTERS',
+  'PATH_MEMBERSHIP_APPROVAL',
   /** How often the LMS is polled (D-042). Re-registers the scheduler on change. */
   'COMPLETION_SYNC_INTERVAL_MINUTES',
   /** D-017's registration gate: the mode, the domains, the employee-id shape. */

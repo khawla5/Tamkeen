@@ -149,7 +149,7 @@ function ReadBackStrip({
       {blocked ? (
         <div className="mt-3">
           <p className="text-sm font-medium text-foreground">{t('publishBlockedTitle')}</p>
-          <BlockerList blockers={course.publishBlockers} />
+          <BlockerList blockers={course.publishBlockers} maxPaths={course.pathRules.maxPaths} />
         </div>
       ) : null}
     </Card>

@@ -134,6 +134,15 @@ export const envSchema = z.object({
   CERT_SIGNATORY_TITLE: z.string().max(160).default(''),
   CERT_ISSUING_BODY: z.string().max(160).default('الجهة المصدرة: وزارة الداخلية'),
   PASS_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
+  /**
+   * Path membership rules for a course (TAM-132): how many paths one course
+   * may belong to, how many distinct RIASEC letters those paths may span, and
+   * whether an entity's membership needs admin approval before learners see it
+   * ('off' auto-approves — the state until Phase 5's queue exists).
+   */
+  COURSE_MAX_PATHS: z.coerce.number().int().min(1).max(12).default(3),
+  COURSE_MAX_RIASEC_LETTERS: z.coerce.number().int().min(1).max(6).default(2),
+  PATH_MEMBERSHIP_APPROVAL: z.enum(['off', 'on']).default('off'),
   COMPLETION_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5),
   /**
    * Whether the background sync scheduler runs. Off in tests regardless, since a

@@ -5,6 +5,20 @@
 
 ---
 
+## D-100 — A course belongs to at most three paths, within two RIASEC letters; membership is a proposal; «عامة» is the admin's word for "everywhere"
+
+**Decision (TAM-132, at the user's direction 2026-08-25):** four rules for which paths a course may belong to.
+
+1. **Cap of 3** (`COURSE_MAX_PATHS`, a setting). 2. **Coherence:** those paths may span at most **2** distinct RIASEC letters (`COURSE_MAX_RIASEC_LETTERS`). 3. **Approval:** what an entity saves is a proposal — `path_courses.status PENDING | APPROVED`; only APPROVED rows reach the learner catalogue, path build, the derived letters (D-066) and the publish gate. Auto-approved while `PATH_MEMBERSHIP_APPROVAL=off`, which is the state until Phase 5's Path Management queue exists; the schema (`status`, `decidedById`, `decidedAt`) is in place so switching it on is a setting, not a migration. 4. **«عامة»:** an admin-only `courses.isGeneral` — such a course reaches every path's build list without memberships, carries no letters, and is exempt from rules 1–2; entities see it read-only.
+
+**Why each rule:** a course in every path carries every letter — no Holland signal (D-066 derives letters from paths); every path's 5–10 build list then holds the same generic course, so paths stop being curated tracks; and path membership is *path* content the admin owns (§4C.4), yet one entity ticking twelve boxes has edited every path. The cap alone does not protect the signal — three paths from R, S and C still smear it — hence coherence. «عامة» exists so a genuinely cross-cutting course (أساسيات أمن المعلومات) has an honest route that is an admin's decision, not the "all paths" hole under a nicer name.
+
+**Grandfathering:** a course already outside the rules (seeded before them, or the limits lowered) keeps its memberships — learners may hold it in confirmed paths and D-002/D-040 forbid pulling it. It may remove memberships but not add until it is back within the rules (`PATH_MEMBERSHIP_FROZEN`, and the form says «يمكنك إزالة مسارات فقط»). No migration rewrites `path_courses`.
+
+**Where the rules live:** one pure module, `path-membership-rules.ts` (`checkPathMembership`), used by `replacePathMembership`; the form applies the same three checks per checkbox from `pathRules` on the course payload, so the numbers live in the settings and nowhere else. Every learner-facing reader of `path_courses` filters `status: 'APPROVED'` (`courses.service`, `paths.service`, the entity dashboard count); the entity's own views show pending rows with their status. Admin readers deliberately see everything — the queue is theirs.
+
+**Rejected:** letting the entity mark «عامة» (the same hole); cap without coherence; approval with no auto-approve setting (would block entities until Phase 5); trimming existing memberships by migration (touches confirmed learner paths); `@ArrayMaxSize` on the DTO (would bake the number into a decorator instead of reading the setting).
+
 ## D-099 — The authoring loop is one page, and the publish gate is one component offered on two
 
 **Decision:** Course Content (§4B.4) is where an entity authors: Moodle's editor framed with editing on, the D-061 read-back strip above it, and **publish / unpublish as the page header's single action** — the same `PublishAction` component Manage Course renders in its publish card, so the two pages cannot disagree about whether a course may be published, and the blockers clear on the page the entity is looking at (one `getCourse` request carries both the read-back and the gate, refetched on the frame's `content-changed` message). Manage Course no longer mints a launch; it links to the content page, so the author credential is issued in one place with one audit trail.

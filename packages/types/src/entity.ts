@@ -41,7 +41,16 @@ export interface EntityCourseSummary {
   status: CourseStatus;
 
   /** Paths this course belongs to, as product metadata the entity set. */
-  paths: Array<{ id: string; name: string; riasecLetter: RiasecLetter }>;
+  /**
+   * Every path the course is attached to, including memberships still awaiting
+   * the admin (TAM-132). Learners see only APPROVED ones.
+   */
+  paths: Array<{
+    id: string;
+    name: string;
+    riasecLetter: RiasecLetter;
+    status: PathMembershipStatus;
+  }>;
 
   /** How many learners have this course among their selected path courses. */
   enrolledCount: number;
@@ -89,8 +98,35 @@ export interface EntityCourseContentView {
   completionConfigured: boolean;
 }
 
+/** Whether an entity's path membership has been accepted by the admin (TAM-132). */
+export type PathMembershipStatus = 'PENDING' | 'APPROVED';
+
+/**
+ * The membership rules the form enforces alongside the server (TAM-132) — sent
+ * with the course so the numbers live in one place, the settings.
+ */
+export interface PathMembershipRules {
+  /** At most this many paths. */
+  maxPaths: number;
+  /** Spanning at most this many distinct RIASEC letters. */
+  maxLetters: number;
+  /**
+   * The course is already outside the rules (seeded before them, or the limits
+   * were lowered). It may remove memberships but not add — grandfathered.
+   */
+  frozen: boolean;
+  /** Whether a new membership waits for the admin, or takes effect at once. */
+  approvalRequired: boolean;
+}
+
 /** §4B.3 — one course, as the entity manages it. */
 export interface EntityCourseDetail extends EntityCourseSummary {
+  /**
+   * Admin-only (§4C.5): a cross-cutting course that reaches every path without
+   * memberships and carries no letters. Read-only for the entity.
+   */
+  isGeneral: boolean;
+  pathRules: PathMembershipRules;
   objectives: string[];
   prerequisites: string | null;
 

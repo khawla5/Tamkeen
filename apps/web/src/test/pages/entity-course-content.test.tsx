@@ -77,6 +77,8 @@ const detail = (overrides: Partial<EntityCourseDetail> = {}): EntityCourseDetail
   prerequisites: null,
   paths: [],
   riasecLetters: [],
+  isGeneral: false,
+  pathRules: { maxPaths: 3, maxLetters: 2, frozen: false, approvalRequired: false },
   content: { activityCount: 0, hasQuiz: false, completionConfigured: false },
   publishBlockers: ['NO_COMPLETION_CRITERIA'],
   availablePaths: [],

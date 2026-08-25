@@ -49,7 +49,9 @@ export class PathsService {
           /* The count shown on the card is what the user can actually choose
              from, so hidden and retired courses are excluded. Counting all
              memberships would advertise a choice the build page does not offer. */
-          select: { pathCourses: { where: { course: { status: 'AVAILABLE' } } } },
+          select: {
+            pathCourses: { where: { status: 'APPROVED', course: { status: 'AVAILABLE' } } },
+          },
         },
       },
     });
@@ -111,6 +113,7 @@ export class PathsService {
         typicalDurationMinutes: true,
         displayOrder: true,
         pathCourses: {
+          where: { status: 'APPROVED' },
           orderBy: { displayOrder: 'asc' },
           select: {
             course: {
