@@ -6,6 +6,7 @@
 ---
 
 ## Current status
+
 - **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **merged** (PR #13, with PR #12 merging TAM-106 before it). In parallel, the **design-direction workstream** (Platforms Code, D-069) continues on stacked feature branches off the old `feature/dga-alignment` line, now being rebased onto `main`.
 - **Last completed task (this workstream):** **TAM-112 — sign-out in the sidebar footer** (`feature/tam-112-sidebar-signout`, top of the stack), through one shared `useSignOut()`. Before that **TAM-123 — a meaningful dashboard** (`feature/tam-123-dashboard-content`): tracker, personal header, the top recommendations, next courses, latest certificate, activity feed — one payload from the server, D-095 (authored as D-074). Before that TAM-108 (chips + status strip, closing `assessment-gating`), TAM-107 (D-094), the loader (TAM-122, D-093). TAM-106 and the auth epic are merged.
 - **Next task:** the ticket backlog — results (TAM-113/114), profile (TAM-109–111, re-check against Phase 5 which built password change + email re-verification), portal-dga (TAM-117–121), and the width/paths/courses batch (TAM-124–128).
@@ -13,6 +14,7 @@
 - **Test totals (main, post-Phase 5):** 599 API unit · 403 web component · 515 API integration against real PostgreSQL · 84 browser e2e in Chromium — **1601 automated**, plus the real-Chromium verification scripts from Phase 3. **One transient integration failure is recorded in the 2026-08-24 entry and was never reproduced — read it before dismissing a similar one.**
 
 ### Phase 5 sub-phase tracker
+
 - [x] **5.1 Admin foundation + Dashboard** (§4C.1) — RBAC, route group, shell, integration health
 - [x] **5.2 User Management** (§4C.2) — employees + entities, suspend/activate, **entity-account creation**
 - [x] **5.3 Assessment Management** (§4C.3) — draft/publish, balance guard, copy-on-write versioning
@@ -24,8 +26,7 @@
 - [x] **5.9 Deferred Profile items + verification pass** — change password, **email re-verification**, digits preference
 
 - **Open blockers / questions for the human:**
-  0a. **The registration department list (`DEPARTMENTS` in `apps/web/src/lib/auth-constants.ts`) is a placeholder** — the ministry must supply the official list of الإدارات; when it does, the server should validate against it too.
-  0. **⚠ PLATFORMS CODE (D-069) — three questions for the ministry/team:** (a) is Platforms Code compliance **mandatory** for this platform or adopted by choice — it decides how much deviation is allowed; (b) **who has access to the official Figma library** — the token values in `globals.css` came from the system's published export and must be re-checked against the official foundations, and the mandatory government header/footer/national-identity elements for TAM-116 must be read from the official guidelines, not guessed; (c) the ministry emblem (D-051) is needed by the landing and auth designs.
+  0a. **The registration department list (`DEPARTMENTS` in `apps/web/src/lib/auth-constants.ts`) is a placeholder** — the ministry must supply the official list of الإدارات; when it does, the server should validate against it too. 0. **⚠ PLATFORMS CODE (D-069) — three questions for the ministry/team:** (a) is Platforms Code compliance **mandatory** for this platform or adopted by choice — it decides how much deviation is allowed; (b) **who has access to the official Figma library** — the token values in `globals.css` came from the system's published export and must be re-checked against the official foundations, and the mandatory government header/footer/national-identity elements for TAM-116 must be read from the official guidelines, not guessed; (c) the ministry emblem (D-051) is needed by the landing and auth designs.
   1. **⚠ THE MINISTRY LOGO AND SEAL ARE STILL MISSING.** Certificates ship with a neutral placeholder mark and an empty signature block (name + title). The slot is sized and positioned, so dropping in the real artwork is not a layout change — but **no certificate should reach a real employee until this is supplied** (D-051).
   2. **⚠ MINISTRY APPROVAL OF CUSTOM MOODLE PLUGINS IS STILL UNCONFIRMED.** Unchanged since Phase 2 and still the longest-lead dependency: seamless login uses `local_tamkeensso`, and if the ministry refuses custom PHP the fallback is the OAuth2-IdP route (D-044). Phase 4 deliberately did **not** enlarge that surface — the authoring handoff reuses the plugin unmodified (D-060).
   3. **⚠ `MOODLE_TEACHER_ROLE_ID` and `MOODLE_COURSE_CATEGORY_ID` are placeholders** (3 and 1, Moodle's stock values). Both are per-instance and **must be confirmed against the ministry's Moodle before Phase 7** — a wrong teacher role hands an outside organisation capabilities nobody intended, and a wrong category files ministry courses wherever that instance happens to number one (D-060).
@@ -38,6 +39,7 @@
 ---
 
 ## Deferred / owed (carried into later phases)
+
 - **An email change does not warn the OLD address.** Only the new address is written to (§4.12, D-091). §2's notification list is short and locked, and the current-password requirement means an attacker already holds the password before this endpoint is any use to them — so this is defence in depth. **Phase 6's security review** should decide whether to add the notice.
 - **`EnrollmentService.addCourse` is not actually idempotent under concurrency** (found during the Phase 5 verification pass; pre-existing, and enrolment is untouched by Phase 5). Its duplicate guard is a read-then-write, so two concurrent adds of the same course both pass and the second raises P2002 → 500 rather than the no-op its own comment promises. **Phase 6** should catch P2002 there and return the intended success.
 - **The UI language switch (§4.12)** is deferred until an English UI exists (D-089). The digits preference ships in its place; this is a decision, not a gap.
@@ -65,19 +67,21 @@
 - **`packages/types` now also carries the entity-portal contracts.** RIASEC/path/certificate/entity types arrive with the phases that define them.
 
 **Newly owed, from Phase 4:**
+
 - **`MOODLE_TEACHER_ROLE_ID` and `MOODLE_COURSE_CATEGORY_ID` are Moodle's stock values, not the ministry's.** Both are per-instance and unverified. **Phase 7** must confirm them against the real instance before an entity creates a course there — a wrong teacher role hands an outside organisation capabilities nobody intended (D-060).
 - **`core_course_create_courses` and `core_course_get_contents` have not run against a real Moodle.** They are covered by the contract suite and the mock; the Phase 2 spike predates them. **Phase 7's acceptance test** exercises them for the first time in anger, and D-039's 4.5-vs-5.2 re-verification now covers them too.
-- **The successful-publish path is proven in integration, not in the browser.** The mock reports a newly created course as having no completion criteria — the honest simulation, since a real Moodle course is empty until someone authors it — and `simulateAuthoring` lives in the API process, out of Playwright's reach. So the browser proves the *refusal* on a course it creates through the UI, and proves publish/withdraw on a seeded course the mock considers completable. **Phase 7** closes this against a real Moodle.
+- **The successful-publish path is proven in integration, not in the browser.** The mock reports a newly created course as having no completion criteria — the honest simulation, since a real Moodle course is empty until someone authors it — and `simulateAuthoring` lives in the API process, out of Playwright's reach. So the browser proves the _refusal_ on a course it creates through the UI, and proves publish/withdraw on a seeded course the mock considers completable. **Phase 7** closes this against a real Moodle.
 - ~~Entity accounts are created by a seed, not by a screen.~~ **Closed in sub-phase 5.2** — the super-admin provisions an organisation and its accounts from §4C.2, by invitation, and never sees a password (D-080).
 - ~~An entity's own record is read-only, and an entity cannot add a colleague to its organisation.~~ **Closed in sub-phase 5.2** — the super-admin edits an organisation and adds accounts to it. An entity still cannot do either itself, which is the point: who a ministry supplier is, and who speaks for them, is a contractual fact rather than a self-service setting.
 - ~~Course ordering within a path is not editable.~~ **Closed in sub-phase 5.4** — §4C.4 edits `path_courses.display_order` by submitting the complete order, which decides how the build screen offers courses and how My Path numbers them.
-- **A course withdrawn from the LMS side is still only detectable by sync.** An entity sees `lms_present: false` reflected in the status, but nothing tells them *why* a course they published is no longer available. **Phase 6**'s sync-reliability work owns surfacing that.
+- **A course withdrawn from the LMS side is still only detectable by sync.** An entity sees `lms_present: false` reflected in the status, but nothing tells them _why_ a course they published is no longer available. **Phase 6**'s sync-reliability work owns surfacing that.
 - **Eight API error codes have no Arabic copy** — `CERTIFICATE_NOT_FOUND`, `CERTIFICATE_FILE_UNAVAILABLE`, `CERTIFICATE_FILE_CORRUPT`, `COURSE_NOT_ENROLLED`, `CV_INVALID_DATE`, `CV_TOO_MANY_ENTRIES`, `ENTITY_NOT_FOUND`, `USER_NOT_FOUND`. `useErrorMessage` falls back to the generic Arabic message, so none reaches a user as a raw code, but the specific ones would help. **Phase 6**'s Arabic content QA owns them.
 - **`published_at` is written and nothing reads it.** Correct as of D-067's sibling fix, and asserted both ways; **Phase 5**'s §4C.5 course oversight is what will finally display it.
 
 ---
 
 ## Decisions locked (see `decisions.md` for rationale)
+
 - Assessment is **Holland (RIASEC)**: scoring tallies per dimension → ranked profile → top-three **Holland Code**.
 - **Each path is tagged with one RIASEC letter**; a path is gold if its letter is in the user's top-three code, ranked by the user's letter order. (See CLAUDE.md §3A.)
 - Arabic-first, RTL, from day one.
@@ -120,7 +124,7 @@
 - **Publication is ours, LMS visibility is theirs, and `courses.status` is derived from both (D-059).** Corrects a live defect: sync used to recompute status from the LMS's `visible` flag and would silently undo an entity's decision to withdraw a course. Revises D-040's sticky-`RETIRED` sub-rule, which existed only because there was nowhere else to record that decision.
 - **The course shell is created in the LMS, and entities author it as `editingteacher` (D-060).** A database-only draft would be withdrawn by the next sync. The `local_tamkeensso` plugin is left untouched — the entity lands on the course page and uses Moodle's own Edit mode — so D-044's open governance question does not grow.
 - **The content read-back exists to stop an uncompletable course being published (D-061).** Publishing is refused, not warned about, when the LMS reports no completion criteria — the D-042 dead end, caught before anyone enrols rather than after.
-- **`@Roles` on every endpoint; scoping is a query filter, not a guard (D-062).** Role answers "may this kind of account call this"; scope answers "which rows may *this* account see". `RolesGuard` honours `@Public()` first, so class-level roles cannot take the public verification page offline.
+- **`@Roles` on every endpoint; scoping is a query filter, not a guard (D-062).** Role answers "may this kind of account call this"; scope answers "which rows may _this_ account see". `RolesGuard` honours `@Public()` first, so class-level roles cannot take the public verification page offline.
 - **`entities` is a first-class model and course ownership is nullable (D-063).** The organisation owns the courses, not whoever created them; the seeded catalogue legitimately has no owner.
 - **An entity sees a learner's name, department, progress and grade — and nothing else (D-064).** No email, no employee ID, no Holland Code, no path, no certificates.
 - **The entity portal is its own route group, and sign-in routes by role (D-065).**
@@ -185,7 +189,7 @@ Branch `feature/tam-108-dashboard`, on the TAM-107 branch. The assessed-no-path 
 
 ### 2026-08-23 — TAM-107: the assessment keeps its sidebar; a draft makes leaving free
 
-Branch `feature/tam-107-assessment-sidebar`, stacked on the loader branch so the stack stays linear. Removing one `chrome="bare"` prop put the assessment inside the shell with the two-item nav; the real work is the draft — answers and the current question written through to `sessionStorage` on every change, restored on return, discarded if the bank has changed, cleared on submit. The rationale in `portal-page.tsx` that justified hiding the rail on *every* flow page now says why the assessment is the exception (D-094 — authored as D-073, renumbered at rebase). The journey e2e proves it against the live app: answer two, leave to the profile through the sidebar, come back, statement 3 is waiting. A leftover invalid class from the token migration (`hover:border-neutral-400-foreground/50`) was fixed in passing. 326 web unit tests, typecheck, lint, prettier, journey e2e.
+Branch `feature/tam-107-assessment-sidebar`, stacked on the loader branch so the stack stays linear. Removing one `chrome="bare"` prop put the assessment inside the shell with the two-item nav; the real work is the draft — answers and the current question written through to `sessionStorage` on every change, restored on return, discarded if the bank has changed, cleared on submit. The rationale in `portal-page.tsx` that justified hiding the rail on _every_ flow page now says why the assessment is the exception (D-094 — authored as D-073, renumbered at rebase). The journey e2e proves it against the live app: answer two, leave to the profile through the sidebar, come back, statement 3 is waiting. A leftover invalid class from the token migration (`hover:border-neutral-400-foreground/50`) was fixed in passing. 326 web unit tests, typecheck, lint, prettier, journey e2e.
 
 ### 2026-08-23 — One loader for every navigation (TAM-122, D-093 — authored as D-072, renumbered at rebase)
 
@@ -195,7 +199,7 @@ Branch `feature/navigation-loader`, off `feature/dga-alignment`. Moving between 
 
 Branch `feature/tam-106-nav-gating`, off `feature/dga-alignment` — it touches nothing the auth stack touches. One branch in `navForState` and one redirect in `PortalProvider`, beside the 401 and wrong-portal redirects it already owns; the test that pinned the old three-item nav was updated rather than duplicated, and a new `PortalProvider` test covers the redirect, including that the loading state shows and the page never renders. The spec change is recorded (D-071, CLAUDE.md §4.2/§4.6), including the deliberate choice to leave the courses API open.
 
-**The e2e told the truth about the old rule:** two catalogue flows browsed the catalogue *before* the assessment — exactly what §4.2 used to permit — and had to become post-assessment flows. The journey now asserts two nav items and the bounce before the assessment, and الدورات appearing after it without a reload. One run failed at the pre-existing path-build counter step while the dev server was recompiling (46s run); two clean re-runs at 10s each say it is that step's race under load, not the gate — worth a look in the Phase 6 reliability pass.
+**The e2e told the truth about the old rule:** two catalogue flows browsed the catalogue _before_ the assessment — exactly what §4.2 used to permit — and had to become post-assessment flows. The journey now asserts two nav items and the bounce before the assessment, and الدورات appearing after it without a reload. One run failed at the pre-existing path-build counter step while the dev server was recompiling (46s run); two clean re-runs at 10s each say it is that step's race under load, not the gate — worth a look in the Phase 6 reliability pass.
 
 ### 2026-08-23 — Sub-phase 5.4: path management, and a flake chased to its cause
 
@@ -205,25 +209,25 @@ Branch `feature/tam-106-nav-gating`, off `feature/dga-alignment` — it touches 
 
 **Two rules that make a forbidden state unreachable rather than guarded against.**
 
-`PATH_TOO_FEW_COURSES` (D-084) refuses to *offer* a path with fewer than five selectable courses, and refuses any detach that would drop an active one below the floor. The failure it prevents is invisible from every screen: the learner reaches the build page, selects all four courses there are, and the confirm button stays disabled with nothing to act on. Nothing logs it, nothing alerts, and the path sits in the catalogue looking like a choice. Creation therefore always produces an *inactive* path — an empty path could not be offered anyway, so accepting `isActive: true` at creation would mean either refusing every creation or admitting one nobody can confirm.
+`PATH_TOO_FEW_COURSES` (D-084) refuses to _offer_ a path with fewer than five selectable courses, and refuses any detach that would drop an active one below the floor. The failure it prevents is invisible from every screen: the learner reaches the build page, selects all four courses there are, and the confirm button stays disabled with nothing to act on. Nothing logs it, nothing alerts, and the path sits in the catalogue looking like a choice. Creation therefore always produces an _inactive_ path — an empty path could not be offered anyway, so accepting `isActive: true` at creation would mean either refusing every creation or admitting one nobody can confirm.
 
-`COURSE_HELD_BY_LEARNERS` refuses to detach a course learners hold *through this path*. Nothing cascades, so a confirmed learner would keep seeing it — what breaks is everyone still building, whose next save is refused with `COURSE_NOT_IN_PATH` about a course they chose from that very screen. Scoped to the path deliberately: a course may belong to several (D-003), and a learner holding it through another one is not stranded.
+`COURSE_HELD_BY_LEARNERS` refuses to detach a course learners hold _through this path_. Nothing cascades, so a confirmed learner would keep seeing it — what breaks is everyone still building, whose next save is refused with `COURSE_NOT_IN_PATH` about a course they chose from that very screen. Scoped to the path deliberately: a course may belong to several (D-003), and a learner holding it through another one is not stranded.
 
-**A stranding that already existed, found by reading rather than by a test.** D-002 reconciles retirement with commitment for the *confirmed* learner — My Path and certificates read through `user_paths` and never consulted `paths.is_active`. Nobody had reconciled it for the learner still **building**: a plain `isActive: true` filter turned a retirement into a 404 on their build page, while `confirm` never checked the flag at all, so they could still commit to a path they could no longer see. Retirement now means what it means for courses (§2/D-015): hidden from new selections, untouched for whoever already chose it (D-085). The integration suite asserts it against the *learner's* endpoint, not by reasoning about the query.
+**A stranding that already existed, found by reading rather than by a test.** D-002 reconciles retirement with commitment for the _confirmed_ learner — My Path and certificates read through `user_paths` and never consulted `paths.is_active`. Nobody had reconciled it for the learner still **building**: a plain `isActive: true` filter turned a retirement into a 404 on their build page, while `confirm` never checked the flag at all, so they could still commit to a path they could no longer see. Retirement now means what it means for courses (§2/D-015): hidden from new selections, untouched for whoever already chose it (D-085). The integration suite asserts it against the _learner's_ endpoint, not by reasoning about the query.
 
 **The detail screen prints the numbers the decision turns on.** Learners building, active and completed are shown separately and never summed: only the building count is affected by a retirement, and the retirement audit entry records it. An administrator retiring a path knowing "three people are part way through choosing this" is making a different decision from one taken blind.
 
 **A one-in-five flake, chased to three separate causes rather than re-run.** It failed different suites on different runs, which is the shape of shared state rather than of a bug.
 
-| cause | what it broke | fix |
-|---|---|---|
-| cleanup keyed on `version > 1`, not namespaced to the run | one run's `afterAll` deleted the *next* run's fresh draft, so an endpoint 404'd on a draft that demonstrably existed two tests earlier | track the ids this run created and delete exactly those |
-| a course created here does not exist in the LMS, so every catalogue sync correctly withdrew it | the five-course-floor assertions, by the product working as designed | borrow catalogue courses instead — they are in the LMS, so sync leaves them alone |
-| the draft copy made ~180 sequential statements inside one transaction | Prisma's five-second interactive-transaction budget under parallel load, surfacing as a timeout with nothing wrong in it | nest options and weights inside each question's create — 30 statements — and give the copy an explicit budget |
+| cause                                                                                          | what it broke                                                                                                                          | fix                                                                                                           |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| cleanup keyed on `version > 1`, not namespaced to the run                                      | one run's `afterAll` deleted the _next_ run's fresh draft, so an endpoint 404'd on a draft that demonstrably existed two tests earlier | track the ids this run created and delete exactly those                                                       |
+| a course created here does not exist in the LMS, so every catalogue sync correctly withdrew it | the five-course-floor assertions, by the product working as designed                                                                   | borrow catalogue courses instead — they are in the LMS, so sync leaves them alone                             |
+| the draft copy made ~180 sequential statements inside one transaction                          | Prisma's five-second interactive-transaction budget under parallel load, surfacing as a timeout with nothing wrong in it               | nest options and weights inside each question's create — 30 statements — and give the copy an explicit budget |
 
-**And one that was not mine.** `withdrawVanished` used `update`, which throws when the row is gone, abandoning every course after it in the list. Several suites create and remove courses of their own, so a sync running during another suite's cleanup failed a *third* suite. It is now `updateMany` with the count checked, so a vanished row is skipped without being counted or audited (D-086). Nothing in the product deletes a course, so this is defensive in production — but a reconciliation job that crashes because the world changed under it is reconciling badly, and this one is the Phase 6 sync-reliability item arriving early.
+**And one that was not mine.** `withdrawVanished` used `update`, which throws when the row is gone, abandoning every course after it in the list. Several suites create and remove courses of their own, so a sync running during another suite's cleanup failed a _third_ suite. It is now `updateMany` with the count checked, so a vanished row is skipped without being counted or audited (D-086). Nothing in the product deletes a course, so this is defensive in production — but a reconciliation job that crashes because the world changed under it is reconciling badly, and this one is the Phase 6 sync-reliability item arriving early.
 
-**A brittle assertion removed on the way.** `journey.e2e-spec.ts` asserted `paths` had length 12 — the seed's count stated as though it were a product rule. The rule is "every *offered* path comes back, recommended or not"; it now counts against the database, and stops breaking the moment another suite legitimately offers a thirteenth.
+**A brittle assertion removed on the way.** `journey.e2e-spec.ts` asserted `paths` had length 12 — the seed's count stated as though it were a product rule. The rule is "every _offered_ path comes back, recommended or not"; it now counts against the database, and stops breaking the moment another suite legitimately offers a thirteenth.
 
 ### 2026-08-23 — Sub-phase 5.3: the assessment editor, and results that stay frozen
 
@@ -235,13 +239,13 @@ Branch `feature/tam-106-nav-gating`, off `feature/dga-alignment` — it touches 
 
 **Copy-on-write turned two guarantees into properties rather than promises.** A draft is a full copy, so no `assessment_responses` row can ever reference a draft's questions — which is why the draft is freely editable and freely deletable while the `Restrict` that protects published banks has nothing to refuse. And there is no code path in the whole service that touches `assessment_results`: D-049 holds not because the code is careful but because there is nothing to be careful about. The integration suite checks the strong form — the same row, the same six scores, the same code, still pointing at version 1, and **the question text a historical response resolves to is still the text that was asked**. That last one is the half a scores-only guarantee misses: edit in place and a row claims version 1 while reading as version 2's wording.
 
-**The balance guard refuses; adjacency warns** (D-074), and the editor tries to make balance easy rather than only reporting failure. Adding a question asks for a *dimension* and copies the bank's own agreement levels, so growing five items per dimension to six is six clicks rather than a weighting exercise — and the full weight editor is still one click away on every option, because D-048 promises it. When the bank is unbalanced the panel prints what each dimension can attain: "الاجتماعي ٢٤ / الواقعي ٢٠" says which dimension to even up, where "غير متوازن" sends somebody to count questions by hand.
+**The balance guard refuses; adjacency warns** (D-074), and the editor tries to make balance easy rather than only reporting failure. Adding a question asks for a _dimension_ and copies the bank's own agreement levels, so growing five items per dimension to six is six clicks rather than a weighting exercise — and the full weight editor is still one click away on every option, because D-048 promises it. When the bank is unbalanced the panel prints what each dimension can attain: "الاجتماعي ٢٤ / الواقعي ٢٠" says which dimension to even up, where "غير متوازن" sends somebody to count questions by hand.
 
-**Balance is expressed over attainable maxima, not question counts** — and a unit test proves why that matters. A bank with one item per dimension passes any count-based check while a strongly Enterprising taker scores twice what a strongly Realistic one can, because the weights differ. The same definition also *permits* a ministry to rescale the whole instrument to 0-8, which a count-based rule would have had no opinion about.
+**Balance is expressed over attainable maxima, not question counts** — and a unit test proves why that matters. A bank with one item per dimension passes any count-based check while a strongly Enterprising taker scores twice what a strongly Realistic one can, because the weights differ. The same definition also _permits_ a ministry to rescale the whole instrument to 0-8, which a count-based rule would have had no opinion about.
 
 **The seed stopped maintaining and became a bootstrap.** `seedAssessment` used to upsert the bank by key on every run. After 5.3 that would overwrite a published ministry version with whatever wording shipped in the code — data loss dressed as a convenience. It now writes only while version 1 is the only version there is, and says so when it stands back. D-032 always claimed the bank was seeded data "precisely so Phase 5 can edit it without a deploy"; this is the other half of that sentence.
 
-**The one genuinely hard test problem this phase created.** Every integration suite namespaces its rows by a per-run id and they run in parallel against one database. The assessment cannot be namespaced — §4.3 has *one* instrument and `getActive` finds the one ACTIVE row — so publishing a version mid-run made `journey.e2e-spec.ts` fail eight tests with `ASSESSMENT_NOT_FOUND`. **That refusal is correct product behaviour**: a taker whose instrument was replaced mid-attempt must not be scored against a bank they never saw. So the fix serialises the two suites with a Postgres advisory lock rather than weakening either assertion — held on its own connection, released by the server if a worker dies, and costing four seconds of wall clock across the whole run.
+**The one genuinely hard test problem this phase created.** Every integration suite namespaces its rows by a per-run id and they run in parallel against one database. The assessment cannot be namespaced — §4.3 has _one_ instrument and `getActive` finds the one ACTIVE row — so publishing a version mid-run made `journey.e2e-spec.ts` fail eight tests with `ASSESSMENT_NOT_FOUND`. **That refusal is correct product behaviour**: a taker whose instrument was replaced mid-attempt must not be scored against a bank they never saw. So the fix serialises the two suites with a Postgres advisory lock rather than weakening either assertion — held on its own connection, released by the server if a worker dies, and costing four seconds of wall clock across the whole run.
 
 **Three smaller decisions worth knowing.** The weights DTO names all six letters explicitly rather than accepting a `Record<string, number>`, because a record would let `{ "X": 4 }` past validation and leave the enum column to answer 500 — the DTO is the outermost gate and naming the six is the only shape in which it can say no. Reordering takes the complete order rather than a move-up/move-down, so the result is what the administrator arranged rather than a replay of their clicks, and it writes negative orders first because `display_order` would otherwise collide with itself mid-shuffle. And an option's weights are replaced wholesale rather than merged, because "this option now contributes to S only" has to be expressible and a merge cannot say it.
 
@@ -251,7 +255,7 @@ Asked to test Phase 5 thoroughly before the PR. Four things came out of it, in o
 
 **1. A Phase 5 deliverable was missing.** CLAUDE.md's Phase 5 lists "change-password, email re-verification, language switch" among the deferred Profile items. Change-password shipped in 5.9 and the language switch is deliberately deferred (D-089) — **email re-verification had simply not been built**, and nothing recorded it as owed. It is built now (D-091): request-then-confirm, with the pending address held on an `EMAIL_CHANGE` token rather than on the user row, so `users.email` never points at an inbox nobody has proved they can read. The current password is required — whoever can move the address can then use "forgot password" and own the account outright — and the ministry-domain gate applies, extracted from the registration policy into `checkEmailDomain` so the two rules cannot drift. A taken address is answered exactly like a free one, because the profile form must not become the address oracle registration refuses to be. Completing the change revokes **every** session, the caller's included: the identifier the person signs in with has just changed.
 
-**2. The portals unmounted themselves on an ordinary refetch.** All three providers gated their loading state on `isLoading` rather than `isInitialLoad`, so `refreshSession` after saving a preference swapped the whole portal for a spinner and tore down everything below it. `PreferenceProvider` made it worse by returning `children` unwrapped when the preference was null — a different element type at that position, so the *first* save changed the tree shape and remounted the entire subtree. Either way the confirmation the person had just earned vanished, along with any half-filled form or open dialog. Fixed at all four points (D-092).
+**2. The portals unmounted themselves on an ordinary refetch.** All three providers gated their loading state on `isLoading` rather than `isInitialLoad`, so `refreshSession` after saving a preference swapped the whole portal for a spinner and tore down everything below it. `PreferenceProvider` made it worse by returning `children` unwrapped when the preference was null — a different element type at that position, so the _first_ save changed the tree shape and remounted the entire subtree. Either way the confirmation the person had just earned vanished, along with any half-filled form or open dialog. Fixed at all four points (D-092).
 
 > **How it was found is the part worth remembering.** The browser test asserted `getByRole('status')` after saving — and passed, against the **loading state**, which carries that role too. The bug and the test that should have caught it were hiding each other. Assertions now name the confirmation's actual words.
 
@@ -265,7 +269,7 @@ Two of the new tests were themselves vacuous when first written — `getByRole('
 
 > **One transient failure, honestly reported.** The first full integration run after the new migration failed 7 tests in `admin-assessment.e2e-spec.ts`. It has not recurred in three subsequent full runs, the suite passes in isolation, and the assessment table was verified clean afterwards (one ACTIVE version 1). **The cause was not identified.** Given this suite's history of cross-suite collisions (D-079, D-083), it should not be assumed benign — if it reappears, capture the failure text before re-running.
 
-**Also carried forward:** the old address is *not* warned when an email change is requested. §2's notification list is short and locked, and the current-password requirement means an attacker already holds the password before this endpoint helps them — so it is defence in depth, not the primary control. On the Phase 6 list rather than silently absent.
+**Also carried forward:** the old address is _not_ warned when an email change is requested. §2's notification list is short and locked, and the current-password requirement means an attacker already holds the password before this endpoint helps them — so it is defence in depth, not the primary control. On the Phase 6 list rather than silently absent.
 
 **Files:** `auth.{service,controller,dto}.ts`, `registration-policy.ts`, `email.{service,templates}.ts`, `audit.actions.ts`, a migration (`phase_5_email_change`), `verify-email-change/page.tsx`, the profile page, `preference-provider.tsx`, the three portal providers, the audit page, and their tests plus `e2e/phase-5-admin.spec.ts` and `e2e/phase-5-profile.spec.ts`.
 
@@ -281,8 +285,8 @@ Run straight through at the user's instruction, on the same branch, one commit p
 
 **5.5 — Course Oversight (§4C.5).** The global catalogue: every entity's courses plus the ~40 the
 seeded catalogue holds that nobody supplies — which no entity portal can show by construction, and
-are therefore only ever the administrator's to place. The screen answers one question, *why can
-nobody see this course*, and the answer is always the publication decision and the two LMS facts
+are therefore only ever the administrator's to place. The screen answers one question, _why can
+nobody see this course_, and the answer is always the publication decision and the two LMS facts
 disagreeing, so all three sit on the row rather than only the conclusion. Intervention lands on
 publication and ownership only: the DTO has no `status` field, so `effectiveCourseStatus` stays its
 sole author (D-059) and hiding a course a learner holds degrades to `HIDDEN_BUT_COMPLETABLE` rather
@@ -304,7 +308,7 @@ it changes the polling instead of producing two schedules.
 
 **5.7 — Certificate Templates (§4C.7).** The signature block becomes three settings read at issue
 time, so each certificate freezes the block current when it was earned (D-052). The page leads with
-the notice that an edit reaches *future* issuances only — stated as the property that makes a
+the notice that an edit reaches _future_ issuances only — stated as the property that makes a
 credential a credential, not as a limitation, because an administrator who thinks a correction will
 propagate is one who will not make the correction. The still-missing ministry seal is named on the
 screen, where the person who can supply it is looking, rather than only in this file. The preview is
@@ -327,7 +331,7 @@ formula-defusing.
 
 **5.9 — the deferred Profile items (§4.12).** Owed since Phase 1. Change-password requires the
 current password and revokes every other session while keeping the one doing the changing (D-088):
-a session cookie is enough to *be* the user, so without the check an unlocked machine is a permanent
+a session cookie is enough to _be_ the user, so without the check an unlocked machine is a permanent
 takeover, and the usual reason to change a password is that it may be known elsewhere — which a
 change that leaves those sessions alive does not address. In place of the language selector §4.12
 names, a digits preference through D-018's switch point (D-089): the interface is Arabic-only, so a
@@ -373,21 +377,21 @@ exception, for glyph specimens). D-072-D-086 were recorded earlier in the phase.
 
 **Test totals: 556 API unit · 290 web component · 268 API integration · 40 browser e2e — 1154 automated.** Typecheck, lint and format clean. No new dependencies.
 
-**No password reaches the administrator, and the tests are written so a regression cannot hide.** An account is created with a hash of 32 random bytes that nothing retains, and an invitation goes to the address; the person chooses their own password from the link. The obvious alternative — generate one and show it once, as `prisma/seed.ts` does — produces a credential two people know, relayed over whatever channel the admin then uses, which in a ministry is a chat message. The seed does it that way because a terminal has no mailbox to send to; a portal does. Both the integration and browser suites assert the *absence* against the whole serialised response and the whole rendered page rather than against named fields, because a later refactor adding `temporaryPassword` would satisfy every other assertion in either file.
+**No password reaches the administrator, and the tests are written so a regression cannot hide.** An account is created with a hash of 32 random bytes that nothing retains, and an invitation goes to the address; the person chooses their own password from the link. The obvious alternative — generate one and show it once, as `prisma/seed.ts` does — produces a credential two people know, relayed over whatever channel the admin then uses, which in a ministry is a chat message. The seed does it that way because a terminal has no mailbox to send to; a portal does. Both the integration and browser suites assert the _absence_ against the whole serialised response and the whole rendered page rather than against named fields, because a later refactor adding `temporaryPassword` would satisfy every other assertion in either file.
 
-**A dead end that already existed, found while making the invitation work.** `requestPasswordReset` accepts an unverified account, but `resetPassword` never set `emailVerifiedAt` — so it was possible to register, skip verification, use "forgot password", set a new password, and still be refused at sign-in with `EMAIL_NOT_VERIFIED`, having just proved control of the mailbox. Redeeming a token emailed to an address *is* what verification asserts, so the reset now sets the timestamp when it is null (`??`, never overwriting — the original is when the address was first proven). This is also what makes an invited account work at all, since it has never seen a verification email.
+**A dead end that already existed, found while making the invitation work.** `requestPasswordReset` accepts an unverified account, but `resetPassword` never set `emailVerifiedAt` — so it was possible to register, skip verification, use "forgot password", set a new password, and still be refused at sign-in with `EMAIL_NOT_VERIFIED`, having just proved control of the mailbox. Redeeming a token emailed to an address _is_ what verification asserts, so the reset now sets the timestamp when it is null (`??`, never overwriting — the original is when the address was first proven). This is also what makes an invited account work at all, since it has never seen a verification email.
 
-**Two lockouts, and they are not the same failure.** Refusing self-modification stops an administrator suspending themselves mid-session, where the screen that would undo it is the one they just lost. Refusing to remove the last *active* administrator stops the ministry losing the portal entirely — and no amount of individual care prevents that one: two administrators can each demote the other, one after the other, and neither has done anything wrong. Both live in `account-changes.ts` as pure functions over gathered facts, on the same reasoning as `checkRegistrationPolicy` and `publishBlockers`: every rule here prevents a lockout or an orphaned record, which are exactly the cases an integration test reaches only by arranging the disaster first.
+**Two lockouts, and they are not the same failure.** Refusing self-modification stops an administrator suspending themselves mid-session, where the screen that would undo it is the one they just lost. Refusing to remove the last _active_ administrator stops the ministry losing the portal entirely — and no amount of individual care prevents that one: two administrators can each demote the other, one after the other, and neither has done anything wrong. Both live in `account-changes.ts` as pure functions over gathered facts, on the same reasoning as `checkRegistrationPolicy` and `publishBlockers`: every rule here prevents a lockout or an orphaned record, which are exactly the cases an integration test reaches only by arranging the disaster first.
 
 **A third refusal the schema does not enforce.** Converting an EMPLOYEE who holds a result, a path or a certificate is refused. Their record survives — `user_paths.pathId` is `Restrict` and certificates are immutable — but every screen that reads it is `@Roles('EMPLOYEE')`, so the person could no longer reach their own training history while their certificate stayed publicly verifiable in their name. The ministry case this resembles, an employee seconded to run a supplier account, is properly served by a second account.
 
-**Suspension revokes sessions, and the reason is not the obvious one.** `SessionService.resolve` already refuses a suspended owner on every request, so the suspension takes effect either way. What revoking prevents is the *reactivation*: without it, restoring an account silently hands back every session that was live when it was suspended — including whichever one may have been the reason for suspending it. A role change revokes for a different reason: a demotion would otherwise keep resolving against the old role until the session expired, which is precisely the window that matters.
+**Suspension revokes sessions, and the reason is not the obvious one.** `SessionService.resolve` already refuses a suspended owner on every request, so the suspension takes effect either way. What revoking prevents is the _reactivation_: without it, restoring an account silently hands back every session that was live when it was suspended — including whichever one may have been the reason for suspending it. A role change revokes for a different reason: a demotion would otherwise keep resolving against the old role until the session expired, which is precisely the window that matters.
 
 **A defect the audit test caught.** `Object.keys(dto)` on a class-validator DTO returns every declared optional, because `transform: true` instantiates the class and absent fields exist as `undefined` own properties. The entity-update trail therefore claimed all four fields changed on every edit — worse than recording nothing, because a reviewer would stop believing the payload. Now filtered on `!== undefined`.
 
 **`ADMIN_CONTROLLERS` replaced the single controller.** 5.1's RBAC suite reflected routes off one class; §4C is roughly forty endpoints across eight pages, and one file holding all of them makes the boundary between "users" and "settings" a matter of scrolling. The suite now enumerates the same array `AdminModule` registers, so a controller added later is covered the moment it is routable — **46 RBAC assertions across 11 routes**, with no second place to remember. Each denial is still checked for `INSUFFICIENT_ROLE` rather than only for a 403, since a CSRF refusal is indistinguishable from outside.
 
-**Administrative provisioning bypasses D-017 deliberately.** The domain and employee-id gate governs *self*-registration; the whole point of `admin-only` mode is that an administrator is the gate. It also has to: an entity contact is by definition not at a ministry address and could never be provisioned otherwise. Uniqueness is still the database's, and the browser suite provisions to `@authority.example` to prove it.
+**Administrative provisioning bypasses D-017 deliberately.** The domain and employee-id gate governs _self_-registration; the whole point of `admin-only` mode is that an administrator is the gate. It also has to: an entity contact is by definition not at a ministry address and could never be provisioned otherwise. Uniqueness is still the database's, and the browser suite provisions to `@authority.example` to prove it.
 
 **The Phase 4 refetch defect, written a second time.** Saving from the admin user panel triggered a refetch, `useApiQuery` set `isLoading` on every refetch, and `DataView` swapped to its loading state — unmounting the confirmation the administrator had just earned. Phase 4 hit exactly this on the entity manage screen and fixed it by writing `isLoading && data === undefined` at the call site. Two occurrences of a rule nobody can be expected to remember is enough: the hook now exposes **`isInitialLoad`**, documented as what `DataView` almost always wants, so a third occurrence needs a deliberate choice rather than a forgotten one. Only the browser suite could see it — the component test passes because a mocked fetch resolves before React can render the loading state.
 
@@ -399,21 +403,21 @@ exception, for glyph specimens). D-072-D-086 were recorded earlier in the phase.
 
 Branch `phase-5-admin-portal`, cut from `origin/main` @ `f1f0dcd` — which now contains Phase 4 (PR #6 merged). **Phase 5 is divided into nine sub-phases**, run back to back on this one branch with a single PR at the end; the tracker is in Current Status above so a cleared chat can resume mid-phase.
 
-**Eight decisions were taken before any code was written** (D-072 … D-079), because four of them shape the schema and would have been expensive to reverse. The one that matters most is **D-072, copy-on-write assessment versioning**: D-049 says existing results are "frozen as taken", and that is only literally true if the *instrument* survives beside the scores. Editing in place and bumping an integer freezes the numbers but lets a wording change rewrite the questions a past response points at, so a row would claim version 3 and resolve to version 7's text. `assessment_results.assessmentId onDelete: Restrict` (D-035) has been promising since Phase 1 that the instrument still exists; 5.3 is where that promise is either kept or quietly broken.
+**Eight decisions were taken before any code was written** (D-072 … D-079), because four of them shape the schema and would have been expensive to reverse. The one that matters most is **D-072, copy-on-write assessment versioning**: D-049 says existing results are "frozen as taken", and that is only literally true if the _instrument_ survives beside the scores. Editing in place and bumping an integer freezes the numbers but lets a wording change rewrite the questions a past response points at, so a row would claim version 3 and resolve to version 7's text. `assessment_results.assessmentId onDelete: Restrict` (D-035) has been promising since Phase 1 that the instrument still exists; 5.3 is where that promise is either kept or quietly broken.
 
 **Test totals: 540 API unit · 271 web component · 198 API integration · 34 browser e2e — 1043 automated.** Typecheck, lint and format clean. No new dependencies.
 
-**A live defect, found by reading the routing rather than by a failing test.** A `SUPER_ADMIN` who signed in was sent to the *entity* portal. Three separate files each asked `role === 'EMPLOYEE'` and treated everything else as an entity — correct when written, because until this phase there were only two portals, and wrong the moment a third role could sign in. The account with the most authority in the system was being handed somebody else's screens, and no test could see it because every test asserted the two roles that existed. It is now one `Record<UserRole, string>` map with four readers, so adding a role fails the typecheck at every site instead of defaulting silently. This is the second time a half-implemented redirect rule has surfaced (D-067 was the first) — the pattern is that these rules read correctly one branch at a time and are only wrong as a set.
+**A live defect, found by reading the routing rather than by a failing test.** A `SUPER_ADMIN` who signed in was sent to the _entity_ portal. Three separate files each asked `role === 'EMPLOYEE'` and treated everything else as an entity — correct when written, because until this phase there were only two portals, and wrong the moment a third role could sign in. The account with the most authority in the system was being handed somebody else's screens, and no test could see it because every test asserted the two roles that existed. It is now one `Record<UserRole, string>` map with four readers, so adding a role fails the typecheck at every site instead of defaulting silently. This is the second time a half-implemented redirect rule has surfaced (D-067 was the first) — the pattern is that these rules read correctly one branch at a time and are only wrong as a set.
 
 **The RBAC test enumerates its own routes.** `admin-rbac.e2e-spec.ts` reflects Nest's own `PATH_METADATA` / `METHOD_METADATA` off `AdminController` rather than listing paths by hand, so every endpoint added in sub-phases 5.2-5.8 is automatically asserted against an employee, an entity and an anonymous caller the moment it exists. A hand-maintained list would go stale exactly where it matters: the endpoint nobody remembers to add is the one that ships unproven while the suite stays green. Each request carries a valid CSRF token and each denial is checked for `INSUFFICIENT_ROLE`, because a 403 from `CsrfGuard` and a 403 from `RolesGuard` are indistinguishable from outside and one of them would mean the role check never ran.
 
-**The dashboard adds no source of truth.** Every figure on §4C.1 already existed — users, entities, paths, courses, results, completions, certificates, the audit trail. The service only asks the existing tables the questions an administrator has, which is what stops it disagreeing with the screens it summarises. Three pieces of arithmetic were worth unit-testing because a plausible implementation gets each wrong: a retake must not count as a second assessed person (D-033), the code distribution must use each person's *newest* result or it describes the indecisive rather than the ministry, and a completion rate over nobody is undefined rather than 0%.
+**The dashboard adds no source of truth.** Every figure on §4C.1 already existed — users, entities, paths, courses, results, completions, certificates, the audit trail. The service only asks the existing tables the questions an administrator has, which is what stops it disagreeing with the screens it summarises. Three pieces of arithmetic were worth unit-testing because a plausible implementation gets each wrong: a retake must not count as a second assessed person (D-033), the code distribution must use each person's _newest_ result or it describes the indecisive rather than the ministry, and a completion rate over nobody is undefined rather than 0%.
 
-**Integration health asks two questions, not one.** "Is Moodle answering?" is a live `checkHealth()` call; "did the sync actually run?" is read from the audit trail, because that is the only place a *run* is recorded — `courses.lastSyncedAt` would report a healthy catalogue while every recent run had failed. A Moodle that answers while the scheduler is dead is the outage that a single green tick hides, and it is the one an operator must act on. The failure code is surfaced too: a rejected token and an unreachable host need different fixes, and collapsing them costs the operator their first hour.
+**Integration health asks two questions, not one.** "Is Moodle answering?" is a live `checkHealth()` call; "did the sync actually run?" is read from the audit trail, because that is the only place a _run_ is recorded — `courses.lastSyncedAt` would report a healthy catalogue while every recent run had failed. A Moodle that answers while the scheduler is dead is the outage that a single green tick hides, and it is the one an operator must act on. The failure code is surfaced too: a rejected token and an unreachable host need different fixes, and collapsing them costs the operator their first hour.
 
 **Two smaller things the work forced.** `audit_log.id` is a `BigInt`, and `JSON.stringify` throws on one rather than rounding it — so the conversion happens in the service and is asserted with a value above `Number.MAX_SAFE_INTEGER`. And an audit action with no Arabic copy falls back to its raw code rather than to an empty string, because a blank row hides the event entirely, which is worse than an untranslated one.
 
-**Eight nav items, not six.** §3 caps the *learner's* steady-state nav at six so a person is not shown places they cannot act on; §4C names eight administrative destinations and each is a distinct thing the ministry runs. `ADMIN_NAV` currently holds one entry and gains the others in the sub-phase that builds each page — the same rule `navForState` follows, that an item leading to a 404 advertises what the product cannot do.
+**Eight nav items, not six.** §3 caps the _learner's_ steady-state nav at six so a person is not shown places they cannot act on; §4C names eight administrative destinations and each is a distinct thing the ministry runs. `ADMIN_NAV` currently holds one entry and gains the others in the sub-phase that builds each page — the same rule `navForState` follows, that an item leading to a 404 advertises what the product cannot do.
 
 ### 2026-08-22 — Phase 4 verification pass: four defects found, fixed, and the PR opened
 
@@ -423,12 +427,12 @@ The phase was already written and green. This session tried to break it, and did
 
 **Four defects, none of which the existing 998 tests could see.**
 
-| what | how it was found | why no test caught it |
-|---|---|---|
-| an entity on any learner page got a dead error card | driving the merged build in a browser | `@Roles` made the dashboard answer 403, not 401 — no suite asked what a non-employee sees on `/` (D-067) |
-| the mock reissued a course id after a restart | a 500 in the first test of the entity suite | the mock's state dies with the process; the rows do not, and `moodle_course_id` is UNIQUE (D-068) |
-| `published_at` never set on a course withdrawn while still a draft | reading the publish path, then reproducing it against a running API | nothing renders the column yet — §4C.5 will |
-| the e2e fixture borrowed a created course, not a catalogue one | the suite failed on the publish bridge, which was not at fault | `MAX(moodle_course_id)` is not the same question as "the last catalogue course" |
+| what                                                               | how it was found                                                    | why no test caught it                                                                                    |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| an entity on any learner page got a dead error card                | driving the merged build in a browser                               | `@Roles` made the dashboard answer 403, not 401 — no suite asked what a non-employee sees on `/` (D-067) |
+| the mock reissued a course id after a restart                      | a 500 in the first test of the entity suite                         | the mock's state dies with the process; the rows do not, and `moodle_course_id` is UNIQUE (D-068)        |
+| `published_at` never set on a course withdrawn while still a draft | reading the publish path, then reproducing it against a running API | nothing renders the column yet — §4C.5 will                                                              |
+| the e2e fixture borrowed a created course, not a catalogue one     | the suite failed on the publish bridge, which was not at fault      | `MAX(moodle_course_id)` is not the same question as "the last catalogue course"                          |
 
 **The one that mattered most was the cheapest to fix.** D-065 already claimed "each provider redirects a caller who does not belong to it". It was half true: the entity portal returned a mis-routed employee, and the learner portal left a mis-routed entity staring at a retry button that could never succeed — §2B's forbidden state, shipped, in the phase that created the role which reaches it. Applying `@Roles` is what turned the dashboard's answer from 401 into 403 and broke the assumption the provider rested on.
 
@@ -469,7 +473,7 @@ e2e          the whole thing through a real browser, twice over
 
 **Two things the work forced that were not in the brief.** The publish gate had to refuse rather than warn, because a warning on a publish button is dismissed and the cost of dismissing this one is a cohort of learners on a course nobody can ever pass (D-061, closing the detection-only half of D-042). And the RIASEC letter had to be derived from path membership rather than authored beside it (D-066) — §3A makes the path its owner, so a stored copy could contradict the path and nothing downstream would notice, because the gold recommendation never reads a course's letter.
 
-**Three corrections worth recording.** The generated migration would have failed on PostgreSQL 12+, which refuses to *use* a new enum value in the transaction that added it — split into two migrations. The backfill was the part that mattered: `publication` defaults to `DRAFT`, and taking that default would have withdrawn all 48 existing courses from every learner the moment the migration ran; existing rows are marked `PUBLISHED` with LMS flags chosen to reproduce each row's current status exactly, verified against the live database as 47 `AVAILABLE` and 1 `HIDDEN_BUT_COMPLETABLE`, unchanged. And the browser suite caught a real bug: `DataView` was showing its loading state on every refetch rather than only the first, so saving metadata unmounted the whole view and the confirmation vanished the instant it was earned.
+**Three corrections worth recording.** The generated migration would have failed on PostgreSQL 12+, which refuses to _use_ a new enum value in the transaction that added it — split into two migrations. The backfill was the part that mattered: `publication` defaults to `DRAFT`, and taking that default would have withdrawn all 48 existing courses from every learner the moment the migration ran; existing rows are marked `PUBLISHED` with LMS flags chosen to reproduce each row's current status exactly, verified against the live database as 47 `AVAILABLE` and 1 `HIDDEN_BUT_COMPLETABLE`, unchanged. And the browser suite caught a real bug: `DataView` was showing its loading state on every refetch rather than only the first, so saving metadata unmounted the whole view and the confirmation vanished the instant it was earned.
 
 **The contract suite earned its keep for the third time.** It caught `MockLmsService.createCourse` throwing synchronously where the real adapter rejects — which would have escaped a caller's `.catch()` entirely. After D-036's user-id counter and D-045's stable launch URL, this is the third occasion the mock was easier to satisfy than reality.
 
@@ -505,6 +509,7 @@ e2e          the whole thing through a real browser
 **Two corrections worth recording.** A reported bidi defect in the CV's career line was not real — measured glyph positions put the full stop correctly to the right of the Arabic run, and the speculative `&lrm;` fix was reverted rather than left carrying a false rationale. And the API's copy of the Arabic RIASEC names had `C` as "التقليدي" against the catalogue's "التنظيمي"; the drift guard that now compares the two caught it on its first run.
 
 ### [DATE] — Phase 4/5 portals specified + language decisions (planning, no code)
+
 - CLAUDE.md gained §4A (Model 1 authoring + cross-portal linking rules), §4B (Entity/reviewer portal full page spec), §4C (Super-admin portal full page spec). Phase 4 + Phase 5 in §7 rewritten to reference them and to fold in the deferred items they own (D-027 entity scoping, D-035 objectives/prerequisites editable, deferred Profile items).
 - Locked D-046 (Model 1 authoring), D-047 (single-language courses), D-048 (admins edit questions/weightings not the algorithm), D-049 (assessment-edit result freezing), D-050 (English CV with pass-through Arabic).
 - §4.11 CV spec changed from Arabic-first to English-document. NOTE for Phase 3: the CV is English with inline Arabic proper nouns — the PDF spike must cover that case, not only pure Arabic.
@@ -519,8 +524,6 @@ Branches `phase-2-moodle-spike` and `phase-2-moodle-integration` pushed. **Not m
 **Nine commits**, one per checkpoint plus the spike, the dependency decision and the final pass.
 
 **The claim the phase rests on:** the mock→real swap changed only the implementation. No caller of `LmsPort` was touched in any checkpoint — the port, the executable contract and the mock were built in Phase 0 for exactly this, and they held.
-
-
 
 ### 2026-08-19 — Phase 2 test pass: the whole loop, against a real Moodle
 
@@ -554,14 +557,13 @@ PASS  and does NOT send the email again              1 email(s) after a second s
 **Setup the pass needed:** the dev Moodle had one usable course and the 5-10 rule needs five, so six test courses were created on it through Moodle's own PHP API. `scripts/real-pass-setup.ts` seeds the assessment, mirrors the live catalogue and builds one path over it — the last part is test scaffolding, since the seeded twelve paths are built on mock course ids. **Phase 7 owns real catalogue and path data.**
 
 **Two things learned while doing it:**
+
 - `tsx` cannot boot the Nest container — esbuild does not emit `emitDecoratorMetadata`, which is exactly what Nest reads to resolve constructor parameters, and the failure presents as a misleading "dependency at index [0] is undefined". Scripts that need DI must run compiled.
 - The 60-second handoff TTL is right for production and impractical for a human step; the pass ran at the 300-second cap. The verify script now reads the lifetime out of the token rather than printing a constant that would quietly become wrong.
 
 **Phase 2's "done when" is met:** a real user, from the app, entered a real Moodle course, took its quiz, and the app reflected completion and pass/fail automatically and idempotently. The mock→real swap changed only the implementation — no caller of `LmsPort` was touched in any checkpoint.
 
 **Awaiting the user's approval of this test before opening the PR** (D-008).
-
-
 
 ### 2026-08-19 — Phase 2 checkpoint 6: the course player
 
@@ -581,22 +583,20 @@ PASS  and does NOT send the email again              1 email(s) after a second s
 
 **Next:** the full Phase 2 test pass — the whole loop against the real Moodle end to end — then the PR.
 
-
-
 ### 2026-08-19 — Phase 2 checkpoint 5: seamless login, proven end to end
 
 `local_tamkeensso` (D-044) plus app-side token minting. **Verified against the live Moodle, including the refusals** — a handoff that only proves it lets people in has demonstrated nothing about who it keeps out:
 
-| check | result |
-|---|---|
-| fresh token | `303 → /course/view.php?id=2`, and the course page renders the learner's Arabic name — a real session, no login form |
-| replayed token | refused ("already been used") |
-| tampered payload (user id edited to 1) | refused ("not valid") |
-| expired but validly signed | refused ("expired") |
+| check                                  | result                                                                                                               |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| fresh token                            | `303 → /course/view.php?id=2`, and the course page renders the learner's Arabic name — a real session, no login form |
+| replayed token                         | refused ("already been used")                                                                                        |
+| tampered payload (user id edited to 1) | refused ("not valid")                                                                                                |
+| expired but validly signed             | refused ("expired")                                                                                                  |
 
 Repeatable as `npx tsx spike/verify-sso.ts`.
 
-**Cross-language agreement is asserted, not assumed.** The plugin verifies in PHP what we mint in TypeScript, so a unit test pins the wire format exactly — unpadded base64url, HMAC-SHA256 over the *encoded* payload string, camelCase claims — and a live check ran a TS-minted token through the plugin's PHP verification inside the container. Two implementations read side by side would have drifted.
+**Cross-language agreement is asserted, not assumed.** The plugin verifies in PHP what we mint in TypeScript, so a unit test pins the wire format exactly — unpadded base64url, HMAC-SHA256 over the _encoded_ payload string, camelCase claims — and a live check ran a TS-minted token through the plugin's PHP verification inside the container. Two implementations read side by side would have drifted.
 
 **Why core Moodle could not do this** (established, not assumed): every core mechanism mints a session for the **web-service token's own user**, and our token is `tamkeen-integration`, not the learner. `tool_mobile_get_autologin_key` fails on that plus three other counts.
 
@@ -610,15 +610,13 @@ Repeatable as `npx tsx spike/verify-sso.ts`.
 
 **Next checkpoint:** the course player (§4.8) — now unblocked — then the full Phase 2 test pass.
 
-
-
 ### 2026-08-19 — Phase 2 checkpoint 4: completion sync
 
 The loop now closes in the product, not just in a spike. `getCourseProgress`/`listProgressForUser` are real, `completions` exists, and a scheduled job drives catalogue sync, enrolment reconciliation and completion sync in that order (D-042).
 
 **Verified against the live Moodle**, reading the learner who actually took the quiz: `{"completed":true,"completedAt":"2026-08-18T13:57:59.000Z","gradePercent":100}` → our verdict `passed: true` at `PASS_THRESHOLD=70`. A course they are not enrolled in returns `null`; an unknown learner returns `[]`; three consecutive reads are identical.
 
-**One constraint carries three rules.** `completions` unique on `(user_id, moodle_course_id)`: polling cannot duplicate a row, a shared course reuses the one completion instead of being re-taken (D-003), and Phase 3 gets a stable idempotency key. Keyed on the *LMS* course id so a completion survives our catalogue row being retired.
+**One constraint carries three rules.** `completions` unique on `(user_id, moodle_course_id)`: polling cannot duplicate a row, a shared course reuses the one completion instead of being re-taken (D-003), and Phase 3 gets a stable idempotency key. Keyed on the _LMS_ course id so a completion survives our catalogue row being retired.
 
 **The email fires only on the transition into passing** — the single irreversible act in a job that re-reads the same data forever. Tested by running the sync three times and asserting one email.
 
@@ -632,15 +630,13 @@ The loop now closes in the product, not just in a spike. `getCourseProgress`/`li
 
 **Next checkpoint:** the seamless-login spike, before any course-player UI is built (D-039).
 
-
-
 ### 2026-08-18 — Phase 2 checkpoint 3: enrolment
 
 `enrol`/`isEnrolled` are real, and enrolment now survives a Moodle that misbehaves (D-041).
 
 **Verified against the live Moodle** — `spike/verify-enrol.ts`: provision → `isEnrolled` false → `enrol` → `isEnrolled` true → `enrol` again, no error, and false for a course the learner does not hold.
 
-**Two defects that only exist against a real LMS.** `enrol` now **verifies before believing its own error**, because Moodle throws *after* committing the enrolment — the spike proved it, and the same reasoning covers a timeout, where the request may well have landed. And each course is enrolled **independently**: the old single `try` around the whole 5–10 course loop would abandon every course after a refused one and audit the batch as failed, leaving a learner half-enrolled in a path they cannot switch out of.
+**Two defects that only exist against a real LMS.** `enrol` now **verifies before believing its own error**, because Moodle throws _after_ committing the enrolment — the spike proved it, and the same reasoning covers a timeout, where the request may well have landed. And each course is enrolled **independently**: the old single `try` around the whole 5–10 course loop would abandon every course after a refused one and audit the batch as failed, leaving a learner half-enrolled in a path they cannot switch out of.
 
 **`retryPendingEnrolments` closes the loop D-036 left open** — best-effort enrolment is only defensible if something reconciles the leftovers. Bounded per run, safe any time, attributed to no IP address because it is a background job rather than a person.
 
@@ -652,15 +648,13 @@ The loop now closes in the product, not just in a spike. `getCourseProgress`/`li
 
 **Next checkpoint:** completion sync — the `completions` table keyed on `(user, moodle_course_id)`, the pass threshold, and the BullMQ scheduler that will also drive catalogue sync and enrolment reconciliation.
 
-
-
 ### 2026-08-18 — Phase 2 checkpoint 2: catalogue sync
 
 `listCourses`/`getCourse` are real, and `CatalogSyncService` mirrors the LMS catalogue into `courses`.
 
 **Verified against the live Moodle**, not just mocks — `spike/verify-catalog.ts` reads the real catalogue through the adapter: two courses returned, **the site course (id 1) correctly discarded**, the hidden course present with `visible: false` so sync can see it, `getCourse(9999)` → `null`, and `durationMinutes: null` exactly as D-039 predicted.
 
-**Three destructive defaults avoided, recorded as D-040.** A vanished course is never deleted and is only retired if **no learner holds it** — `RETIRED` is invisible even to someone who already selected it, so retiring an in-use course would breach D-015. An empty catalogue is treated as a fault and writes nothing, rather than withdrawing everything in one pass. And sync writes only what Moodle owns: letting the LMS's `null` overwrite an authored `durationMinutes` would have erased every duration on the first run *without erroring*, since the column is nullable.
+**Three destructive defaults avoided, recorded as D-040.** A vanished course is never deleted and is only retired if **no learner holds it** — `RETIRED` is invisible even to someone who already selected it, so retiring an in-use course would breach D-015. An empty catalogue is treated as a fault and writes nothing, rather than withdrawing everything in one pass. And sync writes only what Moodle owns: letting the LMS's `null` overwrite an authored `durationMinutes` would have erased every duration on the first run _without erroring_, since the column is nullable.
 
 **Two stale tests updated honestly rather than deleted.** `moodle.module.spec` asserted the real adapter throws `NotImplementedException`; it now reaches an unreachable host and reports the LMS down. The property under test — an unusable LMS must never present as an empty catalogue — is unchanged, and the test still asserts it.
 
@@ -669,8 +663,6 @@ The seed runner now shares `fieldsForPublishedCourse` with the sync, so a seeded
 **Totals:** 268 API unit tests (was 234) and **90 integration tests against real PostgreSQL**, all green; typecheck, lint and format clean. Callers still unchanged.
 
 **Next checkpoint:** enrolment — including the verify-before-believing-the-error rule the spike proved necessary (D-038).
-
-
 
 ### 2026-08-18 — Phase 2 checkpoint 1: real Moodle client + user provisioning
 
@@ -694,15 +686,16 @@ Branch `phase-2-moodle-spike` off `origin/main` @ `f25b644`. One file, `spike/mo
 
 **The loop closes.** Against real Moodle **5.2.2** at `localhost:8080`: provision user → enrol in course 2 → learner took the quiz in Moodle → we detect `completed: true`, `completedAt: 2026-08-18T13:57:59Z`, `gradePercent: 100` ⇒ **PASS** at `PASS_THRESHOLD=70`. Three consecutive reads returned byte-identical results.
 
-**Five findings became D-038**, each a defect that would otherwise have shipped: email lookup silently returns empty under least privilege (→ key on a username we derive); `enrol` throws *after* committing (→ verify before believing the error); `core_course_get_courses` omits `visible` (→ use `..._by_field`); only a course-total grade item is returned (→ always evaluate the course total); `completionstatus.timecompleted` does not exist (→ derive from the criteria).
+**Five findings became D-038**, each a defect that would otherwise have shipped: email lookup silently returns empty under least privilege (→ key on a username we derive); `enrol` throws _after_ committing (→ verify before believing the error); `core_course_get_courses` omits `visible` (→ use `..._by_field`); only a course-total grade item is returned (→ always evaluate the course total); `completionstatus.timecompleted` does not exist (→ derive from the criteria).
 
-**Four Moodle-side gaps the spike surfaced**, all fixed by the human: `moodle/role:assign` plus the Allow-role-assignments matrix row (enrolment returned `wsusercannotassign` for *every* role id until both were set); the manual-enrolment welcome message (no mail transport in the container); and the test course, which turned out to contain no quiz at all — `core_course_get_contents` showed only the default Announcements forum, which explained both `nocriteriaset` and the missing grade item.
+**Four Moodle-side gaps the spike surfaced**, all fixed by the human: `moodle/role:assign` plus the Allow-role-assignments matrix row (enrolment returned `wsusercannotassign` for _every_ role id until both were set); the manual-enrolment welcome message (no mail transport in the container); and the test course, which turned out to contain no quiz at all — `core_course_get_contents` showed only the default Announcements forum, which explained both `nocriteriaset` and the missing grade item.
 
 **Not yet built:** anything in `apps/`. The spike is deliberately disposable and no application code has changed. `MoodleHttpService` still throws `NotImplementedException`; `MOODLE_MODE` is still `mock`; no `completions` table, no BullMQ.
 
 **Next:** on approval, branch `phase-2-moodle-integration` and build the real adapter against `describeLmsContract`, in the order: client + provisioning → catalogue sync → enrolment → completion sync → seamless login + player.
 
 ---
+
 ### 2026-08-19 — Public landing page built and verified (side-track, not phase-numbered)
 
 **Scope:** a marketing/landing surface at `/landing`, out of the phase sequence — explicitly no auth, assessment, or application logic (brief's own boundary). Ported the section structure of the reference repo (`AhmadIbrahiem/frontend`, read-only) and adapted it to the Ministry BRD: Hero → Problem/solution → four-step journey (assessment → committed path → Moodle courses → certificate/CV) → trust/compliance → final CTA. Dropped the reference's Core Features / Stakeholder / Partnerships sections — they describe a different product's audience and have no Ministry-employee equivalent.
@@ -710,6 +703,7 @@ Branch `phase-2-moodle-spike` off `origin/main` @ `f25b644`. One file, `spike/mo
 **Built:** `apps/web/src/app/landing/page.tsx` + 6 section components + a new `Badge` primitive, all on branch `feature/landing-page` (2 commits, based on `main` @ f25b644, post-Phase-1-merge). Reuses the existing design system (color tokens, self-hosted IBM Plex Sans Arabic, shadcn primitives, the `useFormat` digit formatter) rather than a second one. Placeholder Arabic copy only — not machine-translated, not Lorem Ipsum — reflecting realistic sentence length; final copy is still owed by the Training Directorate.
 
 **Verified this session** (branch already existed from an earlier session; re-verified rather than trusting the prior state):
+
 - `npm run test`, `lint`, `typecheck` all green on `apps/web`.
 - Live in a second dev instance (port 3001, same DB/API): `/landing` renders correctly separate from the authenticated `/` dashboard, `lang="ar"`/`dir="rtl"` on `<html>`, the self-hosted Arabic font is actually applied (not a Latin fallback), first Tab lands on the skip link with a visible 2px gold focus ring, and the page has zero horizontal overflow at a 360px viewport.
 - Cross-checked the reference repo's actual section list (`src/pages/Landing.tsx`) to confirm the port is a deliberate adaptation, not a guess.
@@ -725,6 +719,7 @@ Branch `phase-2-moodle-spike` off `origin/main` @ `f25b644`. One file, `spike/mo
 **Cause:** the workflow applied migrations but **never seeded**. Phase 0's tests only needed authentication, so an empty database was a valid starting state; from Phase 1 the tests need real content — the assessment bank, the paths, the catalogue — and the journey suite collapsed without it. A gap in the workflow, not in the code under test.
 
 **Fixed:**
+
 - `ci.yml` gained a **Seed reference data** step after `db:deploy` (the seed is idempotent, so re-running is safe).
 - `journey.e2e-spec.ts` now **fails once, clearly**, on an unseeded database instead of producing forty unrelated-looking assertion failures whose real cause has to be inferred.
 - Fixed a genuine e2e flake found while verifying: the skip-link test tabbed immediately after the redirect to `/`, but `PortalProvider` renders only a loading state until the session and dashboard load — so there was no shell and no skip link yet. `signIn` now waits for the navigation landmark, which makes every consumer of the helper safe rather than patching one test.
@@ -741,16 +736,17 @@ Branch `phase-1-assessment-core`, 5 commits on `main` @ b478327. **Not merged.**
 
 **1.2 Question bank** — 30 Arabic Likert items, five per dimension, weights 0-4, **balanced by construction** and asserted (D-032): ranking compares raw scores across dimensions, so an unbalanced bank would produce a code reflecting its own shape rather than the user's interests. Seeded data, not components, with stable keys so wording revisions need no migration. Items are interleaved so no two consecutive statements share a dimension.
 
-**1.3 Schema, migration, seed** — one migration adding assessment/paths/courses tables. Constraints carry the rules (D-035): `user_paths.user_id` is unique so single-path survives concurrent confirms; option weights are a table with an enum column, because a mistyped letter in JSON fails *silently* into a wrong Holland Code; responses reference the bank with `Restrict` so Phase 5 edits cannot rewrite history. Mock catalogue grew 12 → 48 courses (twelve could not support twelve paths each offering a genuine 5-10 choice); 12 paths, two per letter, so the within-letter ordering is actually exercised. Seed is idempotent — verified by three consecutive runs leaving row counts identical. The API tsconfig now typechecks `prisma/`.
+**1.3 Schema, migration, seed** — one migration adding assessment/paths/courses tables. Constraints carry the rules (D-035): `user_paths.user_id` is unique so single-path survives concurrent confirms; option weights are a table with an enum column, because a mistyped letter in JSON fails _silently_ into a wrong Holland Code; responses reference the bank with `Restrict` so Phase 5 edits cannot rewrite history. Mock catalogue grew 12 → 48 courses (twelve could not support twelve paths each offering a genuine 5-10 choice); 12 paths, two per letter, so the within-letter ordering is actually exercised. Seed is idempotent — verified by three consecutive runs leaving row counts identical. The API tsconfig now typechecks `prisma/`.
 
 **1.4 API** — assessment, paths, courses, path commitment, dashboard. Rules live in services, never controllers. Confirm re-counts **inside** the transaction and guards on `confirmedAt IS NULL` in the `UPDATE … WHERE`, so two concurrent confirms cannot both succeed. Gold ordering calls the shared function rather than an `ORDER BY`. `resolveCourseAction` is pure and returns exactly one value, so §3's "never all three" is enforced by the response shape; an exhaustive sweep over all 48 state combinations asserts it. **No view type carries a weighting** — an integration test greps the whole `/api/assessment` response for `weight`, `dimension`, `points`, `riasec`, and the e2e suite has to read weights out of the database to produce a chosen code.
 
 **1.5 Web** — assessment flow, results with the gold ranking, path build with the live counter and the native-`<dialog>` commitment gate, catalogue + detail, My Path, the dashboard's three states, minimal profile. Authenticated pages sit under a `(portal)` route group; `PortalProvider` loads session + journey state once and owns the 401 redirect (D-037), because the nav depends on that state and a per-page copy would disagree with its own content.
 
 **Three defects the verification pass found — each now has the test that would have caught it:**
+
 - The `{}`→`null` normalisation also flattened an empty **array**, so an empty catalogue never reached its empty state and rendered a heading above nothing. Caught by the catalogue e2e.
 - The mock LMS numbered users from a **per-process counter**, so after a restart it handed a new user an id an existing row already held and enrolment died on the `moodle_user_id` unique index. Ids now derive from the email, matching the invariant a real Moodle has; the contract suite asserts stability across instances (D-036).
-- `PathCard` paired each value with a visually-hidden `<dt>`, making a screen reader announce *"دورة متاحة، 11 دورة متاحة"*.
+- `PathCard` paired each value with a visually-hidden `<dt>`, making a screen reader announce _"دورة متاحة، 11 دورة متاحة"_.
 
 **Three more found only by driving the built app in a browser:** the modal pinned to the top (Tailwind's preflight zeroes the `margin:auto` the UA stylesheet centres a `<dialog>` with); the progress track invisible at 0% (cream on white); course detail printing its title twice.
 
@@ -768,14 +764,14 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 
 **0.1 Monorepo & tooling** — npm workspaces (D-020): `apps/api` NestJS 11, `apps/web` Next 15 + React 19, `packages/types`. Strict shared tsconfig, Prettier + per-workspace ESLint flat configs, `.gitattributes` for LF parity with CI. Zod-validated env at boot. `docker-compose` for PostgreSQL 16 / Redis 7 / Mailpit (D-021). npm `overrides` cleared 3 high CVEs while holding Next 15 (D-022). **Fixed:** `gitignore`/`env.example` had no leading dots, so the ignore file was inert and `.env` was unprotected.
 
-**0.2 Arabic-first RTL / i18n** — next-intl without locale routing (D-024); `lang="ar" dir="rtl"` fixed; all copy in `messages/ar.json` including the document title. The D-018 switch point lives in `packages/types` and is shared by web and api so screen and PDF cannot disagree; next-intl receives the extended tag (`ar-u-nu-latn-ca-gregory`) so ICU-embedded numbers honour it too. Self-hosted IBM Plex Sans Arabic (D-023) — removes a build-time network dependency *and* a third-party disclosure of who uses an internal system. A catalog test fails the build on empty strings, unbalanced ICU braces, stray English, or hardcoded digits.
+**0.2 Arabic-first RTL / i18n** — next-intl without locale routing (D-024); `lang="ar" dir="rtl"` fixed; all copy in `messages/ar.json` including the document title. The D-018 switch point lives in `packages/types` and is shared by web and api so screen and PDF cannot disagree; next-intl receives the extended tag (`ar-u-nu-latn-ca-gregory`) so ICU-embedded numbers honour it too. Self-hosted IBM Plex Sans Arabic (D-023) — removes a build-time network dependency _and_ a third-party disclosure of who uses an internal system. A catalog test fails the build on empty strings, unbalanced ICU braces, stray English, or hardcoded digits.
 
-**0.3 Design tokens & UI shell** — the seven brand colours once in `globals.css` with a shadcn-compatible semantic layer. **Measured** contrast (D-025): gold `#A8863C` is 3.08–3.99:1 and **fails AA for body text on every background**, including as a fill with white *or* navy text; it is now restricted to borders/rings/icons/large text, with light gold + navy (6.01:1) as the AA-safe achievement fill. Two functional colours added outside the palette (danger/success) because mandatory error states need a signal colour and §3 has none. 24 contrast assertions, including negative tests documenting the restriction. `LoadingState`/`EmptyState`/`ErrorState` + a `DataView` that makes the happy path unreachable without handling all three; error outranks empty so a failed request is never reported as "nothing here yet".
+**0.3 Design tokens & UI shell** — the seven brand colours once in `globals.css` with a shadcn-compatible semantic layer. **Measured** contrast (D-025): gold `#A8863C` is 3.08–3.99:1 and **fails AA for body text on every background**, including as a fill with white _or_ navy text; it is now restricted to borders/rings/icons/large text, with light gold + navy (6.01:1) as the AA-safe achievement fill. Two functional colours added outside the palette (danger/success) because mandatory error states need a signal colour and §3 has none. 24 contrast assertions, including negative tests documenting the restriction. `LoadingState`/`EmptyState`/`ErrorState` + a `DataView` that makes the happy path unreachable without handling all three; error outranks empty so a failed request is never reported as "nothing here yet".
 
 **0.4 Database & migrations** — Prisma 7 with the pg driver adapter (D-026); foundation tables only (`users`, `auth_tokens`, `sessions`, `audit_log`, `notifications`), with a test asserting product tables stay absent. Token hashes only; timestamps not booleans; audit references ids only and survives actor deletion via `SetNull`; UUID keys. Seed has no known default password — production requires it explicitly or refuses to run — and is idempotent. RBAC is role-based and code-defined, with no permission table (D-027).
 
-**0.5 Auth & security** — restricted registration (D-017) failing *closed* on an empty allow-list or bad pattern; email verification and reset via single-use hashed tokens; opaque Postgres sessions with immediate revocation (D-028); per-account lockout; double-submit CSRF; global **fail-closed** session guard so a controller added later is protected by omission rather than exposed by it; audit written from services, not controllers. Enumeration resistance end to end, including a dummy argon2 verify to equalise timing. Five Arabic RTL auth pages; a `Field` component makes label/`aria-invalid`/`aria-describedby` structural.
-  **Security defect found and fixed (D-029):** `@nestjs/config`'s `ConfigService` reads `process.env` in preference to the validated object, so `ALLOWED_EMAIL_DOMAINS` arrived as a *string* and the domain check became a **substring match** — `attacker@ministry.gov` would have passed a gate set to `ministry.gov.example`. The existing domain test passed for the wrong reason (`gmail.com` fails a substring check too). Config now reads the validated object; tests assert the types and explicit prefix/substring rejection.
+**0.5 Auth & security** — restricted registration (D-017) failing _closed_ on an empty allow-list or bad pattern; email verification and reset via single-use hashed tokens; opaque Postgres sessions with immediate revocation (D-028); per-account lockout; double-submit CSRF; global **fail-closed** session guard so a controller added later is protected by omission rather than exposed by it; audit written from services, not controllers. Enumeration resistance end to end, including a dummy argon2 verify to equalise timing. Five Arabic RTL auth pages; a `Field` component makes label/`aria-invalid`/`aria-describedby` structural.
+**Security defect found and fixed (D-029):** `@nestjs/config`'s `ConfigService` reads `process.env` in preference to the validated object, so `ALLOWED_EMAIL_DOMAINS` arrived as a _string_ and the domain check became a **substring match** — `attacker@ministry.gov` would have passed a gate set to `ministry.gov.example`. The existing domain test passed for the wrong reason (`gmail.com` fails a substring check too). Config now reads the validated object; tests assert the types and explicit prefix/substring rejection.
 
 **0.6 LMS port (contract-first)** — one `LmsPort` behind the `LMS_PORT` token, in **our** vocabulary; a test asserts Moodle's native field names never reach a caller. The contract is an **executable suite** (`describeLmsContract`) asserting idempotent provision/enrol, `null` for unenrolled, **null grade not 0** for unattempted, copies not shared state, and no token in the course URL — Phase 2 runs the same suite against the real adapter. `LmsCourseProgress` has no `passed` field, asserted, because the threshold is a product setting (D-007). `MOODLE_MODE=real` boots and fails loudly rather than reporting an empty catalogue. Mock-only simulation helpers stay off the port. (D-030)
 
@@ -786,12 +782,14 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 **Next:** Phase 1 — RIASEC content + scoring engine.
 
 ### [DATE] — Two open questions resolved (D-019)
+
 - Auth: **email/password only, no AD/LDAP** (user confirmed). Updated CLAUDE.md §2/§5 and Phase 2; annotated D-004.
 - Moodle: **latest 4.5.x LTS** (github.com/moodle/moodle newest `v4.5.x` tag; supported to Oct 2027; PHP ≥ 8.1 + sodium + max_input_vars ≥ 5000). Recorded as D-019.
 - No open blockers remain for Phase 0 or Phase 2 auth. Application code still not started.
 - **Next:** run the Phase 0 kickoff prompt.
 
 ### [DATE] — Deep audit: filled 14 gaps
+
 - Attempted to read the repo `AbdullahDamati/tamkeen` — returns 404 (private or not yet created); could not inspect current contents. Treating these files as the repo foundation. If the agent needs the real repo state, it must be made accessible.
 - Audited all four files as the build agent would; found and filled gaps:
   - **§2B added** — Engineering standards + Definition of Done; defines what "the test" means (D-014).
@@ -807,6 +805,7 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - **Next:** Phase 0 foundations after human confirms the two open questions.
 
 ### [DATE] — Stack/architecture locked + README created
+
 - Locked the tech stack and architecture as **D-013** in `decisions.md` (Next.js 15 / NestJS / PostgreSQL+Prisma / Redis+BullMQ / Chromium PDF / Moodle 4.5 LTS behind one anti-corruption module).
 - Verified Moodle baseline via web research: 4.5 LTS supported to ~late 2027, single REST endpoint, Catalyst RESTful plugin for real HTTP status codes, CVE-2025-32044 (fixed 4.5.3) noted for hardening.
 - Created **`README.md`** — system overview: what it does, RIASEC model, stack, architecture diagram, Moodle integration, data model, portals & pages, design system, phases, working agreement, getting started.
@@ -814,6 +813,7 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - **Next:** Phase 0 foundations after human confirms open questions (AD/LDAP? Moodle version to deploy?).
 
 ### [DATE] — Holland/RIASEC + comprehensive phases update
+
 - Assessment defined as **Holland (RIASEC)**: added CLAUDE.md §3A (six dimensions, scoring → Holland Code, path tagging, gold recommendation rule).
 - **Paths now carry `riasec_letter`**; recommendation = path letter ∈ user's top-three code, ranked by the user's letter order.
 - Updated Assessment + Results page specs and the data model (`assessment_options` with RIASEC weighting; `assessment_results` stores all six scores + code; `paths.riasec_letter`).
@@ -823,6 +823,7 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - **Next:** Phase 0 foundations after human confirms stack + open questions above.
 
 ### [DATE] — Project initialization
+
 - Created `CLAUDE.md` (rules + full context + page specs + phases), `progress.md` (this file), `decisions.md` (rationale).
 - No application code yet.
 - **Next:** Phase 0 foundations after human confirms stack + open questions above.
@@ -830,6 +831,7 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 ---
 
 ## Phase tracker
+
 - [x] **Phase 0 — Foundations** (skeleton, RTL/i18n, color tokens, auth+email verification, user model, mocked Moodle service, CI) — **merged** (PR #1, `main` @ `b478327`)
 - [x] **Phase 1 — Assessment (RIASEC) + path core** (RIASEC questions+scoring→Holland Code, gold ranked results, letter-tagged paths, catalog+detail from mock, 5-10 build + single-path commit, dashboard's 3 states, My Path) — **merged** (PR #2)
 - [x] **Phase 2 — Moodle integration** (spike first; web services, provisioning, catalog sync, enrollment, scheduled completion sync + pass threshold + shared-course reuse, seamless login, course player) — **merged** (PR #3, `origin/main` @ `dcb8aad`)
@@ -840,7 +842,6 @@ Branch `phase-0-foundations`, 7 commits on `main` @ 6442ed4. **Not merged.**
 - [ ] **Phase 7 — Deployment, acceptance & launch** (deploy app+Moodle, seed data, full end-to-end acceptance, docs/handover, sign-off)
 
 > When a phase is complete AND the user approved the test: create branch `phase-<n>-<slug>`, open a PR to `main`, and record it here. **Never merge/push to main.**
-
 
 ### 2026-08-25 — Tickets: the `moodle-embed` epic (TAM-129, TAM-130)
 
@@ -853,3 +854,7 @@ Implementation session on the user's "go with A" (Moodle's editor framed in the 
 ### 2026-08-25 — TAM-130 built: the entity Course Content page frames Moodle's editor (D-099) — branch `feature/tam-130-entity-content-embed` (stacked on TAM-129)
 
 TAM-129 was pushed and its PR body committed (`.github/PR_BODY_tam-129.md`; the user opens the PR from the compare URL). Then TAM-130: `components/entity/moodle-embed.tsx`, `components/entity/publish-action.tsx`, the rewritten `entity/courses/[courseId]/content/page.tsx` (publish gate as the header action, read-back strip, framed editor), Manage Course's author card as a link and its publish card on the shared component, five new `entity.*` strings, the user-tour rule in the plugin CSS. Tests: `entity-course-content.test.tsx` (9), `entity-manage-course.test.tsx` updated (12), full web suite 501 green ×2, typecheck/lint/prettier clean; `e2e/phase-4-happy-path.spec.ts` rewritten for the link and the framed page (against the mock LMS the frame never reports ready, which exercises the fallback). Live proof against the running app with a throwaway Playwright script (not committed). CLAUDE.md §4B.3/§4B.4 rewritten; D-099. **Next:** the user's test → PR for TAM-130 (after TAM-129 merges, or as a stacked PR); TAM-120's sweep of the remaining entity pages; the `lang=ar` provisioning fix noted in D-099.
+
+### 2026-08-25 — TAM-131 (sidebar double-active) fixed on the TAM-130 branch
+
+The user asked for the fix rather than a backlog ticket: the rail marked «الرئيسية» active on every entity page because `/entity` prefix-matched everything and only `/` was special-cased. Replaced by a segment-aware `isNavItemActive` helper (no special cases; `/admin` in Phase 5 needs nothing), unit-tested; the ticket is recorded as done in `tickets.md`.

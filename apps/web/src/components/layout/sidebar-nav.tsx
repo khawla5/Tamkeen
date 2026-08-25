@@ -19,6 +19,7 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
 import type { NavIconName, NavItem } from './nav-items';
+import { activeNavHref } from './nav-items';
 import { cn } from '@/lib/utils';
 
 /** Name -> icon resolution lives on the client, so no function crosses the boundary. */
@@ -48,6 +49,11 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
   const t = useTranslations('nav');
   const tA11y = useTranslations('a11y');
   const pathname = usePathname();
+  /* Exactly one active item: the longest matching href (TAM-131). */
+  const activeHref = activeNavHref(
+    pathname,
+    items.map((item) => item.href),
+  );
 
   return (
     <ul
@@ -56,8 +62,7 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
       )}
     >
       {items.map((item) => {
-        /* Exact match for the root so it isn't marked active on every route. */
-        const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+        const isActive = item.href === activeHref;
         const Icon = ICONS[item.icon];
         const hasIndicator = indicators?.includes(item.key) ?? false;
 

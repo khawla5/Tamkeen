@@ -198,6 +198,10 @@ export class MoodleHttpService implements LmsPort {
             lastname,
             email,
             auth: 'manual',
+            /* Arabic-first (§2): Moodle's UI — framed inside the portal for
+               authors (D-098) — must open in Arabic. Left unset, Moodle gives a
+               new account English regardless of the site default. */
+            lang: 'ar',
           },
         ],
       });

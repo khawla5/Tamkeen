@@ -622,3 +622,23 @@
   - `PortalPage` already has the `action` slot (§3's single primary action) — use it; do not add a second button row.
   - Moodle's file picker, TinyMCE and drag-drop upload work inside a same-site iframe; pages that navigate `window.top` (LTI/SCORM players) are out of scope — note it.
   - Rejected: two actions in the header (publish + open in Moodle) — one primary action, the fallback is secondary; auto-publishing when blockers clear (publishing is the entity's decision, D-059); polling the read-back on an interval (the plugin message exists for this; keep only the manual refresh).
+
+## TAM-131 — Bug: the entity sidebar marks «الرئيسية» active on every entity page (two active items at once) — **DONE** (on `feature/tam-130-entity-content-embed`, at the user's direction)
+
+- **What shipped (2026-08-25):** `activeNavHref(pathname, hrefs)` in `nav-items.ts` — **longest matching href wins** (segment-aware via `navPathMatches`, trailing slashes normalised, the `/` special case deleted): a dashboard is the root of its portal and matches everything by prefix, so "equal or nested" alone cannot single it out; longest-match does, with no per-portal exception. Used by `SidebarNav`; five unit cases in `nav-items.test.ts`.
+
+- **Labels:** `bug`, `entity`, `app-chrome`, `frontend`, `a11y`
+- **Priority:** High (visible on every entity page; also an accessibility defect — two `aria-current="page"` links)
+- **Pre-requisite:** none
+- **Description:**
+  On any entity page other than the dashboard — e.g. «المتدربون» — the rail shows **two** items in the active treatment: the page's own item _and_ «الرئيسية» (screenshot 2026-08-25, learners page: both carry the tinted ground, primary start-edge bar and primary text). The dashboard item is `href: '/entity'`, and the rail decides "active" by `pathname.startsWith(item.href)`, so `/entity` matches `/entity/learners`, `/entity/courses/…`, `/entity/profile` — everything. The learner rail does not show this only because its dashboard is `/`, which has an explicit exact-match special case (`sidebar-nav.tsx:60`: "Exact match for the root so it isn't marked active on every route"). The entity portal (D-065) has its own root, and the special case never learned about it.
+  **Fix:** make the rule structural rather than a list of exceptions — an item is active when the pathname **equals** its href **or starts with `href + '/'`** (segment-aware prefix). That keeps `/entity/courses` active on `/entity/courses/abc/content` (correct: a nested page belongs to its section) while `/entity` is active only on `/entity` itself, and `/` only on `/`. Delete the `item.href === '/'` special case; the general rule covers it. A trailing slash in the pathname, if Next ever hands one, should not defeat the equality — normalise once.
+  **Acceptance:**
+  - On every entity route exactly **one** rail item is active and carries `aria-current="page"` — asserted for `/entity`, `/entity/courses`, `/entity/courses/[id]`, `/entity/courses/[id]/content`, `/entity/learners`, `/entity/profile`.
+  - The learner rail's behaviour is unchanged and asserted the same way (`/`, `/courses/[id]/player`, `/my-path`, `/profile`).
+  - A unit test on the active-match helper (extract it: `isNavItemActive(pathname, href)`) covering: exact, nested segment, sibling prefix (`/entity` vs `/entityx` → not active), root.
+  - No visual change to the active treatment itself (D-097); the screenshot at 360/768/1280 shows one highlighted item.
+    **Implementation notes (verified):**
+  - `apps/web/src/components/layout/sidebar-nav.tsx:60` — the one line: `const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);`. Items: `entity-nav-items.ts:16` (`/entity`), `nav-items.ts:47` (`/`).
+  - Both rails render through the same `SidebarNav` (`AppShell`, D-097), so one fix covers both portals; the horizontal (mobile) orientation uses the same `isActive`.
+  - Rejected: adding `'/entity'` to the exact-match exception list — the admin portal (Phase 5, `/admin`) would need the next exception, and the next; the segment-aware rule needs none.
