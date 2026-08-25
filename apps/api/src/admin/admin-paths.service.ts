@@ -11,6 +11,7 @@ import { AuditAction, AuditReason } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PATH_COURSE_BOUNDS, pathBlockers } from './path-readiness';
+import { isForeignKeyViolation } from './prisma-errors';
 import type {
   AttachCourseDto,
   CreatePathDto,
@@ -643,23 +644,6 @@ function isSelectable(status: string): boolean {
 
 function bound(): number {
   return PATH_COURSE_BOUNDS.min;
-}
-
-/**
- * A foreign-key violation, by code rather than by `instanceof`.
- *
- * The generated client can be loaded through more than one module instance in a
- * monorepo, so an `instanceof` check can silently stop matching. The code is the
- * stable contract — the same reasoning `certificate-issuance.service.ts` gives
- * for P2002.
- */
-function isForeignKeyViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === 'P2003'
-  );
 }
 
 function changedFields(dto: Record<string, unknown>): string {

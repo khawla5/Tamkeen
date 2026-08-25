@@ -149,8 +149,7 @@ describe('Arabic message catalog', () => {
 const DYNAMIC_NAMESPACES = [
   'admin.auditAction',
   'admin.riasec',
-  'admin.courseStatus',
-  'admin.coursePublication',
+  'admin.courseVisibility',
   'admin.versionStatus',
   'admin.setting',
 ];

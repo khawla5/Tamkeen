@@ -14,7 +14,6 @@
     "heroCta": "إنشاء حساب",
     "heroSecondaryCta": "كيف تعمل المنصة",
     "heroEligibility": "التسجيل مقصور على منسوبي الوزارة، عبر البريد الإلكتروني الرسمي ورقم الموظف.",
-
     "aboutTitle": "عن المنصة",
     "aboutSubtitle": "ما يمرّ به الموظف على المنصة، من التقييم إلى الشهادة",
     "explorerAction": "إنشاء حساب",
@@ -94,7 +93,6 @@
         }
       }
     },
-
     "faqTitle": "الأسئلة الشائعة",
     "faq": {
       "who": {
@@ -122,7 +120,6 @@
         "a": "على منصة الوزارة للتعلّم الإلكتروني. يدخل الموظف إليها من تمكين مباشرة دون تسجيل دخول إضافي."
       }
     },
-
     "footerAbout": "منصة داخلية للتدريب والتطوير المهني لمنسوبي الوزارة.",
     "footerDirectorate": "الإدارة العامة للتدريب",
     "footerLinksTitle": "روابط",
@@ -133,7 +130,6 @@
     "footerPolicyPrivacy": "سياسة الخصوصية",
     "footerPolicyTerms": "شروط الاستخدام",
     "footerPolicyAccessibility": "إمكانية الوصول",
-
     "footerClassification": "داخلي — للاستخدام الحكومي",
     "footerOwner": "© وزارة الداخلية"
   },
@@ -564,7 +560,10 @@
     "SETTING_INVALID_NUMBER_FORMAT": "شكل الأرقام يجب أن يكون western أو arabic.",
     "SETTING_INVALID_MOODLE_BASE_URL": "عنوان منصة التعلم غير صالح.",
     "PASSWORD_UNCHANGED": "كلمة المرور الجديدة مطابقة للحالية.",
-    "EMAIL_UNCHANGED": "هذا هو بريدك الحالي."
+    "EMAIL_UNCHANGED": "هذا هو بريدك الحالي.",
+    "COURSE_IN_USE": "لا يمكن حذف هذه الدورة: اختارها موظفون أو صدرت عنها شهادات أو سُجّل فيها إنجاز. استخدم «سحب الدورة» لإخفائها عن الاختيارات الجديدة.",
+    "COURSE_LMS_DELETE_FAILED": "تعذّر حذف الدورة من منصة التعلم، فلم يُحذف شيء. تأكد من صلاحيات التكامل ثم أعد المحاولة.",
+    "COURSE_AVAILABILITY_WINDOW_INVALID": "فترة الإتاحة غير صحيحة: تأكد من أن تاريخ البداية لا يلي تاريخ النهاية."
   },
   "player": {
     "title": "محتوى الدورة",
@@ -990,12 +989,6 @@
     "pathRemoveConfirmHint": "إن أردت إخفاءه مع الاحتفاظ به، أغلق هذه النافذة واختر «إيقاف العرض».",
     "pathRemoveConfirm": "حذف نهائي",
     "pathRemoved": "حُذف المسار نهائيًا.",
-    "courseStatus": {
-      "DRAFT": "مسوّدة",
-      "AVAILABLE": "متاحة",
-      "HIDDEN_BUT_COMPLETABLE": "مخفية عن الاختيار",
-      "RETIRED": "متوقفة"
-    },
     "coursesTitle": "الإشراف على الدورات",
     "coursesSearchPlaceholder": "عنوان الدورة",
     "coursesOwnership": "الجهة الموردة",
@@ -1005,16 +998,7 @@
     "coursesEmptyHint": "جرّب تعديل البحث أو إزالة عوامل التصفية.",
     "resultCountCourses": "{count} دورة",
     "columnCourse": "الدورة",
-    "columnPublication": "قرار النشر",
     "columnHeld": "متدربون يحتفظون بها",
-    "columnPublishedAt": "تاريخ النشر",
-    "coursePublication": {
-      "DRAFT": "تحت الإعداد",
-      "PUBLISHED": "منشورة",
-      "UNPUBLISHED": "مسحوبة"
-    },
-    "lmsState": "حالة الدورة في منصة التعلم",
-    "lmsShown": "ظاهرة",
     "lmsHidden": "مخفية في منصة التعلم",
     "lmsAbsent": "غير موجودة في منصة التعلم",
     "coursesHeldNotice": "يحتفظ بهذه الدورة متدربون. سحبها يخفيها عن الاختيارات الجديدة فقط، ويبقيها متاحة لمن اختارها حتى يكملها.",
@@ -1130,7 +1114,39 @@
       "ADMIN_SETTING_CHANGED": "تغيير إعداد",
       "ADMIN_SETTING_RESET": "إرجاع إعداد إلى الافتراضي",
       "AUTH_EMAIL_CHANGE_REQUESTED": "طلب تغيير البريد الإلكتروني",
-      "AUTH_EMAIL_CHANGED": "تغيير البريد الإلكتروني"
-    }
+      "AUTH_EMAIL_CHANGED": "تغيير البريد الإلكتروني",
+      "ADMIN_COURSE_DELETED": "حذف دورة",
+      "COURSE_AVAILABILITY_APPLIED": "تطبيق فترة إتاحة دورة"
+    },
+    "courseVisibility": {
+      "AVAILABLE": "متاحة",
+      "HIDDEN": "مخفية"
+    },
+    "reasonDraft": "قيد الإعداد لدى الجهة الموردة",
+    "reasonWithdrawn": "مسحوبة من الكتالوج",
+    "reasonOutsideWindow": "خارج فترة الإتاحة",
+    "coursesHiddenReason": "سبب الإخفاء",
+    "columnAvailability": "فترة الإتاحة",
+    "availabilityNone": "دائمة",
+    "availabilityFrom": "من {from}",
+    "availabilityUntil": "حتى {until}",
+    "availabilityBetween": "من {from} حتى {until}",
+    "coursesWindowHeading": "فترة الإتاحة",
+    "coursesWindowHint": "حدّد اليوم الأول واليوم الأخير لإتاحة الدورة. عند انتهاء الفترة تصبح الدورة مخفية تلقائيًا عن الاختيارات الجديدة، ويبقى من اختارها قادرًا على إكمالها. اترك الحقلين فارغين لتبقى الدورة متاحة بلا فترة محددة.",
+    "coursesAvailableFrom": "متاحة من",
+    "coursesAvailableUntil": "متاحة حتى",
+    "coursesSaveWindow": "حفظ فترة الإتاحة",
+    "coursesOwnerHeading": "الجهة الموردة",
+    "coursesHideHeading": "ظهور الدورة في الكتالوج",
+    "coursesHideHint": "السحب يخفي الدورة عن اختيارات الموظفين الجدد ويمكن التراجع عنه في أي وقت.",
+    "coursesRestoreHint": "الدورة مسحوبة الآن. إعادة نشرها تعيدها إلى الكتالوج.",
+    "coursesRemoveHeading": "حذف الدورة",
+    "coursesRemoveHint": "تُحذف الدورة نهائيًا من المنصة ومن منصة التعلم معًا، مع ارتباطاتها بالمسارات. لا يمكن التراجع عن هذا الإجراء.",
+    "coursesRemoveBlocked": "لا يمكن حذف هذه الدورة: اختارها موظفون أو صدرت عنها شهادات أو سُجّل فيها إنجاز. «سحب الدورة» يخفيها عن الاختيارات الجديدة دون المساس بمن يدرسها.",
+    "coursesRemove": "حذف نهائي",
+    "coursesRemoveConfirmTitle": "حذف الدورة نهائيًا",
+    "coursesRemoveConfirmBody": "ستُحذف دورة «{name}» من المنصة ومن منصة التعلم، بمحتواها واختباراتها. هذا الإجراء لا يمكن التراجع عنه.",
+    "coursesRemoveConfirmHint": "إن أردت إخفاءها مع الاحتفاظ بها، أغلق هذه النافذة واختر «سحب الدورة».",
+    "coursesRemoveConfirm": "حذف نهائي"
   }
 }

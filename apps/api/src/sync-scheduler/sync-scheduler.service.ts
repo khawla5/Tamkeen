@@ -7,6 +7,7 @@ import {
 import { Queue, Worker } from 'bullmq';
 
 import { CatalogSyncService } from '../catalog-sync/catalog-sync.service';
+import { CourseAvailabilityService } from '../catalog-sync/course-availability.service';
 import { SettingsService } from '../settings/settings.service';
 import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import { CompletionSyncService } from '../completion-sync/completion-sync.service';
@@ -18,6 +19,7 @@ const JOB_NAME = 'sync-cycle';
 
 export interface SyncCycleResult {
   catalog: { seen: number; withdrawn: number } | null;
+  availability: { scanned: number; changed: number } | null;
   enrolments: { enrolled: number; stillPending: number } | null;
   completions: { completions: number; newlyPassed: number } | null;
   certificates: { issued: number; failed: number } | null;
@@ -46,6 +48,7 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
     private readonly config: AppConfigService,
     private readonly settings: SettingsService,
     private readonly catalog: CatalogSyncService,
+    private readonly availability: CourseAvailabilityService,
     private readonly enrollment: EnrollmentService,
     private readonly completion: CompletionSyncService,
     private readonly certificates: CertificateIssuanceService,
@@ -55,7 +58,9 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
    * One pass over everything the LMS drives.
    *
    * **Order matters.** The catalogue first, so a course that appeared or
-   * vanished is known before anything reasons about it. Then enrolment
+   * vanished is known before anything reasons about it; then the availability
+   * windows, which restate the status of anything whose period has opened or
+   * closed since the last run. Then enrolment
    * reconciliation, so a learner whose enrolment never landed is enrolled before
    * we ask the LMS about their progress — otherwise their first sync would read
    * nothing and they would wait a whole interval for no reason. Completion last.
@@ -67,6 +72,7 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
   async runSyncCycle(): Promise<SyncCycleResult> {
     const result: SyncCycleResult = {
       catalog: null,
+      availability: null,
       enrolments: null,
       completions: null,
       certificates: null,
@@ -76,6 +82,17 @@ export class SyncSchedulerService implements OnApplicationBootstrap, OnModuleDes
       result.catalog = await this.catalog.sync();
     } catch (error) {
       this.logger.error(`Catalogue sync failed: ${describe(error)}`);
+    }
+
+    /* Immediately after the catalogue, and before anything reasons about what a
+       learner may choose: this is what turns a date the ministry set into the
+       course actually being hidden (§4C.5, TAM-134). It touches only courses
+       that have a window, and unlike the stage above it needs no LMS at all —
+       so it runs whether or not the catalogue sync just failed. */
+    try {
+      result.availability = await this.availability.refresh();
+    } catch (error) {
+      this.logger.error(`Availability refresh failed: ${describe(error)}`);
     }
 
     try {

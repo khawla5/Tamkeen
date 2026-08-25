@@ -4,7 +4,12 @@ import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import { RIASEC_LETTERS, type AdminPathDetail, type RiasecLetter } from '@tamkeen/types';
+import {
+  RIASEC_LETTERS,
+  courseVisibility,
+  type AdminPathDetail,
+  type RiasecLetter,
+} from '@tamkeen/types';
 
 import { AdminDialog } from '@/components/admin/admin-dialog';
 import { useErrorMessage } from '@/components/auth/use-error-message';
@@ -262,8 +267,11 @@ function Body({
                   </p>
                 </div>
 
-                {course.status !== 'AVAILABLE' ? (
-                  <Badge variant="soft">{t(`courseStatus.${course.status}`)}</Badge>
+                {/* The same two words §4C.5 uses (TAM-134): a course in a path
+                    is either available to choose or it is not, and the four-state
+                    derivation is not what this list is about. */}
+                {courseVisibility(course.status) !== 'AVAILABLE' ? (
+                  <Badge variant="soft">{t('courseVisibility.HIDDEN')}</Badge>
                 ) : null}
 
                 <Button

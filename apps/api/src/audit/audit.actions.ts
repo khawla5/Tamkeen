@@ -47,6 +47,15 @@ export const AuditAction = {
    * can see, and D-015 makes getting it wrong a product violation.
    */
   LMS_COURSE_WITHDRAWN: 'LMS_COURSE_WITHDRAWN',
+  /**
+   * A course's availability window opened or closed and its status followed
+   * (§4C.5, TAM-134).
+   *
+   * Recorded for the same reason a withdrawal is: it changes what a learner can
+   * see, and it is the one such change nobody performed — so without an entry
+   * the trail would show a course going quiet with no cause anywhere in it.
+   */
+  COURSE_AVAILABILITY_APPLIED: 'COURSE_AVAILABILITY_APPLIED',
   /** A completion-sync run finished. Counts only, never grades or names. */
   LMS_COMPLETION_SYNCED: 'LMS_COMPLETION_SYNCED',
   /**
@@ -178,6 +187,8 @@ export const AuditAction = {
    * the learners holding it.
    */
   ADMIN_COURSE_INTERVENED: 'ADMIN_COURSE_INTERVENED',
+  /** §4C.5's permanent deletion (TAM-134) — recorded whichever way it goes. */
+  ADMIN_COURSE_DELETED: 'ADMIN_COURSE_DELETED',
   /**
    * A product knob changed (§4C.6).
    *
@@ -234,6 +245,7 @@ export const AuditReason = {
   COURSE_NOT_PUBLISHABLE: 'COURSE_NOT_PUBLISHABLE',
   /** The LMS refused or could not be reached while creating a course shell. */
   LMS_COURSE_CREATE_FAILED: 'LMS_COURSE_CREATE_FAILED',
+  LMS_COURSE_DELETE_FAILED: 'LMS_COURSE_DELETE_FAILED',
 
   /* Phase 5 — refused administrative changes. Every one of these is a lockout
      or an integrity failure that was prevented, which makes them the entries a

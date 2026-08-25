@@ -483,6 +483,28 @@ export interface AdminCourseRow {
   paths: Array<{ id: string; name: string }>;
   /** How many learners hold it — why it may not be retired outright. */
   heldByLearners: number;
+  /** How many issued certificates name it. Part of why it may not be deleted. */
+  certificatesIssued: number;
+  /**
+   * Whether this course may be deleted outright (§4C.5, TAM-134).
+   *
+   * Reported in advance so the destructive control is simply absent for a course
+   * that cannot be deleted, with the reason in its place — rather than offered,
+   * clicked, and refused. The server enforces the same rule regardless; this is
+   * how the administrator learns it without being refused by it.
+   */
+  canDelete: boolean;
+  /**
+   * The availability window, as calendar days (`YYYY-MM-DD`) or null for "no
+   * bound" (§4C.5, TAM-134).
+   *
+   * Days rather than instants, and resolved server-side: the bounds are stored
+   * as the first and last moment of a day in the ministry's own time zone, and
+   * sending instants would leave the browser to reconstruct which day that was —
+   * getting it wrong by one for anybody whose machine is set elsewhere.
+   */
+  availableFrom: string | null;
+  availableUntil: string | null;
   /** When it first entered the catalogue. Written since Phase 4, read here. */
   publishedAt: string | null;
   lastSyncedAt: string | null;

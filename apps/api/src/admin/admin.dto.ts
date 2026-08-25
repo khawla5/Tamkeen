@@ -19,7 +19,14 @@ import {
   MinLength,
 } from 'class-validator';
 
-import { RIASEC_LETTERS, USER_ROLES, type RiasecLetter, type UserRole } from '@tamkeen/types';
+import {
+  COURSE_VISIBILITIES,
+  RIASEC_LETTERS,
+  USER_ROLES,
+  type CourseVisibility,
+  type RiasecLetter,
+  type UserRole,
+} from '@tamkeen/types';
 
 /**
  * Validation for the super-admin portal.
@@ -420,9 +427,17 @@ export class AdminCourseQueryDto {
   @IsIn(['DRAFT', 'PUBLISHED', 'UNPUBLISHED'])
   publication?: 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED';
 
+  /**
+   * The administrator's vocabulary: available, or hidden (§4C.5, TAM-134).
+   *
+   * Replaces a four-value status filter, because the four were a derivation the
+   * screen no longer shows: an administrator filtering the catalogue is asking
+   * whether an employee can choose the course, and `courseStatusesFor` resolves
+   * that to the statuses it covers.
+   */
   @IsOptional()
-  @IsIn(['DRAFT', 'AVAILABLE', 'HIDDEN_BUT_COMPLETABLE', 'RETIRED'])
-  status?: 'DRAFT' | 'AVAILABLE' | 'HIDDEN_BUT_COMPLETABLE' | 'RETIRED';
+  @IsIn(COURSE_VISIBILITIES)
+  visibility?: CourseVisibility;
 
   @IsOptional()
   @IsUUID()
@@ -459,6 +474,20 @@ export class AdminCourseQueryDto {
   pageSize?: number;
 }
 
+/**
+ * `YYYY-MM-DD`.
+ *
+ * Shape only — it constrains the month to 01-12 and the day to 01-31, and it
+ * still accepts `2026-02-31`, which the calendar does not have. The service
+ * settles that with `isCalendarDay` before the day becomes an instant; putting
+ * the whole rule in a regex would be a second calendar implementation, and the
+ * one that disagreed would be this one.
+ *
+ * Declared above the class on purpose: decorators run when the class is defined,
+ * so a `const` below it would be read from its temporal dead zone.
+ */
+const CALENDAR_DAY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
 export class InterveneCourseDto {
   /**
    * PUBLISHED restores a course to the catalogue; UNPUBLISHED takes it out.
@@ -476,6 +505,27 @@ export class InterveneCourseDto {
   @ValidateIf((_object, value) => value !== null)
   @IsUUID()
   ownerEntityId?: string | null;
+
+  /**
+   * The availability window, as calendar days (§4C.5, TAM-134).
+   *
+   * Three states each, and all three are meaningful: absent leaves the bound
+   * alone, `null` clears it, and a `YYYY-MM-DD` sets it. Collapsing absent and
+   * null would make every edit of the *other* bound silently clear this one.
+   *
+   * Days, not instants: the administrator picks a date and the server decides
+   * which moment that is in ministry time (`availabilityWindowFrom`/`Until`),
+   * so a browser in another zone cannot shift the boundary by a day.
+   */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(CALENDAR_DAY_PATTERN, { message: 'availableFrom must be YYYY-MM-DD' })
+  availableFrom?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(CALENDAR_DAY_PATTERN, { message: 'availableUntil must be YYYY-MM-DD' })
+  availableUntil?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
