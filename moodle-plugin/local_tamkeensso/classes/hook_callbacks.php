@@ -120,7 +120,8 @@ class hook_callbacks {
             . 'body{scroll-padding-top:0!important}'
             // Learners have no business in Settings / Participants / Grades:
             // the course tabs go too, leaving the material and the course index.
-            . ($mode === 'learner' ? '.secondary-navigation{display:none!important}' : '')
+            // …and the course heading, which the portal's own panel already shows.
+            . ($mode === 'learner' ? '.secondary-navigation,#page-header .page-header-headings{display:none!important}' : '')
             . '</style>';
     }
 

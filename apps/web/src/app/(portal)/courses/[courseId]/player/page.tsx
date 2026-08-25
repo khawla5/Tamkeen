@@ -66,65 +66,86 @@ function Player({ course, onOutcome }: { course: CoursePlayerView; onOutcome: ()
       .finally(onOutcome);
   }, [course.courseId, onOutcome]);
 
+  /*
+   * The course is the page. The frame takes the main column at the height the
+   * viewport allows; everything the frame cannot say — where this course sits
+   * in the path, what happened last time, the way back and the way on — lives
+   * in a slim panel beside it (RTL: on the start side, the frame on the end),
+   * sticky so it stays in reach while the course scrolls. Under `lg` the panel
+   * becomes a compact strip above the frame; the description folds away so
+   * the material is never more than one glance down.
+   */
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          {course.pathName ? (
-            <p className="text-muted-blue text-sm">
-              {course.orderInPath !== null && course.totalInPath !== null
-                ? t('pathContext', {
-                    path: course.pathName,
-                    order: format.number(course.orderInPath),
-                    total: format.number(course.totalInPath),
-                  })
-                : course.pathName}
-            </p>
-          ) : null}
-          <CardTitle>{course.title}</CardTitle>
-        </CardHeader>
+    <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
+      <aside className="space-y-4 lg:sticky lg:top-6">
+        <Card>
+          <CardHeader className="space-y-1">
+            {course.pathName ? (
+              <p className="text-muted-blue text-sm">
+                {course.orderInPath !== null && course.totalInPath !== null
+                  ? t('pathContext', {
+                      path: course.pathName,
+                      order: format.number(course.orderInPath),
+                      total: format.number(course.totalInPath),
+                    })
+                  : course.pathName}
+              </p>
+            ) : null}
+            <CardTitle className="text-lg">{course.title}</CardTitle>
+          </CardHeader>
 
-        <CardContent className="space-y-3">
-          <p>{course.summary}</p>
+          <CardContent className="space-y-3">
+            {course.durationMinutes !== null ? (
+              <p className="text-muted-blue text-sm">
+                {t('duration', { minutes: format.number(course.durationMinutes) })}
+              </p>
+            ) : null}
 
-          {course.durationMinutes !== null ? (
-            <p className="text-muted-blue text-sm">
-              {t('duration', { minutes: format.number(course.durationMinutes) })}
-            </p>
-          ) : null}
+            <Outcome course={course} />
 
-          <Outcome course={course} />
+            {course.summary ? (
+              <details className="text-sm">
+                <summary className="cursor-pointer text-muted-blue">{t('about')}</summary>
+                <p className="mt-2">{course.summary}</p>
+              </details>
+            ) : null}
 
-          {!course.canLaunch ? <p className="text-muted-blue text-sm">{t('notEnrolled')}</p> : null}
-        </CardContent>
-      </Card>
+            {!course.canLaunch ? (
+              <p className="text-muted-blue text-sm">{t('notEnrolled')}</p>
+            ) : null}
 
-      {course.canLaunch ? (
-        <MoodleEmbed
-          title={course.title}
-          labels={{
-            loading: t('embedLoading'),
-            failedTitle: t('embedFailedTitle'),
-            failedBody: t('embedFailedBody'),
-            openFullPage: t('embedOpenFullPage'),
-            opening: t('opening'),
-          }}
-          launchEmbed={launchEmbed}
-          launchFullPage={launchFullPage}
-          translateError={translateError}
-          onQuizFinished={onQuizFinished}
-        />
-      ) : null}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/my-path">{t('backToPath')}</Link>
+              </Button>
 
-      <div className="flex flex-wrap gap-3">
-        <Button asChild variant="outline">
-          <Link href="/my-path">{t('backToPath')}</Link>
-        </Button>
+              {course.passed && course.nextCourseId ? (
+                <Button asChild size="sm">
+                  <Link href={`/courses/${course.nextCourseId}/player`}>{t('nextCourse')}</Link>
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      </aside>
 
-        {course.passed && course.nextCourseId ? (
-          <Button asChild>
-            <Link href={`/courses/${course.nextCourseId}/player`}>{t('nextCourse')}</Link>
-          </Button>
+      <div className="min-w-0">
+        {course.canLaunch ? (
+          <MoodleEmbed
+            title={course.title}
+            labels={{
+              loading: t('embedLoading'),
+              failedTitle: t('embedFailedTitle'),
+              failedBody: t('embedFailedBody'),
+              openFullPage: t('embedOpenFullPage'),
+              opening: t('opening'),
+            }}
+            launchEmbed={launchEmbed}
+            launchFullPage={launchFullPage}
+            translateError={translateError}
+            onQuizFinished={onQuizFinished}
+            frameClassName="h-[calc(100dvh-11rem)] min-h-[36rem]"
+          />
         ) : null}
       </div>
     </div>

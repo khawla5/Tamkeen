@@ -49,6 +49,7 @@ export function MoodleEmbed({
   onContentChanged,
   onQuizFinished,
   readyTimeoutMs = EMBED_READY_TIMEOUT_MS,
+  frameClassName = 'h-[calc(100dvh-14rem)] min-h-[32rem]',
 }: {
   /** The course name — the frame's accessible name. */
   title: string;
@@ -62,6 +63,8 @@ export function MoodleEmbed({
   onQuizFinished?: () => void;
   /** Overridable for tests; pages never pass it. */
   readyTimeoutMs?: number;
+  /** The frame's height — the page knows how much of the viewport it owns. */
+  frameClassName?: string;
 }) {
   const [phase, setPhase] = useState<Phase>('launching');
   const [src, setSrc] = useState<string | null>(null);
@@ -193,12 +196,12 @@ export function MoodleEmbed({
             title={title}
             allow="fullscreen"
             referrerPolicy="strict-origin"
-            className="h-[calc(100dvh-14rem)] min-h-[32rem] w-full rounded-card border border-border bg-card"
+            className={`${frameClassName} w-full rounded-card border border-border bg-card`}
           />
         ) : (
           /* Holds the height while the launch is in flight, so the page does
              not jump when the frame arrives. */
-          <div aria-hidden="true" className="h-[calc(100dvh-14rem)] min-h-[32rem] w-full" />
+          <div aria-hidden="true" className={`${frameClassName} w-full`} />
         )}
       </div>
 
