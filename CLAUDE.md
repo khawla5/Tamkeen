@@ -280,13 +280,13 @@ List of courses this entity owns, each showing status (draft / published / `HIDD
 
 ### 4B.3 Add / Manage Course
 The create + edit flow:
-- Create the course shell, then be HANDED INTO MOODLE (seamless login, D-044) to author content — lectures, videos, materials, quiz + questions — using Moodle's own tools (Model 1).
-- Back in the portal, set the PRODUCT metadata our app owns: path(s) the course belongs to, its RIASEC letter (consistent with the path), duration (product field, D-035), objectives, prerequisites, and course language (D-047).
-- Publish / unpublish / hide — publish makes it appear in the learner catalog; unpublish/hide respects course-edit protection (can't strand mid-path learners).
-- A clear "author content in Moodle" launch action keeps the seam smooth.
+- Create the course shell, then author its content — lectures, videos, materials, quiz + questions — in **Moodle's own editor, framed inside the Course Content page** (§4B.4, D-098; the seamless login of D-044 is the frame's first URL). Model 1 stands: the editor is Moodle's, only its chrome is hidden.
+- Set the PRODUCT metadata our app owns: path(s) the course belongs to, its RIASEC letter (consistent with the path), duration (product field, D-035), objectives, prerequisites, and course language (D-047).
+- Publish / unpublish / hide — publish makes it appear in the learner catalog; unpublish/hide respects course-edit protection (can't strand mid-path learners). The publish gate is one shared component, offered on Manage Course and on Course Content alike, with its blockers listed beside it.
+- Manage Course **links** to the editor («افتح محرّر المحتوى»); it mints no launch itself — the author credential is issued in one place, the content page (D-098).
 
-### 4B.4 Course Content (launch-to-Moodle)
-Thin: a launch-into-Moodle button for authoring, plus a read-back summary of what Moodle holds (activities, quiz presence, completion criteria configured — the exact gap D-042 flagged) so the entity can confirm the course is actually completable before publishing. We do not rebuild Moodle's editor.
+### 4B.4 Course Content (the editor, framed)
+The authoring loop on one page (TAM-130, D-098): the page header carries the course's single action — «نشر الدورة» / «إلغاء النشر» (the shared publish gate); a compact **read-back strip** shows what Moodle holds (activities, quiz presence, completion criteria configured — the exact gap D-042 flagged) with the D-061 warning and the publish blockers beside it; below, **Moodle's course editor inside an iframe**, editing on, Moodle's navbar/footer/breadcrumb hidden and its course navigation + course index kept. The read-back refreshes when the frame reports a content change. If the frame never reports ready (blocked framing, refused cookie, LMS down) the page falls back to the full-page handoff on a fresh token; the same «افتح في منصة التعلّم» link sits quietly under the frame at all times. We do not rebuild Moodle's editor. Premise: Moodle on a subdomain of the app's site (D-098).
 
 ### 4B.5 Learners / Review
 For THIS entity's courses only: enrolled learners, per-learner progress, quiz results, completions. Strictly RBAC-scoped. Optional flag/note. No other entities' data; no PII beyond what review requires.

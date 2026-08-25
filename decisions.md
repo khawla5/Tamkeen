@@ -5,6 +5,20 @@
 
 ---
 
+## D-099 — The authoring loop is one page, and the publish gate is one component offered on two
+
+**Decision:** Course Content (§4B.4) is where an entity authors: Moodle's editor framed with editing on, the D-061 read-back strip above it, and **publish / unpublish as the page header's single action** — the same `PublishAction` component Manage Course renders in its publish card, so the two pages cannot disagree about whether a course may be published, and the blockers clear on the page the entity is looking at (one `getCourse` request carries both the read-back and the gate, refetched on the frame's `content-changed` message). Manage Course no longer mints a launch; it links to the content page, so the author credential is issued in one place with one audit trail.
+
+**Why one page:** the read-back exists to stop an uncompletable course being published (D-061); putting it beside the editor that fixes the problem, with the publish button in sight, turns "fix, go back, refresh, check, publish" into one screen. **Why the gate in the header:** §3's one primary action per page — publishing is the decision this page ends in; the frame's fallback («افتح في منصة التعلّم») is secondary by design and the refresh is a ghost button. The blockers are rendered by the page, not the component, so the component fits the header slot as well as a card.
+
+**The D-045 amendment, now implemented for this page:** the launch is a POST on mount (never prefetched, never in the page before it resolves); once the frame has loaded it, the `src` in the DOM is a spent single-use token. The component test asserts exactly that sequence — absent before, only as the frame `src` after, never as a link.
+
+**Fallback semantics:** the only honest "it worked" signal is the plugin's `tamkeen:ready` — a blocked frame fires `load` like any other. No ready within 8 s (`EMBED_READY_TIMEOUT_MS`) replaces the frame with an `ErrorState` and one recovery: a **fresh** handoff (the first token is spent) via `location.assign`, not `window.open` (popup blockers — D-045). The ready timeout is a prop so the fallback can be tested with a real 30 ms timer; faking timers around the whole page was flaky under a loaded run and was abandoned.
+
+**Also, in the plugin:** the framed CSS now hides Moodle's first-visit user tour — onboarding for a chrome the frame does not show, so it pointed at things that were not there.
+
+**Noticed, not fixed here:** Moodle renders in English for users our app provisions (the created Moodle user's language is not set to `ar` — the site default is). Arabic-first (§2) says provisioning should set it; a one-line change in `provisionUser`, owed to the next Moodle-module pass.
+
 ## D-098 — Moodle is framed by the entity portal, and the plugin — not a theme — dresses it for the frame
 
 **Decision:** the entity authors course content in Moodle's own editor rendered **inside an iframe within the portal shell** (TAM-129/TAM-130, epic `moodle-embed`). D-046 (Model 1) stands: Moodle is still the authoring tool; only its frame around the editor disappears. Four things make it safe and workable, all in `local_tamkeensso`:

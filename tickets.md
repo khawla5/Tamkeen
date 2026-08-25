@@ -589,7 +589,9 @@
   - Production needs **HTTPS on both hosts**, or Chrome refuses the framed session cookie.
   - Rejected: putting `embed` inside the signed token (no security value, one more claim); a Moodle theme for chrome hiding (a second custom artefact to approve; the plugin is already hook-capable); a `before_footer` inline script instead of the head hook (renders after the page, delays `ready`).
 
-## TAM-130 — Entity Course Content page: Moodle's editor inside the page, read-back beside it, publish from the same place
+## TAM-130 — Entity Course Content page: Moodle's editor inside the page, read-back beside it, publish from the same place — **DONE** (`feature/tam-130-entity-content-embed`, stacked on TAM-129; D-099)
+
+- **What shipped (2026-08-25):** `MoodleEmbed` (launch on mount with `embed: true`, loading until `tamkeen:ready`, origin-checked messages, 8 s ready timeout → `ErrorState` + «افتح في منصة التعلّم» on a fresh token, the same link quietly under the frame), the shared `PublishAction` (extracted from Manage Course's card; blockers rendered by the page), the Content page (publish gate in the header slot, read-back strip with the D-061 warning and blockers, one `getCourse` query refetched on `content-changed`), Manage Course's author card as a link («افتح محرّر المحتوى»). Plugin CSS hides Moodle's user tour in the frame. 9 new component tests (credential absent-then-only-src, spoofed origin ignored, read-back + gate refresh on change, fallback on a fresh token, page action = publish gate) + Manage test updated; phase-4 browser suite updated for the moved link and the framed page. Proven live: the entity signs in, the page frames course 81 with editing on, no navbar, no tour, `ready` received, publish disabled with its reasons. Open: provisioned Moodle users render Moodle in English (D-099 note).
 
 - **Labels:** `moodle-embed`, `entity`, `frontend`
 - **Priority:** High

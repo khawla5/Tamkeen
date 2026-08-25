@@ -249,31 +249,20 @@ describe('manage course', () => {
     });
   });
 
-  describe('authoring in Moodle (D-045, D-060)', () => {
-    it('never renders the handoff URL into the page', async () => {
+  describe('the way to the editor (TAM-130, D-098)', () => {
+    it('links to the content page and mints nothing here', async () => {
       /*
-       * It carries a live, single-use credential. As an href it would sit in the
-       * DOM, in view-source and in any cached copy from the moment the page
-       * loaded — so it is fetched on the click instead.
+       * The author credential is minted in one place — the content page, when
+       * it opens. Manage Course only points there, so nothing carrying a token
+       * can appear on this page at all.
        */
       renderWithProviders(<ManageCoursePage />);
 
-      await screen.findByRole('button', { name: 'حرّر المحتوى في منصة التعلّم' });
+      const link = await screen.findByRole('link', { name: 'افتح محرّر المحتوى' });
+      expect(link).toHaveAttribute('href', '/entity/courses/course-1/content');
 
       expect(document.body.innerHTML).not.toContain('token=');
       expect(api.authorLaunch).not.toHaveBeenCalled();
-    });
-
-    it('mints the handoff when the entity clicks', async () => {
-      const user = userEvent.setup();
-      api.authorLaunch.mockResolvedValue({ url: 'http://moodle.test/local/tamkeensso/login.php' });
-
-      renderWithProviders(<ManageCoursePage />);
-      await user.click(await screen.findByRole('button', { name: 'حرّر المحتوى في منصة التعلّم' }));
-
-      await waitFor(() => {
-        expect(api.authorLaunch).toHaveBeenCalledWith('course-1');
-      });
     });
   });
 });

@@ -105,7 +105,11 @@ class hook_callbacks {
         // theme edit.
         return '<style id="tamkeen-embed">'
             . 'nav.navbar.fixed-top,#page-footer,#page-header .breadcrumb,'
-            . 'nav[aria-label="Navigation bar"],.tamkeen-embed-hidden{display:none!important}'
+            . 'nav[aria-label="Navigation bar"],.tamkeen-embed-hidden,'
+            // Moodle's first-visit user tour: onboarding for a chrome the frame
+            // does not show, so it would point at things that are not there.
+            . '[data-flexitour="container"],[data-flexitour="backdrop"],'
+            . '[data-flexitour="step-background"],.tour-backdrop{display:none!important}'
             . '#page,#page.drawers,#page-wrapper,#topofscroll{margin-top:0!important;padding-top:0!important}'
             . '.drawer{top:0!important;height:100vh!important}'
             . '.drawer-toggles .drawer-toggler{top:.5rem!important}'
