@@ -233,7 +233,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 - **Single context-dependent primary action:** "أضف إلى مساري" / "ابدأ الدورة" / "مكتمل" (with certificate link). Show only the applicable one.
 
 ### 4.8 Course view / player (محتوى الدورة)
-- Moodle content (handoff or embed). App contribution is thin: a header (course/path context), the Moodle material + quiz, and outcome handling: pass → certificate issued + return to path; fail → clear retake action. Do not rebuild Moodle chrome.
+- **Moodle inside the page** (D-102): a header (course/path context, description, the last outcome), then the Moodle course in an iframe — chrome hidden, course tabs hidden, course index kept, no editing — and beneath it the quiet «افتح في منصة التعلّم» fallback (the D-045 handoff on a fresh token, also shown when the frame never reports ready). Outcome handling: the frame reports a submitted quiz → on-demand completion sync → the outcome updates in seconds; pass → certificate issued (in the sync) + onward link; fail → clear retake (the frame is still there). Do not rebuild Moodle chrome — ours replaces it. Premise: Moodle on a subdomain of the app's site (D-098).
 
 ### 4.9 My Path (مساري)
 - Path name + single progress bar. Ordered list of chosen courses with status (in progress / completed / next-up) and quiz result.
@@ -353,8 +353,7 @@ View the audit log (who/what/when) and system-wide reports: completion rates, po
 - **Auth is email/password only — no AD/LDAP, no external SSO** (LOCKED, D-019). The app is the sole identity owner and provisions Moodle accounts behind the scenes. The optional hardening target is app-as-OAuth2-IdP purely to smooth the Moodle handoff if ever needed; it is NOT a ministry SSO requirement.
 
 ### 5.4 Course delivery model
-- **MVP:** **handoff** to a heavily Arabic/RTL-themed Moodle (strong RTL support), app remains the hub.
-- **Later:** embedding inside Course view once the flow is proven.
+- **Embedded** (D-098 for authors, D-102 for learners): Moodle framed inside the portal, its chrome hidden by `local_tamkeensso`, the app the only hub. The full-page **handoff** to Moodle (D-045) remains as the fallback when the frame cannot establish a session, and as the always-available «افتح في منصة التعلّم».
 
 ### 5.5 Completion → certificate loop
 - **MVP mechanism: scheduled sync job.** Backend polls Moodle completion/grade functions for enrolled users every few minutes. A few minutes' latency is acceptable.

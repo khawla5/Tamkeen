@@ -99,6 +99,7 @@ export class CoursePlayerService {
     userId: string,
     courseId: string,
     ipAddress: string | null,
+    options: { embed: boolean } = { embed: false },
   ): Promise<CourseLaunchView> {
     const course = await this.prisma.course.findUnique({
       where: { id: courseId },
@@ -158,7 +159,19 @@ export class CoursePlayerService {
       targetId: courseId,
     });
 
-    return { url: this.lms.courseLaunchUrl(user.moodleUserId, course.moodleCourseId) };
+    /* D-102: framed by the player, or the full-page handoff. Same credential,
+       same audit entry either way — only the presentation differs. */
+    return options.embed
+      ? {
+          url: this.lms.courseLaunchUrl(user.moodleUserId, course.moodleCourseId, {
+            embed: 'learner',
+          }),
+          mode: 'embed',
+        }
+      : {
+          url: this.lms.courseLaunchUrl(user.moodleUserId, course.moodleCourseId),
+          mode: 'handoff',
+        };
   }
 
   /** The next course in the path after this one, for "continue" after a pass. */

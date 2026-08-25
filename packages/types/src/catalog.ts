@@ -201,4 +201,6 @@ export interface CoursePlayerView {
  */
 export interface CourseLaunchView {
   url: string;
+  /** `embed`: meant for the player's iframe (D-102); `handoff`: full page. */
+  mode: 'embed' | 'handoff';
 }

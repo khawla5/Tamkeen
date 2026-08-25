@@ -50,21 +50,25 @@ class hook_callbacks {
     public static function before_standard_head_html_generation(
         \core\hook\output\before_standard_head_html_generation $hook
     ): void {
-        global $SESSION;
+        global $SESSION, $PAGE;
 
         if (empty($SESSION->tamkeen_embed)) {
             return;
         }
 
+        $mode = (string) $SESSION->tamkeen_embed;
         $origin = self::allowed_ancestor();
         $changed = !empty($SESSION->tamkeen_content_changed);
         // Consumed: one change, one message.
         unset($SESSION->tamkeen_content_changed);
+        // A learner has just submitted a quiz when the review page renders
+        // (D-102); the portal then asks for an on-demand completion sync.
+        $quizfinished = $mode === 'learner' && strpos((string) $PAGE->pagetype, 'mod-quiz-review') === 0;
 
-        $hook->add_html(self::chrome_css());
+        $hook->add_html(self::chrome_css($mode));
 
         if ($origin !== null) {
-            $hook->add_html(self::messaging_script($origin, $changed));
+            $hook->add_html(self::messaging_script($origin, $changed, $quizfinished));
         }
     }
 
@@ -99,7 +103,7 @@ class hook_callbacks {
         return $origin;
     }
 
-    private static function chrome_css(): string {
+    private static function chrome_css(string $mode): string {
         // Selectors are Boost 4.x. `!important` because the theme sets the
         // 60px navbar offset with its own specificity; this must win without a
         // theme edit.
@@ -114,22 +118,27 @@ class hook_callbacks {
             . '.drawer{top:0!important;height:100vh!important}'
             . '.drawer-toggles .drawer-toggler{top:.5rem!important}'
             . 'body{scroll-padding-top:0!important}'
+            // Learners have no business in Settings / Participants / Grades:
+            // the course tabs go too, leaving the material and the course index.
+            . ($mode === 'learner' ? '.secondary-navigation{display:none!important}' : '')
             . '</style>';
     }
 
-    private static function messaging_script(string $origin, bool $changed): string {
+    private static function messaging_script(string $origin, bool $changed, bool $quizfinished = false): string {
         // Target origin is the configured ancestor, never `*`: a message to a
         // wildcard would reach whatever framed the page, and the whole point
         // of frame-ancestors is that only the portal can.
         $originjson = json_encode($origin, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
         $changedjson = $changed ? 'true' : 'false';
+        $quizjson = $quizfinished ? 'true' : 'false';
 
         return '<script id="tamkeen-embed-messages">(function(){'
             . 'var origin=' . $originjson . ';'
             . 'if(!origin||window.parent===window){return;}'
             . 'function post(message){try{window.parent.postMessage(message,origin);}catch(e){}}'
             . 'function announce(){post({type:"tamkeen:ready"});'
-            . 'if(' . $changedjson . '){post({type:"tamkeen:content-changed"});}}'
+            . 'if(' . $changedjson . '){post({type:"tamkeen:content-changed"});}'
+            . 'if(' . $quizjson . '){post({type:"tamkeen:quiz-finished"});}}'
             . 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",announce);}'
             . 'else{announce();}'
             . '})();</script>';

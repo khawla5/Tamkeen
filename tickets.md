@@ -783,3 +783,8 @@
   - Types: `EntityProfileView { id, name, contactName, contactEmail }` (`packages/types/src/entity.ts:13`) — add the account fields.
   - Strings: `entity.profile*` in `messages/ar.json`; error codes go through the shared catalogue (D-024) → `useErrorMessage`.
   - Rejected: letting the entity rename the organisation (admin's act; it is the name on the catalogue and, later, on reports); a separate "contact" sub-page (§4B.6 says minimal — one card); free-text role/title fields for the contact (not asked for; PII minimisation).
+
+## TAM-136 — Learner course player: the course inside the page, the handoff as fallback — **DONE** (at the user's direction, on `feature/tam-130-entity-content-embed`, D-102)
+
+- **Labels:** `moodle-embed`, `frontend`, `backend`, `moodle-plugin`
+- **What shipped (2026-08-25):** plugin 0.3.0 — `embed=learner` (no editing; navbar, footer, breadcrumb **and course tabs** hidden; course index kept) and `tamkeen:quiz-finished` from the quiz review page; `LaunchOptions.embed: 'author' | 'learner'`; `POST /api/courses/:id/launch { embed }` → `{ url, mode }`; `POST /api/courses/:id/sync` (per-learner on-demand completion sync, 10 s cooldown, same `syncUser` as the schedule); `components/moodle-embed.tsx` shared by the entity Content page and the player (labels + launches injected); the player keeps its header (path context, description, outcome) and frames the course beneath, fallback under it. Tests: player suite rewritten (URL absent before launch / only as frame src after; frames nothing before commitment; quiz message → sync + refetch; foreign origin ignored; failed launch → fallback), web 519, API 209 + e2e 105. Proven live as `demo-student` on course 85.

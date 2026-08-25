@@ -5,6 +5,16 @@
 
 ---
 
+## D-102 — The learner's course is framed too; the handoff becomes the fallback for everyone
+
+**Decision (at the user's direction, 2026-08-25):** §4.8's course player renders the Moodle course **inside the page**, the same way the entity's editor is framed (D-098). The plugin gains `embed=learner` (chrome hidden as for authors, **plus the course tabs** — a learner has no business in Settings, Participants or Grades; the course index stays; no editing) and posts `tamkeen:quiz-finished` when the quiz review page renders. The launch endpoint takes `{ embed: true }` and answers `mode: 'embed' | 'handoff'`; the frame component is now one, portal-agnostic `components/moodle-embed.tsx` fed the two launches and its words. D-045's "the player is a handoff page" is superseded: the handoff is the **fallback** — when the frame never reports ready, and always as the quiet «افتح في منصة التعلّم» beneath it. Its other rules stand unchanged: launch is a POST per visit, never prefetched, enrolment on demand, refusals indistinguishable, no `courseUrl` in the API.
+
+**The outcome comes back in seconds, not at the next run.** On `quiz-finished` the page calls `POST /api/courses/:id/sync`, which runs the scheduled completion sync's own `syncUser` for this learner only — same code, same idempotency, same threshold reading — behind a 10-second per-learner cooldown so a burst of messages is one LMS read; then it refetches the player view. The scheduled sync remains the safety net, and certificate issuance still happens inside the sync.
+
+**Why now:** the entity side proved the mechanism (same-site cookies, `frame-ancestors`, ready/fallback) and the user's test showed the learner's leave-for-Moodle as the last seam. **Rejected:** a separate learner frame component (one seam, one discipline); polling the player view after launch (the plugin already knows when the quiz was submitted); a course-scoped sync (Moodle's progress read is per user anyway).
+
+**Verified:** as `demo-student`, `/courses/<id>/player` frames Moodle course 85 with `tamkeen:ready` received, `body.editing` false, navbar and course tabs hidden, course index present, all eight demo activities listed. Web 519, API unit 209, journey + entity e2e 105 green.
+
 ## D-101 — The authoring guide is one Markdown file, rendered in the portal by a forty-line converter of our own
 
 **Decision (TAM-134):** the entity authoring guide lives once, in Arabic, at `docs/entity-authoring-guide.md`, and the portal renders it at `/entity/courses/guide` through `lib/simple-markdown.ts` — a converter for exactly the subset the guide uses (three heading levels with `{#anchor}` ids, paragraphs, one-level lists, bold, inline code, links to `#`, relative or http(s) targets). The source is HTML-escaped before any tag is written, so the only markup in the output is the converter's own. Blockers whose fix is in Moodle or in بيانات الدورة carry a «كيف؟» link straight to the section; the create card and the Content page link to the guide; it is not a nav destination (§4B keeps the entity nav to four) and it sits under `/entity/courses/…` so TAM-131's longest-match rule lights «دوراتي».

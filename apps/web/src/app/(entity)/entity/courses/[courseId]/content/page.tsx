@@ -5,12 +5,14 @@ import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useCallback } from 'react';
 
+import { useErrorMessage } from '@/components/auth/use-error-message';
+
 import { directionForCourseLanguage, type EntityCourseDetail } from '@tamkeen/types';
 
 import { BlockerList } from '@/components/entity/blocker-list';
-import { MoodleEmbed } from '@/components/entity/moodle-embed';
 import { PublishAction } from '@/components/entity/publish-action';
 import { EntityPage } from '@/components/layout/entity-page';
+import { MoodleEmbed } from '@/components/moodle-embed';
 import { DataView } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -41,6 +43,12 @@ export default function CourseContentPage() {
      looking at. */
   const course = useApiQuery(() => entityApi.getCourse(courseId), [courseId]);
   const refresh = course.refetch;
+  const translateError = useErrorMessage();
+  const launchEmbed = useCallback(
+    () => entityApi.authorLaunch(courseId, { embed: true }),
+    [courseId],
+  );
+  const launchFullPage = useCallback(() => entityApi.authorLaunch(courseId), [courseId]);
   const onContentChanged = useCallback(() => {
     refresh();
   }, [refresh]);
@@ -62,8 +70,17 @@ export default function CourseContentPage() {
           <div className="space-y-6">
             <ReadBackStrip course={course.data} onRefresh={refresh} />
             <MoodleEmbed
-              courseId={courseId}
               title={course.data.title}
+              labels={{
+                loading: t('embedLoading'),
+                failedTitle: t('embedFailedTitle'),
+                failedBody: t('embedFailedBody'),
+                openFullPage: t('embedOpenFullPage'),
+                opening: t('authorLaunching'),
+              }}
+              launchEmbed={launchEmbed}
+              launchFullPage={launchFullPage}
+              translateError={translateError}
               onContentChanged={onContentChanged}
             />
           </div>

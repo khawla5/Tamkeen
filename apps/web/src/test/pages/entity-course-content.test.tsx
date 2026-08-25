@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EntityCourseDetail } from '@tamkeen/types';
 
-import { MoodleEmbed } from '@/components/entity/moodle-embed';
+import { MoodleEmbed } from '@/components/moodle-embed';
 import { renderWithProviders } from '@/test/render';
 
 /**
@@ -190,8 +190,17 @@ describe('course content — the framed editor', () => {
 
     renderWithProviders(
       <MoodleEmbed
-        courseId="course-1"
         title="إدارة المخاطر"
+        labels={{
+          loading: 'جارٍ فتح محرّر المحتوى',
+          failedTitle: 'تعذّر عرض محرّر المحتوى داخل الصفحة',
+          failedBody: 'يمكنك فتح المحرّر في منصة التعلّم مباشرة.',
+          openFullPage: 'افتح في منصة التعلّم',
+          opening: 'جارٍ الفتح…',
+        }}
+        launchEmbed={() => api.authorLaunch('course-1', { embed: true })}
+        launchFullPage={() => api.authorLaunch('course-1')}
+        translateError={() => 'خطأ'}
         onContentChanged={() => undefined}
         readyTimeoutMs={30}
       />,

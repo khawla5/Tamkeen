@@ -1,32 +1,36 @@
 'use client';
 
-import { ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useCallback } from 'react';
 
 import type { CoursePlayerView } from '@tamkeen/types';
 
+import { useErrorMessage } from '@/components/auth/use-error-message';
 import { PortalPage } from '@/components/layout/portal-page';
+import { MoodleEmbed } from '@/components/moodle-embed';
 import { DataView } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFormat } from '@/i18n/format-provider';
 import { coursesApi } from '@/lib/api-client';
-import { useApiMutation, useApiQuery } from '@/lib/use-api';
+import { useApiQuery } from '@/lib/use-api';
 
 /**
- * Course view / player (§4.8).
+ * Course view / player (§4.8) — the course inside the page (D-102).
  *
- * Deliberately thin, and deliberately **not** an embed. Moodle owns the
- * material, the quiz and the grading; the MVP hands off to a heavily Arabic/RTL
- * themed Moodle and this page provides only what Moodle cannot: where the
- * learner is in their path, what happened last time, and the single action that
- * applies now (§5.4, D-000).
+ * Moodle still owns the material, the quiz and the grading; what changed is
+ * that the learner no longer leaves for it. The page keeps what Moodle cannot
+ * provide — where the learner is in their path, what happened last time — and
+ * frames the course beneath it, with the full-page handoff (D-045) as the
+ * fallback when the frame cannot establish a session.
  *
- * The launch URL is fetched **on click**, never rendered into the page. It
- * carries a short-lived single-use credential, so its life has to start when the
- * learner actually goes (D-044).
+ * The launch URL is minted **on mount** and rendered only as the frame's `src`
+ * once it has resolved; by then the plugin has spent the nonce (D-098). When
+ * the frame reports a submitted quiz, the page asks for an on-demand sync and
+ * refetches, so the outcome below updates within seconds rather than at the
+ * next scheduled run.
  */
 export default function CoursePlayerPage() {
   const t = useTranslations('player');
@@ -36,33 +40,31 @@ export default function CoursePlayerPage() {
   const player = useApiQuery(() => coursesApi.player(courseId), [courseId]);
 
   return (
-    <PortalPage title={t('title')} width="narrow">
+    <PortalPage title={t('title')}>
       <DataView isLoading={player.isLoading} error={player.error} onRetry={player.refetch}>
-        {player.data ? <Player course={player.data} /> : null}
+        {player.data ? <Player course={player.data} onOutcome={player.refetch} /> : null}
       </DataView>
     </PortalPage>
   );
 }
 
-function Player({ course }: { course: CoursePlayerView }) {
+function Player({ course, onOutcome }: { course: CoursePlayerView; onOutcome: () => void }) {
   const t = useTranslations('player');
   const format = useFormat();
+  const translateError = useErrorMessage();
 
-  const launch = useApiMutation(() => coursesApi.launch(course.courseId));
-
-  const openCourse = async () => {
-    const result = await launch.run();
-
-    if (result) {
-      /*
-       * A full navigation rather than a new tab. The learner is leaving for
-       * Moodle and will come back through it, and `window.open` from an async
-       * callback is what popup blockers exist to stop — the click that opened it
-       * has already been forgotten by the time the request resolves.
-       */
-      window.location.assign(result.url);
-    }
-  };
+  const launchEmbed = useCallback(
+    () => coursesApi.launch(course.courseId, { embed: true }),
+    [course.courseId],
+  );
+  const launchFullPage = useCallback(() => coursesApi.launch(course.courseId), [course.courseId]);
+  const onQuizFinished = useCallback(() => {
+    /* The sync is best-effort: the scheduled run remains the safety net. */
+    coursesApi
+      .sync(course.courseId)
+      .catch(() => undefined)
+      .finally(onOutcome);
+  }, [course.courseId, onOutcome]);
 
   return (
     <div className="space-y-6">
@@ -82,7 +84,7 @@ function Player({ course }: { course: CoursePlayerView }) {
           <CardTitle>{course.title}</CardTitle>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           <p>{course.summary}</p>
 
           {course.durationMinutes !== null ? (
@@ -93,33 +95,26 @@ function Player({ course }: { course: CoursePlayerView }) {
 
           <Outcome course={course} />
 
-          {/* Exactly one action, chosen by state (§3). Never all three. */}
-          {course.canLaunch ? (
-            <div className="space-y-3">
-              <Button onClick={() => void openCourse()} disabled={launch.isPending}>
-                <ExternalLink aria-hidden="true" className="size-4" />
-                {launch.isPending
-                  ? t('opening')
-                  : course.passed
-                    ? t('review')
-                    : course.status === 'IN_PROGRESS'
-                      ? t('resume')
-                      : t('start')}
-              </Button>
-
-              {launch.error ? (
-                <p role="alert" className="text-danger text-sm">
-                  {t('launchFailed')}
-                </p>
-              ) : null}
-
-              <p className="text-muted-blue text-sm">{t('opensInMoodle')}</p>
-            </div>
-          ) : (
-            <p className="text-muted-blue text-sm">{t('notEnrolled')}</p>
-          )}
+          {!course.canLaunch ? <p className="text-muted-blue text-sm">{t('notEnrolled')}</p> : null}
         </CardContent>
       </Card>
+
+      {course.canLaunch ? (
+        <MoodleEmbed
+          title={course.title}
+          labels={{
+            loading: t('embedLoading'),
+            failedTitle: t('embedFailedTitle'),
+            failedBody: t('embedFailedBody'),
+            openFullPage: t('embedOpenFullPage'),
+            opening: t('opening'),
+          }}
+          launchEmbed={launchEmbed}
+          launchFullPage={launchFullPage}
+          translateError={translateError}
+          onQuizFinished={onQuizFinished}
+        />
+      ) : null}
 
       <div className="flex flex-wrap gap-3">
         <Button asChild variant="outline">

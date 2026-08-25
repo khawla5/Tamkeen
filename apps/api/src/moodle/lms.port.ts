@@ -152,8 +152,12 @@ export interface LmsPort {
 
 /** How the launched course should present itself (TAM-129). */
 export interface LaunchOptions {
-  /** `'author'`: framed by the entity portal, chrome hidden, editing on. */
-  embed?: 'author';
+  /**
+   * `'author'`: framed by the entity portal, chrome hidden, editing on.
+   * `'learner'`: framed by the learner portal, chrome hidden, no editing,
+   * the quiz review page announces itself (D-102).
+   */
+  embed?: 'author' | 'learner';
 }
 
 /**
