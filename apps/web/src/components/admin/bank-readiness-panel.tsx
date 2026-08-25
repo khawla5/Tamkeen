@@ -66,7 +66,7 @@ export function BankReadinessPanel({ readiness }: { readiness: AdminBankReadines
       ) : null}
 
       {readiness.warnings.length > 0 ? (
-        <Card className="border-s-4 border-s-gold p-5">
+        <Card className="border-s-4 border-s-warning p-5">
           <h3 className="text-sm font-semibold text-foreground">{t('bankWarningTitle')}</h3>
           <ul className="mt-2 list-disc space-y-1 pe-5 text-sm text-foreground">
             {readiness.warnings.map((code) => (

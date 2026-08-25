@@ -49,10 +49,31 @@ export interface AdminJourneyCounts {
   certificatesIssued: number;
 }
 
-/** One bar of the Holland-code distribution (§4C.1). */
+/** One bar of the Holland-code distribution (§4C.8's reports). */
 export interface AdminCodeShare {
   code: string;
   count: number;
+}
+
+/**
+ * One row of the dashboard's career-type distribution (§4C.1).
+ *
+ * **A letter, not a code.** The full Holland Code has thirty-odd values and
+ * spells nothing an administrator can act on; the *dominant* letter has six,
+ * each with an Arabic name the ministry already uses, and it is the same letter
+ * `paths.riasec_letter` is tagged with (§3A). Putting the two counts on one row
+ * is the whole point of the section: it answers "are we offering paths where
+ * our people's interests actually are", which is a decision the admin owns.
+ * The exhaustive code breakdown stays in §4C.8's reports, where the detail
+ * belongs.
+ */
+export interface AdminLetterShare {
+  letter: RiasecLetter;
+  /** Employees whose dominant letter this is — one per person, newest result
+   *  only (D-033), so a retake corrects rather than double-counts. */
+  employees: number;
+  /** Paths currently offered to learners with this letter. */
+  activePaths: number;
 }
 
 /**
@@ -99,8 +120,9 @@ export interface AdminDashboardView {
   paths: { total: number; active: number };
   courses: { total: number; published: number; draft: number; unowned: number };
   journey: AdminJourneyCounts;
-  /** Ordered by count, descending. Empty until somebody has been assessed. */
-  codeDistribution: AdminCodeShare[];
+  /** All six letters, always — a dimension nobody scored is itself the
+   *  finding. Ordered by employee count, descending. */
+  letterDistribution: AdminLetterShare[];
   lms: AdminLmsHealth;
   recentActivity: AdminActivityRow[];
   /** Assessment version currently served to new takers, and since when. */

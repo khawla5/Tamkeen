@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { RIASEC_LETTERS } from '@tamkeen/types';
 import type {
   AdminActivityRow,
-  AdminCodeShare,
   AdminDashboardView,
+  AdminLetterShare,
   AdminLmsHealth,
 } from '@tamkeen/types';
 
@@ -41,7 +42,7 @@ export class AdminDashboardService {
       paths,
       courses,
       journey,
-      codeDistribution,
+      letterDistribution,
       lms,
       recentActivity,
       assessment,
@@ -51,7 +52,7 @@ export class AdminDashboardService {
       this.pathCounts(),
       this.courseCounts(),
       this.journeyCounts(),
-      this.codeDistribution(),
+      this.letterDistribution(),
       this.lmsHealth(),
       this.recentActivity(),
       this.activeAssessment(),
@@ -63,7 +64,7 @@ export class AdminDashboardService {
       paths,
       courses,
       journey,
-      codeDistribution,
+      letterDistribution,
       lms,
       recentActivity,
       assessment,
@@ -152,31 +153,62 @@ export class AdminDashboardService {
   }
 
   /**
-   * How the assessed population is distributed across Holland Codes.
+   * Where the ministry's people are, by career type, against what is offered.
    *
-   * **One code per person — their newest** (D-033). A retake is a correction,
+   * **The dominant letter rather than the whole code.** The full Holland Code
+   * has thirty-odd values, is written in Latin letters, and tells an
+   * administrator nothing they can do anything about; §4C.8's reports keep that
+   * breakdown for the analyst who wants it. The *first* letter has six values,
+   * each with an Arabic name, and it is the same letter a path is tagged with
+   * (§3A) — so putting the employee count beside the count of paths offered for
+   * that letter turns a chart into a decision: a type many employees lead with
+   * and few paths serve is a gap in the catalogue, and this is the only screen
+   * where both halves of that comparison exist.
+   *
+   * **One result per person — their newest** (D-033). A retake is a correction,
    * not a second opinion, so counting every result row would weight the people
    * who changed their mind more heavily than the people who did not, and the
    * distribution would describe the sample rather than the ministry.
+   *
+   * All six letters are always returned, including the ones nobody scored:
+   * a zero is a finding, and a row that disappears cannot be compared against
+   * the paths offered for it.
    */
-  private async codeDistribution(): Promise<AdminCodeShare[]> {
-    const newest = await this.prisma.assessmentResult.findMany({
-      distinct: ['userId'],
-      orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
-      select: { code: true },
-    });
+  private async letterDistribution(): Promise<AdminLetterShare[]> {
+    const [newest, pathsByLetter] = await Promise.all([
+      this.prisma.assessmentResult.findMany({
+        distinct: ['userId'],
+        orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
+        select: { code: true },
+      }),
+      this.prisma.path.groupBy({
+        by: ['riasecLetter'],
+        where: { isActive: true },
+        _count: { _all: true },
+      }),
+    ]);
 
-    const counts = new Map<string, number>();
+    const employees = new Map<string, number>();
     for (const row of newest) {
-      counts.set(row.code, (counts.get(row.code) ?? 0) + 1);
+      /* The code's first letter IS the dominant dimension: the code is derived
+         by ranking, with ties already broken canonically (D-031), so reading it
+         here cannot disagree with the ranking the learner was shown. */
+      const letter = row.code.charAt(0);
+      employees.set(letter, (employees.get(letter) ?? 0) + 1);
     }
 
-    return (
-      [...counts.entries()]
-        .map(([code, count]) => ({ code, count }))
-        /* Descending by count, then by code so that equal counts render in a
-         stable order rather than in whatever order the Map happened to hold. */
-        .sort((a, b) => b.count - a.count || a.code.localeCompare(b.code))
+    const paths = new Map(pathsByLetter.map((row) => [row.riasecLetter, row._count._all]));
+
+    return RIASEC_LETTERS.map((letter) => ({
+      letter,
+      employees: employees.get(letter) ?? 0,
+      activePaths: paths.get(letter) ?? 0,
+    })).sort(
+      (a, b) =>
+        b.employees - a.employees ||
+        /* Canonical R-I-A-S-E-C decides a tie, so the order is reproducible
+           rather than whatever the Map happened to hold (D-031). */
+        RIASEC_LETTERS.indexOf(a.letter) - RIASEC_LETTERS.indexOf(b.letter),
     );
   }
 
