@@ -542,3 +542,81 @@
   - Page: `src/app/(portal)/courses/[courseId]/page.tsx` — the comment at the top of the card explains why the course name is not repeated (the `h1` is the page header); keep that. `CourseAction` already renders "the one action the server chose — never a menu"; this ticket relocates it, it does not reinvent it.
   - The add flow's reload-confirms-outcome comment (`addCourse` resolves undefined on success and failure) is a real subtlety — preserve the behaviour and the comment.
   - `PortalPage` already has the `action` prop ("the single primary action for this page, §3") — this is its intended use.
+
+---
+
+> **Epic label: `moodle-embed`** — the entity publishes courses and adds their content **without leaving the portal**. Publishing already lives in the entity portal (Manage Course: metadata, publish/unpublish with blockers — D-059/D-061); adding content is the one step that still hands the entity out to Moodle. Decision (2026-08-25, option A of three): **Moodle's own editor renders inside an iframe within our shell** — Moodle stays the engine and the authoring tool (D-046 Model 1 stands), only its frame around the editor disappears. Rejected: an in-portal authoring UI (Model 2 — Moodle exposes no web-service API to create activities or quiz questions, so it means a large custom plugin _and_ a second authoring surface; D-046 already refused it) and a hybrid "simple things in our forms, the rest in Moodle" (same API gap for whatever we cover, two surfaces drifting). Shared ground rules:
+>
+> - **Same mechanism as today for identity:** the frame's first URL is the single-use, HMAC-signed `local_tamkeensso` login (D-044) that `author-launch` already mints for the `editingteacher` handoff (D-060) — nothing new is minted, nothing bypasses entity scoping. The plugin gains an `embed` mode; it does not gain any new trust.
+> - **Deployment assumption (confirmed 2026-08-25): Moodle lives on a subdomain of the app's site** (e.g. `lms.<site>` under `<site>`). Cookies are then first-party inside the frame and `SameSite=Lax` keeps working. **If Moodle ends up on a different registrable domain this epic does not work as written** — browsers drop third-party cookies by default — and it must be re-planned (Partitioned cookies / Storage Access API, or back to the handoff). Confirm the hostname with the ministry before TAM-129 starts; locally `localhost:3000` / `localhost:8080` are one site (ports do not partition cookies) so development is unaffected.
+> - **Moodle's chrome is hidden when framed** (decided 2026-08-25): our shell is the only outer navigation. The secondary _course_ navigation and the course index stay — the editor is unusable without them (see TAM-129).
+> - **The full-page handoff stays as a fallback**: «فتح في موودل». It is the recovery when the frame cannot establish a session, and the accessible route for anyone who needs the editor at full size.
+> - D-044's open blocker applies with more weight: the chrome hiding and the frame-ancestors header live in `local_tamkeensso`. If the ministry refuses custom PHP and the handoff moves to OAuth2, the same two things must move into a Moodle **theme** — record that in the D-044 follow-up, do not let it surprise hardening.
+> - Definition of Done per CLAUDE.md §2B; Platforms Code (D-069); logical properties; WCAG 2.1 AA — the iframe carries a `title`, the fallback is keyboard-reachable, nothing in our page traps focus in the frame.
+> - **Not in this epic:** framing the _learner's_ course on `/courses/[id]/player` (D-045's handoff stands for learners). TAM-129's foundation makes it a small later ticket if wanted.
+
+## TAM-129 — Embed foundation: `local_tamkeensso` author-embed mode, frame-ancestors, and the launch flag — **DONE** (`feature/tam-129-embed-foundation`, D-098)
+
+- **What shipped (2026-08-25):** everything in the five points below, proven against the local Moodle 4.5.4: `curl -I` shows `Content-Security-Policy: frame-ancestors 'self' http://localhost:3000` and no `X-Frame-Options`; a Playwright probe framing a fresh `embed=author` URL from `localhost:3000` lands on `course/view.php` with `body.editing`, navbar/footer/breadcrumb hidden, secondary nav + course index visible, and receives `tamkeen:ready`; adding a URL resource inside the frame delivers `tamkeen:content-changed`; the same probe from `127.0.0.1:3000` gets a blank frame and no message. Contract suite + entity e2e (43, incl. two new) green; the plugin is at 0.2.0. Also fixed on the way: the setup script's re-run crash (`role_allow_assign` duplicate), `docker cp` nesting, and CLI-as-root cache permissions (`-u daemon`). Moodle's first-visit **user tour** still pops up inside the frame — Moodle's own onboarding, once per user; hide it in TAM-130 if it reads as noise (`usetours` or the plugin's CSS).
+
+- **Labels:** `moodle-embed`, `moodle-plugin`, `backend`
+- **Priority:** High (TAM-130 cannot start without it)
+- **Pre-requisite:** Moodle hostname confirmed as a subdomain of the app's site (epic note).
+- **Description:**
+  Everything on the Moodle and API side that lets a portal page frame Moodle's editor safely. No UI in this ticket; it is proven with `curl`, a throwaway HTML page that frames the login URL, and the contract suite.
+
+  **1. Plugin — `embed=author` mode.** `login.php` accepts `embed=author`. After `complete_user_login` it sets `$USER->editing = 1` (editing on from the first page — a per-session flag, no `sesskey` round trip) and `$SESSION->tamkeen_embed = 'author'`, then redirects to `course/view.php?id=…` as now. Token claims (`moodle-handoff.ts`) are unchanged — the flag is a URL parameter, not part of the signed payload; being framed grants nothing, so it needs no signature.
+
+  **2. Plugin — chrome hiding while the session flag is set.** A body class plus CSS injected from the head hook (`core\hook\output\before_standard_head_html_generation`, 4.4+ hook API — not a theme edit, so it survives upgrades) hides: the top navbar (site logo, primary nav, user menu), the footer, breadcrumbs, and any navigation entry that leads _out_ of the course (site home, dashboard, "my courses"). **Keeps:** the secondary course navigation (Course / Settings / Participants / Grades / More — the quiz editor `mod/quiz/edit.php`, question bank and activity settings are reached through it) and the course-index drawer. Verify on the course page, an activity settings form, the quiz editor and the question bank — those four cover the authoring loop.
+
+  **3. Plugin — framing allowed only from the app.** `allowframembedding=1` in the setup script (`infra/moodle/moodle-setup.php`, beside the other `set_config` lines — Moodle otherwise sends `X-Frame-Options: sameorigin` from `lib/setuplib.php`) **and** a `Content-Security-Policy: frame-ancestors <APP_URL>` header from the plugin's `before_http_headers` hook, from a new plugin setting `allowedframeancestor` that `setup.mjs` stores from `APP_URL`. `allowframembedding` alone lets any site frame a Moodle login page — a clickjacking hole, not a config toggle. Check the container's Apache does not add a second `X-Frame-Options`.
+
+  **4. Plugin — two messages to the parent**, `postMessage` with the allowed ancestor as target origin (never `*`): `{type:'tamkeen:ready'}` once a framed page renders with a session; `{type:'tamkeen:content-changed'}` on the next render after a course-module change (observers for `\core\event\course_module_created` / `updated` / `deleted` and `course_section_updated` in `db/events.php` set a session flag the head hook consumes). Nothing else crosses the boundary — no grades, no learner data.
+
+  **5. API — the launch flag.** `POST /entity/courses/:id/author-launch` (`entity.controller.ts:198` → `management.authorLaunch` → `LmsPort.courseLaunchUrl`) takes `{ embed: true }` and returns `{ url, mode: 'embed' | 'handoff' }`; the real adapter appends `&embed=author` to the `/local/tamkeensso/login.php?token=…` URL it builds (`moodle-http.service.ts:713`). Without the flag, exactly today's handoff URL. Scoping (`scope.resolve`), audit, single-use, `MOODLE_SSO_TTL_SECONDS=60` all unchanged.
+
+  **Acceptance:**
+  - `curl -I` on any Moodle page: `Content-Security-Policy: frame-ancestors <APP_URL>` present, `X-Frame-Options` absent. A page served from another origin cannot frame Moodle (browser check); a page from `APP_URL` can.
+  - A framed `embed=author` login lands on the course with editing on; navbar/footer/breadcrumb/out-of-course entries absent; secondary nav + course index present; the four authoring pages usable in-frame.
+  - `tamkeen:ready` arrives on load; `tamkeen:content-changed` arrives after adding an activity; neither is sent to a parent at another origin (plugin test with a wrong `allowedframeancestor`).
+  - `describeLmsContract`: `courseLaunchUrl` with the embed option still varies per call, still carries no WS token; the mock implements it. Entity endpoint tests: with and without `embed`, wrong-entity course → same refusal as today.
+  - Docs: a decision entry (why frame now, the same-site cookie premise, chrome hiding via plugin not theme, why `allowframembedding` needs the CSP header); D-044 follow-up noted; progress.md.
+
+  **Implementation notes (verified):**
+  - Plugin files: `moodle-plugin/local_tamkeensso/login.php` (redirect target at line 102), `settings.php`; add `db/hooks.php`, `db/events.php`, `classes/hook_callbacks.php`, `classes/observer.php`. Copied into the container by `infra/moodle/setup.mjs:37` — no new deploy step; the setup script must also bump `version.php` so Moodle installs the new `db/` files.
+  - Local instance has `allowframembedding=0` today (checked 2026-08-25).
+  - Types: `EntityAuthorLaunchView` (`packages/types/src/entity.ts:181`) gains `mode`; `LmsPort.courseLaunchUrl` (`lms.port.ts:145`) gains an options argument.
+  - Production needs **HTTPS on both hosts**, or Chrome refuses the framed session cookie.
+  - Rejected: putting `embed` inside the signed token (no security value, one more claim); a Moodle theme for chrome hiding (a second custom artefact to approve; the plugin is already hook-capable); a `before_footer` inline script instead of the head hook (renders after the page, delays `ready`).
+
+## TAM-130 — Entity Course Content page: Moodle's editor inside the page, read-back beside it, publish from the same place
+
+- **Labels:** `moodle-embed`, `entity`, `frontend`
+- **Priority:** High
+- **Pre-requisite:** TAM-129. Pairs with TAM-120 (entity page sweep) — lay out these two pages once, with this ticket.
+- **Description:**
+  The entity's authoring loop becomes one page. `/entity/courses/[courseId]/content` opens with the course editor framed inside the shell, editing on, and the D-061 read-back next to it — so the entity adds sections, files, videos and the quiz, watches "activities / quiz / completion criteria" update, and publishes without ever seeing Moodle's own frame.
+
+  **1. The page.** Page header: course title, the status Tag (draft / published / …), and the page's single action in `PortalPage`'s `action` slot — **«نشر الدورة»** when unpublished and not blocked, **«إلغاء النشر»** when published (the same `entityApi.publish/unpublish` calls and the same blocker rules as Manage Course; if blocked, the action is disabled and the blockers are listed in the read-back strip). Below the header: a compact **read-back strip** (activity count · quiz present · completion criteria configured · last refreshed), the D-061 warning inline when completion criteria are missing — that warning is the reason the read-back exists and now sits beside the editor that fixes it. Then the **iframe**, full width of the content column, height = viewport minus shell header and page header (`min-height` for 360px). `title` = the course name; `allow="fullscreen"`; `referrerpolicy="strict-origin"`; **no `sandbox`** (Moodle needs scripts, forms and its own origin).
+
+  **2. Launch and ready.** On mount, `POST …/author-launch { embed: true }` (never prefetched, never rendered before it resolves — D-045's reasoning); mount the frame with the returned URL. The plugin consumes the nonce on first load, so the `src` left in the DOM is a **spent** token — note this in the decision that amends D-045's "never in the page" (the DOM never holds a _live_ credential). `LoadingState` covers the frame until `tamkeen:ready`; if it has not arrived in ~8s or the frame errors, swap to `ErrorState` with one recovery, **«فتح في موودل»**, which calls `author-launch` again _without_ `embed` (the first token is spent) and `window.location.assign`s — today's handoff, unchanged. The same link sits quietly under the frame at all times as a secondary action.
+
+  **3. Read-back refresh.** On `tamkeen:content-changed` (origin checked against `MOODLE_BASE_URL`'s origin — a message from anywhere else is ignored) refetch the read-back; keep the manual «تحديث». Because the publish action reads the same data, blockers clear on the page the entity is looking at.
+
+  **4. Manage Course** (`/entity/courses/[courseId]`): the "author in Moodle" card becomes a link, **«تحرير المحتوى»** → the content page; no launch is minted from Manage anymore (one place, one audit trail). Metadata region untouched. The publish card stays (it is where an entity who only changed metadata publishes), using the one shared `PublishAction` component so the rules live once.
+
+  **5. Scoping unchanged.** `author-launch` still resolves the entity scope; a course the entity does not own answers exactly what it answers today; a learner or admin account never reaches `/entity/*` (D-065/D-067 guards).
+
+  **Acceptance:**
+  - An entity opens Course Content, sees its course in editing mode inside the shell (no Moodle navbar/footer/breadcrumb; secondary course nav and course index present), adds a section, uploads a file, creates a quiz with questions, sets a completion criterion — all in-frame; the read-back strip updates without a reload; the D-061 warning disappears; «نشر الدورة» enables; the course publishes and appears in the learner catalogue (existing e2e).
+  - The launch URL is absent from the markup before the launch resolves and present only as the frame `src` after (component test, replacing the current "never present" assertion for this page).
+  - A spoofed-origin message changes nothing (unit test). Blocked framing yields the fallback state within the timeout, and «فتح في موودل» uses a fresh token (two distinct `author-launch` calls asserted).
+  - Manage Course no longer mints a launch; its publish card and the content page's action share one component and one blocker list (asserted).
+  - Loading / error / blocked states present; `entity-*.test.tsx` updated for the moved action; axe on both pages at 360/768/1280; no horizontal overflow from the frame.
+  - Docs: decision entry (one page for the authoring loop; publish reachable from both pages, one component; D-045 amendment); CLAUDE.md §4B.3/§4B.4 updated (Course Content is the editor, not a launch button); progress.md.
+
+  **Implementation notes (verified):**
+  - Pages: `apps/web/src/app/(entity)/entity/courses/[courseId]/content/page.tsx` (launch at ~line 127 via `window.location.href`; read-back shape `{ activityCount, hasQuiz, completionConfigured }` at line 80; its header comment says "deliberately thin: a launch and a read-back" — rewrite) and `…/[courseId]/page.tsx` (author launch ~line 111; `PublishCard` at ~line 319 with `publishBlockers`, `canPublish`, and the remount-on-change pattern described at line 49 — extract it to the shared component rather than duplicating).
+  - `PortalPage` already has the `action` slot (§3's single primary action) — use it; do not add a second button row.
+  - Moodle's file picker, TinyMCE and drag-drop upload work inside a same-site iframe; pages that navigate `window.top` (LTI/SCORM players) are out of scope — note it.
+  - Rejected: two actions in the header (publish + open in Moodle) — one primary action, the fallback is secondary; auto-publishing when blockers clear (publishing is the entity's decision, D-059); polling the read-back on an interval (the plugin message exists for this; keep only the manual refresh).

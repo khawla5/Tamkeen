@@ -141,8 +141,19 @@ export interface LmsPort {
    * It must therefore be minted **at the moment of the click**, not when a page
    * renders, so its short life starts when it is actually used. It must never
    * contain the web-services token.
+   *
+   * `options.embed` asks the LMS to open the course **inside the portal's
+   * frame** — chrome hidden, and for `'author'` editing already on (TAM-129).
+   * It is a hint on the URL, never part of the credential: being framed grants
+   * nothing, so it needs no signature.
    */
-  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string;
+  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId, options?: LaunchOptions): string;
+}
+
+/** How the launched course should present itself (TAM-129). */
+export interface LaunchOptions {
+  /** `'author'`: framed by the entity portal, chrome hidden, editing on. */
+  embed?: 'author';
 }
 
 /**

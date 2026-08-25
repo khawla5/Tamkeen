@@ -548,6 +548,26 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
         );
       });
 
+      it('carries the embed hint outside the credential, and stays fresh and token-free', async () => {
+        /* TAM-129: the entity portal frames the course. The hint must reach the
+           LMS on the URL, must not change any of the properties above, and must
+           not be the same URL as the plain handoff — that one is spent already
+           by the time a fallback needs a fresh one. */
+        const user = await lms.provisionUser({
+          email: 'launch-embed@ministry.gov.example',
+          fullName: 'مؤلف',
+          externalUserId: 'ext-launch-embed',
+        });
+
+        const framed = lms.courseLaunchUrl(user.lmsUserId, 101, { embed: 'author' });
+
+        expect(framed).toMatch(/^https?:\/\//);
+        expect(framed).toMatch(/[?&]embed=author(&|$)/);
+        expect(framed).not.toMatch(/wstoken/i);
+        expect(framed).not.toBe(lms.courseLaunchUrl(user.lmsUserId, 101, { embed: 'author' }));
+        expect(lms.courseLaunchUrl(user.lmsUserId, 101)).not.toMatch(/embed=/);
+      });
+
       it('is fresh on every call', async () => {
         /* A handoff is single-use by design, so returning the same URL twice
            would return an already-spent token the second time. Callers mint per

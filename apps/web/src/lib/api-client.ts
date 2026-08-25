@@ -469,8 +469,10 @@ export const entityApi = {
    * carries a live, single-use credential, so it must not sit in the DOM from
    * the moment the page loads (D-045). Called on the click, used immediately.
    */
-  authorLaunch: (courseId: string) =>
-    api.post<EntityAuthorLaunchView>(`/api/entity/courses/${courseId}/author-launch`),
+  authorLaunch: (courseId: string, options: { embed?: boolean } = {}) =>
+    api.post<EntityAuthorLaunchView>(`/api/entity/courses/${courseId}/author-launch`, {
+      embed: options.embed === true,
+    }),
 
   learners: (courseId?: string) =>
     api.get<EntityLearnerRow[]>(
