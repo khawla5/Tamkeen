@@ -141,6 +141,18 @@
   }
 
   /*
+   * Native <select> popups on Windows Chrome are drawn outside the page's
+   * renderer, where a page-loaded web font does not exist — options set in
+   * the self-hosted Plex Arabic rendered as blank rows. A system stack the
+   * popup can always resolve; the closed control still wears the brand font.
+   */
+  option {
+    font-family: system-ui, 'Segoe UI', Tahoma, Arial, sans-serif;
+    color: var(--foreground);
+    background-color: var(--card);
+  }
+
+  /*
    * Visible focus on every interactive element — WCAG 2.1 AA 2.4.7 (§2B DoD 5).
    * `:focus-visible` rather than `:focus` so pointer users don't see rings, but
    * keyboard users always do.
