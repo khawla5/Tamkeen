@@ -97,6 +97,22 @@ $capabilities = [
     'moodle/grade:viewall',
     'report/completion:view',
 ];
+// The content read-back (§4B.4, D-061) must see EVERY activity, published or
+// not. `core_course_get_contents` drops a module the calling user may not
+// view, and a module's own `mod/<name>:view` capability decides that for a
+// user who is not enrolled — so without these the quiz an entity just added is
+// invisible to the read-back and the publish gate keeps refusing for a reason
+// the entity has already fixed (found 2026-08-25, TAM-130 follow-up). Granted
+// for every installed module rather than a hand-kept list, plus hidden
+// activities/sections, which an author may keep hidden until publishing.
+// Bound parameters: a literal ':view' would be read as a named placeholder.
+$viewcaps = $DB->get_fieldset_select('capabilities', 'name',
+    'name LIKE :pattern OR name = :book', ['pattern' => 'mod/%:view', 'book' => 'mod/book:read']);
+$capabilities = array_merge($capabilities, $viewcaps, [
+    'moodle/course:viewhiddenactivities',
+    'moodle/course:viewhiddensections',
+]);
+
 foreach ($capabilities as $capability) {
     assign_capability($capability, CAP_ALLOW, $roleid, $syscontext->id, true);
 }
