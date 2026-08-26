@@ -156,19 +156,19 @@ function Outcome({ course }: { course: CoursePlayerView }) {
 
   if (course.passed) {
     return (
-      <div className="border-primary-600 bg-primary-50 rounded-lg border p-4">
-        <p className="font-semibold">{t('passedTitle')}</p>
-        <p className="text-sm">{t('passedBody', { grade })}</p>
-      </div>
+      <Card edge="success" className="p-4">
+        <p className="font-semibold text-foreground">{t('passedTitle')}</p>
+        <p className="text-sm text-neutral-700">{t('passedBody', { grade })}</p>
+      </Card>
     );
   }
 
   return (
-    <div className="border-danger/40 bg-danger/5 rounded-lg border p-4">
-      <p className="font-semibold">{t('failedTitle')}</p>
+    <Card edge="danger" className="p-4">
+      <p className="font-semibold text-foreground">{t('failedTitle')}</p>
       <p className="text-sm">
         {t('failedBody', { grade, threshold: format.percent(course.passThreshold / 100) })}
       </p>
-    </div>
+    </Card>
   );
 }

@@ -7,7 +7,7 @@
 
 ## Current status
 - **Current phase:** Phase 5 — the super-admin portal (CLAUDE.md §4C) — **merged** (PR #13, with PR #12 merging TAM-106 before it). In parallel, the **design-direction workstream** (Platforms Code, D-069) continues on stacked feature branches off the old `feature/dga-alignment` line, now being rebased onto `main`.
-- **Last completed task:** **TAM-118 — shared portal components on Platforms Code** on `feature/tam-118-shared-components` (Card radius 8 + selected/edge variants, Tag anatomy, Progress, new Table and Tabs, restyled states, Textarea; D-109). Before it: TAM-110 / TAM-138 (profile: change password, the entity profile, the two-column layout — **PR #29, merged**).
+- **Last completed task:** **TAM-119 — the learner page sweep** on `feature/tam-119-learner-sweep` (stacked on TAM-118): eleven pages composed on the primitives, no bespoke card/chip/bar left, status tags on My Path. Before it: **TAM-118 — shared portal components on Platforms Code** on `feature/tam-118-shared-components` (Card radius 8 + selected/edge variants, Tag anatomy, Progress, new Table and Tabs, restyled states, Textarea; D-109). Before it: TAM-110 / TAM-138 (profile: change password, the entity profile, the two-column layout — **PR #29, merged**).
 - **Next task:** PR for `feature/tam-118-shared-components` once the user has finished testing; then TAM-119 (learner page sweep) and TAM-120 (entity page sweep) composing these primitives; results (TAM-113/114) after.
 - **Phase 4 is merged** (PR #6). Phases 0-3 merged before it (PRs #1-#4), plus the landing page (PR #5).
 - **Test totals (on `feature/tam-134-admin-courses-settings-certs`):** **657 API unit · 663 web component · 557 API integration against real PostgreSQL · 114 browser tests in Chromium against the built apps** — all run in this session, not deferred; typecheck / lint / format clean. 113 of the 114 passed; the one failure is a **pre-existing flake** in the learner path-build counter, which passes on re-run and is recorded below. **⚠ The API integration suite passes in full only serially (`--runInBand`);** run with Jest's default parallelism against one database, fifteen suites collide and ~39 tests fail. Pre-existing test isolation, not a product defect — and almost certainly the explanation for the "transient integration failure never reproduced" recorded in the 2026-08-24 entry. **Read this before chasing a similar one.**
@@ -148,6 +148,10 @@
 ---
 
 ## Log (newest first)
+
+### 2026-08-26 — TAM-119: the learner pages on the primitives (`feature/tam-119-learner-sweep`)
+
+Branch off `feature/tam-118-shared-components` @ `8faca04`. An audit first (hex, physical classes, retired tokens, `bg-accent` chips, hand-rolled `rounded-card border` cards): sixteen sites across dashboard, assessment, results, PathCard, path build, catalogue, course detail, player, My Path and the CV, plus the shared Holland chips. All moved to `cardVariants` / `Card edge` / `Badge` tones / the token colours; My Path's course state became a status tag; results reuses `HollandCodeChips`; the assessment's `accent-navy` — a retired token still in the tree — is now the primary. One test updated (chips: `bg-accent` → the primary tag). Page tests 523 green, typecheck/lint clean, dashboard + profile axe green (profile's 5th/6th sign-in per file hits the dev login throttle; green singly). **Next:** the user's test → PR (after TAM-118 merges, or stacked); TAM-120 (entity sweep) the same way; then TAM-121's gate.
 
 ### 2026-08-26 — TAM-118: the shared primitives on Platforms Code (`feature/tam-118-shared-components`, D-109)
 

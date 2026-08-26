@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 
 import { useFormat } from '@/i18n/format-provider';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 /**
  * A Holland Code as the user should meet it: the three letters as their
@@ -31,14 +32,13 @@ export function HollandCodeChips({
   return (
     <ul aria-label={tResults('codeHeading')} className={cn('flex flex-wrap gap-2', className)}>
       {code.map((letter, position) => (
-        <li
-          key={letter}
-          className="rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-accent-foreground"
-        >
-          {ordinals ? (
-            <span className="font-medium opacity-70">{number(position + 1)}. </span>
-          ) : null}
-          {t(`${letter}.name`)}
+        <li key={letter}>
+          <Badge variant="primary" className="px-3 py-1 text-sm">
+            {ordinals ? (
+              <span className="font-medium opacity-70">{number(position + 1)}. </span>
+            ) : null}
+            {t(`${letter}.name`)}
+          </Badge>
         </li>
       ))}
     </ul>
