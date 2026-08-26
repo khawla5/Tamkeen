@@ -315,17 +315,29 @@ describe('Admin audit and reports (e2e)', () => {
       expect(response.text).toContain('التقرير');
     });
 
-    it('serves the trail as CSV, honouring the filter', async () => {
-      const response = await get(
-        `/api/admin/audit.csv?actorUserId=${adminId}&outcome=FAILURE`,
-        sessionAdmin,
-      ).expect(200);
+    /*
+     * The *trail* export moved into the browser (TAM-138): every column of it is
+     * Arabic copy, that copy lives in the message catalogue by convention, and
+     * an export written where the words are is the only way the file and the
+     * screen can agree. What the API still owes it is a page big enough to
+     * export, honouring the same filters — which is this.
+     */
+    it('serves a whole export-sized page of the trail, honouring the filter', async () => {
+      const page = (
+        await get(
+          `/api/admin/audit?actorUserId=${adminId}&outcome=FAILURE&pageSize=5000`,
+          sessionAdmin,
+        ).expect(200)
+      ).body as AdminAuditPage;
 
-      expect(response.text.charCodeAt(0)).toBe(0xfeff);
-      expect(response.text).toContain('SELF_MODIFICATION_REFUSED');
+      expect(page.rows.length).toBeGreaterThan(0);
       /* An export that ignored the filter would hand over the whole log to
          answer a narrow question. */
-      expect(response.text).not.toContain('AUTH_LOGIN_SUCCEEDED');
+      expect(page.rows.every((row) => row.outcome === 'FAILURE')).toBe(true);
+    });
+
+    it('refuses a page larger than the export bound', async () => {
+      await get('/api/admin/audit?pageSize=5001', sessionAdmin).expect(400);
     });
   });
 });

@@ -724,13 +724,26 @@ export const adminApi = {
 
   // §4C.8 — audit and reports
   auditLog: (
-    filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE'; before?: string } = {},
+    filters: {
+      action?: string;
+      outcome?: 'SUCCESS' | 'FAILURE';
+      /** Inclusive dates, as the `<input type="date">` values the screen holds. */
+      from?: string;
+      to?: string;
+      before?: string;
+      pageSize?: number;
+    } = {},
   ) => {
     const query = new URLSearchParams();
 
     if (filters.action) query.set('action', filters.action);
     if (filters.outcome) query.set('outcome', filters.outcome);
+    /* A day, not an instant: `to=2026-08-26` alone means midnight, which would
+       drop everything that happened on the day the administrator asked for. */
+    if (filters.from) query.set('from', `${filters.from}T00:00:00.000`);
+    if (filters.to) query.set('to', `${filters.to}T23:59:59.999`);
     if (filters.before) query.set('before', filters.before);
+    if (filters.pageSize) query.set('pageSize', String(filters.pageSize));
 
     const suffix = query.toString();
 
@@ -740,23 +753,12 @@ export const adminApi = {
   reports: () => api.get<AdminReports>('/api/admin/reports'),
 
   /**
-   * Where the CSV exports live.
+   * Where the reports export lives.
    *
-   * Plain URLs rather than a fetch-and-blob: the session is an httpOnly cookie
+   * A plain URL rather than a fetch-and-blob: the session is an httpOnly cookie
    * on the API's origin, so an ordinary link carries it and the browser handles
-   * the download — while a fetched blob would need the bytes in memory and a
-   * synthetic anchor to save them.
+   * the download. The *audit* export is built in the browser instead (TAM-138) —
+   * its every column is Arabic copy, and that lives in the message catalogue.
    */
   reportsCsvUrl: () => `${API_URL}/api/admin/reports.csv`,
-
-  auditCsvUrl: (filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE' } = {}) => {
-    const query = new URLSearchParams();
-
-    if (filters.action) query.set('action', filters.action);
-    if (filters.outcome) query.set('outcome', filters.outcome);
-
-    const suffix = query.toString();
-
-    return `${API_URL}/api/admin/audit.csv${suffix ? `?${suffix}` : ''}`;
-  },
 };

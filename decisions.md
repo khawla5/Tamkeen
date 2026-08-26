@@ -5,6 +5,24 @@
 
 ---
 
+## D-107 — The audit export is rendered where the words are
+
+**Decision:** the §4C.8 trail export is built in the browser and saved from a blob; `/api/admin/audit.csv` is gone. `toCsv` moved to `packages/types`, so the browser and the still-server-side reports export share one implementation of the quoting, the formula guard and the BOM. The API's part is a page big enough to export (`pageSize` up to 5,000, the DTO's existing ceiling) honouring the same filters.
+
+**Why:** every column of that file is Arabic copy — the action, the outcome, the target kind, the reason, the detail labels and now the detail values — and by convention (D-024) Arabic copy lives in the message catalogue, which the API does not have. So the file said `ADMIN_SETTING_CHANGED,SUCCESS,setting,BAD_PASSWORD` while the screen it was exported from said what those meant. An export that disagrees with its own screen is worse than no export: it is the artefact that leaves the building and gets attached to something.
+
+**Rejected:** an Arabic label map in the API (two catalogues for one vocabulary, drifting apart with nothing able to compare them — the exact failure D-105 had just finished fixing, and D-103's before it); re-implementing the CSV rules in the browser (the BOM and the `=`/`+`/`-`/`@` guard are security- and Excel-critical, and two copies means one of them is eventually wrong); leaving the export raw and documenting it (the request was to remove technically-exposed information, and this is the copy of it that travels).
+
+## D-106 — An audit action has a category, and an entry names a thing that exists
+
+**Decision:** three changes to what is *recorded*, upstream of how §4C.8 renders it. (1) `AUDIT_ACTION_CATEGORY` maps every action to one of five areas — `auth`, `learner`, `content`, `administration`, `integration` — as a `Record<AuditActionCode, …>`, so an action added without a category fails the build; §4C.8 groups its filter by it. (2) `LMS_COURSE_PASSED` records **our** course id, not the LMS's. (3) `EnrollmentService.auditFailure` requires a `targetType` beside the `targetId` it already took.
+
+**Why:** D-105 made the trail readable; this makes what it reads *true*. `LMS_COURSE_PASSED` was filing `String(moodleCourseId)` under `targetType: 'course'` — a number from a system the ministry does not administer, stored as though it were one of our uuids — so the label resolution D-105 added never resolved and every pass in the trail read «دورة: 12». The refused path-building entries carried an id and no type, and the screen renders a target only when it knows the kind, so the subject was dropped from the row entirely while the id sat there unused: the failures a review most wants to find were the ones naming nothing. The category exists because fifty-three options in one flat select is not a filter anybody uses, and because the grouping has to come from the vocabulary itself or a heading will one day disagree with what the code records.
+
+**On what was left alone.** A self-directed auth event (`AUTH_LOGIN_SUCCEEDED`, `AUTH_PASSWORD_CHANGED`) still carries no target: the actor *is* the subject and the row already names them. A sync run carries none because nobody performed it and it is about no single thing — its counts are the entry.
+
+**Rejected:** a `category` column on `audit_log` (it is a property of the action, not of the event — storing it lets the two disagree, and a re-categorisation would need a migration over the largest table in the system); filtering by category server-side (a new query parameter to save a select the browser can group itself); back-filling a target onto the auth events (it would restate the actor column in every row).
+
 ## D-105 — The audit trail is written for the ministry, not for whoever debugs the system
 **Decision:** §4C.8 renders an entry as *what happened, to what, by whom, when, and why* — all in Arabic. Four changes make that true: `AUDIT_TARGET_TYPES` is one shared vocabulary and `AuditEntry.targetType` is typed against it (a migration normalises the rows already written); every row carries a **`targetLabel`** resolved server-side per page, so a retirement names the path rather than its uuid; **`reason` is its own field** and renders as an Arabic sentence; and the remaining detail is **stripped of every opaque identifier** before it leaves the server, then rendered through an Arabic label map. `AuditAction` and `AuditReason` moved to `@tamkeen/types` so the message catalogue can be asserted against them.
 
