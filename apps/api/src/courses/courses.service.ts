@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 
-import type { CourseDetail, CourseSummary } from '@tamkeen/types';
+import type { CourseDetail, CourseSummary, UserPathCourseStatus } from '@tamkeen/types';
 
 import { JourneyStateService, type JourneyState } from '../journey/journey-state.service';
 import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
@@ -127,6 +127,8 @@ export class CoursesService {
       throw new NotFoundException('COURSE_NOT_FOUND');
     }
 
+    const personalStatus = await this.getPersonalStatus(state, course.id);
+
     const action = resolveCourseAction({
       userPath: state.userPath
         ? {
@@ -139,7 +141,7 @@ export class CoursesService {
         : null,
       courseId: course.id,
       courseStatus: course.status,
-      completed: await this.isCompleted(state, course.id),
+      completed: personalStatus === 'COMPLETED',
     });
 
     return {
@@ -161,12 +163,24 @@ export class CoursesService {
       /* Only meaningful when the action is ADD_TO_PATH or IN_PATH; the client
          uses it to link to the right build page rather than guessing. */
       buildablePathId: state.userPath?.pathId ?? null,
+      personalStatus,
+      certificateId:
+        action === 'COMPLETED' ? await this.findCertificateId(userId, course.id) : null,
     };
   }
 
-  private async isCompleted(state: JourneyState, courseId: string): Promise<boolean> {
+  /**
+   * The user's own progress on this course, or null when it is not in their
+   * path at all. `action` alone cannot carry this: a confirmed, unattempted
+   * course and one genuinely in progress both resolve to `START_COURSE`
+   * (§4.7 needs the distinction for the card's status chip).
+   */
+  private async getPersonalStatus(
+    state: JourneyState,
+    courseId: string,
+  ): Promise<UserPathCourseStatus | null> {
     if (!state.userPath?.selectedCourseIds.includes(courseId)) {
-      return false;
+      return null;
     }
 
     const chosen = await this.prisma.userPathCourse.findFirst({
@@ -174,6 +188,17 @@ export class CoursesService {
       select: { status: true },
     });
 
-    return chosen?.status === 'COMPLETED';
+    return chosen?.status ?? 'NOT_STARTED';
+  }
+
+  /** Only ever queried for a completed course, which the unique constraint on
+   *  (user, type, course) guarantees has at most one certificate. */
+  private async findCertificateId(userId: string, courseId: string): Promise<string | null> {
+    const certificate = await this.prisma.certificate.findFirst({
+      where: { userId, courseId, type: 'COURSE' },
+      select: { id: true },
+    });
+
+    return certificate?.id ?? null;
   }
 }

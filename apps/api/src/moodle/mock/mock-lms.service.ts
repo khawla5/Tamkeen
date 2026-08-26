@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-import type { LmsPort } from '../lms.port';
+import type { LaunchOptions, LmsPort } from '../lms.port';
 import {
   LmsOperationError,
   type CreateCourseInput,
@@ -424,12 +424,13 @@ export class MockLmsService implements LmsPort {
    * A handoff is single-use, so handing out the same URL twice would be handing
    * out an already-spent token.
    */
-  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
+  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId, options?: LaunchOptions): string {
     this.launchCounter += 1;
+    const embed = options?.embed ? `&embed=${options.embed}` : '';
 
     return (
       `${MOCK_LMS_BASE_URL}/local/tamkeensso/login.php` +
-      `?mockuser=${lmsUserId}&mockcourse=${lmsCourseId}&mocknonce=${this.launchCounter}`
+      `?mockuser=${lmsUserId}&mockcourse=${lmsCourseId}&mocknonce=${this.launchCounter}${embed}`
     );
   }
 

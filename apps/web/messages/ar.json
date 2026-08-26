@@ -345,9 +345,11 @@
     "actionInPath": "ضمن مسارك",
     "actionStart": "ابدأ الدورة",
     "actionCompleted": "مكتملة",
+    "actionCompletedAriaLabel": "مكتملة — عرض الشهادة",
     "actionUnavailable": "غير متاحة للإضافة",
     "adding": "جارٍ الإضافة…",
-    "backToCourses": "عودة إلى الدورات"
+    "backToCourses": "عودة إلى الدورات",
+    "statusInPath": "في مسارك"
   },
   "myPath": {
     "title": "مساري",
