@@ -133,6 +133,9 @@ export const AuditAction = {
   PROFILE_LMS_SYNC_FAILED: 'PROFILE_LMS_SYNC_FAILED',
 
   // Entity portal (Phase 4)
+  /** An entity account changed its own name and/or its organisation's contact
+   *  details (§4B.6). `detail.fields` names what changed, never the values. */
+  ENTITY_PROFILE_UPDATED: 'ENTITY_PROFILE_UPDATED',
   /** An entity created a course shell — in the LMS and in our catalogue. */
   ENTITY_COURSE_CREATED: 'ENTITY_COURSE_CREATED',
   /** Product metadata changed: path membership, duration, objectives,

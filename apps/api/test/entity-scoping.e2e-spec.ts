@@ -159,6 +159,14 @@ describe('Entity portal scoping (e2e)', () => {
     return request(server()).get(path).set('Cookie', session);
   }
 
+  function patch(path: string, body: Record<string, unknown>, session: string) {
+    return request(server())
+      .patch(path)
+      .set('Cookie', [csrfCookie, session].join('; '))
+      .set('X-CSRF-Token', csrfToken)
+      .send(body);
+  }
+
   async function createCourse(
     moodleCourseId: number,
     ownerEntityId: string | null,
@@ -288,6 +296,74 @@ describe('Entity portal scoping (e2e)', () => {
        * courses, and no happy-path test would notice.
        */
       await get('/api/entity/courses', sessionOrphanEntity).expect(403);
+    });
+  });
+
+  describe('the entity profile (§4B.6)', () => {
+    const body = {
+      fullName: 'مسؤولة الجهة أ',
+      contactName: 'مكتب التدريب',
+      contactEmail: 'training@authority.example',
+    };
+
+    it('saves the account name and the organisation contact together, and audits which fields', async () => {
+      const response = await patch('/api/entity/me', body, sessionEntityA).expect(200);
+
+      expect(response.body).toMatchObject({
+        id: entityAId,
+        name: 'جهة أ',
+        contactName: 'مكتب التدريب',
+        contactEmail: 'training@authority.example',
+      });
+
+      const entity = await prisma.entity.findUniqueOrThrow({ where: { id: entityAId } });
+      expect(entity.contactName).toBe('مكتب التدريب');
+      /* The organisation's name is not this endpoint's to change (D-063). */
+      expect(entity.name).toBe('جهة أ');
+
+      const me = await get('/api/auth/me', sessionEntityA).expect(200);
+      expect((me.body as { fullName: string }).fullName).toBe('مسؤولة الجهة أ');
+
+      const entry = await prisma.auditLog.findFirst({
+        where: { action: 'ENTITY_PROFILE_UPDATED', targetId: entityAId },
+        orderBy: { id: 'desc' },
+      });
+      expect(entry?.metadata).toMatchObject({ fields: 'contactEmail,contactName,fullName' });
+    });
+
+    it('refuses the organisation name through the body', async () => {
+      await patch('/api/entity/me', { ...body, name: 'جهة مزيّفة' }, sessionEntityA).expect(400);
+    });
+
+    it('refuses an empty account name and a malformed contact address', async () => {
+      await patch('/api/entity/me', { ...body, fullName: '   ' }, sessionEntityA).expect(400);
+      await patch(
+        '/api/entity/me',
+        { ...body, contactEmail: 'not-an-address' },
+        sessionEntityA,
+      ).expect(400);
+      /* An absent contact is allowed — an organisation may not have one yet. */
+      await patch(
+        '/api/entity/me',
+        { ...body, contactName: '', contactEmail: '' },
+        sessionEntityA,
+      ).expect(200);
+    });
+
+    it('cannot reach another organisation: the scope, not the body, chooses the row', async () => {
+      await patch('/api/entity/me', { ...body, contactName: 'من الجهة ب' }, sessionEntityB).expect(
+        200,
+      );
+
+      const a = await prisma.entity.findUniqueOrThrow({ where: { id: entityAId } });
+      const b = await prisma.entity.findUniqueOrThrow({ where: { id: entityBId } });
+      expect(a.contactName).not.toBe('من الجهة ب');
+      expect(b.contactName).toBe('من الجهة ب');
+    });
+
+    it('is refused for an account with no organisation, rather than half-saved', async () => {
+      await patch('/api/entity/me', body, sessionOrphanEntity).expect(403);
+      await patch('/api/entity/me', body, sessionAdmin).expect(403);
     });
   });
 
