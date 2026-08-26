@@ -676,6 +676,8 @@
     "profileTitle": "بيانات الجهة",
     "manageTitle": "إدارة الدورة",
     "contentTitle": "محتوى الدورة",
+    "guideTitle": "دليل إنشاء الدورة",
+    "guideLink": "دليل إنشاء الدورة",
     "addCourse": "أضف دورة",
     "createTitle": "دورة جديدة",
     "createHint": "أنشئ الدورة هنا، ثم أكمل محتواها داخل منصة التعلّم.",
