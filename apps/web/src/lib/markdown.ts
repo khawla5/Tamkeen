@@ -45,7 +45,9 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
     index += 1;
 
     if (match[1] !== undefined) {
-      nodes.push(createElement('strong', { key, className: 'font-semibold text-foreground' }, match[1]));
+      nodes.push(
+        createElement('strong', { key, className: 'font-semibold text-foreground' }, match[1]),
+      );
     } else if (match[2] !== undefined) {
       nodes.push(
         createElement(
@@ -167,7 +169,11 @@ export function parseMarkdown(source: string): ParsedMarkdown {
           'ul',
           { key: blockKey++, className: 'list-disc space-y-1 ps-5 text-sm' },
           items.map((item, itemIndex) =>
-            createElement('li', { key: itemIndex }, renderInline(item, `li-${blockKey}-${itemIndex}`)),
+            createElement(
+              'li',
+              { key: itemIndex },
+              renderInline(item, `li-${blockKey}-${itemIndex}`),
+            ),
           ),
         ),
       );
