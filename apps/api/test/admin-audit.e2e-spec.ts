@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import type { AdminAuditPage, AdminReports } from '@tamkeen/types';
+import { AUDIT_TARGET_TYPES, type AdminAuditPage, type AdminReports } from '@tamkeen/types';
 
 import { AppModule } from '../src/app.module';
 import { hashPassword } from '../src/common/password';
@@ -183,8 +183,41 @@ describe('Admin audit and reports (e2e)', () => {
       ).body as AdminAuditPage;
 
       /* Half the value of an entry is *why*. A trail that hides the reason is a
-         list of timestamps. */
-      expect(page.rows[0]!.detail).toMatchObject({ reason: 'SELF_MODIFICATION_REFUSED' });
+         list of timestamps. Its own field since TAM-137, because it is the one
+         detail the screen renders as a sentence rather than a labelled value. */
+      expect(page.rows[0]!.reason).toBe('SELF_MODIFICATION_REFUSED');
+      /* And it is gone from the payload, rather than carried in both places. */
+      expect(Object.keys(page.rows[0]!.detail ?? {})).not.toContain('reason');
+    });
+
+    it('names what each entry was about, and never leaks an id into the detail', async () => {
+      const page = (await get(`/api/admin/audit?actorUserId=${adminId}`, sessionAdmin).expect(200))
+        .body as AdminAuditPage;
+
+      /* The refusal above targeted the administrator's own account, so the row
+         resolves to their name. A uuid there answers nothing (TAM-137). */
+      const targeted = page.rows.find((row) => row.targetType === 'user');
+      expect(targeted?.targetLabel).toBe('مسؤول التدقيق');
+
+      /* And nothing anywhere on the page still prints an identifier as detail. */
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      for (const row of page.rows) {
+        for (const value of Object.values(row.detail ?? {})) {
+          expect(typeof value === 'string' && uuid.test(value)).toBe(false);
+        }
+        expect(Object.keys(row.detail ?? {})).not.toContain('pathId');
+      }
+    });
+
+    it('uses one spelling per target kind', async () => {
+      /* `User` and `user` were both in the log, which split every filter and
+         grouping over this column in two (TAM-137). */
+      const page = (await get('/api/admin/audit', sessionAdmin).expect(200)).body as AdminAuditPage;
+
+      const types = new Set(page.rows.map((row) => row.targetType).filter(Boolean));
+      for (const type of types) {
+        expect(AUDIT_TARGET_TYPES as readonly string[]).toContain(type);
+      }
     });
 
     it('filters by action and by outcome', async () => {

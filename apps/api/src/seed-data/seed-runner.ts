@@ -223,6 +223,10 @@ async function seedCatalog(
       lmsPresent,
       lmsVisible,
       heldByAnyLearner: false,
+      /* The seed authors no availability window, and re-seeding does not clear
+         one an administrator set — the update below names its fields and this is
+         not among them. */
+      withinAvailabilityWindow: true,
     });
 
     const fields = {

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
-import type { AuditActionCode, AuditReasonCode } from './audit.actions';
+import type { AuditActionCode, AuditReasonCode, AuditTargetType } from './audit.actions';
 
 export interface AuditEntry {
   action: AuditActionCode;
@@ -9,7 +9,13 @@ export interface AuditEntry {
   /** Null for anonymous events, e.g. a sign-in against an unknown address. */
   actorUserId?: string | null;
   ipAddress?: string | null;
-  targetType?: string | null;
+  /**
+   * What kind of thing this is about, from the one shared vocabulary
+   * (TAM-137). Typed rather than a free string because the log previously held
+   * `User` and `user` for the same concept, which split every filter and
+   * grouping in two.
+   */
+  targetType?: AuditTargetType | null;
   targetId?: string | null;
   /** Enumerated reason codes only — never free text, which could carry PII. */
   reason?: AuditReasonCode;

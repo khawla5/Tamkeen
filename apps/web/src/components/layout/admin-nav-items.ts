@@ -25,7 +25,11 @@ export const ADMIN_NAV: readonly NavItem[] = [
   { key: 'adminAssessment', href: '/admin/assessment', icon: 'assessment' },
   { key: 'adminPaths', href: '/admin/paths', icon: 'myPath' },
   { key: 'adminCourses', href: '/admin/courses', icon: 'courses' },
-  { key: 'adminSettings', href: '/admin/settings', icon: 'settings' },
   { key: 'adminTemplates', href: '/admin/templates', icon: 'templates' },
   { key: 'adminAudit', href: '/admin/audit', icon: 'audit' },
+  /* Last, at the ministry's direction (TAM-135). It is also where it belongs:
+     the items above are the ministry's day-to-day work, and settings is the
+     configuration behind them — a destination you go to deliberately, not one
+     you pass through. */
+  { key: 'adminSettings', href: '/admin/settings', icon: 'settings' },
 ];
