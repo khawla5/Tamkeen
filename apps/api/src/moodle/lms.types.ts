@@ -37,6 +37,30 @@ export interface ProvisionUserInput {
 export interface LmsUserRef {
   lmsUserId: LmsUserId;
   email: string;
+  /** The LMS's own record of the display name — read back, not echoed from a
+   *  caller's input, so it reflects what Moodle actually holds (the same
+   *  "read back rather than synthesise" rule `createCourse` follows). */
+  fullName: string;
+}
+
+/**
+ * What a profile edit can change about the LMS's copy of a user (§4.12).
+ *
+ * Patch-style: either field, or both, may be given. A name change and an
+ * email change are independent events in the product (§4.12's profile form
+ * saves a name; §4.12's email flow moves the address on confirmation), and
+ * forcing a caller to resend the field it did not change would mean reading
+ * it back first for no reason.
+ *
+ * `email` moves the LMS's own copy of the address — it does **not** re-derive
+ * or change the Moodle username (D-038 addendum). `moodle_user_id` is the
+ * durable identity link; the username was fixed at `provisionUser` time and
+ * stays fixed for the account's lifetime.
+ */
+export interface UpdateUserInput {
+  lmsUserId: LmsUserId;
+  fullName?: string;
+  email?: string;
 }
 
 export interface LmsCourse {
@@ -170,7 +194,9 @@ export class LmsUnavailableError extends Error {
  * operator can find it and a caller cannot couple to it.
  */
 export class LmsOperationError extends Error {
-  constructor(readonly operation: 'PROVISION' | 'ENROL' | 'SYNC' | 'CREATE_COURSE') {
+  constructor(
+    readonly operation: 'PROVISION' | 'ENROL' | 'SYNC' | 'CREATE_COURSE' | 'UPDATE_USER',
+  ) {
     super(`LMS_${operation}_REJECTED`);
     this.name = 'LmsOperationError';
   }

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { expect, type Page } from '@playwright/test';
 
+import { DEPARTMENTS } from '../src/lib/auth-constants';
 import { tokenFromEmail } from './mailpit';
 
 /**
@@ -25,7 +26,7 @@ export interface Account {
 }
 
 /** A department from the registration dropdown (DEPARTMENTS in auth-constants). */
-export const DEPARTMENT = 'تقنية المعلومات';
+export const DEPARTMENT = DEPARTMENTS[0]!;
 
 export function accountFor(label: string): Account {
   return {

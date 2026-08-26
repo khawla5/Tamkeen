@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { signedInEmployee } from './account';
+import { DEPARTMENT, signedInEmployee } from './account';
 import { seedPassedCourseCertificate, type SeededCertificate } from './certificate-fixtures';
 import { completeAssessment, confirmFirstPath } from './journey';
 import { assertMailpitReachable } from './mailpit';
@@ -107,7 +107,7 @@ test.describe('Phase 3 journey', () => {
     /* Everything absent here is absent by design (§2, D-016). */
     const text = (await visitor.locator('body').textContent()) ?? '';
     expect(text).not.toContain('@ministry.gov.example');
-    expect(text).not.toContain('تقنية المعلومات');
+    expect(text).not.toContain(DEPARTMENT);
     expect(text).not.toMatch(/\d{2,3}%/);
 
     await visitor.goto('/verify/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');

@@ -160,6 +160,36 @@ test.describe('Phase 5 — the administered surface', () => {
     await expect(card).toContainText('غير معروض');
   });
 
+  test('§4C.4 — hiding and deleting are different words, and the empty path can be deleted', async () => {
+    const card = page.getByRole('listitem').filter({ hasText: pathName });
+    await card.getByRole('button', { name: 'إدارة' }).click();
+
+    const panel = page.getByRole('dialog');
+    await expect(panel.getByRole('heading', { name: 'إدارة المسار' })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    /* Two removals, two sections, two words — and the estimate field and the
+       add-course button are gone from the form (TAM-133). */
+    await expect(panel.getByRole('heading', { name: 'عرض المسار على الموظفين' })).toBeVisible();
+    await expect(panel.getByRole('heading', { name: 'حذف المسار' })).toBeVisible();
+    await expect(panel.getByLabel(/المدة/)).toHaveCount(0);
+    await expect(panel.getByRole('button', { name: 'إضافة دورة' })).toHaveCount(0);
+
+    /* Nobody has ever chosen this one, so the irreversible option is available
+       — and it asks once more, naming the path and offering the reversible
+       alternative, before it goes. */
+    await panel.getByRole('button', { name: 'حذف نهائي' }).click();
+
+    const confirm = page.getByRole('dialog').last();
+    await expect(confirm.getByText(new RegExp(pathName))).toBeVisible();
+    await expect(confirm.getByText(/إن أردت إخفاءه مع الاحتفاظ به/)).toBeVisible();
+    await confirm.getByRole('button', { name: 'حذف نهائي' }).click();
+
+    await expect(page.getByText('حُذف المسار نهائيًا.')).toBeVisible({ timeout: 15_000 });
+    await expect(card).toHaveCount(0);
+  });
+
   test('§4C.4 — the 5-10 bounds are stated on the screen that builds paths', async () => {
     /* Shown where the rule bites, not only in Settings: somebody adding a sixth
        course needs the bound in front of them (D-074). */

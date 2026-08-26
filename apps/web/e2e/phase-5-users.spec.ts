@@ -80,7 +80,9 @@ test.describe('Phase 5 — user management', () => {
     await adminPage.getByRole('link', { name: 'الحسابات' }).click();
     await expect(adminPage.getByRole('heading', { name: 'إدارة الحسابات' })).toBeVisible();
 
-    await adminPage.getByRole('button', { name: 'الجهات' }).click();
+    /* The organisations appear under the entity-role filter — there is no tab
+       to switch to any more (TAM-131). */
+    await adminPage.getByLabel('الدور').selectOption('ENTITY');
     await adminPage.getByRole('button', { name: 'إضافة جهة' }).click();
 
     /* Labels, not CSS selectors: a label that getByLabel cannot find is a field
@@ -92,26 +94,35 @@ test.describe('Phase 5 — user management', () => {
 
     await adminPage.getByRole('button', { name: 'إنشاء الجهة' }).click();
 
-    await expect(adminPage.getByText(entityName)).toBeVisible({ timeout: 15_000 });
+    /* Scoped to this run's card: a development database accumulates
+       organisations, and "0 حساب · 0 دورة" is true of every unstaffed one. */
+    const card = adminPage.getByRole('listitem').filter({ hasText: entityName });
+
+    await expect(card).toBeVisible({ timeout: 15_000 });
     /* A shell nobody has staffed yet, and the counts say so rather than leaving
        it to be discovered later. */
-    await expect(adminPage.getByText('0 حساب · 0 دورة')).toBeVisible();
+    await expect(card.getByText('0 حساب · 0 دورة')).toBeVisible();
   });
 
   test('provisioning an account never shows the administrator a password', async () => {
     await adminPage.getByRole('button', { name: 'إنشاء حساب' }).click();
 
-    await adminPage.getByLabel('البريد الإلكتروني').fill(invitedEmail);
-    await adminPage.getByLabel('الاسم').fill('منسّق الجهة');
-    await adminPage.getByLabel('الرقم الوظيفي').fill(`ENT-${stamp}`);
-    await adminPage.getByLabel('الإدارة').fill('التدريب');
-    await adminPage.getByLabel('الدور').selectOption('ENTITY');
+    /* Scoped to the dialog: the accounts filters stay on the page behind it and
+       one of them is also labelled «الدور» (TAM-131 removed the tab that used
+       to unmount them). */
+    const dialog = adminPage.getByRole('dialog', { name: 'إنشاء حساب' });
+
+    await dialog.getByLabel('البريد الإلكتروني').fill(invitedEmail);
+    await dialog.getByLabel('الاسم').fill('منسّق الجهة');
+    await dialog.getByLabel('الرقم الوظيفي').fill(`ENT-${stamp}`);
+    await dialog.getByLabel('الإدارة').fill('التدريب');
+    await dialog.getByLabel('الدور').selectOption('ENTITY');
 
     /* The organisation selector appears only for this role — a control that can
        never apply to an employee should not be on the screen at all (§3). */
-    await adminPage.getByLabel('الجهة').selectOption({ label: entityName });
+    await dialog.getByLabel('الجهة').selectOption({ label: entityName });
 
-    await adminPage.getByRole('button', { name: 'إرسال الدعوة' }).click();
+    await dialog.getByRole('button', { name: 'إرسال الدعوة' }).click();
 
     await expect(adminPage.getByText('أُرسلت الدعوة')).toBeVisible({ timeout: 15_000 });
     await expect(adminPage.getByText(invitedEmail)).toBeVisible();
@@ -132,12 +143,10 @@ test.describe('Phase 5 — user management', () => {
   test('the new account is listed as awaiting activation, not as active', async () => {
     await adminPage.getByRole('button', { name: 'إلغاء' }).click();
 
-    /* Back to the accounts tab: creating an account is the *page's* primary
-       action and is offered from either tab, so closing the dialog leaves the
-       organisations list where the previous test left it. Switching the tab
-       under the administrator instead would move the ground they are standing
-       on the moment they finish an unrelated task. */
-    await adminPage.getByRole('button', { name: 'الحسابات', exact: true }).click();
+    /* No tab to come back from (TAM-131): the accounts table was on screen the
+       whole time, under the entity-role filter the previous step was working
+       in — which is exactly where an account just created for an organisation
+       belongs. Closing the dialog leaves the administrator where they were. */
     await adminPage.getByLabel('بحث').fill(invitedEmail);
 
     const row = adminPage.getByRole('row').filter({ hasText: invitedEmail });
@@ -180,6 +189,10 @@ test.describe('Phase 5 — user management', () => {
   });
 
   test('an administrator cannot suspend their own account', async () => {
+    /* The role filter is still on «جهة» from the organisation work above, and
+       an administrator's own account is not an entity account. Clearing it is
+       what the removed tab used to do by remounting the view (TAM-131). */
+    await adminPage.getByLabel('الدور').selectOption('');
     await adminPage.getByLabel('بحث').fill(admin.email);
 
     const row = adminPage.getByRole('row').filter({ hasText: admin.email });

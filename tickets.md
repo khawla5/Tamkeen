@@ -793,3 +793,37 @@
 
 - **Labels:** `moodle-embed`, `frontend`, `backend`, `moodle-plugin`
 - **What shipped (2026-08-25):** `LmsPort.getCourseOutline` (real + mock, contract case), `GET /api/courses/:id/outline` (same gate as launch), plugin 0.3.1 (`tamkeen:ready` carries `cmid`), `MoodleEmbed` exposes `navigate(url)` through a ref and reports `onReady({ moduleId })`, the player panel shows «النشاط n من N · name» (or «صفحة الدورة · N أنشطة») with «السابق / التالي» that move the frame without a new launch and stay in step with in-frame navigation. Tests: player +2, web 521, API 164; proven live.
+> **Epic label: `admin-polish`** — a pass over the super-admin portal at the ministry's direction (2026-08-25), one ticket per page, worked in that order on `feature/tam-130-admin-polish`. Everything below is **DONE** and shipped in **PR #24** (five commits, awaiting review); the acceptance notes record what was actually asserted. Decisions: D-098 (two removals for a path), D-099 (the dashboard's distribution), D-100 (the dialog).
+
+## TAM-130 — Admin home: a distribution that means something, and nothing on it that cannot be acted on — **DONE**
+
+- **Labels:** `admin-polish`, `frontend`, `backend`
+- **Priority:** High (first of the epic)
+- **What shipped:** the Holland-code list became a **career-type distribution** — six rows by dominant RIASEC letter with the Arabic type name, the employee count and share, and the number of paths offered for that letter beside it, with «لا مسار معروض» in words when there are none (D-099). `AdminDashboardView.codeDistribution` → `letterDistribution`; §4C.8's reports keep the code breakdown. The **unverified-accounts tile is gone** (§4C.2 badges each such account beside the button that fixes it), the **recent-activity list scrolls in its own focusable, labelled region** (WCAG 2.1.1) so integration health stays near the fold, and the **unpublished-draft flag** the server had always sent is rendered as a link into §4C.3 — it had never been displayed.
+- **Also:** the admin portal's retired-token sweep — `bg-gold`, `border-s-gold`, `border-gold` survived D-069, so the distribution bars had no fill and three notice edges no colour. Mapped to primary / info / warning.
+- **Acceptance met:** 6 new service unit tests (dominant letter only, all six letters always, size ordering with the canonical tie-break, offered paths only); 6 new page tests (Arabic names not codes, the "no path" wording, the empty state, the removed tile, the scroll region's `tabindex`, the draft link and its absence). Verified in a real browser against the built apps.
+
+## TAM-131 — Accounts: the organisations are a filter away, not a tab away — **DONE**
+
+- **Labels:** `admin-polish`, `frontend`
+- **Priority:** High
+- **What shipped:** the «الحسابات» / «الجهات» tab bar is removed. The organisations panel — with `إضافة جهة` inside it — appears when the role filter is set to «جهة», above the accounts it explains, so supplier onboarding still reads organisation-then-accounts without a mode to discover. The create-account hint now points at the filter rather than the removed tab.
+- **Acceptance met:** page tests assert no tab controls exist, and that the panel and its create button appear only under the entity filter; the e2e was updated at three points where it had leaned on the tab (the tab click itself, an ambiguous «الدور» label now that the filters stay mounted, and the filter reset the tab used to do by remounting). Phase-5 users e2e green.
+
+## TAM-132 — Assessment: remove the back control that undid itself — **DONE**
+
+- **Labels:** `admin-polish`, `frontend`
+- **Priority:** Medium
+- **What shipped:** «رجوع» is gone from the draft editor. It could not work: entering the editor creates the draft, and the page renders the editor whenever a draft exists, so the button returned to the overview for as long as the refetch took and landed back where it started. The two real exits are unchanged and both sit in the editor's header — publish the version, or discard the draft.
+- **Acceptance met:** a page test asserts the control's absence and both exits' presence; `backToOverview` dropped from the catalogue with its last caller. **Known limitation, unchanged by this ticket:** while a draft exists the overview (active version + history) is unreachable — noted in progress.md as owed.
+
+## TAM-133 — Paths: centre the modal, simplify the form, and give a path two removals — **DONE**
+
+- **Labels:** `admin-polish`, `frontend`, `backend`
+- **Priority:** High
+- **What shipped:**
+  1. **Centring (also fixes TAM-131's modal, and every other admin dialog).** `AdminDialog` gained `m-auto` — without it Tailwind's preflight leaves a modal `<dialog>` pinned to the top _right_ of an RTL page, which is what was reported. Same commit: a live backdrop token (the old one referenced retired `navy` and rendered transparent), a height cap with the body as the only scroll region, a per-instance title id, and the removal of the `<form method="dialog">` wrapper that had been closing panels behind their own save/retire/activate requests (D-100).
+  2. **Form simplified** — the estimated-duration field and the add-course button are gone (D-098). Course order and removal stay.
+  3. **Hide vs delete** — `DELETE /api/admin/paths/:id`, refused for any path someone ever chose or that a certificate names, reported in advance as `canDelete`, audited both ways, with the P2003 race returned as the same refusal. Two sections, two words, a confirmation that names the path and offers the reversible alternative.
+- **Acceptance met:** 5 new integration tests against real PostgreSQL (the refusal + its audit, a successful delete with cascading membership and the course untouched, the named audit entry, 404 when already gone); 5 new page tests; 7 tests on `AdminDialog` including the centring class and the absent form; a browser test that deletes the path the suite creates. RBAC coverage is automatic — the suite reflects routes off the controller.
+- **Owed, recorded in progress.md:** the learner path card still shows `typicalDurationMinutes`, which now has no editor — deriving it from the path's courses is the fix, and it belongs with the learner-facing screens.

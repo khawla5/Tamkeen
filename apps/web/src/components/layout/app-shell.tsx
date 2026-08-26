@@ -119,7 +119,6 @@ export function AppShell({
               <SidebarNav items={items} indicators={indicators} orientation="horizontal" />
             </div>
           </nav>
-
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">

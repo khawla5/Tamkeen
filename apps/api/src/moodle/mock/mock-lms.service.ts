@@ -14,7 +14,9 @@ import {
   type LmsUserId,
   type LmsUserRef,
   type ProvisionUserInput,
+  type UpdateUserInput,
 } from '../lms.types';
+import { deriveMoodleUsername } from '../real/moodle-identity';
 import { MOCK_COURSES, MOCK_LMS_BASE_URL } from './mock-lms.data';
 
 /**
@@ -53,7 +55,16 @@ function fnv1a(value: string): number {
 export class MockLmsService implements LmsPort {
   private readonly logger = new Logger(MockLmsService.name);
 
-  private readonly users = new Map<LmsUserId, LmsUserRef>();
+  /**
+   * Keyed by `lmsUserId`, holding `derivedUsername` alongside the port's
+   * `LmsUserRef` fields — the mock's mirror of D-038: a real Moodle account
+   * is found by a username derived once, at provisioning, never by an email
+   * lookup. Storing it lets `findUserByEmail` and `provisionUser` resolve the
+   * same way the real adapter does, so an email change that must **not**
+   * relocate the account under a new lookup key fails the same way in tests
+   * as it would against a real Moodle.
+   */
+  private readonly users = new Map<LmsUserId, LmsUserRef & { derivedUsername: string }>();
   private readonly enrolments = new Set<string>();
   /** Which of those enrolments carry editing capabilities (D-060). */
   private readonly authorEnrolments = new Set<string>();
@@ -121,27 +132,82 @@ export class MockLmsService implements LmsPort {
 
   provisionUser(input: ProvisionUserInput): Promise<LmsUserRef> {
     const email = input.email.trim().toLowerCase();
+    const derivedUsername = deriveMoodleUsername(email);
 
-    /* Idempotent by email, exactly as the port requires: a retried
-       registration must not create a second LMS account. */
+    /* Idempotent by the derived username, exactly as the real adapter is
+       (D-038): a retried registration must not create a second LMS account. */
     for (const existing of this.users.values()) {
-      if (existing.email === email) {
-        return Promise.resolve(existing);
+      if (existing.derivedUsername === derivedUsername) {
+        return Promise.resolve({
+          lmsUserId: existing.lmsUserId,
+          email,
+          fullName: existing.fullName,
+        });
       }
     }
 
-    const reference: LmsUserRef = { lmsUserId: this.idFor(email), email };
+    const reference = {
+      lmsUserId: this.idFor(email),
+      email,
+      fullName: input.fullName,
+      derivedUsername,
+    };
     this.users.set(reference.lmsUserId, reference);
 
-    return Promise.resolve(reference);
+    return Promise.resolve({ lmsUserId: reference.lmsUserId, email, fullName: reference.fullName });
   }
 
+  /**
+   * Overwrites the stored name and/or email, the same effect
+   * `core_user_update_users` has on a real Moodle account. Unknown ids are
+   * refused rather than silently accepted, so a caller that raced a real
+   * outage sees the same shape of failure here as it would there.
+   *
+   * **`derivedUsername` is never touched here (D-038 addendum).** A real
+   * Moodle account is found by the username `provisionUser` derived once;
+   * writing a new `email` changes what the account displays, not the key it
+   * is found by. This is what makes a stale lookup by the *old* address
+   * still resolve after an email change, and a lookup by the *new* address
+   * resolve to nothing — the same shape of "invisible" the real adapter has
+   * under a least-privilege token that cannot read Moodle's email index.
+   *
+   * `async`, like `createCourse` and for the same reason: a synchronous throw
+   * from a method typed to return a `Promise` never reaches a caller's
+   * `.catch()`, so the mock would be easier to satisfy than reality.
+   */
+  async updateUser(input: UpdateUserInput): Promise<void> {
+    const existing = this.users.get(input.lmsUserId);
+
+    if (!existing) {
+      throw new LmsOperationError('UPDATE_USER');
+    }
+
+    this.users.set(input.lmsUserId, {
+      ...existing,
+      ...(input.fullName !== undefined ? { fullName: input.fullName } : {}),
+      ...(input.email !== undefined ? { email: input.email.trim().toLowerCase() } : {}),
+    });
+  }
+
+  /**
+   * Resolves by the username `email` derives to, not by a stored email field
+   * (D-038): the real adapter has no email index to search, only the
+   * username it computes from whatever address it is asked to find. Returns
+   * the *queried* address on a match, exactly as the real adapter echoes its
+   * input rather than reading anything back — which is also why an address
+   * `updateUser` wrote is never what this returns.
+   */
   findUserByEmail(email: string): Promise<LmsUserRef | null> {
     const needle = email.trim().toLowerCase();
+    const derivedUsername = deriveMoodleUsername(needle);
 
     for (const existing of this.users.values()) {
-      if (existing.email === needle) {
-        return Promise.resolve(existing);
+      if (existing.derivedUsername === derivedUsername) {
+        return Promise.resolve({
+          lmsUserId: existing.lmsUserId,
+          email: needle,
+          fullName: existing.fullName,
+        });
       }
     }
 

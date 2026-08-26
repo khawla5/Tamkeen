@@ -1,7 +1,8 @@
 'use client';
 
+import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 
 import type { NumberFormat } from '@tamkeen/types';
 
@@ -12,20 +13,40 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { authApi } from '@/lib/api-client';
-import { PASSWORD_MIN_LENGTH } from '@/lib/auth-constants';
+import { Select } from '@/components/ui/select';
+import { authApi, profileApi } from '@/lib/api-client';
+import { DEPARTMENTS, PASSWORD_MIN_LENGTH } from '@/lib/auth-constants';
+import { useApiMutation } from '@/lib/use-api';
+
+type FieldName = 'fullName' | 'department';
+type FieldErrors = Partial<Record<FieldName, string>>;
+
+function validate(form: { fullName: string; department: string }): FieldErrors {
+  const errors: FieldErrors = {};
+
+  if (form.fullName.trim().length === 0) errors.fullName = 'FULL_NAME_REQUIRED';
+  if (form.department.trim().length === 0) errors.department = 'DEPARTMENT_REQUIRED';
+
+  return errors;
+}
 
 /**
  * Profile (§4.12), completed in Phase 5.
  *
- * Phase 1 shipped this read-only and said why: none of the rest was a Phase 1
- * deliverable, and a form that does not work is worse than one that is not there
- * yet. Sub-phase 5.9 pays the debt.
+ * The top card is الاسم الكامل، البريد الإلكتروني، الرقم الوظيفي، الإدارة،
+ * الصلاحية — name and department editable in place, the rest read-only, one
+ * save for both fields rather than per-field autosave. A name change also has
+ * to reach Moodle (the course player renders a learner's name from Moodle's
+ * own record), and firing that on every keystroke would spam an external
+ * system for a field nobody has finished typing — so `PATCH /api/me/profile`
+ * is best-effort about that propagation: a Moodle hiccup is audited
+ * server-side and never blocks or fails this save.
  *
- * **Changing a password requires the current one.** A session cookie is enough
- * to *be* the user, so without that check anyone who reached an unlocked machine
- * could take the account permanently — and the owner would find out at their
- * next sign-in.
+ * The three cards below pay the rest of §4.12's Phase 1 debt. **Changing a
+ * password requires the current one.** A session cookie is enough to *be* the
+ * user, so without that check anyone who reached an unlocked machine could
+ * take the account permanently — and the owner would find out at their next
+ * sign-in.
  *
  * **There is no language selector, and that is a decision rather than an
  * omission** (recorded as a decision, not left as a gap). The interface is
@@ -35,7 +56,27 @@ import { PASSWORD_MIN_LENGTH } from '@/lib/auth-constants';
  */
 export default function ProfilePage() {
   const t = useTranslations('profile');
+  const tErrors = useTranslations('errors');
   const { user, refreshSession } = usePortal();
+
+  const [fullName, setFullName] = useState(user.fullName);
+  const [department, setDepartment] = useState(user.department);
+  /* What is actually saved, separate from `user` — `usePortal()` is not
+     refetched after a save, so comparing against it would leave the form
+     reading "dirty" forever the moment editing succeeds once (the same
+     reasoning the CV builder's own `baseline` state exists for). */
+  const [baseline, setBaseline] = useState({
+    fullName: user.fullName,
+    department: user.department,
+  });
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [saved, setSaved] = useState(false);
+
+  const save = useApiMutation((input: { fullName: string; department: string }) =>
+    profileApi.update(input),
+  );
+
+  const isDirty = fullName !== baseline.fullName || department !== baseline.department;
 
   const roleLabel =
     user.role === 'SUPER_ADMIN'
@@ -44,59 +85,162 @@ export default function ProfilePage() {
         ? t('roleEntity')
         : t('roleEmployee');
 
+  const errorFor = (key: FieldName) => {
+    const code = fieldErrors[key];
+    return code ? tErrors(code) : undefined;
+  };
+
+  /*
+   * The dropdown only ever *offers* the closed list — but the server still
+   * accepts any non-empty department (auth-constants.ts), so an existing
+   * value from before this list existed, or simply not on it, must stay
+   * selected rather than silently blank out or snap to the first option.
+   * Once the employee picks a real option this extra entry drops away on
+   * its own, since `department` no longer needs it.
+   */
+  const departmentOptions =
+    department.length === 0 || DEPARTMENTS.includes(department)
+      ? DEPARTMENTS
+      : [department, ...DEPARTMENTS];
+
+  async function onSave(event: FormEvent) {
+    event.preventDefault();
+    setSaved(false);
+
+    const errors = validate({ fullName, department });
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    const trimmed = { fullName: fullName.trim(), department: department.trim() };
+    const result = await save.run(trimmed);
+
+    if (result) {
+      /* The server's copy wins — it is what was actually validated and saved. */
+      setFullName(result.fullName);
+      setDepartment(result.department);
+      setBaseline({ fullName: result.fullName, department: result.department });
+      setSaved(true);
+      /* Keeps the portal-wide `user` in sync with what was just saved — the
+         same call `DigitsCard` makes after its own save, and safe to make
+         here for the same reason: it no longer re-gates the portal on
+         `isLoading`, so it cannot unmount this confirmation out from under
+         itself. */
+      refreshSession();
+    }
+  }
+
   return (
-    <PortalPage title={t('title')}>
-      {/* Two columns by intent: who you are (facts + the digits preference)
-          beside account security (password, email). Related forms sit
-          together instead of one long scroll; stacks below lg. */}
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('personalHeading')}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-6">
-              <dl className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1">
-                  <dt className="text-sm text-muted-foreground">{t('fullName')}</dt>
-                  <dd className="font-medium">{user.fullName}</dd>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <dt className="text-sm text-muted-foreground">{t('email')}</dt>
-                  {/* The address is Latin script; `dir="ltr"` stops RTL reordering
-                      turning it into something that is not the user's address. */}
-                  <dd dir="ltr" className="text-start font-medium">
-                    {user.email}
-                  </dd>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <dt className="text-sm text-muted-foreground">{t('employeeId')}</dt>
-                  <dd dir="ltr" className="text-start font-medium">
-                    {user.employeeId}
-                  </dd>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <dt className="text-sm text-muted-foreground">{t('department')}</dt>
-                  <dd className="font-medium">{user.department}</dd>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <dt className="text-sm text-muted-foreground">{t('role')}</dt>
-                  <dd className="font-medium">{roleLabel}</dd>
-                </div>
-              </dl>
-              {/* No sign-out here: the header's user menu is the one way out
-                  (D-096) — a second button would be the redundancy §3 forbids. */}
-            </CardContent>
-          </Card>
+    <PortalPage title={t('title')} width="narrow">
+      <>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('personalHeading')}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <form
+              onSubmit={(event) => void onSave(event)}
+              className="flex flex-col gap-6"
+              noValidate
+            >
+              <Field
+                id="profile-full-name"
+                label={t('fullName')}
+                required
+                error={errorFor('fullName')}
+              >
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    value={fullName}
+                    onChange={(event) => setFullName(event.target.value)}
+                    autoComplete="name"
+                  />
+                )}
+              </Field>
 
-          <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
-        </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-semibold text-foreground">{t('email')}</span>
+                {/* The address is Latin script; `dir="ltr"` stops RTL reordering
+                    turning it into something that is not the user's address. */}
+                <span dir="ltr" className="text-start text-sm text-muted-foreground">
+                  {user.email}
+                </span>
+              </div>
 
-        <div className="flex flex-col gap-6">
-          <PasswordCard />
-          <EmailCard current={user.email} />
-        </div>
-      </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-semibold text-foreground">{t('employeeId')}</span>
+                <span dir="ltr" className="text-start text-sm text-muted-foreground">
+                  {user.employeeId}
+                </span>
+              </div>
+
+              <Field
+                id="profile-department"
+                label={t('department')}
+                required
+                error={errorFor('department')}
+              >
+                {(fieldProps) => (
+                  <Select
+                    {...fieldProps}
+                    value={department}
+                    onChange={(event) => setDepartment(event.target.value)}
+                  >
+                    <option value="" disabled>
+                      {t('departmentPlaceholder')}
+                    </option>
+                    {departmentOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-semibold text-foreground">{t('role')}</span>
+                <span className="text-sm text-muted-foreground">{roleLabel}</span>
+              </div>
+
+              {/* A failed save is reported where the action is, not as a page
+                  error — the form is still on screen and still editable. */}
+              {save.error ? (
+                <p role="alert" className="text-sm font-medium text-destructive">
+                  {t('saveFailed')}
+                </p>
+              ) : null}
+
+              <div className="flex items-center gap-3">
+                {/* Same visible "حفظ" every save button on this page uses, but
+                    a card-specific accessible name — the digits card below
+                    has one too, and two controls both announced as plain
+                    "حفظ" would be indistinguishable to a screen reader. */}
+                <Button
+                  type="submit"
+                  aria-label={t('saveAriaLabel')}
+                  disabled={save.isPending || !isDirty}
+                >
+                  {save.isPending ? t('saving') : t('save')}
+                </Button>
+
+                {saved && !isDirty && !save.isPending ? (
+                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Check aria-hidden="true" className="size-4 text-success" />
+                    {t('saved')}
+                  </span>
+                ) : null}
+              </div>
+            </form>
+            {/* No sign-out here: the header's user menu is the one way out
+                (D-096) — a second button would be the redundancy §3 forbids. */}
+          </CardContent>
+        </Card>
+
+        <EmailCard current={user.email} />
+        <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
+        <PasswordCard />
+      </>
     </PortalPage>
   );
 }
@@ -292,7 +436,12 @@ function DigitsCard({
 
         {/* Save appears only when there is something to save (§3). */}
         {value !== (current ?? 'system') ? (
-          <Button className="self-start" disabled={busy} onClick={() => void save()}>
+          <Button
+            className="self-start"
+            aria-label={t('digitsSaveAriaLabel')}
+            disabled={busy}
+            onClick={() => void save()}
+          >
             {t('digitsSave')}
           </Button>
         ) : null}

@@ -10,6 +10,11 @@ import { renderWithProviders } from '@/test/render';
 /**
  * §4.12, finished in Phase 5.
  *
+ * **Name and department are the one editable pair in the top card.** Save is
+ * one action for both, not per-field autosave — a name change also has to
+ * reach Moodle, and firing that on every keystroke would spam an external
+ * system for a field nobody has finished typing.
+ *
  * **The current password is the whole security of the change form.** A session
  * cookie is enough to *be* the user, so a change form that trusts the session
  * alone hands the account to anyone who reaches an unlocked machine — and the
@@ -23,16 +28,16 @@ import { renderWithProviders } from '@/test/render';
  */
 
 const api = vi.hoisted(() => ({
-  logout: vi.fn(),
   changePassword: vi.fn(),
   changeEmail: vi.fn(),
   setNumberFormat: vi.fn(),
+  update: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api-client')>('@/lib/api-client');
 
-  return { ...actual, authApi: api };
+  return { ...actual, authApi: api, profileApi: { update: api.update } };
 });
 
 const portal = vi.hoisted(() => ({
@@ -52,26 +57,21 @@ vi.mock('@/components/layout/portal-page', () => ({
   ),
 }));
 
-const replace = vi.fn();
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace }),
-}));
-
 const { default: ProfilePage } = await import('@/app/(portal)/profile/page');
+
+const BASE_USER: CurrentUser = {
+  id: 'user-1',
+  email: 'sara@ministry.gov.example',
+  fullName: 'سارة العتيبي',
+  employeeId: 'E-1042',
+  department: 'تقنية المعلومات',
+  role: 'EMPLOYEE',
+  numberFormat: null,
+};
 
 function setUser(overrides: Partial<CurrentUser> = {}) {
   portal.value = {
-    user: {
-      id: 'user-1',
-      email: 'sara@ministry.gov.example',
-      fullName: 'سارة العتيبي',
-      employeeId: 'EMP-2201',
-      department: 'الإدارة العامة للتدريب',
-      role: 'EMPLOYEE',
-      numberFormat: null,
-      ...overrides,
-    },
+    user: { ...BASE_USER, ...overrides },
     refreshSession: vi.fn(),
   };
 }
@@ -81,20 +81,26 @@ beforeEach(() => {
   api.changePassword.mockResolvedValue(undefined);
   api.changeEmail.mockResolvedValue({ status: 'EMAIL_CHANGE_PENDING' });
   api.setNumberFormat.mockResolvedValue(undefined);
-  api.logout.mockResolvedValue(undefined);
   setUser();
 });
 
 describe('profile — personal information', () => {
-  it('shows the account as it stands', () => {
+  it('shows all five fields, in order: name, email, employee id, department, role', () => {
     renderWithProviders(<ProfilePage />);
 
-    expect(screen.getByText('سارة العتيبي')).toBeInTheDocument();
+    expect(screen.getByLabelText('الاسم الكامل')).toHaveValue('سارة العتيبي');
     expect(screen.getByText('sara@ministry.gov.example')).toBeInTheDocument();
-    /* TAM-109's display half: the employee number and department are facts of
-       the account and belong with the rest. */
-    expect(screen.getByText('EMP-2201')).toBeInTheDocument();
-    expect(screen.getByText('الإدارة العامة للتدريب')).toBeInTheDocument();
+    expect(screen.getByText('E-1042')).toBeInTheDocument();
+    expect(screen.getByLabelText('الإدارة')).toHaveValue('تقنية المعلومات');
+    expect(screen.getByText('موظف')).toBeInTheDocument();
+  });
+
+  it('renders employee id, email and role as text, not as inputs', () => {
+    renderWithProviders(<ProfilePage />);
+
+    expect(screen.queryByLabelText('البريد الإلكتروني')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('الرقم الوظيفي')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('الصلاحية')).not.toBeInTheDocument();
   });
 
   it('renders the address left-to-right so it stays the address', () => {
@@ -104,6 +110,95 @@ describe('profile — personal information', () => {
        punctuation reorders and the text on screen is not what would be typed
        back in. */
     expect(screen.getByText('sara@ministry.gov.example')).toHaveAttribute('dir', 'ltr');
+  });
+});
+
+describe('profile — editing name and department', () => {
+  it('keeps save disabled until something actually changes', async () => {
+    renderWithProviders(<ProfilePage />);
+    const user = userEvent.setup();
+
+    const save = screen.getByRole('button', { name: 'حفظ الاسم والإدارة' });
+    expect(save).toBeDisabled();
+
+    await user.type(screen.getByLabelText('الاسم الكامل'), ' إضافة');
+    expect(save).toBeEnabled();
+  });
+
+  it('rejects an empty full name inline, without calling the API', async () => {
+    renderWithProviders(<ProfilePage />);
+    const user = userEvent.setup();
+
+    const nameInput = screen.getByLabelText('الاسم الكامل');
+    await user.clear(nameInput);
+    await user.click(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' }));
+
+    expect(await screen.findByText('الاسم الكامل مطلوب.')).toBeInTheDocument();
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
+  it('offers the department only as a closed list, with no selectable empty option', () => {
+    renderWithProviders(<ProfilePage />);
+
+    /* A native <select> can't be "cleared" the way a text input can — the
+       guarantee against an empty department now lives in the placeholder
+       being unselectable, not in post-submit validation reachable through
+       the UI. */
+    expect(screen.getByRole('option', { name: 'اختر الإدارة' })).toBeDisabled();
+    expect(screen.getByLabelText('الإدارة').tagName).toBe('SELECT');
+  });
+
+  it('picking a department from the list marks the form dirty', async () => {
+    renderWithProviders(<ProfilePage />);
+    const user = userEvent.setup();
+
+    const save = screen.getByRole('button', { name: 'حفظ الاسم والإدارة' });
+    expect(save).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText('الإدارة'), 'المديرية العامة للجوازات');
+    expect(save).toBeEnabled();
+  });
+
+  it('saves the trimmed values, shows a saved confirmation and refreshes the session', async () => {
+    api.update.mockResolvedValue({
+      ...BASE_USER,
+      fullName: 'سارة الجديدة',
+      department: 'تقنية المعلومات',
+    });
+
+    renderWithProviders(<ProfilePage />);
+    const user = userEvent.setup();
+
+    const nameInput = screen.getByLabelText('الاسم الكامل');
+    await user.clear(nameInput);
+    await user.type(nameInput, '  سارة الجديدة  ');
+    await user.click(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' }));
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update).toHaveBeenCalledWith({
+      fullName: 'سارة الجديدة',
+      department: 'تقنية المعلومات',
+    });
+
+    expect(await screen.findByText('تم الحفظ')).toBeInTheDocument();
+    /* Nothing left to save — the server's copy is now the baseline. */
+    expect(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' })).toBeDisabled();
+    /* Keeps the portal-wide user in sync, same as the digits card's save. */
+    expect(portal.value.refreshSession).toHaveBeenCalled();
+  });
+
+  it('reports a failed save without losing the edit, and stays retryable', async () => {
+    api.update.mockRejectedValue(new Error('network'));
+
+    renderWithProviders(<ProfilePage />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText('الاسم الكامل'), ' إضافة');
+    await user.click(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' }));
+
+    expect(await screen.findByText('تعذّر حفظ البيانات. حاول مرة أخرى.')).toBeInTheDocument();
+    expect(screen.getByLabelText('الاسم الكامل')).toHaveValue('سارة العتيبي إضافة');
+    expect(screen.getByRole('button', { name: 'حفظ الاسم والإدارة' })).toBeEnabled();
   });
 });
 
@@ -219,11 +314,11 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     const user = userEvent.setup();
     renderWithProviders(<ProfilePage />);
 
-    expect(screen.queryByRole('button', { name: 'حفظ' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'حفظ شكل الأرقام' })).not.toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText(/الأرقام المعروضة/), 'arabic-indic');
 
-    expect(screen.getByRole('button', { name: 'حفظ' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'حفظ شكل الأرقام' })).toBeInTheDocument();
   });
 
   it('saves the chosen format and refreshes the session so the app re-renders', async () => {
@@ -231,7 +326,7 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     renderWithProviders(<ProfilePage />);
 
     await user.selectOptions(screen.getByLabelText(/الأرقام المعروضة/), 'arabic-indic');
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await user.click(screen.getByRole('button', { name: 'حفظ شكل الأرقام' }));
 
     await waitFor(() => expect(api.setNumberFormat).toHaveBeenCalledWith('arabic-indic'));
     /* Without the refresh the preference is stored but the page keeps rendering
@@ -246,7 +341,7 @@ describe('profile — the digits preference (§4.12, D-018)', () => {
     renderWithProviders(<ProfilePage />);
 
     await user.selectOptions(screen.getByLabelText(/الأرقام المعروضة/), 'system');
-    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await user.click(screen.getByRole('button', { name: 'حفظ شكل الأرقام' }));
 
     /* Not the string "system" — the column is nullable precisely so "no
        preference" and "prefers Western" stay distinguishable. */

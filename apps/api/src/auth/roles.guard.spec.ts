@@ -20,8 +20,8 @@ const user = (role: AuthenticatedUser['role']): AuthenticatedUser => ({
   id: 'user-1',
   email: 'someone@ministry.gov.example',
   fullName: 'مستخدم',
-  employeeId: 'EMP-0001',
-  department: 'تقنية المعلومات',
+  employeeId: 'EMP-1',
+  department: 'الإدارة',
   role,
   sessionId: 'session-1',
 });

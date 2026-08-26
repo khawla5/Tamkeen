@@ -9,21 +9,22 @@ import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
+import { MockLmsService } from '../src/moodle/mock/mock-lms.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
- * §4.12's two deferred items, over real HTTP against a real database.
+ * §4.12's profile surface, over real HTTP against a real database (§2B).
  *
- * **The password change is the security-carrying half.** A session cookie is
- * enough to *be* the user, so the current password is the only thing standing
- * between an unlocked machine and a permanent account takeover — and the change
- * has to end the other sessions, or a password changed *because* it may be known
- * elsewhere leaves whoever knew it still signed in.
- *
- * **The preference is the harmless half, and must stay that way.** It is written
- * by the same person it describes and read only by the formatting layer, so the
- * assertions here are about the null case: "no preference" and "prefers Western"
- * have to stay distinguishable, or the ministry can never change the default for
+ * Three deferred items, all covered here. **The name/department edit** is
+ * the audit trail's "which fields, never values" rule plus the best-effort
+ * Moodle name propagation it exists for. **The password change** is the
+ * security-carrying one: a session cookie is enough to *be* the user, so the
+ * current password is the only thing standing between an unlocked machine and
+ * a permanent account takeover — and the change has to end the other
+ * sessions, or a password changed *because* it may be known elsewhere leaves
+ * whoever knew it still signed in. **The digits preference** is the harmless
+ * one, and must stay that way: "no preference" and "prefers Western" have to
+ * stay distinguishable, or the ministry can never change the default for
  * anybody without overwriting a choice.
  */
 
@@ -59,9 +60,10 @@ class EmailCapture {
 const PASSWORD = 'a-sufficiently-long-password';
 const RUN_ID = randomBytes(4).toString('hex');
 
-describe('Profile — password and preferences (e2e)', () => {
+describe('Profile (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let lms: MockLmsService;
 
   let csrfCookie: string;
   let csrfToken: string;
@@ -84,6 +86,7 @@ describe('Profile — password and preferences (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    lms = app.get(MockLmsService);
 
     const issued = await csrf();
     csrfCookie = issued.cookie;
@@ -134,7 +137,7 @@ describe('Profile — password and preferences (e2e)', () => {
 
   const get = (path: string, session: string) => request(server()).get(path).set('Cookie', session);
 
-  /** A fresh account per test, so a password change in one cannot reach another. */
+  /** A fresh account per test, so a change in one cannot reach another. */
   async function account(label: string): Promise<string> {
     const email = `prof-${RUN_ID}-${label}@ministry.gov.example`;
 
@@ -159,6 +162,215 @@ describe('Profile — password and preferences (e2e)', () => {
 
     return cookies.find((value) => value.startsWith('tamkeen_session='))!.split(';')[0]!;
   }
+
+  async function userIdFor(session: string): Promise<string> {
+    const me = await get('/api/auth/me', session).expect(200);
+    return (me.body as { id: string }).id;
+  }
+
+  describe('PATCH /api/me/profile — name and department', () => {
+    it('exposes employeeId and department on the session user', async () => {
+      const email = await account('me-fields');
+      const session = await signIn(email);
+
+      const response = await get('/api/auth/me', session).expect(200);
+
+      expect(response.body).toMatchObject({
+        fullName: 'موظف الملف الشخصي',
+        department: 'قسم',
+        employeeId: expect.stringContaining(`P-${RUN_ID}`) as string,
+        role: 'EMPLOYEE',
+      });
+    });
+
+    it('requires a session', async () => {
+      await request(server())
+        .patch('/api/me/profile')
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ fullName: 'اسم جديد', department: 'إدارة جديدة' })
+        .expect(401);
+    });
+
+    it('rejects an empty full name', async () => {
+      const email = await account('empty-name');
+      const session = await signIn(email);
+
+      const response = await send(
+        'patch',
+        '/api/me/profile',
+        { fullName: '   ', department: 'إدارة جديدة' },
+        session,
+      ).expect(400);
+
+      expect(JSON.stringify(response.body)).toContain('FULL_NAME_REQUIRED');
+    });
+
+    it('rejects an empty department', async () => {
+      const email = await account('empty-dept');
+      const session = await signIn(email);
+
+      const response = await send(
+        'patch',
+        '/api/me/profile',
+        { fullName: 'اسم جديد', department: '' },
+        session,
+      ).expect(400);
+
+      expect(JSON.stringify(response.body)).toContain('DEPARTMENT_REQUIRED');
+    });
+
+    it('refuses to change the employee id or role through the body', async () => {
+      const email = await account('whitelist');
+      const session = await signIn(email);
+
+      /* forbidNonWhitelisted (§2 security baseline): a field this DTO does not
+         declare is a rejected request, not a silently ignored one. */
+      await send(
+        'patch',
+        '/api/me/profile',
+        { fullName: 'اسم جديد', department: 'إدارة جديدة', role: 'SUPER_ADMIN', employeeId: 'X' },
+        session,
+      ).expect(400);
+    });
+
+    it('updates the name and department, and returns the saved view', async () => {
+      const email = await account('update');
+      const session = await signIn(email);
+
+      const response = await send(
+        'patch',
+        '/api/me/profile',
+        { fullName: 'اسم محدّث', department: 'إدارة محدّثة' },
+        session,
+      ).expect(200);
+
+      expect(response.body).toMatchObject({ fullName: 'اسم محدّث', department: 'إدارة محدّثة' });
+
+      const again = await get('/api/auth/me', session).expect(200);
+      expect(again.body).toMatchObject({ fullName: 'اسم محدّث', department: 'إدارة محدّثة' });
+    });
+
+    it('audits which fields changed, never their values', async () => {
+      const email = await account('audit-fields');
+      const session = await signIn(email);
+      const userId = await userIdFor(session);
+
+      /* Only the department actually changes here — the full name is resent
+         unchanged, and the audit trail must not claim it did. */
+      await send(
+        'patch',
+        '/api/me/profile',
+        { fullName: 'موظف الملف الشخصي', department: 'إدارة مغايرة' },
+        session,
+      ).expect(200);
+
+      const entry = await prisma.auditLog.findFirst({
+        where: { actorUserId: userId, action: 'PROFILE_UPDATED' },
+        orderBy: { occurredAt: 'desc' },
+      });
+
+      expect(entry).toMatchObject({ outcome: 'SUCCESS', targetType: 'user', targetId: userId });
+      /* The field name, and only the field name — never "إدارة مغايرة" or any
+         other value, which would be exactly the PII an audit log must not hold. */
+      expect(entry?.metadata).toEqual({ fields: 'department' });
+    });
+
+    it('is a no-op when resubmitted with unchanged values — no audit entry', async () => {
+      const email = await account('noop');
+      const session = await signIn(email);
+      const userId = await userIdFor(session);
+
+      const before = await prisma.auditLog.count({
+        where: { actorUserId: userId, action: 'PROFILE_UPDATED' },
+      });
+
+      await send(
+        'patch',
+        '/api/me/profile',
+        { fullName: 'موظف الملف الشخصي', department: 'قسم' },
+        session,
+      ).expect(200);
+
+      const after = await prisma.auditLog.count({
+        where: { actorUserId: userId, action: 'PROFILE_UPDATED' },
+      });
+
+      expect(after).toBe(before);
+    });
+
+    it('propagates a name change to Moodle for a provisioned user', async () => {
+      const email = await account('lms-sync');
+      const session = await signIn(email);
+      const userId = await userIdFor(session);
+
+      const provisioned = await lms.provisionUser({
+        email,
+        fullName: 'موظف الملف الشخصي',
+        externalUserId: userId,
+      });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { moodleUserId: provisioned.lmsUserId },
+      });
+
+      await send(
+        'patch',
+        '/api/me/profile',
+        { fullName: 'اسم تمكيني', department: 'قسم' },
+        session,
+      ).expect(200);
+
+      /* The property this whole feature exists for: the course player renders
+         the learner's name from Moodle's own record, so the LMS side must
+         actually hold the new name, not just our database. */
+      const onLms = await lms.findUserByEmail(email);
+      expect(onLms?.fullName).toBe('اسم تمكيني');
+    });
+
+    it('does not touch Moodle for a user who was never provisioned', async () => {
+      const email = await account('unprovisioned');
+      const session = await signIn(email);
+
+      await send(
+        'patch',
+        '/api/me/profile',
+        { fullName: 'اسم آخر', department: 'قسم' },
+        session,
+      ).expect(200);
+
+      /* Never provisioned in the mock at all — if the service had reached for
+         moodle.updateUser regardless, there would be a record to find here. */
+      expect(await lms.findUserByEmail(email)).toBeNull();
+    });
+
+    it('saves successfully and audits the failure when Moodle propagation fails', async () => {
+      const email = await account('lms-fail');
+      const session = await signIn(email);
+      const userId = await userIdFor(session);
+
+      /* An id the mock never provisioned — updateUser refuses it exactly as a
+         real Moodle would refuse an unknown account, without this test having
+         to fabricate an outage. */
+      await prisma.user.update({ where: { id: userId }, data: { moodleUserId: 8_888_888 } });
+
+      const response = await send(
+        'patch',
+        '/api/me/profile',
+        { fullName: 'اسم رغم الفشل', department: 'قسم' },
+        session,
+      ).expect(200);
+
+      /* The save itself is unaffected by the LMS refusing — that is the whole
+         point of best-effort propagation. */
+      expect(response.body).toMatchObject({ fullName: 'اسم رغم الفشل' });
+
+      const failure = await prisma.auditLog.findFirst({
+        where: { actorUserId: userId, action: 'PROFILE_LMS_SYNC_FAILED' },
+      });
+      expect(failure).toMatchObject({ outcome: 'FAILURE', targetType: 'user', targetId: userId });
+    });
+  });
 
   describe('changing your own password', () => {
     it('refuses an unauthenticated request', async () => {
@@ -578,6 +790,81 @@ describe('Profile — password and preferences (e2e)', () => {
       });
 
       await send('post', '/api/auth/confirm-email-change', { token }).expect(409);
+    });
+
+    it('updates Moodle’s email for a provisioned user, and leaves the username stable (D-038 addendum)', async () => {
+      const email = await account('em-lms-sync');
+      const target = `prof-${RUN_ID}-em-lms-sync-new@ministry.gov.example`;
+      const userId = await userIdFor(await signIn(email));
+
+      const provisioned = await lms.provisionUser({
+        email,
+        fullName: 'موظف مزود',
+        externalUserId: userId,
+      });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { moodleUserId: provisioned.lmsUserId },
+      });
+
+      const token = await requestChange(email, target);
+      await send('post', '/api/auth/confirm-email-change', { token }).expect(200);
+
+      /* The account is still reachable by the *original* address — its
+         Moodle username was derived once, at provisioning, and this change
+         must not have moved it (D-038 addendum). */
+      const byOriginal = await lms.findUserByEmail(email);
+      expect(byOriginal?.lmsUserId).toBe(provisioned.lmsUserId);
+
+      /* And not reachable by the new one: no account holds a username
+         derived from it, since re-deriving on an email change is exactly
+         what D-038 forbids. This is the real adapter's constraint too, not
+         a mock-only quirk. */
+      expect(await lms.findUserByEmail(target)).toBeNull();
+    });
+
+    it('does not touch Moodle for a user who was never provisioned', async () => {
+      const email = await account('em-unprovisioned');
+      const target = `prof-${RUN_ID}-em-unprovisioned-new@ministry.gov.example`;
+      const token = await requestChange(email, target);
+
+      await send('post', '/api/auth/confirm-email-change', { token }).expect(200);
+
+      /* Never provisioned in the mock at all — if the service had reached
+         for moodle.updateUser regardless, there would be a record to find. */
+      expect(await lms.findUserByEmail(email)).toBeNull();
+      expect(await lms.findUserByEmail(target)).toBeNull();
+    });
+
+    it('confirms successfully and audits the failure when Moodle propagation fails', async () => {
+      const email = await account('em-lms-fail');
+      const target = `prof-${RUN_ID}-em-lms-fail-new@ministry.gov.example`;
+      const userId = await userIdFor(await signIn(email));
+
+      /* An id the mock never provisioned — updateUser refuses it exactly as
+         a real Moodle would refuse an unknown account, without this test
+         having to fabricate an outage. */
+      await prisma.user.update({ where: { id: userId }, data: { moodleUserId: 8_888_887 } });
+
+      const token = await requestChange(email, target);
+
+      /* The confirmation itself is unaffected by the LMS refusing — that is
+         the whole point of best-effort propagation (§4.12, D-036). */
+      await send('post', '/api/auth/confirm-email-change', { token }).expect(200);
+
+      const moved = await prisma.user.findUnique({ where: { email: target } });
+      expect(moved).not.toBeNull();
+
+      const failure = await prisma.auditLog.findFirst({
+        where: { actorUserId: userId, action: 'PROFILE_LMS_SYNC_FAILED' },
+        orderBy: { occurredAt: 'desc' },
+      });
+      expect(failure).toMatchObject({
+        outcome: 'FAILURE',
+        targetType: 'user',
+        targetId: userId,
+        metadata: { field: 'email' },
+      });
     });
   });
 });

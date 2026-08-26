@@ -23,20 +23,18 @@ export const EMPLOYEE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{3,19}$/;
 export const FULL_NAME_MIN_LENGTH = 3;
 
 /**
- * The ministry's departments, as the registration dropdown offers them.
- * PLACEHOLDER until the ministry supplies the official list (tracked in
- * progress.md). The server still accepts any non-empty department string;
- * tightening it to this list is a server change for when the list is real.
+ * The ministry's departments, as the registration and profile dropdowns offer
+ * them. The server still accepts any non-empty department string; tightening
+ * it to this list is a separate server change, not yet made.
  */
 export const DEPARTMENTS: readonly string[] = [
-  'الإدارة العامة للتدريب',
-  'الأمن العام',
-  'المديرية العامة للجوازات',
-  'الأحوال المدنية',
+  'المديرية العامة للأمن العام',
   'المديرية العامة للدفاع المدني',
-  'الإدارة العامة للمرور',
-  'تقنية المعلومات',
-  'الموارد البشرية',
-  'الشؤون المالية',
-  'الشؤون القانونية',
+  'المديرية العامة لحرس الحدود',
+  'المديرية العامة للجوازات',
+  'المديرية العامة لمكافحة المخدرات',
+  'المديرية العامة للسجون',
+  'القوات الخاصة للأمن البيئي',
+  'أمن المنشآت',
+  'إمارات المناطق',
 ];

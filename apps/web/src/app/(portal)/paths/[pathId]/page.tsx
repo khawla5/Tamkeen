@@ -208,7 +208,12 @@ function Builder({ path, onReload }: { path: PathDetail; onReload: () => void })
         `aria-live="polite"` announces each change without interrupting.
       */}
       <div className="fixed inset-x-0 bottom-0 border-t border-border bg-card/95 px-6 py-4 backdrop-blur">
-        <div className={cn('mx-auto flex flex-wrap items-center justify-between gap-3', PAGE_MAX_WIDTH)}>
+        <div
+          className={cn(
+            'mx-auto flex flex-wrap items-center justify-between gap-3',
+            PAGE_MAX_WIDTH,
+          )}
+        >
           <p aria-live="polite" aria-label={t('counterLabel')} className="text-sm font-medium">
             {t('counter', {
               selected: format.number(count),
