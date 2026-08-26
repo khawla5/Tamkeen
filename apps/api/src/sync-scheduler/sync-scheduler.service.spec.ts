@@ -1,4 +1,5 @@
 import type { CatalogSyncService } from '../catalog-sync/catalog-sync.service';
+import type { CourseAvailabilityService } from '../catalog-sync/course-availability.service';
 import type { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import type { CompletionSyncService } from '../completion-sync/completion-sync.service';
 import type { AppConfigService } from '../config/app-config.module';
@@ -18,6 +19,7 @@ import { SyncSchedulerService } from './sync-scheduler.service';
 function harness(
   options: {
     catalogThrows?: boolean;
+    availabilityThrows?: boolean;
     enrolThrows?: boolean;
     completionThrows?: boolean;
     reconcileThrows?: boolean;
@@ -35,6 +37,14 @@ function harness(
       return Promise.resolve({ seen: 3, created: 0, updated: 3, withdrawn: 0 });
     },
   } as unknown as CatalogSyncService;
+
+  const availability = {
+    refresh: () => {
+      order.push('availability');
+      if (options.availabilityThrows) return Promise.reject(new Error('availability down'));
+      return Promise.resolve({ scanned: 2, changed: 1 });
+    },
+  } as unknown as CourseAvailabilityService;
 
   const enrollment = {
     retryPendingEnrolments: () => {
@@ -86,6 +96,7 @@ function harness(
       config,
       settings,
       catalog,
+      availability,
       enrollment,
       completion,
       certificates,
@@ -107,7 +118,13 @@ describe('SyncSchedulerService', () => {
 
       await service.runSyncCycle();
 
-      expect(order).toEqual(['catalog', 'enrolments', 'completions', 'certificates']);
+      expect(order).toEqual([
+        'catalog',
+        'availability',
+        'enrolments',
+        'completions',
+        'certificates',
+      ]);
     });
 
     it('returns what each stage reported', async () => {
@@ -128,7 +145,13 @@ describe('SyncSchedulerService', () => {
 
       const result = await service.runSyncCycle();
 
-      expect(order).toEqual(['catalog', 'enrolments', 'completions', 'certificates']);
+      expect(order).toEqual([
+        'catalog',
+        'availability',
+        'enrolments',
+        'completions',
+        'certificates',
+      ]);
       expect(result.catalog).toBeNull();
       expect(result.completions).not.toBeNull();
     });
@@ -147,6 +170,7 @@ describe('SyncSchedulerService', () => {
          re-run stages that already succeeded. */
       const { service } = harness({
         catalogThrows: true,
+        availabilityThrows: true,
         enrolThrows: true,
         completionThrows: true,
         reconcileThrows: true,
@@ -154,6 +178,7 @@ describe('SyncSchedulerService', () => {
 
       await expect(service.runSyncCycle()).resolves.toEqual({
         catalog: null,
+        availability: null,
         enrolments: null,
         completions: null,
         certificates: null,

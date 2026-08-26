@@ -27,3 +27,7 @@ export * from './entity';
 
 /* Phase 5 — the super-admin portal. */
 export * from './admin';
+
+/* The audit vocabulary (§2, §4C.8) — shared so the Arabic copy can be
+   asserted against it (TAM-137). */
+export * from './audit';

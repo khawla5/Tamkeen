@@ -28,6 +28,11 @@ header('Pragma: no-cache');
 header('Referrer-Policy: no-referrer');
 
 $token = required_param('token', PARAM_RAW);
+// Embed mode (TAM-129): `author` opens the course inside the Tamkeen portal's
+// frame with editing on and Moodle's own chrome hidden. Not part of the signed
+// token — being framed grants nothing, so it needs no signature. Any other
+// value is ignored rather than rejected.
+$embed = optional_param('embed', '', PARAM_ALPHA);
 $secret = (string) get_config('local_tamkeensso', 'secret');
 
 $PAGE->set_url(new moodle_url('/local/tamkeensso/login.php'));
@@ -90,6 +95,20 @@ if (isloggedin() && !isguestuser() && (int) $USER->id !== (int) $user->id) {
 
 if (!isloggedin() || isguestuser() || (int) $USER->id !== (int) $user->id) {
     complete_user_login($user);
+}
+
+if ($embed === 'author') {
+    // Remembered for the whole session: every later page in the frame reads
+    // it (hook_callbacks) to hide the chrome and post the ready message.
+    $SESSION->tamkeen_embed = 'author';
+    // Editing on from the first page. The edit-mode switch sits in the navbar
+    // the embed hides, and it is a per-session flag, so setting it here is
+    // exactly what the switch would do. Moodle still checks the capability
+    // before honouring it, so a learner gains nothing from it.
+    $USER->editing = 1;
+} else {
+    unset($SESSION->tamkeen_embed);
+    unset($SESSION->tamkeen_content_changed);
 }
 
 $courseid = (int) $claims->moodlecourseid;

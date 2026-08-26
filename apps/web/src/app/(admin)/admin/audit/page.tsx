@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
+import { Select } from '@/components/ui/select';
 import { useFormat } from '@/i18n/format-provider';
 import { adminApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
@@ -176,40 +177,44 @@ function TrailTab() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Field id="audit-action" label={t('auditActionLabel')}>
           {(field) => (
-            <select
+            <Select
               {...field}
               value={action}
               onChange={(event) => {
                 setAction(event.target.value);
                 setBefore(undefined);
               }}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
             >
               <option value="">{t('filterAny')}</option>
-              {(log.data?.actions ?? []).map((code) => (
-                <option key={code} value={code}>
-                  {tAction.has(code) ? tAction(code) : code}
-                </option>
-              ))}
-            </select>
+              {/* Sorted by the Arabic label rather than by the code: the list is
+                  fifty entries long, and ordering it by a vocabulary the reader
+                  cannot see makes it unscannable. */}
+              {[...(log.data?.actions ?? [])]
+                .map((code) => ({ code, label: tAction.has(code) ? tAction(code) : code }))
+                .sort((a, b) => a.label.localeCompare(b.label, 'ar'))
+                .map(({ code, label }) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))}
+            </Select>
           )}
         </Field>
 
         <Field id="audit-outcome" label={t('auditOutcome')}>
           {(field) => (
-            <select
+            <Select
               {...field}
               value={outcome}
               onChange={(event) => {
                 setOutcome(event.target.value as 'SUCCESS' | 'FAILURE' | '');
                 setBefore(undefined);
               }}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
             >
               <option value="">{t('filterAny')}</option>
               <option value="SUCCESS">{t('outcomeSuccess')}</option>
               <option value="FAILURE">{t('outcomeFailure')}</option>
-            </select>
+            </Select>
           )}
         </Field>
 
@@ -264,36 +269,110 @@ function TrailTab() {
   );
 }
 
+/**
+ * One event, in words (TAM-137).
+ *
+ * **Every part of a row is translated or dropped.** What an administrator used
+ * to read here was `reason=BAD_PASSWORD` and `pathId=fa9f3562-…` printed
+ * left-to-right in the middle of an Arabic page — the internals of the log
+ * rather than an account of what happened. Now: what was done, to what (by
+ * name), by whom, when, and — on a refusal — why, as a sentence.
+ *
+ * Anything still without Arabic copy falls back to its raw code rather than
+ * rendering blank, because a row that hides the event is worse than an
+ * untranslated one. Nothing should reach that fallback: the message-catalogue
+ * test asserts every action and every reason has copy.
+ */
 function AuditEntry({ row }: { row: AdminAuditRow }) {
   const t = useTranslations('admin');
   const tAction = useTranslations('admin.auditAction');
+  const tReason = useTranslations('admin.auditReason');
+  const tTarget = useTranslations('admin.auditTargetType');
+  const tDetail = useTranslations('admin.auditDetail');
+  const tSetting = useTranslations('admin.setting');
   const format = useFormat();
 
+  /*
+   * A setting names itself: its target id *is* the key, and §4C.6's Arabic name
+   * for it is already in this catalogue — so it resolves here rather than in the
+   * API, which has no business holding Arabic copy.
+   */
+  const targetLabel =
+    row.targetType === 'setting' && row.targetId !== null && tSetting.has(row.targetId)
+      ? tSetting(row.targetId)
+      : row.targetLabel;
+
+  const targetType =
+    row.targetType === null
+      ? null
+      : tTarget.has(row.targetType)
+        ? tTarget(row.targetType)
+        : row.targetType;
+
+  const target =
+    targetType === null
+      ? null
+      : targetLabel === null
+        ? targetType
+        : `${targetType}: ${targetLabel}`;
+
+  const details = Object.entries(row.detail ?? {});
+
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-3 px-5 py-3">
-      <div className="min-w-0">
-        <p className="flex flex-wrap items-center gap-2 text-sm text-foreground">
-          {/* An action with no Arabic copy falls back to its code — a blank row
-              would hide the event, which is worse than an untranslated one. */}
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 py-4">
+      <div className="min-w-0 space-y-1">
+        <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
           {tAction.has(row.action) ? tAction(row.action) : row.action}
-          {row.outcome === 'FAILURE' ? <Badge variant="dark">{t('outcomeFailure')}</Badge> : null}
+          {row.outcome === 'FAILURE' ? <Badge variant="danger">{t('outcomeFailure')}</Badge> : null}
         </p>
 
-        {/* The reason, which is half the value of a refused entry. Non-PII by
-            construction — the audit service accepts only enumerated codes and
-            scalars, never free text. */}
-        {row.detail ? (
-          <p className="mt-1 text-xs text-muted-foreground" dir="ltr">
-            {Object.entries(row.detail)
-              .map(([key, value]) => `${key}=${String(value)}`)
-              .join(' · ')}
+        {/* What it was about, by name. The type is the qualifier, because
+            «مسار» and «مسار موظف» are different things that can share a name.
+            One text node, not two spans — a name split across elements is one a
+            reader can select but a matcher cannot find. */}
+        {target !== null ? (
+          /* `dir="auto"` because a target's name is not always Arabic: a course
+             may be authored in English (D-047), and an LTR name inside an RTL
+             run has its punctuation thrown to the wrong end. */
+          <p dir="auto" className="text-sm text-muted-foreground">
+            {target}
           </p>
+        ) : null}
+
+        {/* Half the value of a refused entry, and the reason the trail is worth
+            reading at all. */}
+        {row.reason !== null ? (
+          <p className="text-sm text-danger">
+            {tReason.has(row.reason) ? tReason(row.reason) : row.reason}
+          </p>
+        ) : null}
+
+        {/* What is left is counts, statuses and changed-field names — the server
+            strips every opaque identifier before this point. Numbers go through
+            the shared formatter so they honour D-018 like everything else. */}
+        {details.length > 0 ? (
+          <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {details.map(([key, value]) => (
+              <div key={key} className="flex gap-1">
+                <dt>{tDetail.has(key) ? tDetail(key) : key}:</dt>
+                {/* Same reason, and here it was actually wrong on screen: the
+                    requested path of a denied request rendered as
+                    `api/admin/settings/` — its leading slash thrown to the end
+                    by the surrounding RTL run, which makes the route read as a
+                    different route. */}
+                <dd dir="auto" className="font-medium">
+                  {typeof value === 'number' ? format.number(value) : String(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
         ) : null}
       </div>
 
-      <span className="text-xs text-muted-foreground">
-        {row.actorName ?? t('actorSystem')} · {format.dateTime(new Date(row.occurredAt))}
-      </span>
+      <p className="shrink-0 text-xs text-muted-foreground">
+        <span>{row.actorName ?? t('actorSystem')}</span>
+        <span className="block">{format.dateTime(new Date(row.occurredAt))}</span>
+      </p>
     </div>
   );
 }

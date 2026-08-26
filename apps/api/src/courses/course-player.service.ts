@@ -7,7 +7,7 @@ import { AuditService } from '../audit/audit.service';
 import { EnrollmentService } from '../enrollment/enrollment.service';
 import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import { PrismaService } from '../prisma/prisma.service';
-import { SettingsService } from '../settings/settings.service';
+import { AppConfigService } from '../config/app-config.module';
 
 /**
  * The course view / player (§4.8).
@@ -22,7 +22,7 @@ export class CoursePlayerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly settings: SettingsService,
+    private readonly config: AppConfigService,
     private readonly enrollment: EnrollmentService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
@@ -56,7 +56,7 @@ export class CoursePlayerService {
 
     const chosen = userPath?.courses.find((entry) => entry.courseId === courseId) ?? null;
     const confirmed = userPath?.confirmedAt != null;
-    const passThreshold = await this.settings.get('PASS_THRESHOLD');
+    const passThreshold = this.config.get('PASS_THRESHOLD');
 
     /*
      * Passing is re-derived from the stored grade rather than stored as a flag

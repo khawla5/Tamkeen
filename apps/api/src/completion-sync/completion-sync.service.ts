@@ -7,7 +7,7 @@ import { EmailService } from '../email/email.service';
 import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import type { LmsCourseProgress } from '../moodle/lms.types';
 import { PrismaService } from '../prisma/prisma.service';
-import { SettingsService } from '../settings/settings.service';
+import { AppConfigService } from '../config/app-config.module';
 import { evaluateCompletion, isGradedButNotComplete } from './pass-threshold';
 
 export interface CompletionSyncResult {
@@ -46,7 +46,7 @@ export class CompletionSyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly settings: SettingsService,
+    private readonly config: AppConfigService,
     private readonly email: EmailService,
     private readonly certificates: CertificateIssuanceService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
@@ -126,10 +126,16 @@ export class CompletionSyncService {
       return { completions: 0, newlyPassed: 0, pathCompleted: false };
     }
 
-    /* One read per run, through the one source of truth (D-072). Every
-       verdict in this cycle is decided under the same threshold, which is what
-       `passThresholdUsed` on each row then records. */
-    const passThreshold = await this.settings.get('PASS_THRESHOLD');
+    /*
+     * One read per run, so every verdict in this cycle is decided under the same
+     * threshold — which is what `passThresholdUsed` on each row then records.
+     *
+     * From the environment rather than the settings table since the ministry
+     * removed the field from §4C.6 (D-102, TAM-135). Still exactly one source:
+     * `AppConfigService` reads the validated object, and there is now no screen
+     * that can move the number underneath a running sync.
+     */
+    const passThreshold = this.config.get('PASS_THRESHOLD');
     let completions = 0;
     let newlyPassed = 0;
 

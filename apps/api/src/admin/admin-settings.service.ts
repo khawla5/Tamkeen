@@ -1,16 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
-import { PATH_MAX_COURSES, PATH_MIN_COURSES, type AdminSettingsView } from '@tamkeen/types';
+import {
+  PATH_MAX_COURSES,
+  PATH_MIN_COURSES,
+  SETTING_KEYS,
+  type AdminSettingsView,
+  type SettingKey,
+} from '@tamkeen/types';
 
 import { AuditAction } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { AppConfigService } from '../config/app-config.module';
-import {
-  SETTING_KEYS,
-  formatSetting,
-  parseSetting,
-  type SettingKey,
-} from '../settings/settings.schema';
+import { formatSetting, parseSetting, settingEditor } from '../settings/settings.schema';
 import { SettingsService } from '../settings/settings.service';
 import { SyncSchedulerService } from '../sync-scheduler/sync-scheduler.service';
 
@@ -18,12 +19,15 @@ import { SyncSchedulerService } from '../sync-scheduler/sync-scheduler.service';
  * §4C.6 — the product knobs.
  *
  * **What this can change, and what it deliberately cannot.** It writes the
- * settings `SETTING_KEYS` lists: the pass threshold, the sync interval, the
- * registration gate, the digits default and the Moodle address. It shows, and
- * refuses to write, the two things §2 makes rules rather than knobs — the 5-10
- * path bounds (D-074) and the auth rate limits, which are security floors. And
- * it has no vocabulary at all for the secrets, which never leave the
- * environment (D-072).
+ * settings `SETTING_KEYS` lists: the sync interval, the registration gate, the
+ * digits default, the Moodle address and the certificate signature block. It
+ * shows, and refuses to write, the two things §2 makes rules rather than knobs —
+ * the 5-10 path bounds (D-074) and the auth rate limits, which are security
+ * floors. It has no vocabulary at all for the secrets, which never leave the
+ * environment (D-072). And since the ministry's 2026-08-25 direction it has none
+ * for the **pass threshold** either: that is deployment configuration now, read
+ * straight from the environment, and there is no endpoint that can move it
+ * (D-102).
  *
  * **A changed interval re-registers the scheduler.** BullMQ holds a repeatable
  * job registered at boot; without re-registering, an administrator lowering the
@@ -51,6 +55,9 @@ export class AdminSettingsService {
         key,
         value: formatSetting(key, values[key]),
         isOverridden: overridden.includes(key),
+        /* Read off the validating schema, so the screen's field and the
+           server's rule are the same statement (TAM-135). */
+        ...settingEditor(key),
       })),
       /*
        * Shown, never written. An administrator explaining why a path build was

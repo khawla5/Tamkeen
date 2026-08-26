@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -138,6 +139,17 @@ export class UpdateEntityCourseDto {
   @IsOptional()
   @IsIn(['AR', 'EN'])
   language?: 'AR' | 'EN';
+}
+
+/**
+ * The author launch's one option (TAM-129). `embed` asks for a URL the entity
+ * portal can frame — chrome hidden, editing on. Absent or false: the plain
+ * full-page handoff, unchanged.
+ */
+export class AuthorLaunchDto {
+  @IsOptional()
+  @IsBoolean()
+  embed?: boolean;
 }
 
 /** §4B.5's optional per-course filter. */

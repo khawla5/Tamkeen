@@ -181,7 +181,8 @@ export class LmsUnavailableError extends Error {
  */
 export class LmsOperationError extends Error {
   constructor(
-    readonly operation: 'PROVISION' | 'ENROL' | 'SYNC' | 'CREATE_COURSE' | 'UPDATE_USER',
+    readonly operation:
+      'PROVISION' | 'ENROL' | 'SYNC' | 'CREATE_COURSE' | 'DELETE_COURSE' | 'UPDATE_USER',
   ) {
     super(`LMS_${operation}_REJECTED`);
     this.name = 'LmsOperationError';

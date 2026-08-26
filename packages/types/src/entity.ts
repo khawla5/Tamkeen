@@ -180,4 +180,9 @@ export interface EntityDashboardView {
 /** The response to an author launch — a URL, minted per click (D-044/D-060). */
 export interface EntityAuthorLaunchView {
   url: string;
+  /**
+   * `embed`: meant for an iframe inside the entity portal — Moodle's chrome
+   * hidden, editing on (TAM-129). `handoff`: the full-page navigation.
+   */
+  mode: 'embed' | 'handoff';
 }

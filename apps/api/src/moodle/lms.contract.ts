@@ -362,6 +362,44 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
       });
     });
 
+    describe('deleteCourse', () => {
+      const input = () => ({
+        title: 'دورة للحذف',
+        summary: 'وصف',
+        shortName: `contract-del-${Math.random().toString(36).slice(2, 10)}`,
+      });
+
+      it('removes the course from the catalogue', async () => {
+        /* The property the whole feature rests on (§4C.5, TAM-134): if the
+           course survived here, the next catalogue sync would rediscover it and
+           re-enter it as an unowned draft — so "permanently deleted" would mean
+           "back within minutes". */
+        const created = await lms.createCourse(input());
+
+        await lms.deleteCourse(created.lmsCourseId);
+
+        await expect(lms.getCourse(created.lmsCourseId)).resolves.toBeNull();
+
+        const catalogue = await lms.listCourses();
+        expect(catalogue.map((course) => course.lmsCourseId)).not.toContain(created.lmsCourseId);
+      });
+
+      it('is a successful no-op for a course that is already gone', async () => {
+        /* The caller deletes here first and in our database second, so a retry
+           after a half-failure lands on exactly this case. It must succeed, or
+           the retry can never finish what the first attempt started. */
+        const created = await lms.createCourse(input());
+
+        await lms.deleteCourse(created.lmsCourseId);
+
+        await expect(lms.deleteCourse(created.lmsCourseId)).resolves.toBeUndefined();
+      });
+
+      it('is a successful no-op for an id the LMS never had', async () => {
+        await expect(lms.deleteCourse(99_999_998)).resolves.toBeUndefined();
+      });
+    });
+
     describe('getCourseContentSummary', () => {
       it('returns null for a course that does not exist', async () => {
         await expect(lms.getCourseContentSummary(99_999_999)).resolves.toBeNull();
@@ -631,6 +669,26 @@ export function describeLmsContract(name: string, createPort: () => LmsPort): vo
         expect(lms.courseLaunchUrl(first!.lmsUserId, 101)).not.toBe(
           lms.courseLaunchUrl(second!.lmsUserId, 101),
         );
+      });
+
+      it('carries the embed hint outside the credential, and stays fresh and token-free', async () => {
+        /* TAM-129: the entity portal frames the course. The hint must reach the
+           LMS on the URL, must not change any of the properties above, and must
+           not be the same URL as the plain handoff — that one is spent already
+           by the time a fallback needs a fresh one. */
+        const user = await lms.provisionUser({
+          email: 'launch-embed@ministry.gov.example',
+          fullName: 'مؤلف',
+          externalUserId: 'ext-launch-embed',
+        });
+
+        const framed = lms.courseLaunchUrl(user.lmsUserId, 101, { embed: 'author' });
+
+        expect(framed).toMatch(/^https?:\/\//);
+        expect(framed).toMatch(/[?&]embed=author(&|$)/);
+        expect(framed).not.toMatch(/wstoken/i);
+        expect(framed).not.toBe(lms.courseLaunchUrl(user.lmsUserId, 101, { embed: 'author' }));
+        expect(lms.courseLaunchUrl(user.lmsUserId, 101)).not.toMatch(/embed=/);
       });
 
       it('is fresh on every call', async () => {

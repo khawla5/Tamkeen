@@ -19,7 +19,7 @@ import { PASSWORD_MIN_LENGTH } from '@/lib/auth-constants';
  * to the role, and `POST /api/auth/change-password` asks no more of an entity
  * than of an employee. The current password is required — a session cookie is
  * enough to *be* the user, so this is the whole security of the change — and a
- * wrong one counts toward the same lockout as sign-in (D-104), which the
+ * wrong one counts toward the same lockout as sign-in (D-107), which the
  * `ACCOUNT_LOCKED` message below explains when it happens.
  */
 export function PasswordCard() {

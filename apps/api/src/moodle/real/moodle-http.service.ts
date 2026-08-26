@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotImplementedException } from '@nestjs/common';
 
-import type { LmsPort } from '../lms.port';
+import type { LaunchOptions, LmsPort } from '../lms.port';
 import {
   LmsOperationError,
   LmsUnavailableError,
@@ -75,6 +75,14 @@ interface MoodleCourse {
 interface MoodleCreatedCourse {
   id?: number;
   shortname?: string;
+}
+
+/**
+ * `core_course_delete_courses` reports per-course problems as warnings on a 200
+ * rather than as an error, so the warnings are the result and have to be read.
+ */
+interface MoodleDeleteCoursesResponse {
+  warnings?: Array<{ item?: string; itemid?: number; warningcode?: string; message?: string }>;
 }
 
 interface MoodleCourseModule {
@@ -454,6 +462,55 @@ export class MoodleHttpService implements LmsPort {
   }
 
   /**
+   * Deletes a course (§4C.5, TAM-134).
+   *
+   * **`core_course_delete_courses` needs `moodle/course:delete` on the
+   * integration role** — a capability the least-privilege role of §5.1 does not
+   * have today. Until it is granted the call fails and the administrator sees
+   * the refusal rather than a half-done deletion, which is the right way round:
+   * our row is only removed after this resolves.
+   *
+   * **Idempotent by contract, and Moodle nearly gives it for free.** Deleting an
+   * id it does not have is reported as a *warning* on a 200 rather than as an
+   * error, so an already-deleted course resolves here exactly as the port
+   * promises. A warning naming any other problem is a failure, since Moodle's
+   * habit of reporting real refusals this way would otherwise let a course we
+   * are not allowed to delete look deleted.
+   */
+  async deleteCourse(lmsCourseId: LmsCourseId): Promise<void> {
+    let response: MoodleDeleteCoursesResponse;
+
+    try {
+      response = await this.client.call<MoodleDeleteCoursesResponse>('core_course_delete_courses', {
+        courseids: [lmsCourseId],
+      });
+    } catch (error) {
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Course deletion failed: ${error instanceof MoodleWsError ? error.errorcode : 'unknown'}`,
+      );
+      throw new LmsOperationError('DELETE_COURSE');
+    }
+
+    /* `unknowncourseidnumber` is Moodle's answer for an id it does not have,
+       which is the idempotent case and not a failure. Anything else — most
+       likely `cannotdeletecourse`, the missing capability — is. */
+    const blocking = (response?.warnings ?? []).filter(
+      (warning) => warning.warningcode !== 'unknowncourseidnumber',
+    );
+
+    if (blocking.length > 0) {
+      this.logger.error(
+        `Course ${lmsCourseId} was not deleted: ${blocking.map((w) => w.warningcode).join(',')}`,
+      );
+      throw new LmsOperationError('DELETE_COURSE');
+    }
+  }
+
+  /**
    * What the LMS holds inside a course (§4B.4, D-061).
    *
    * Two reads, because Moodle splits the answer. `core_course_get_contents`
@@ -781,14 +838,19 @@ export class MoodleHttpService implements LmsPort {
    * Called per click rather than per render, so the token's short life begins
    * when the learner actually goes to the course.
    */
-  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
+  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId, options?: LaunchOptions): string {
     const token = mintHandoffToken(
       { moodleUserId: lmsUserId, moodleCourseId: lmsCourseId },
       this.ssoSecret,
       this.ssoTtlSeconds,
     );
 
-    return `${this.baseUrl.replace(/\/+$/, '')}/local/tamkeensso/login.php?token=${encodeURIComponent(token)}`;
+    /* The embed flag rides beside the token, not inside it (TAM-129): the
+       plugin reads it after the signature has been verified and spent, and a
+       forged flag on a real token changes only how the page is dressed. */
+    const embed = options?.embed ? `&embed=${options.embed}` : '';
+
+    return `${this.baseUrl.replace(/\/+$/, '')}/local/tamkeensso/login.php?token=${encodeURIComponent(token)}${embed}`;
   }
 
   private notYet(method: string): never {

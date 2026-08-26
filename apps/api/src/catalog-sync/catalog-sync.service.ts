@@ -8,6 +8,7 @@ import type { LmsCourse } from '../moodle/lms.types';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   effectiveCourseStatus,
+  isWithinAvailabilityWindow,
   fieldsForPublishedCourse,
   isUsableCatalogue,
   type CoursePublicationValue,
@@ -108,8 +109,15 @@ export class CatalogSyncService implements OnApplicationBootstrap {
         publication: true,
         durationMinutes: true,
         lmsPresent: true,
+        availableFrom: true,
+        availableUntil: true,
       },
     });
+
+    /* One clock reading for the whole pass. A run that took its own `now` per
+       course could put two courses with the same window on opposite sides of
+       it, which is a difference nobody could explain from the data. */
+    const now = new Date();
 
     const existingByLmsId = new Map(existing.map((row) => [row.moodleCourseId, row]));
     const heldIds = await this.courseIdsHeldByLearners(existing.map((row) => row.id));
@@ -140,6 +148,14 @@ export class CatalogSyncService implements OnApplicationBootstrap {
         lmsPresent: fields.lmsPresent,
         lmsVisible: fields.lmsVisible,
         heldByAnyLearner: known ? heldIds.has(known.id) : false,
+        /* A course we have never seen has no window, so it is open — the same
+           answer `isWithinAvailabilityWindow` gives for two absent bounds. */
+        withinAvailabilityWindow: known
+          ? isWithinAvailabilityWindow(
+              { availableFrom: known.availableFrom, availableUntil: known.availableUntil },
+              now,
+            )
+          : true,
       });
 
       await this.prisma.course.upsert({
@@ -202,6 +218,8 @@ export class CatalogSyncService implements OnApplicationBootstrap {
       moodleCourseId: number;
       publication: string;
       lmsPresent: boolean;
+      availableFrom: Date | null;
+      availableUntil: Date | null;
     }>,
     heldIds: ReadonlySet<string>,
   ): Promise<number> {
@@ -220,6 +238,10 @@ export class CatalogSyncService implements OnApplicationBootstrap {
         /* Immaterial once absent, but passed honestly rather than guessed. */
         lmsVisible: false,
         heldByAnyLearner: heldIds.has(row.id),
+        withinAvailabilityWindow: isWithinAvailabilityWindow(
+          { availableFrom: row.availableFrom, availableUntil: row.availableUntil },
+          new Date(),
+        ),
       });
 
       /*

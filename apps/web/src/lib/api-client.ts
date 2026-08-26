@@ -50,8 +50,8 @@ import type {
   CoursePlayerView,
   CourseLanguage,
   CoursePublication,
-  CourseStatus,
   CourseSummary,
+  CourseVisibility,
   DashboardView,
   EntityAuthorLaunchView,
   EntityCourseContentView,
@@ -482,8 +482,10 @@ export const entityApi = {
    * carries a live, single-use credential, so it must not sit in the DOM from
    * the moment the page loads (D-045). Called on the click, used immediately.
    */
-  authorLaunch: (courseId: string) =>
-    api.post<EntityAuthorLaunchView>(`/api/entity/courses/${courseId}/author-launch`),
+  authorLaunch: (courseId: string, options: { embed?: boolean } = {}) =>
+    api.post<EntityAuthorLaunchView>(`/api/entity/courses/${courseId}/author-launch`, {
+      embed: options.embed === true,
+    }),
 
   learners: (courseId?: string) =>
     api.get<EntityLearnerRow[]>(
@@ -666,7 +668,7 @@ export const adminApi = {
     filters: {
       q?: string;
       publication?: CoursePublication;
-      status?: CourseStatus;
+      visibility?: CourseVisibility;
       entityId?: string;
       unowned?: boolean;
       page?: number;
@@ -676,7 +678,7 @@ export const adminApi = {
 
     if (filters.q) query.set('q', filters.q);
     if (filters.publication) query.set('publication', filters.publication);
-    if (filters.status) query.set('status', filters.status);
+    if (filters.visibility) query.set('visibility', filters.visibility);
     if (filters.entityId) query.set('entityId', filters.entityId);
     if (filters.unowned) query.set('unowned', 'true');
     if (filters.page && filters.page > 1) query.set('page', String(filters.page));
@@ -686,11 +688,30 @@ export const adminApi = {
     return api.get<AdminCoursePage>(`/api/admin/courses${suffix ? `?${suffix}` : ''}`);
   },
 
-  /** Hide, restore, or place a course with an organisation. Never sets status. */
+  /**
+   * Hide, restore, place a course with an organisation, or set its availability
+   * window. Never sets status — that is derived (D-059).
+   *
+   * The window bounds are `YYYY-MM-DD` or `null` to clear; omitting one leaves
+   * it as it was, which is why they are optional *and* nullable.
+   */
   interveneCourse: (
     courseId: string,
-    patch: { publication?: CoursePublication; ownerEntityId?: string | null },
+    patch: {
+      publication?: CoursePublication;
+      ownerEntityId?: string | null;
+      availableFrom?: string | null;
+      availableUntil?: string | null;
+    },
   ) => api.patch<AdminCourseRow>(`/api/admin/courses/${courseId}`, patch),
+
+  /**
+   * Permanent removal — from the LMS and from the catalogue (§4C.5, TAM-134).
+   *
+   * Refused for any course a learner holds, a certificate names, or a completion
+   * records; the row's `canDelete` says so in advance.
+   */
+  deleteCourse: (courseId: string) => api.delete<void>(`/api/admin/courses/${courseId}`),
 
   // §4C.6 — system settings
   settings: () => api.get<AdminSettingsView>('/api/admin/settings'),

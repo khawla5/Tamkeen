@@ -19,5 +19,16 @@ if ($hassiteconfig) {
         ''
     ));
 
+    // The one origin allowed to frame this site (TAM-129). Sent as a
+    // `frame-ancestors` policy on every page — see hook_callbacks. Leave empty
+    // to send no policy (Moodle's own X-Frame-Options then applies).
+    $settings->add(new admin_setting_configtext(
+        'local_tamkeensso/allowedframeancestor',
+        get_string('allowedframeancestor', 'local_tamkeensso'),
+        get_string('allowedframeancestor_desc', 'local_tamkeensso'),
+        '',
+        PARAM_URL
+    ));
+
     $ADMIN->add('localplugins', $settings);
 }
