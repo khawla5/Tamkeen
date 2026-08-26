@@ -414,6 +414,9 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ADMIN_USER_ROLE_CHANGED: 'administration',
   ADMIN_ENTITY_CREATED: 'administration',
   ADMIN_ENTITY_UPDATED: 'administration',
+  /* The entity editing its own §4B.6 record — the same subject as the two
+     above, reached from the other portal. */
+  ENTITY_PROFILE_UPDATED: 'administration',
   ADMIN_SETTING_CHANGED: 'administration',
   ADMIN_SETTING_RESET: 'administration',
 

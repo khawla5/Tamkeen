@@ -253,7 +253,9 @@
 
 > **Epic label: `results`** — the Results & Path Selection page (§4.4). Two tickets: TAM-113 restructures the path list (do this first — it reshapes the cards), TAM-114 adds behaviour on top. Approved mockup: the "Tamkeen Results Page" artifact (shared from Claude Code). The result card itself stays exactly as built.
 
-## TAM-113 — Results page: ranked letter groups, compact cards, other paths collapsed
+## TAM-113 — Results page: ranked letter groups, compact cards, other paths collapsed — **DONE** (`feature/tam-113-results-groups`, D-113)
+
+**What shipped (2026-08-26):** one `<section>` per letter of the user's code, in rank order — «الأقرب إلى ميلك الأول — {type}» for #1, «مناسب أيضًا — {type}» plus a quiet «ميلك الثاني» / «ميلك الثالث» `neutral` tag for #2 and #3; a letter with no paths produces no heading (asserted). `PathCard` is compact — the description paragraph is gone (asserted absent from the whole list), everything else unchanged. The non-matching paths sit behind one native `<details>`/`<summary>`, «عرض المسارات الأخرى (6)» with the live count, collapsed on every visit, default marker hidden for a caret mirrored with `rtl:-scale-x-100`, its own `focus-visible` ring. Grouping is `recommendationRank` off the existing `PathSummary` — **no API change**, and the anti-re-sort test is kept. CLAUDE.md §4.4 rewritten, §3A amended ("shown normally below" → "available one click below"). jsdom does not implement summary activation, so the component test asserts the toggle _is_ the native element and `journey-happy-path` asserts 6 links collapsed → 12 after Enter, in Chromium.
 
 - **Labels:** `results`, `frontend`, `spec-change`
 - **Priority:** High
@@ -278,7 +280,9 @@
   - Heading levels: page `h1` → group headings `h2` → card names `h3`; the collapsed section's summary is not a heading.
   - The seed guarantees two paths per letter, but real data (Phase 7) won't — handle 0..n paths per group.
 
-## TAM-114 — Results page: post-commitment state + shared Holland chips
+## TAM-114 — Results page: post-commitment state + shared Holland chips — **DONE** (`feature/tam-113-results-groups`, D-114)
+
+**What shipped (2026-08-26):** `PathCard` takes a `committedPathId` prop (read once on the page from `usePortal().dashboard.path?.id`, non-null exactly in `ACTIVE_PATH`), so the card stays presentational. Committed: the chosen card carries «مسارك» in the **neutral** tag — not the primary accent, which means _recommended_ — and its one action links to `/my-path`; every other card in every group and behind the toggle has **no button at all**, not a disabled one. Uncommitted, and mid-build, nothing changes. **Part 2 was already closed by TAM-108**, which created `src/components/riasec/holland-code-chips.tsx` with the `ordinals` prop; Results consumes it and a test now asserts the dashboard and Results render through the same component, so a second copy fails rather than drifts. `noResult`, `canRetake`, the API's order and `chrome="bare"` asserted unchanged.
 
 - **Labels:** `results`, `frontend`
 - **Priority:** Medium
