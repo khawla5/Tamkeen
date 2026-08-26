@@ -594,6 +594,24 @@ describe('CompletionSyncService', () => {
       );
     });
 
+    it('names the course by our own id, never the LMS number', async () => {
+      const { service, audits } = harness({ progress: [passed()] });
+
+      await service.sync();
+
+      /* The entry used to carry `String(moodleCourseId)` under `targetType:
+         'course'` — a number from a system the ministry does not administer,
+         filed as though it were one of our ids. §4C.8 resolves a target's name
+         by that id, so it never resolved: every pass read «دورة: 12» (TAM-138). */
+      expect(audits).toContainEqual(
+        expect.objectContaining({
+          action: AuditAction.LMS_COURSE_PASSED,
+          targetType: 'course',
+          targetId: 'course-1',
+        }),
+      );
+    });
+
     it('puts no grade or learner name in the audit trail', async () => {
       const { service, audits } = harness({ progress: [passed()] });
 
