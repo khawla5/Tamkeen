@@ -31,3 +31,8 @@ export * from './admin';
 /* The audit vocabulary (§2, §4C.8) — shared so the Arabic copy can be
    asserted against it (TAM-137). */
 export * from './audit';
+
+/* CSV, shared so the audit export can be written in the browser — where the
+   Arabic copy is — against the same quoting and BOM rules the reports export
+   uses server-side (TAM-138). */
+export * from './csv';
