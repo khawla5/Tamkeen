@@ -31,7 +31,10 @@ export interface EntityValue {
   user: CurrentUser;
   /** Null for a super-admin, who has no organisation of their own. */
   entity: EntityProfileView | null;
+  /** Refetches the organisation (§4B.6 saves contact details). */
   refresh: () => void;
+  /** Refetches the session — the account's own name, digits preference. */
+  refreshSession: () => void;
 }
 
 const EntityContext = createContext<EntityValue | null>(null);
@@ -123,6 +126,7 @@ export function EntityProvider({ children }: { children: ReactNode }) {
         user: session.data,
         entity: entity.data ?? null,
         refresh: entity.refetch,
+        refreshSession: session.refetch,
       }}
     >
       {/* The person's digits choice, applied to everything below (§4.12). */}
