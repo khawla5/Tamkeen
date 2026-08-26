@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { ENTITY_NAV } from './entity-nav-items';
-import { NAV_ICONS, STEADY_STATE_NAV, navForState } from './nav-items';
+import {
+  NAV_ICONS,
+  STEADY_STATE_NAV,
+  activeNavHref,
+  navForState,
+  navPathMatches,
+} from './nav-items';
 
 /**
  * Which navigation a learner sees, and — the part that keeps being wrong — which
@@ -121,5 +127,38 @@ describe('the entity portal navigation (§4B)', () => {
     /* Creating a course is the single primary action on two screens (§3), not a
        fifth place to navigate to. */
     expect(ENTITY_NAV.some((item) => item.href.includes('new'))).toBe(false);
+  });
+});
+
+describe('the active rail item (TAM-131)', () => {
+  const ENTITY = ['/entity', '/entity/courses', '/entity/learners', '/entity/profile'];
+  const LEARNER = ['/', '/courses', '/my-path', '/certificates', '/cv', '/profile'];
+
+  it('gives the dashboard only its own page', () => {
+    /* The bug: `/entity` was active on every entity page. */
+    expect(activeNavHref('/entity', ENTITY)).toBe('/entity');
+    expect(activeNavHref('/entity/learners', ENTITY)).toBe('/entity/learners');
+    expect(activeNavHref('/', LEARNER)).toBe('/');
+    expect(activeNavHref('/my-path', LEARNER)).toBe('/my-path');
+  });
+
+  it('keeps a nested page inside its section', () => {
+    expect(activeNavHref('/entity/courses/abc/content', ENTITY)).toBe('/entity/courses');
+    expect(activeNavHref('/courses/abc/player', LEARNER)).toBe('/courses');
+  });
+
+  it('is segment-aware, not a string prefix', () => {
+    expect(navPathMatches('/entityx', '/entity')).toBe(false);
+    expect(navPathMatches('/coursesx/1', '/courses')).toBe(false);
+    expect(navPathMatches('/entity/courses/1', '/entity/courses')).toBe(true);
+  });
+
+  it('ignores a trailing slash', () => {
+    expect(activeNavHref('/entity/', ENTITY)).toBe('/entity');
+    expect(activeNavHref('/entity/learners/', ENTITY)).toBe('/entity/learners');
+  });
+
+  it('activates nothing on a page outside the rail', () => {
+    expect(activeNavHref('/assessment', LEARNER)).toBe(null);
   });
 });

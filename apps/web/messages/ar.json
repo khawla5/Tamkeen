@@ -561,6 +561,7 @@
     "SETTING_INVALID_NUMBER_FORMAT": "شكل الأرقام يجب أن يكون western أو arabic.",
     "SETTING_INVALID_MOODLE_BASE_URL": "عنوان منصة التعلم غير صالح.",
     "PASSWORD_UNCHANGED": "كلمة المرور الجديدة مطابقة للحالية.",
+    "CONTACT_EMAIL_INVALID": "بريد جهة الاتصال غير صالح.",
     "EMAIL_UNCHANGED": "هذا هو بريدك الحالي.",
     "COURSE_IN_USE": "لا يمكن حذف هذه الدورة: اختارها موظفون أو صدرت عنها شهادات أو سُجّل فيها إنجاز. استخدم «سحب الدورة» لإخفائها عن الاختيارات الجديدة.",
     "COURSE_LMS_DELETE_FAILED": "تعذّر حذف الدورة من منصة التعلم، فلم يُحذف شيء. تأكد من صلاحيات التكامل ثم أعد المحاولة.",
@@ -763,11 +764,13 @@
     "statusNOT_STARTED": "لم تبدأ",
     "statusIN_PROGRESS": "قيد التقدّم",
     "statusCOMPLETED": "مكتملة",
+    "profileHeading": "بيانات الحساب والجهة",
     "profileName": "اسم الجهة",
+    "profileNameHint": "يُدار اسم الجهة من قِبل إدارة النظام.",
     "profileContactName": "جهة الاتصال",
-    "profileContactEmail": "البريد الإلكتروني",
-    "profileEmpty": "لا توجد بيانات جهة مرتبطة بهذا الحساب.",
-    "profileReadOnly": "تُدار بيانات الجهة من قِبل إدارة النظام."
+    "profileContactEmail": "بريد جهة الاتصال",
+    "profileSaveAriaLabel": "حفظ بيانات الحساب والجهة",
+    "profileEmpty": "لا توجد بيانات جهة مرتبطة بهذا الحساب."
   },
   "admin": {
     "dashboardTitle": "لوحة الإشراف",
@@ -1104,6 +1107,7 @@
       "LMS_COURSE_PASSED": "اجتياز دورة",
       "LMS_COURSE_LAUNCHED": "دخول دورة",
       "CERTIFICATE_ISSUED": "إصدار شهادة",
+      "ENTITY_PROFILE_UPDATED": "تحديث بيانات الجهة",
       "ENTITY_COURSE_CREATED": "إنشاء دورة",
       "ENTITY_COURSE_METADATA_UPDATED": "تعديل بيانات دورة",
       "ENTITY_COURSE_PUBLISHED": "نشر دورة",
