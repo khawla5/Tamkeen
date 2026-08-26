@@ -491,6 +491,7 @@ export class EntityCourseManagementService {
     courseId: string,
     actorUserId: string,
     ipAddress: string | null,
+    options: { embed: boolean } = { embed: false },
   ): Promise<EntityAuthorLaunchView> {
     await this.scope.requireOwnedCourse(scope, courseId);
 
@@ -523,7 +524,14 @@ export class EntityCourseManagementService {
       targetId: courseId,
     });
 
-    return { url: this.lms.courseLaunchUrl(moodleUserId, course.moodleCourseId) };
+    /* TAM-129: framed by the portal, or the full-page handoff. Same credential,
+       same audit entry either way — only the presentation differs. */
+    return options.embed
+      ? {
+          url: this.lms.courseLaunchUrl(moodleUserId, course.moodleCourseId, { embed: 'author' }),
+          mode: 'embed',
+        }
+      : { url: this.lms.courseLaunchUrl(moodleUserId, course.moodleCourseId), mode: 'handoff' };
   }
 
   /**
