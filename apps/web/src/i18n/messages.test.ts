@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { SETTING_KEYS } from '@tamkeen/types';
+
 import messages from '../../messages/ar.json';
 
 /**
@@ -57,6 +59,7 @@ const LATIN_LETTERS = /[A-Za-z]/;
  */
 const LITERAL_VALUE_PATHS = [
   /^admin\.settingHint\./,
+  /^admin\.settingOption\.NUMBER_FORMAT\./,
   /^errors\.SETTING_INVALID_/,
   /^profile\.digits(Western|Arabic)$/,
 ];
@@ -152,6 +155,9 @@ const DYNAMIC_NAMESPACES = [
   'admin.courseVisibility',
   'admin.versionStatus',
   'admin.setting',
+  'admin.settingHint',
+  'admin.settingOption.REGISTRATION_MODE',
+  'admin.settingOption.NUMBER_FORMAT',
 ];
 
 function at(path: string): unknown {
@@ -203,5 +209,38 @@ describe('dynamically-keyed namespaces', () => {
     expect(Object.keys(actions).length).toBeGreaterThan(40);
     expect(actions.ADMIN_SETTING_CHANGED).toBeTruthy();
     expect(actions.CERTIFICATE_ISSUED).toBeTruthy();
+  });
+});
+
+/**
+ * §4C.6's settings screen renders one row per key and looks its copy up by key,
+ * so a key with no entry reaches the ministry as the raw
+ * `admin.setting.CERT_SIGNATORY_NAME` — which is exactly what the three
+ * certificate keys did until TAM-135. Nothing could catch it while the key list
+ * lived only in the API; now that `SETTING_KEYS` is shared, the catalogue is
+ * asserted against it and the next such key fails CI instead of shipping.
+ */
+describe('every system setting has readable Arabic copy', () => {
+  const labels = at('admin.setting') as Record<string, string>;
+  const hints = at('admin.settingHint') as Record<string, string>;
+
+  it.each(SETTING_KEYS)('%s has a label and a hint', (key) => {
+    expect(labels[key], `admin.setting.${key}`).toBeTruthy();
+    expect(hints[key], `admin.settingHint.${key}`).toBeTruthy();
+  });
+
+  it('names no key that is not a setting', () => {
+    /* A label left behind after a key is removed is a smaller problem than a
+       missing one, but it is still copy describing a control nobody can reach —
+       the pass threshold's label outlived its field for exactly one commit. */
+    const readOnly = ['PATH_MIN_COURSES', 'PATH_MAX_COURSES'];
+    const known = new Set<string>([
+      ...SETTING_KEYS,
+      ...readOnly,
+      'API_RATE_LIMIT_MAX_REQUESTS',
+      'API_RATE_LIMIT_WINDOW_SECONDS',
+    ]);
+
+    expect(Object.keys(labels).filter((key) => !known.has(key))).toEqual([]);
   });
 });

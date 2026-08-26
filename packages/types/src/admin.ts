@@ -524,6 +524,67 @@ export interface AdminCoursePage {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Which knobs an administrator may change without a deployment (§4C.6, D-072).
+ *
+ * **Shared rather than API-only, and that is the point of moving it here
+ * (TAM-135).** The screen renders one row per key and looks up Arabic copy by
+ * key, so a key with no copy reached the ministry as the raw
+ * `admin.setting.CERT_SIGNATORY_NAME` — invisible to every test, because
+ * nothing could enumerate the keys on the web side. With the list shared, the
+ * message catalogue is asserted against it and the same defect fails CI.
+ *
+ * **The list is short on purpose, and what is missing from it is the point.**
+ * Secrets are absent — the Moodle web-services token, the database URL, the SMTP
+ * credentials — because a setting readable by the screen that edits it is a
+ * setting that appears in a network response. So are the auth rate limits, which
+ * §2 makes security floors rather than knobs an operator may loosen; the 5-10
+ * path bounds, which §2 makes a product rule and D-074 keeps in code; and, since
+ * the ministry's 2026-08-25 direction, the pass threshold, which is deployment
+ * configuration rather than a screen (D-102).
+ */
+export const SETTING_KEYS = [
+  /** How often the LMS is polled (D-042). Re-registers the scheduler on change. */
+  'COMPLETION_SYNC_INTERVAL_MINUTES',
+  /** D-017's registration gate: the mode, the domains, the employee-id shape. */
+  'REGISTRATION_MODE',
+  'ALLOWED_EMAIL_DOMAINS',
+  'EMPLOYEE_ID_PATTERN',
+  /** D-018's single switch point between Western and Arabic-Indic digits. */
+  'NUMBER_FORMAT',
+  /** Which Moodle we talk to. Not a secret; the token is, and is not here. */
+  'MOODLE_BASE_URL',
+  /**
+   * §4C.7's signature block (D-073).
+   *
+   * Settings rather than template code, so the ministry can name its signatory
+   * without a deployment — and settings rather than a `certificate_templates`
+   * table, because three strings do not need a table and issued certificates
+   * store their rendered bytes regardless (D-052).
+   */
+  'CERT_SIGNATORY_NAME',
+  'CERT_SIGNATORY_TITLE',
+  'CERT_ISSUING_BODY',
+] as const;
+
+export type SettingKey = (typeof SETTING_KEYS)[number];
+
+/**
+ * How a setting is edited (TAM-135).
+ *
+ * **Derived on the server from the very Zod field that validates the value**,
+ * never declared a second time: a `select` is a setting whose schema is an enum,
+ * and its `options` are that enum's members. A hand-written list would be a
+ * second source of truth for the allowed values, and the day the two disagreed
+ * the screen would offer an option the server refuses.
+ *
+ * `number` likewise comes from the schema, so the field that only accepts digits
+ * is exactly the field that would reject anything else on save.
+ */
+export const SETTING_EDITORS = ['text', 'number', 'select'] as const;
+
+export type SettingEditor = (typeof SETTING_EDITORS)[number];
+
+/**
  * One product knob (§4C.6, D-072).
  *
  * `value` is the effective one — the stored override, or the environment's
@@ -532,9 +593,13 @@ export interface AdminCoursePage {
  * that sometimes does nothing.
  */
 export interface AdminSetting {
-  key: string;
+  key: SettingKey;
   value: string;
   isOverridden: boolean;
+  /** How to render the field — see `SETTING_EDITORS`. */
+  editor: SettingEditor;
+  /** The allowed values, for `select`; empty for everything else. */
+  options: string[];
 }
 
 /**

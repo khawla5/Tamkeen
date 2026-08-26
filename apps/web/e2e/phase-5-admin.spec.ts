@@ -251,37 +251,47 @@ test.describe('Phase 5 — the administered surface', () => {
   });
 
   test('§4C.6 — a setting saved here is the one the API serves back', async () => {
-    const threshold = settingRow('PASS_THRESHOLD', 'درجة الاجتياز');
+    const interval = settingRow(
+      'COMPLETION_SYNC_INTERVAL_MINUTES',
+      'فترة المزامنة مع منصة التعلم (بالدقائق)',
+    );
 
-    await threshold.getByLabel('القيمة').fill('72');
-    await threshold.getByRole('button', { name: 'حفظ' }).click();
-    await expect(threshold.getByRole('status')).toContainText('حُفظ', { timeout: 15_000 });
+    await interval.getByLabel('القيمة').fill('12');
+    await interval.getByRole('button', { name: 'حفظ' }).click();
+    await expect(interval.getByRole('status')).toContainText('حُفظ', { timeout: 15_000 });
 
     /*
      * Read back through the API rather than off the screen. 5.6 exists because
-     * the pass threshold had four independent readers; a page showing what it
-     * just typed proves nothing about what the sync job will use.
+     * one knob had four independent readers; a page showing what it just typed
+     * proves nothing about what the sync job will use.
      */
     const response = await page.request.get('http://localhost:4000/api/admin/settings');
     expect(response.ok()).toBe(true);
 
     const body = (await response.json()) as { settings: { key: string; value: string }[] };
-    expect(body.settings.find((row) => row.key === 'PASS_THRESHOLD')?.value).toBe('72');
+    expect(body.settings.find((row) => row.key === 'COMPLETION_SYNC_INTERVAL_MINUTES')?.value).toBe(
+      '12',
+    );
   });
 
   test('§4C.6 — and reset puts the deployment default back', async () => {
-    const threshold = settingRow('PASS_THRESHOLD', 'درجة الاجتياز');
+    const interval = settingRow(
+      'COMPLETION_SYNC_INTERVAL_MINUTES',
+      'فترة المزامنة مع منصة التعلم (بالدقائق)',
+    );
 
     /* "Reset" is only an honest offer if the row says which value it is
        holding, so the badge is part of the assertion. */
-    await expect(threshold.getByText('قيمة الوزارة')).toBeVisible();
+    await expect(interval.getByText('قيمة الوزارة')).toBeVisible();
 
-    await threshold.getByRole('button', { name: 'إرجاع إلى الافتراضي' }).click();
-    await expect(threshold.getByText('القيمة الافتراضية')).toBeVisible({ timeout: 15_000 });
+    await interval.getByRole('button', { name: 'إرجاع إلى الافتراضي' }).click();
+    await expect(interval.getByText('القيمة الافتراضية')).toBeVisible({ timeout: 15_000 });
 
     const response = await page.request.get('http://localhost:4000/api/admin/settings');
     const body = (await response.json()) as { settings: { key: string; isOverridden: boolean }[] };
-    expect(body.settings.find((row) => row.key === 'PASS_THRESHOLD')?.isOverridden).toBe(false);
+    expect(
+      body.settings.find((row) => row.key === 'COMPLETION_SYNC_INTERVAL_MINUTES')?.isOverridden,
+    ).toBe(false);
   });
 
   test('§4C.6 — no secret is a setting, and the screen says so', async () => {
@@ -340,10 +350,15 @@ test.describe('Phase 5 — the administered surface', () => {
     await expect(page.frameLocator('iframe[title="معاينة"]').locator('body')).not.toBeEmpty();
   });
 
-  test('§4C.7 — the missing ministry seal is named where it can be supplied', async () => {
-    /* Open since Phase 3 and tracked until now only in progress.md, which is
-       not a document the person holding the artwork has open. */
-    await expect(page.getByText(/لم يُزوَّد النظام بشعار الوزارة وختمها بعد/)).toBeVisible();
+  test('§4C.7 — the preview carries the ministry emblem, and says nothing is missing', async () => {
+    /* TAM-136 supplied the emblem, so the notice that named it as missing is
+       gone — asserted, because a blocker notice that outlives its blocker is
+       how a screen starts lying. The seal and the signature are still owed
+       (D-051) and are not what this notice was about. */
+    await expect(page.getByText(/لم يُزوَّد النظام بشعار الوزارة/)).toHaveCount(0);
+
+    /* And it is really on the face rather than merely not disclaimed. */
+    await expect(page.frameLocator('iframe[title="معاينة"]').locator('.emblem svg')).toBeVisible();
   });
 
   test('§4C.8 — the reports answer §4C.8 questions, worst-first where it matters', async () => {

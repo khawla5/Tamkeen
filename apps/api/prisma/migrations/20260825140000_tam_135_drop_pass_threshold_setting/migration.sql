@@ -1,0 +1,14 @@
+-- §4C.6 loses the pass-threshold field (TAM-135, ministry direction 2026-08-25).
+--
+-- The knob itself still exists — completion sync and the course player read
+-- PASS_THRESHOLD from the validated environment (D-007 is unchanged; it is a
+-- product setting, now a deployment one). What goes is the screen, and with it
+-- the endpoint: `SETTING_KEYS` no longer names the key, so nothing can write it
+-- and nothing can reset it.
+--
+-- Which is exactly why any row already stored has to go with it. A stored
+-- override would keep governing every pass/fail verdict, invisibly, with no
+-- screen to show it and no endpoint to clear it — a number nobody could see
+-- deciding whether an employee earned a certificate. Deleting it here makes the
+-- deployment's value the only answer, which is what the removal means.
+DELETE FROM "settings" WHERE "key" = 'PASS_THRESHOLD';
