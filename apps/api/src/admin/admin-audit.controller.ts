@@ -74,32 +74,4 @@ export class AdminAuditController {
       ],
     );
   }
-
-  /** The trail as CSV, honouring whatever filter the screen has applied. */
-  @Get('audit.csv')
-  @Header('Content-Type', CSV_CONTENT_TYPE)
-  @Header('Content-Disposition', 'attachment; filename="tamkeen-audit.csv"')
-  async auditCsv(@Query() query: AdminAuditQueryDto): Promise<string> {
-    /* Bounded: an export is not a licence to page the whole table into memory,
-       and a trail that grows without limit would otherwise make this endpoint
-       the way to take the API down. */
-    const page = await this.audit.list({ ...query, pageSize: 5_000 });
-
-    /* The target as its *name*, with the id only where nothing resolved — the
-       same rule the screen follows (TAM-137). An export whose target column is
-       a uuid is one nobody can read without the database open beside them. */
-    return toCsv(
-      ['التاريخ', 'الإجراء', 'النتيجة', 'المنفِّذ', 'نوع الهدف', 'الهدف', 'السبب', 'التفاصيل'],
-      page.rows.map((row) => [
-        row.occurredAt,
-        row.action,
-        row.outcome,
-        row.actorName ?? '',
-        row.targetType ?? '',
-        row.targetLabel ?? row.targetId ?? '',
-        row.reason ?? '',
-        row.detail ? JSON.stringify(row.detail) : '',
-      ]),
-    );
-  }
 }

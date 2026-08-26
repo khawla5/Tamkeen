@@ -22,7 +22,6 @@ const api = vi.hoisted(() => ({
   reports: vi.fn(),
   auditLog: vi.fn(),
   reportsCsvUrl: vi.fn(() => 'http://api/api/admin/reports.csv'),
-  auditCsvUrl: vi.fn(() => 'http://api/api/admin/audit.csv'),
 }));
 
 vi.mock('@/lib/api-client', async () => {
@@ -86,6 +85,17 @@ function log(overrides: Partial<AdminAuditPage> = {}): AdminAuditPage {
   };
 }
 
+/** jsdom's `Blob` has no `text()`; `FileReader` is what it does implement. */
+function read(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
+
 describe('Admin audit and reports (§4C.8)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,7 +146,26 @@ describe('Admin audit and reports (§4C.8)', () => {
     expect(await screen.findAllByText('لا توجد بيانات كافية بعد.')).toHaveLength(2);
   });
 
-  it('offers the export as an ordinary link, so the session cookie carries it', async () => {
+  it('shows the Holland-code distribution in Arabic type names', async () => {
+    renderWithProviders(<AdminAuditPage />);
+
+    /* §4C.8 asks for it, the API has always computed it and the export has
+       always carried it — the page never showed it (TAM-138). And spelled out,
+       because «SIA» in an Arabic report names nothing. */
+    expect(await screen.findByText('الاجتماعي · البحثي · الفني')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SIA');
+  });
+
+  it('counts every stage the export reports, not four of the six', async () => {
+    renderWithProviders(<AdminAuditPage />);
+
+    /* The file and the page it came from used to disagree about how the
+       programme was doing. */
+    expect(await screen.findByText('يختارون دوراتهم')).toBeInTheDocument();
+    expect(screen.getByText('دورات مجتازة')).toBeInTheDocument();
+  });
+
+  it('offers the reports export as an ordinary link, so the session cookie carries it', async () => {
     renderWithProviders(<AdminAuditPage />);
 
     const link = await screen.findByRole('link', { name: 'تصدير البيانات' });
@@ -340,6 +369,123 @@ describe('Admin audit and reports (§4C.8)', () => {
       await user.click(await screen.findByRole('button', { name: 'عمليات أقدم' }));
 
       expect(api.auditLog).toHaveBeenLastCalledWith(expect.objectContaining({ before: '900' }));
+    });
+
+    it('says what a coded value means, not what it is called in the codebase', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(
+        log({
+          rows: [
+            {
+              id: '5',
+              occurredAt: '2026-08-23T08:00:00.000Z',
+              action: 'ADMIN_COURSE_INTERVENED',
+              outcome: 'SUCCESS',
+              actorName: 'مسؤول النظام',
+              targetType: 'course',
+              targetId: 'c1',
+              targetLabel: 'مقدمة في الحوكمة',
+              reason: null,
+              detail: {
+                status: 'HIDDEN_BUT_COMPLETABLE',
+                fields: 'department,fullName',
+                race: true,
+              },
+            },
+          ],
+        }),
+      );
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      /* The keys were translated and the values were not: the row read «الحالة:
+         HIDDEN_BUT_COMPLETABLE» — an Arabic label followed by the codebase's own
+         vocabulary (TAM-138). A list is split and each part translated; a
+         boolean is a word. */
+      expect(await screen.findByText('مخفية عن الاختيار')).toBeInTheDocument();
+      expect(screen.getByText('الإدارة، الاسم')).toBeInTheDocument();
+      expect(screen.getByText('نعم')).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('HIDDEN_BUT_COMPLETABLE');
+      expect(document.body.textContent).not.toContain('fullName');
+    });
+
+    it('groups the action filter by the area each action belongs to', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      const action = await screen.findByLabelText('الإجراء');
+      const groups = [...action.querySelectorAll('optgroup')].map((node) => node.label);
+
+      /* Fifty-three options in one flat list is not a filter anybody uses; the
+         grouping is the vocabulary's own, so a heading here cannot disagree with
+         what the codebase records (TAM-138). */
+      expect(groups).toEqual(['رحلة الموظف', 'إدارة المنصة']);
+    });
+
+    it('filters by a period, and starts the paging over when it changes', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(log({ nextBefore: '900' }));
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('button', { name: 'عمليات أقدم' }));
+
+      await user.type(screen.getByLabelText('من تاريخ'), '2026-08-01');
+
+      /* A cursor from the previous result set points into rows the new filter
+         may not contain. */
+      expect(api.auditLog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ from: '2026-08-01', before: undefined }),
+      );
+    });
+
+    it('exports the trail in the same words the screen shows', async () => {
+      const user = userEvent.setup();
+      const blobs: Blob[] = [];
+
+      /* jsdom implements neither half of the object-URL API, so they are
+         assigned rather than spied on. */
+      URL.createObjectURL = vi.fn((blob: Blob) => {
+        blobs.push(blob);
+        return 'blob:audit';
+      });
+      URL.revokeObjectURL = vi.fn();
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('button', { name: 'تصدير البيانات' }));
+
+      /* The export used to be a link to `/api/admin/audit.csv`, which wrote the
+         raw vocabulary — so the file said something different from the screen it
+         came from (TAM-138). */
+      expect(api.auditLog).toHaveBeenLastCalledWith(expect.objectContaining({ pageSize: 5000 }));
+
+      const csv = await read(blobs[0]!);
+      /* The BOM is not asserted here — `readAsText` consumes it as the encoding
+         signature it is; `toCsv`'s own spec owns that, and this export goes
+         through the same shared writer. */
+      expect(csv).toContain('تغيير حالة حساب');
+      expect(csv).toContain('لا يجوز للمسؤول تعديل حسابه بنفسه');
+      expect(csv).toContain('حساب: سارة العتيبي');
+      expect(csv).not.toContain('ADMIN_USER_STATUS_CHANGED');
+      expect(csv).not.toContain('SELF_MODIFICATION_REFUSED');
+      expect(csv).not.toContain('u1');
+    });
+
+    it('says so rather than failing silently when the export cannot be built', async () => {
+      const user = userEvent.setup();
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await screen.findAllByText(/تغيير حالة حساب/);
+
+      api.auditLog.mockRejectedValueOnce(new Error('down'));
+      await user.click(screen.getByRole('button', { name: 'تصدير البيانات' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('تعذّر تحضير الملف');
     });
 
     it('offers nothing that changes an entry', async () => {

@@ -437,18 +437,47 @@ test.describe('Phase 5 — the administered surface', () => {
     }
   });
 
-  test('§4C.8 — the exports open as Arabic, not as mojibake', async () => {
-    for (const path of ['reports.csv', 'audit.csv']) {
-      const response = await page.request.get(`http://localhost:4000/api/admin/${path}`);
+  test('§4C.8 — the reports export opens as Arabic, not as mojibake', async () => {
+    const response = await page.request.get('http://localhost:4000/api/admin/reports.csv');
 
-      expect(response.ok()).toBe(true);
-      expect(response.headers()['content-type']).toContain('text/csv');
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['content-type']).toContain('text/csv');
 
-      /* The three bytes between a report the ministry can use and a column of
-         question marks in Excel (D-076). */
-      const body = await response.body();
-      expect([body[0], body[1], body[2]]).toEqual([0xef, 0xbb, 0xbf]);
+    /* The three bytes between a report the ministry can use and a column of
+       question marks in Excel (D-076). */
+    const body = await response.body();
+    expect([body[0], body[1], body[2]]).toEqual([0xef, 0xbb, 0xbf]);
+  });
+
+  test('§4C.8 — the trail exports in the words the screen shows', async () => {
+    await page.getByRole('button', { name: 'سجل العمليات' }).click();
+
+    /* Built in the browser, because every column of it is Arabic copy and that
+       copy lives in the message catalogue (TAM-138). The file used to come from
+       the API carrying `ADMIN_SETTING_CHANGED,SUCCESS,setting` — saying
+       something different from the screen it was exported from. */
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'تصدير البيانات' }).click();
+    const download = await downloading;
+
+    expect(download.suggestedFilename()).toBe('tamkeen-audit.csv');
+
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+
+    for await (const chunk of stream) {
+      chunks.push(Buffer.from(chunk));
     }
+
+    const body = Buffer.concat(chunks);
+
+    expect([body[0], body[1], body[2]]).toEqual([0xef, 0xbb, 0xbf]);
+
+    const text = body.toString('utf8');
+
+    expect(text).toContain('الإجراء');
+    /* The raw vocabulary is what this export exists to stop showing. */
+    expect(text).not.toContain('AUTH_LOGIN_SUCCEEDED');
   });
 
   test('an employee reaches none of it, by URL or by API', async ({ browser }) => {

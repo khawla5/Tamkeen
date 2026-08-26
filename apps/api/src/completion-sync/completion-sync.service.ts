@@ -400,13 +400,24 @@ export class CompletionSyncService {
       select: { id: true, title: true },
     });
 
+    /*
+     * Our course id, not the LMS's (TAM-138).
+     *
+     * The entry used to carry `String(moodleCourseId)` under `targetType:
+     * 'course'` — a number from a system the ministry does not administer,
+     * filed as though it were one of our ids. §4C.8 resolves a target's name by
+     * that id, so it never resolved: every pass in the trail read «دورة: 12».
+     * The row is looked up two lines above for the certificate; it answers this
+     * too. A course the catalogue has since lost names no target rather than a
+     * false one.
+     */
     await this.audit.record({
       action: AuditAction.LMS_COURSE_PASSED,
       outcome: 'SUCCESS',
       actorUserId: learner.id,
       ipAddress: null,
-      targetType: 'course',
-      targetId: String(moodleCourseId),
+      targetType: course ? 'course' : null,
+      targetId: course?.id ?? null,
     });
 
     let certificateIssued = false;

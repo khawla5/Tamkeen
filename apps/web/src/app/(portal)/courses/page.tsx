@@ -12,6 +12,8 @@ import { useFormat } from '@/i18n/format-provider';
 import { coursesApi, pathsApi } from '@/lib/api-client';
 import { toHours } from '@/lib/duration';
 import { useApiQuery } from '@/lib/use-api';
+import { cardVariants } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 /** Duration buckets, in minutes. Coarse on purpose — a free-form number field
  *  would be a worse way to ask "something short?". */
@@ -148,7 +150,10 @@ export default function CoursesPage() {
                   <li key={course.id}>
                     <Link
                       href={`/courses/${course.id}`}
-                      className="flex h-full flex-col gap-2 rounded-card border border-border bg-card p-5 transition-colors hover:border-primary-600"
+                      className={cn(
+                        cardVariants(),
+                        'flex h-full flex-col gap-2 p-5 transition-colors hover:border-primary-600',
+                      )}
                     >
                       <h2 className="font-semibold text-foreground">{course.title}</h2>
                       <p className="text-sm text-muted-foreground">{course.summary}</p>
