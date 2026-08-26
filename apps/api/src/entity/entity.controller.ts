@@ -37,6 +37,7 @@ import {
   EntityCourseQueryDto,
   EntityLearnerQueryDto,
   UpdateEntityCourseDto,
+  UpdateEntityProfileDto,
 } from './entity.dto';
 
 /**
@@ -73,6 +74,16 @@ export class EntityController {
   @Get('me')
   async me(@CurrentUser() user: AuthenticatedUser): Promise<EntityProfileView | null> {
     return this.profile.get(await this.scope.resolve(user));
+  }
+
+  /** §4B.6 — the account's own name and the organisation's contact, one save. */
+  @Patch('me')
+  async updateMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateEntityProfileDto,
+    @Req() request: Request,
+  ): Promise<EntityProfileView> {
+    return this.profile.update(await this.scope.resolve(user), user.id, dto, request.ip ?? null);
   }
 
   /** §4B.1 — counts for context, and the one list that is actionable. */

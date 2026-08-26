@@ -192,11 +192,12 @@
   - `LmsPort` is `apps/api/src/moodle/lms.port.ts`, executable contract in `lms.contract.ts`; the mock must implement the new operation with the same semantics so the contract suite remains the swap guarantee. Real adapter: `core_user_update_users` must be added to the Moodle external service's function list on the ministry instance (add it to the Moodle setup checklist).
   - Page: `src/app/(portal)/profile/page.tsx`; copy under `profile.*` in `messages/ar.json`; use the shared `Field`/`Input` components.
 
-## TAM-110 — Profile: change password
+## TAM-110 — Profile: change password — **DONE** (`feature/tam-110-change-password`, D-104)
 
 - **Labels:** `profile`, `frontend`, `api`, `security`
 - **Priority:** High
 - **Pre-requisite:** TAM-109 (page sections + `me` module)
+- **What shipped (2026-08-26):** most of this ticket had landed with the profile epic (PR #22): `POST /api/auth/change-password`, `revokeAllForUserExcept`, the profile card, the audit entry. This branch closes the acceptance gaps: **a wrong current password now feeds the same failure counter and lockout as sign-in** (`countFailedAttempt`, shared by both paths; a locked account is refused with `ACCOUNT_LOCKED`; proving the password resets the counter), and **the confirmation is checked on the server** (`confirmPassword` in the DTO, refused as `PASSWORDS_DO_NOT_MATCH` before any attempt is counted). **The card is shared with the entity portal:** `components/profile/password-card.tsx` renders on §4B.6 too (below the read-only organisation record; also for a super-admin visiting without an organisation) — the credential belongs to the account, not the role, and the endpoint asks no more of an entity than of an employee. The email question is recorded as D-104. Tests: profile e2e +3 (lockout parity, server confirm, counter reset) with the existing five updated; page tests +1 (the lockout message). Proven live: mismatch → 400, one guess → 401 and counter 1, correct change → 204 and counter 0, audit `FAILURE:BAD_PASSWORD` then `SUCCESS`.
 - **Description:**
   A "تغيير كلمة المرور" section: current password, new password, confirm. Same password policy as registration (`PASSWORD_MIN_LENGTH`; length over composition, NIST 800-63B). On success: **revoke every other session of the user, keep the current one**, write an audit entry, show a success status in place.
   A wrong current password returns the generic credentials error and counts toward the per-account lockout — changing a password must not be a cheaper brute-force surface than login.
@@ -210,6 +211,14 @@
   - `SessionService.revokeAllForUser(userId)` exists but revokes **all** sessions including the current — add a `revokeOthersForUser(userId, keepSessionId)` variant rather than logging the user out of the device they just used.
   - Argon2 verification and the lockout counters live in `auth.service.ts` — reuse the login path's helpers (including the dummy-verify timing equalisation) instead of re-implementing the comparison.
   - Endpoint belongs under `auth` (credential management), not `me`.
+
+## TAM-138 — Entity profile: the employee's editable surface, and a two-column profile on both portals — **DONE** (`feature/tam-110-change-password`, D-105)
+
+- **Labels:** `profile`, `entity`, `frontend`, `api`
+- **Priority:** High (at the user's direction, 2026-08-26, alongside TAM-110)
+- **What shipped:** §4B.6 now carries what §4.12 carries — an account card (the account holder's name editable; email and role read-only; the organisation's **name** read-only with a line saying the ministry manages it, D-063; the organisation's **contact name and contact email** editable), the digits preference, and the password change — through `PATCH /api/entity/me` (`UpdateEntityProfileDto`; refused with 403 for an account with no organisation rather than half-saved; the organisation name is not accepted in the body; audited as `ENTITY_PROFILE_UPDATED` with the field names, never the values; a name change reaches the LMS best-effort as the employee's does). `DigitsCard` and `PasswordCard` are shared components under `components/profile/`. **No email-change card for the entity:** its address is outside the ministry domain that `change-email` enforces (D-017), so the card could only refuse. **Layout:** both profile pages leave the narrow single column for the standard width with two columns from `lg` — the account card leads the start column with the digits beneath it, the credential cards fill the end column; one column in that order below `lg`.
+- **Supersedes** the embed branch's open TAM-135 (entity contact details) once that branch renumbers.
+- **Acceptance met:** 5 new integration tests in `entity-scoping.e2e-spec` (one save + audit fields, the organisation name refused in the body, validation incl. empty contact allowed, scope not body picks the row, orphan/admin refused); 8 page tests in `entity-profile.test.tsx`; web 528, API e2e scoping 19/19, typecheck/lint clean; both pages screenshotted at 1440px. Also carries TAM-131's nav fix (`activeNavHref`) from the embed branch, so the entity rail marks one item.
 
 ## TAM-111 — Profile: change email with re-verification
 

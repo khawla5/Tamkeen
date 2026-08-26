@@ -5,6 +5,23 @@
 
 ---
 
+## D-105 — An entity edits what is its own; the organisation's name stays the ministry's
+
+**Decision (TAM-138):** the entity profile (§4B.6) gains the employee's editable surface — the account holder's name, the organisation's contact name and contact email, the digits preference, the password — through one `PATCH /api/entity/me`. The organisation's _name_ remains read-only there, changed only in §4C.2. There is no email-change card on the entity page. Both profile pages use a two-column layout at the standard width.
+
+**Why:** the D-063 reasoning that kept the page read-only was about the organisation's _identity_ — what the ministry contracted with. It never applied to a contact address or to the account holder's own name, and making a supplier ask an administrator to correct a typo in their contact email was cost without a safeguard behind it. The name stays: it is the fact the ministry vouches for. The email card is left off because `change-email` enforces the ministry domain (D-017) and an entity address is outside it — a card that can only refuse teaches nothing. The layout: four cards in one narrow column read as a form with no end; two columns keep the account card first and the credentials beside it.
+
+**Rejected:** editing the organisation name here (falsifies the contracted identity); relaxing the domain gate for entities (D-017 is the registration policy, not a per-role setting); a separate endpoint per field (one save, as §4.12 does, so a half-saved form is impossible).
+
+## D-104 — A password change is not the cheaper way to guess, and it sends no email (for now)
+**Decision (TAM-110):** `POST /api/auth/change-password` feeds the **same** failure counter and lockout as sign-in (`AUTH_MAX_FAILED_ATTEMPTS` / `AUTH_LOCKOUT_MINUTES`); a locked account is refused there with the same `ACCOUNT_LOCKED` code; a successful change clears the counter as a successful sign-in does. The retyped confirmation is checked on the server as well as in the form, and a mismatch is refused **before** the current password is verified, so a typo never costs an attempt. **No "your password was changed" email is sent.**
+
+**Why:** the endpoint verifies a password. Left outside the lockout, a stolen session cookie would buy unlimited guesses at the one secret that turns a temporary foothold into permanent ownership — the login beside it locks after five. One counter for every place a password is checked means none of them is the soft target. The confirmation is a typo guard for the person, and a client that skipped it would store a password typed once and never repeatable; the server is the last line. The email is standard security hygiene, but §2's notification list is short and locked, and every other session is revoked on change — the owner already learns of a change they did not make by being signed out. Raised with the product owner as a §2 amendment; add it in a follow-up if approved, not silently.
+
+**Rejected:** a separate counter for the change endpoint (two thresholds to explain, and the weaker one wins); counting a confirmation mismatch as an attempt (punishes the typo the field exists to catch); sending the email anyway (widens a locked list by one line without the decision that locks it).
+
+**Numbering note:** D-101 is the embed premise on `feature/tam-129-embed-foundation`; D-102 and D-103 are the learner player decisions on `feature/tam-130-entity-content-embed` — left to those branches.
+
 ## D-100 — The admin dialog is centred, capped and form-free
 **Decision:** `AdminDialog` carries `m-auto` (centring), a `max-h` with the body as the only scrolling region, a live backdrop token, a per-instance title id — and **no `<form>` wrapper**. The learner portal's confirm dialog already had the first of these with the reason written beside it.
 
