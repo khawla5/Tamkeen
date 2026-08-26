@@ -124,6 +124,15 @@ export class ChangePasswordDto {
   @MinLength(8, { message: 'PASSWORD_TOO_SHORT' })
   @MaxLength(MAX_PASSWORD, { message: 'PASSWORD_TOO_LONG' })
   newPassword!: string;
+
+  /* The retyped new password. Compared in the service, beside the other
+     password rules (TAM-110): the client checks it first, but a form that
+     skipped the check would otherwise store a password typed once and never
+     repeatable. Not length-validated — it either equals newPassword or it is
+     refused, and a second length message would only say the same thing twice. */
+  @IsString()
+  @MaxLength(MAX_PASSWORD)
+  confirmPassword!: string;
 }
 
 /** Asking to move the account to a new address (§4.12). */
