@@ -1,3 +1,4 @@
+import type { AuditTargetType } from './audit';
 import type { CourseLanguage, CoursePublication, CourseStatus } from './catalog';
 import type { RiasecLetter } from './riasec';
 import type { UserRole } from './roles';
@@ -650,13 +651,36 @@ export interface AdminAuditRow {
   action: string;
   outcome: 'SUCCESS' | 'FAILURE';
   actorName: string | null;
-  targetType: string | null;
+  /** From the one shared vocabulary (`AUDIT_TARGET_TYPES`, TAM-137). */
+  targetType: AuditTargetType | null;
   targetId: string | null;
   /**
-   * The structured detail, non-PII by construction (`AuditService` accepts only
-   * enumerated reason codes and scalar values). Shown because half its value is
-   * the reason a refusal happened, and a trail that hides that is a list of
-   * timestamps.
+   * What the target is called — the person's name, the path's, the course's
+   * (TAM-137).
+   *
+   * Resolved server-side per page, because an administrator reading a trail
+   * needs to know *which* path was retired, and a uuid answers that for nobody.
+   * Null when the row names no target, or when the target has since been
+   * deleted — the id is still carried, so the entry stays traceable.
+   */
+  targetLabel: string | null;
+  /**
+   * Why a refusal happened, as an enumerated code (`AuditReason`).
+   *
+   * Lifted out of the detail payload and given its own field because it is the
+   * one piece of detail almost every failure carries, and the one §4C.8 renders
+   * as a sentence rather than as a labelled value.
+   */
+  reason: string | null;
+  /**
+   * The remaining structured detail, non-PII by construction (`AuditService`
+   * accepts only enumerated reason codes and scalar values).
+   *
+   * **Opaque identifiers are stripped before it leaves the server** (TAM-137).
+   * A uuid tells an administrator nothing the resolved `targetLabel` does not
+   * tell them better, and a screen that prints `pathId=fa9f3562-…` is exposing
+   * internals in place of information. What is left is counts, statuses,
+   * changed-field names and the like — things that mean something read aloud.
    */
   detail: Record<string, string | number | boolean> | null;
 }

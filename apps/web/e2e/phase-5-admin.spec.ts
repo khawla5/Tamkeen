@@ -204,14 +204,24 @@ test.describe('Phase 5 — the administered surface', () => {
     await expect(table).toBeVisible({ timeout: 15_000 });
 
     /*
-     * The publication decision and the LMS's own state are separate columns.
-     * Collapsing them into a single verdict is exactly what makes "it is not
-     * published" unanswerable — the two disagree often, and which of them is
-     * wrong is the entire question.
+     * One column and two words since TAM-134: the screen asks whether an
+     * employee can choose this course, and «قرار النشر» beside «الحالة»
+     * answered a question nobody was asking. Collapsing the vocabulary must not
+     * collapse the *explanation*, so the reason a course is hidden still prints
+     * under the badge — that is what makes "nobody can see it" answerable, and
+     * it is what this test now guards.
      */
-    await expect(table.getByRole('columnheader', { name: 'قرار النشر' })).toBeVisible();
     await expect(table.getByRole('columnheader', { name: 'الحالة' })).toBeVisible();
+    await expect(table.getByRole('columnheader', { name: 'فترة الإتاحة' })).toBeVisible();
     await expect(table.getByRole('columnheader', { name: 'الجهة' })).toBeVisible();
+    await expect(table.getByRole('columnheader', { name: 'قرار النشر' })).toHaveCount(0);
+
+    /* Exactly two words across the whole table, whatever the four underlying
+       states are doing. */
+    const badges = await table.locator('tbody tr td:nth-child(3)').allInnerTexts();
+    for (const badge of badges) {
+      expect(badge.startsWith('متاحة') || badge.startsWith('مخفية')).toBe(true);
+    }
   });
 
   test('§4C.5 — the unowned seeded catalogue is reachable here and nowhere else', async () => {

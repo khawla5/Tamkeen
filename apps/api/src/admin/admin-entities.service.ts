@@ -97,7 +97,7 @@ export class AdminEntitiesService {
       outcome: 'SUCCESS',
       actorUserId: actorId,
       ipAddress,
-      targetType: 'Entity',
+      targetType: 'entity',
       targetId: entity.id,
       /* The key, not the contact address. An organisation's key is an
          identifier we chose; the contact is a named person at a supplier. */
@@ -137,7 +137,7 @@ export class AdminEntitiesService {
       outcome: 'SUCCESS',
       actorUserId: actorId,
       ipAddress,
-      targetType: 'Entity',
+      targetType: 'entity',
       targetId: entityId,
       /* Which fields moved, never their values — a contact name is PII and an
          audit payload is not where it belongs. The status is the exception,
