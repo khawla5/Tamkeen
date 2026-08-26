@@ -696,6 +696,8 @@ describe('Phase 1 journey (e2e)', () => {
 
       const view = (await get('/api/my-path', session).expect(200)).body as MyPathView;
       expect(view.totalCount).toBe(PATH_MIN_COURSES + 1);
+      /* TAM-126: every stop carries its certificate id, null until issued. */
+      expect(view.courses.every((course) => course.certificateId === null)).toBe(true);
     });
 
     it('refuses an eleventh course after commitment', async () => {

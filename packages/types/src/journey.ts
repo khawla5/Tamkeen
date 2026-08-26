@@ -37,6 +37,12 @@ export interface MyPathCourseView {
   gradePercent: number | null;
   /** Exactly one action applies at a time (§3). */
   isNextUp: boolean;
+  /**
+   * The course certificate issued to this learner for this course, once the
+   * sync has issued one (§4.9, TAM-126) — read-only here, so My Path can link
+   * to the same file the gallery opens. Null until issued.
+   */
+  certificateId: string | null;
 }
 
 export interface MyPathView {

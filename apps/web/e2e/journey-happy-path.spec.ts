@@ -122,7 +122,9 @@ test.describe('Phase 1 journey', () => {
     /* Exactly one course is next up — §4.9's "must not compete with continue". */
     await expect(page.getByText('التالية', { exact: true })).toHaveCount(1);
     /* Passed, not merely finished — the gate Phase 3 corrected. */
-    await expect(page.getByText('تُفتح شهادة المسار بعد اجتياز جميع دوراتك.')).toBeVisible();
+    await expect(page.getByText('تُفتح عند اجتياز دوراتك الـ5 — بقيت 5.')).toBeVisible();
+    /* TAM-126: the next-up course holds the page's only action. */
+    await expect(page.getByRole('link', { name: 'ابدأ الدورة' })).toHaveCount(1);
 
     // ── Into a course, through the player (§4.8, Phase 2) ─────────────────────
     /* The Phase 2 user-visible flow: My Path no longer links at the LMS

@@ -295,6 +295,20 @@ export class EnrollmentService {
       return null;
     }
 
+    /* One read for every course certificate on this path (TAM-126): the link
+       on a done stop, not a promise — null until the sync has issued one. */
+    const certificates = await this.prisma.certificate.findMany({
+      where: {
+        userId,
+        type: 'COURSE',
+        courseId: { in: userPath.courses.map((chosen) => chosen.course.id) },
+      },
+      select: { id: true, courseId: true },
+    });
+    const certificateByCourse = new Map(
+      certificates.map((certificate) => [certificate.courseId, certificate.id]),
+    );
+
     let nextAssigned = false;
     const courses: MyPathCourseView[] = userPath.courses.map((chosen) => {
       /*
@@ -324,6 +338,7 @@ export class EnrollmentService {
         status,
         gradePercent: chosen.gradePercent,
         isNextUp,
+        certificateId: certificateByCourse.get(chosen.course.id) ?? null,
       };
     });
 
