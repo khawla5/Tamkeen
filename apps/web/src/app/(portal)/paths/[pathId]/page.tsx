@@ -14,7 +14,7 @@ import { usePortal } from '@/components/layout/portal-provider';
 import { ConfirmPathDialog } from '@/components/paths/confirm-path-dialog';
 import { DataView, EmptyState } from '@/components/states';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, cardVariants } from '@/components/ui/card';
 import { useFormat } from '@/i18n/format-provider';
 import { myPathApi, pathsApi } from '@/lib/api-client';
 import { toHours } from '@/lib/duration';
@@ -154,8 +154,8 @@ function Builder({ path, onReload }: { path: PathDetail; onReload: () => void })
               <div
                 key={course.id}
                 className={cn(
-                  'flex flex-wrap items-start justify-between gap-3 rounded-card border p-4',
-                  isSelected ? 'border-2 border-primary-600 bg-card' : 'border-border bg-card',
+                  cardVariants({ variant: isSelected ? 'selected' : 'default' }),
+                  'flex flex-wrap items-start justify-between gap-3 p-4',
                 )}
               >
                 <div className="flex min-w-0 flex-col gap-1">

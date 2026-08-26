@@ -31,11 +31,11 @@ describe('HollandCodeChips', () => {
     expect(items[2]).toMatch(/^3\.\s*المبادِر$/);
   });
 
-  it('names the list for assistive technology and uses the accent fill, never gold', () => {
+  it('names the list for assistive technology and uses the primary tag, never gold', () => {
     const { container } = renderChips({ code: ['S', 'I', 'A'] });
 
     expect(screen.getByRole('list')).toHaveAccessibleName('ميولك المهنية');
-    expect(container.innerHTML).toMatch(/bg-accent/);
+    expect(container.innerHTML).toMatch(/bg-primary-50/);
     expect(container.innerHTML).not.toMatch(/gold/i);
   });
 });
