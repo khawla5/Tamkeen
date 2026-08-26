@@ -274,8 +274,12 @@ export const authApi = {
     api.post<{ status: string }>('/api/auth/forgot-password', { email }),
 
   /** §4.12: change your own password, proving the current one. */
-  changePassword: (currentPassword: string, newPassword: string) =>
-    api.post<void>('/api/auth/change-password', { currentPassword, newPassword }),
+  changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) =>
+    api.post<void>('/api/auth/change-password', {
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    }),
 
   /**
    * §4.12: ask to move the account to a new address.
@@ -428,6 +432,9 @@ export const certificatesApi = {
  */
 export const entityApi = {
   profile: () => api.get<EntityProfileView | null>('/api/entity/me'),
+  /** §4B.6 — the account's own name and the organisation's contact, one save. */
+  updateProfile: (input: { fullName: string; contactName: string; contactEmail: string }) =>
+    api.patch<EntityProfileView>('/api/entity/me', input),
   dashboard: () => api.get<EntityDashboardView>('/api/entity/dashboard'),
 
   listCourses: (filters: { q?: string; publication?: CoursePublication } = {}) => {
@@ -475,8 +482,10 @@ export const entityApi = {
    * carries a live, single-use credential, so it must not sit in the DOM from
    * the moment the page loads (D-045). Called on the click, used immediately.
    */
-  authorLaunch: (courseId: string) =>
-    api.post<EntityAuthorLaunchView>(`/api/entity/courses/${courseId}/author-launch`),
+  authorLaunch: (courseId: string, options: { embed?: boolean } = {}) =>
+    api.post<EntityAuthorLaunchView>(`/api/entity/courses/${courseId}/author-launch`, {
+      embed: options.embed === true,
+    }),
 
   learners: (courseId?: string) =>
     api.get<EntityLearnerRow[]>(

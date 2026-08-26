@@ -53,7 +53,7 @@ export function CertificateVerification({ verificationId }: { verificationId: st
         ) : error || !data ? (
           <ErrorState onRetry={refetch} />
         ) : (
-          <Card className="border-2 border-primary-600">
+          <Card variant="selected">
             <CardHeader className="items-center gap-2 text-center">
               {/*
                 The one thing the visitor came to find out, stated first.

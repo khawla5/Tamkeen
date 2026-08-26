@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFormat } from '@/i18n/format-provider';
 import { assessmentApi, pathsApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
+import { HollandCodeChips } from '@/components/riasec/holland-code-chips';
 
 /**
  * Results & Path Selection (§4.4).
@@ -118,19 +119,7 @@ function HollandCode({ result }: { result: AssessmentResultView }) {
         <CardTitle>{t('codeHeading')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        <div className="flex flex-wrap gap-3">
-          {result.code.map((letter, position) => (
-            <span
-              key={letter}
-              className="rounded-card border-2 border-primary-600 bg-card px-4 py-2 text-base font-semibold text-foreground"
-            >
-              {/* The ordinal is what makes "top three, in rank order" visible;
-                  without it the code reads as an unordered set. */}
-              <span className="text-muted-foreground">{format.number(position + 1)}. </span>
-              {tRiasec(`${letter}.name`)}
-            </span>
-          ))}
-        </div>
+        <HollandCodeChips code={result.code} ordinals />
 
         <div className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">{t('codeIntro')}</p>
@@ -156,10 +145,10 @@ function HollandCode({ result }: { result: AssessmentResultView }) {
                 <dd className="flex flex-1 items-center gap-3">
                   <div
                     aria-hidden="true"
-                    className="h-2 flex-1 overflow-hidden rounded-full bg-muted/20"
+                    className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-200"
                   >
                     <div
-                      className="h-full rounded-full bg-secondary"
+                      className="h-full rounded-full bg-primary-600"
                       style={{ width: `${Math.round(dimension.percent)}%` }}
                     />
                   </div>

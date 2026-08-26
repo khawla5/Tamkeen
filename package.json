@@ -26,7 +26,10 @@
     "db:down": "docker compose down",
     "test:e2e": "npm run test:e2e --workspace @tamkeen/api",
     "test:e2e:web": "npm run test:e2e --workspace @tamkeen/web",
-    "e2e": "npm run db:up && npm run build && npm run test:e2e:web"
+    "e2e": "npm run db:up && npm run build && npm run test:e2e:web",
+    "moodle:up": "docker compose -f docker-compose.moodle.yml up -d",
+    "moodle:setup": "node infra/moodle/setup.mjs",
+    "moodle:down": "docker compose -f docker-compose.moodle.yml down"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

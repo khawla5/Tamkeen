@@ -1,9 +1,12 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
+  IsEmail,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -13,6 +16,38 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
+
+const trim = () =>
+  Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value));
+
+/**
+ * §4B.6 — the entity's own profile, saved as one action like the employee's
+ * (§4.12): the account holder's name, and the organisation's contact. The
+ * organisation's *name* is not here — it is what the ministry contracted with
+ * (D-063) and §4C.2 is where it changes. Sending it trips the global
+ * `forbidNonWhitelisted` rather than being silently dropped.
+ */
+export class UpdateEntityProfileDto {
+  @IsString()
+  @IsNotEmpty({ message: 'FULL_NAME_REQUIRED' })
+  @MaxLength(120)
+  @trim()
+  fullName!: string;
+
+  /* Both contact fields may be empty — an organisation can have no named
+     contact yet — but an address that is present must be one. */
+  @IsString()
+  @MaxLength(120)
+  @trim()
+  contactName!: string;
+
+  @IsString()
+  @MaxLength(254)
+  @trim()
+  @ValidateIf((_object, value) => typeof value === 'string' && value.length > 0)
+  @IsEmail({}, { message: 'CONTACT_EMAIL_INVALID' })
+  contactEmail!: string;
+}
 
 /**
  * Validation for the entity portal.
@@ -104,6 +139,17 @@ export class UpdateEntityCourseDto {
   @IsOptional()
   @IsIn(['AR', 'EN'])
   language?: 'AR' | 'EN';
+}
+
+/**
+ * The author launch's one option (TAM-129). `embed` asks for a URL the entity
+ * portal can frame — chrome hidden, editing on. Absent or false: the plain
+ * full-page handoff, unchanged.
+ */
+export class AuthorLaunchDto {
+  @IsOptional()
+  @IsBoolean()
+  embed?: boolean;
 }
 
 /** §4B.5's optional per-course filter. */

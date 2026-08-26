@@ -255,7 +255,11 @@ describe('profile — changing a password', () => {
     await user.click(screen.getByRole('button', { name: 'تغيير كلمة المرور' }));
 
     await waitFor(() =>
-      expect(api.changePassword).toHaveBeenCalledWith('the-old-password', 'a-new-long-password'),
+      expect(api.changePassword).toHaveBeenCalledWith(
+        'the-old-password',
+        'a-new-long-password',
+        'a-new-long-password',
+      ),
     );
 
     /* Passwords left sitting in the DOM after a successful change are three
@@ -288,6 +292,22 @@ describe('profile — changing a password', () => {
     await user.click(screen.getByRole('button', { name: 'تغيير كلمة المرور' }));
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('tells a locked-out account why waiting will help, in the words sign-in uses', async () => {
+    const { ApiError } = await import('@/lib/api-client');
+    api.changePassword.mockRejectedValue(new ApiError('ACCOUNT_LOCKED', 401));
+
+    const user = userEvent.setup();
+    renderWithProviders(<ProfilePage />);
+
+    await fill(user, 'the-old-password', 'a-new-long-password');
+    await user.click(screen.getByRole('button', { name: 'تغيير كلمة المرور' }));
+
+    /* Wrong guesses here feed the same lockout as sign-in (TAM-110); the page
+       must say so rather than show the generic credentials error five times
+       and a mystery on the sixth. */
+    expect(await screen.findByRole('alert')).toHaveTextContent(/إيقاف الحساب مؤقتًا/);
   });
 });
 

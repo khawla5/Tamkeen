@@ -81,3 +81,40 @@ export function navForState(state: DashboardState): readonly NavItem[] {
 
   return STEADY_STATE_NAV.filter((item) => keys.includes(item.key));
 }
+
+/**
+ * Whether `href` is the page itself or a section the page is nested in —
+ * segment-aware, so `/entity` covers `/entity/learners` but not `/entityx`.
+ */
+export function navPathMatches(pathname: string, href: string): boolean {
+  const current = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  const target = href.length > 1 ? href.replace(/\/+$/, '') : href;
+
+  if (current === target) return true;
+  if (target === '/') return false;
+
+  return current.startsWith(`${target}/`);
+}
+
+/**
+ * The one rail item that is active for `pathname` (TAM-131): the **longest**
+ * matching href wins.
+ *
+ * A dashboard is the root of its portal (`/`, `/entity`, `/admin`), so by
+ * plain prefix it matched every page — the bug — and an exact-match special
+ * case for `/` alone had simply never learned about `/entity`. Longest match
+ * needs no special case: the dashboard wins only on its own page, a nested page
+ * (`/entity/courses/abc/content`) belongs to its section, and exactly one item
+ * is ever active.
+ */
+export function activeNavHref(pathname: string, hrefs: readonly string[]): string | null {
+  let best: string | null = null;
+
+  for (const href of hrefs) {
+    if (navPathMatches(pathname, href) && (best === null || href.length > best.length)) {
+      best = href;
+    }
+  }
+
+  return best;
+}

@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { useFormat } from '@/i18n/format-provider';
 import { toHours } from '@/lib/duration';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { cardVariants } from '@/components/ui/card';
 
 /**
  * A path card (§4.4).
@@ -29,8 +31,8 @@ export function PathCard({ path }: { path: PathSummary }) {
   return (
     <article
       className={cn(
-        'flex flex-col gap-3 rounded-card border bg-card p-5',
-        path.recommended ? 'border-2 border-primary-600' : 'border-border',
+        cardVariants({ variant: path.recommended ? 'selected' : 'default' }),
+        'flex flex-col gap-3 p-5',
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -40,9 +42,9 @@ export function PathCard({ path }: { path: PathSummary }) {
         </div>
 
         {path.recommended ? (
-          <span className="rounded-full bg-accent px-3 py-1 text-sm font-semibold text-accent-foreground">
+          <Badge variant="primary" className="text-sm">
             {t('recommendedBadge')}
-          </span>
+          </Badge>
         ) : null}
       </div>
 

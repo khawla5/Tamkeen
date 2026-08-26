@@ -62,8 +62,9 @@
   /* Platforms Code's typeface is IBM Plex Sans Arabic — already self-hosted (D-023). */
   --font-sans: var(--font-arabic), system-ui, sans-serif;
 
-  /* The system's radius scale is 4 / 8 / 16 / 24; cards sit on 16. */
-  --radius-card: 1rem;
+  /* The system's radius scale is 4 / 8 / 16 / 24; cards sit on 8 (TAM-118).
+     The landing hero's panels keep 16 explicitly — they are display, not cards. */
+  --radius-card: 0.5rem;
 }
 
 /*

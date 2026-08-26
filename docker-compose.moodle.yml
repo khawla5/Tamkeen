@@ -1,0 +1,77 @@
+# Local Moodle for integration work — optional, separate from the core dev
+# dependencies (docker-compose.yml). Not a deployment artefact (Phase 7 owns
+# environments); this exists so MOODLE_MODE=real has something to talk to.
+#
+#   npm run moodle:up      start Moodle 4.5.x + MariaDB (first boot installs — minutes)
+#   npm run moodle:setup   configure web services, role, token, plugin (script)
+#   npm run moodle:down    stop them (data persists in the volumes)
+#
+# Image pinned to 4.5.4 — CLAUDE.md Phase 6 requires ≥ 4.5.3 (CVE-2025-32044).
+# bitnamilegacy because Bitnami's free catalogue was frozen there; acceptable
+# for a local dev instance, revisit for any shared environment.
+
+services:
+  moodle-db:
+    image: bitnamilegacy/mariadb:11.4
+    container_name: tamkeen-moodle-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: moodle-root-local
+      MARIADB_DATABASE: moodle
+      MARIADB_USER: moodle
+      MARIADB_PASSWORD: moodle-local
+      MARIADB_CHARACTER_SET: utf8mb4
+      MARIADB_COLLATE: utf8mb4_unicode_ci
+    volumes:
+      - moodle-mariadb-data:/bitnami/mariadb
+    healthcheck:
+      # Bitnami images have no healthcheck.sh — mysqladmin ping is the probe.
+      test: ['CMD', 'mysqladmin', 'ping', '-umoodle', '-pmoodle-local']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  moodle:
+    image: bitnamilegacy/moodle:4.5.4
+    container_name: tamkeen-moodle
+    restart: unless-stopped
+    depends_on:
+      moodle-db:
+        condition: service_healthy
+    ports:
+      - '8080:8080'
+    environment:
+      MOODLE_DATABASE_TYPE: mariadb
+      MOODLE_DATABASE_HOST: moodle-db
+      MOODLE_DATABASE_PORT_NUMBER: 3306
+      MOODLE_DATABASE_NAME: moodle
+      MOODLE_DATABASE_USER: moodle
+      MOODLE_DATABASE_PASSWORD: moodle-local
+      MOODLE_USERNAME: admin
+      MOODLE_PASSWORD: Moodle_Admin_Local_2026
+      MOODLE_EMAIL: moodle-admin@ministry.gov.example
+      MOODLE_SITE_NAME: 'Tamkeen LMS (dev)'
+      # Arabic-first instance, matching the product (§5.4).
+      MOODLE_LANG: ar
+      PHP_MAX_INPUT_VARS: 5000
+    volumes:
+      - moodle-data:/bitnami/moodle
+      - moodle-moodledata:/bitnami/moodledata
+    healthcheck:
+      # The image has no curl; PHP is certainly there.
+      test:
+        [
+          'CMD',
+          'php',
+          '-r',
+          'exit(@file_get_contents("http://localhost:8080/login/index.php") ? 0 : 1);',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+
+volumes:
+  moodle-mariadb-data:
+  moodle-data:
+  moodle-moodledata:

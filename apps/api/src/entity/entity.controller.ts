@@ -33,10 +33,12 @@ import { EntityLearnersService } from './entity-learners.service';
 import { EntityProfileService } from './entity-profile.service';
 import { EntityScopeService } from './entity-scope.service';
 import {
+  AuthorLaunchDto,
   CreateEntityCourseDto,
   EntityCourseQueryDto,
   EntityLearnerQueryDto,
   UpdateEntityCourseDto,
+  UpdateEntityProfileDto,
 } from './entity.dto';
 
 /**
@@ -73,6 +75,16 @@ export class EntityController {
   @Get('me')
   async me(@CurrentUser() user: AuthenticatedUser): Promise<EntityProfileView | null> {
     return this.profile.get(await this.scope.resolve(user));
+  }
+
+  /** §4B.6 — the account's own name and the organisation's contact, one save. */
+  @Patch('me')
+  async updateMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateEntityProfileDto,
+    @Req() request: Request,
+  ): Promise<EntityProfileView> {
+    return this.profile.update(await this.scope.resolve(user), user.id, dto, request.ip ?? null);
   }
 
   /** §4B.1 — counts for context, and the one list that is actionable. */
@@ -200,6 +212,7 @@ export class EntityController {
   async authorLaunch(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) courseId: string,
+    @Body() dto: AuthorLaunchDto,
     @Req() request: Request,
   ): Promise<EntityAuthorLaunchView> {
     return this.management.authorLaunch(
@@ -207,6 +220,7 @@ export class EntityController {
       courseId,
       user.id,
       request.ip ?? null,
+      { embed: dto.embed === true },
     );
   }
 

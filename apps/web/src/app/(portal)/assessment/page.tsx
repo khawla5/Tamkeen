@@ -15,6 +15,8 @@ import { Progress } from '@/components/ui/progress';
 import { assessmentApi } from '@/lib/api-client';
 import { useApiMutation, useApiQuery } from '@/lib/use-api';
 import { useFormat } from '@/i18n/format-provider';
+import { cardVariants } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 /**
  * The assessment (§4.3).
@@ -200,11 +202,11 @@ function AssessmentFlow({ assessment }: { assessment: AssessmentView }) {
               <label
                 key={option.id}
                 htmlFor={id}
-                className={`flex cursor-pointer items-center gap-3 rounded-card border p-4 transition-colors ${
-                  isChosen
-                    ? 'border-primary-600 bg-card font-medium'
-                    : 'border-border bg-card hover:border-neutral-400'
-                }`}
+                className={cn(
+                  cardVariants({ variant: isChosen ? 'selected' : 'default' }),
+                  'flex cursor-pointer items-center gap-3 p-4 transition-colors',
+                  isChosen ? 'font-medium' : 'hover:border-neutral-400',
+                )}
               >
                 <input
                   type="radio"
@@ -213,7 +215,7 @@ function AssessmentFlow({ assessment }: { assessment: AssessmentView }) {
                   value={option.id}
                   checked={isChosen}
                   onChange={() => choose(option.id)}
-                  className="size-4 accent-navy"
+                  className="size-4 accent-primary-600"
                 />
                 <span>{option.label}</span>
               </label>

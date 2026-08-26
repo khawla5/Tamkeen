@@ -11,6 +11,7 @@ import { DataView } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { cvApi } from '@/lib/api-client';
 import { useApiMutation, useApiQuery } from '@/lib/use-api';
+import { Alert } from '@/components/ui/alert';
 import { CvForm } from './cv-form';
 import { CvPreview } from './cv-preview';
 
@@ -123,9 +124,7 @@ export default function CvPage() {
       <DataView isLoading={cv.isLoading} error={cv.error} onRetry={cv.refetch}>
         {cv.data && profile ? (
           <div className="flex flex-col gap-6">
-            <p className="rounded-card border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-              {t('languageNotice')}
-            </p>
+            <Alert tone="info">{t('languageNotice')}</Alert>
 
             {/* A failed save is reported where the action is, not as a page
                 error — the document is still on screen and still editable. */}

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotImplementedException } from '@nestjs/common';
 
-import type { LmsPort } from '../lms.port';
+import type { LaunchOptions, LmsPort } from '../lms.port';
 import {
   LmsOperationError,
   LmsUnavailableError,
@@ -838,14 +838,19 @@ export class MoodleHttpService implements LmsPort {
    * Called per click rather than per render, so the token's short life begins
    * when the learner actually goes to the course.
    */
-  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string {
+  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId, options?: LaunchOptions): string {
     const token = mintHandoffToken(
       { moodleUserId: lmsUserId, moodleCourseId: lmsCourseId },
       this.ssoSecret,
       this.ssoTtlSeconds,
     );
 
-    return `${this.baseUrl.replace(/\/+$/, '')}/local/tamkeensso/login.php?token=${encodeURIComponent(token)}`;
+    /* The embed flag rides beside the token, not inside it (TAM-129): the
+       plugin reads it after the signature has been verified and spent, and a
+       forged flag on a real token changes only how the page is dressed. */
+    const embed = options?.embed ? `&embed=${options.embed}` : '';
+
+    return `${this.baseUrl.replace(/\/+$/, '')}/local/tamkeensso/login.php?token=${encodeURIComponent(token)}${embed}`;
   }
 
   private notYet(method: string): never {
