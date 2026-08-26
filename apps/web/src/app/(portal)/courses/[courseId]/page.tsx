@@ -9,20 +9,24 @@ import type { CourseDetail } from '@tamkeen/types';
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { PortalPage } from '@/components/layout/portal-page';
 import { DataView } from '@/components/states';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useFormat } from '@/i18n/format-provider';
-import { coursesApi, myPathApi } from '@/lib/api-client';
+import { certificatesApi, coursesApi, myPathApi } from '@/lib/api-client';
 import { toHours } from '@/lib/duration';
 import { useApiMutation, useApiQuery } from '@/lib/use-api';
 
 /**
- * Course detail (§4.7).
+ * Course detail (§4.7, TAM-128).
  *
- * The single primary action is whatever the server said it is. The client does
- * not decide between "add", "start" and "completed" — that logic lives in
- * `resolveCourseAction` on the API, which returns exactly one value, so §3's
- * "never all three" cannot be broken by a rendering mistake here.
+ * The single primary action is whatever the server said it is, and it lives in
+ * the page header (`PortalPage`'s `action` slot) so it is visible without
+ * scrolling — the client does not decide between "add", "start" and
+ * "completed", that logic lives in `resolveCourseAction` on the API, which
+ * returns exactly one value, so §3's "never all three" cannot be broken by a
+ * rendering mistake here. This ticket relocates that action; it does not
+ * reinvent it.
  */
 export default function CourseDetailPage() {
   const t = useTranslations('courseDetail');
@@ -30,23 +34,7 @@ export default function CourseDetailPage() {
   const courseId = params.courseId;
 
   const course = useApiQuery(() => coursesApi.detail(courseId), [courseId]);
-
-  return (
-    <PortalPage title={course.data?.title ?? t('title')}>
-      <DataView isLoading={course.isLoading} error={course.error} onRetry={course.refetch}>
-        {course.data ? <Detail course={course.data} onReload={course.refetch} /> : null}
-      </DataView>
-    </PortalPage>
-  );
-}
-
-function Detail({ course, onReload }: { course: CourseDetail; onReload: () => void }) {
-  const t = useTranslations('courseDetail');
-  const translateError = useErrorMessage();
-  const format = useFormat();
-
-  const add = useApiMutation(() => myPathApi.addCourse(course.id));
-  const hours = toHours(course.durationMinutes);
+  const add = useApiMutation(() => myPathApi.addCourse(courseId));
 
   async function onAdd() {
     const result = await add.run();
@@ -55,24 +43,89 @@ function Detail({ course, onReload }: { course: CourseDetail; onReload: () => vo
        the reload is what confirms the outcome — and it is what updates the
        action to IN_PATH either way. */
     if (result !== undefined || !add.error) {
-      onReload();
+      course.refetch();
     }
   }
 
   return (
+    <PortalPage
+      title={course.data?.title ?? t('title')}
+      action={
+        course.data ? (
+          <CourseAction course={course.data} isPending={add.isPending} onAdd={() => void onAdd()} />
+        ) : undefined
+      }
+    >
+      <DataView isLoading={course.isLoading} error={course.error} onRetry={course.refetch}>
+        {course.data ? <Detail course={course.data} addError={add.error} /> : null}
+      </DataView>
+    </PortalPage>
+  );
+}
+
+function Detail({ course, addError }: { course: CourseDetail; addError: unknown }) {
+  const t = useTranslations('courseDetail');
+  const tMyPath = useTranslations('myPath');
+  const translateError = useErrorMessage();
+  const format = useFormat();
+
+  const hours = toHours(course.durationMinutes);
+
+  /* One resolution shared with TAM-127's card chip (§4.7): `personalStatus`
+     is null outside the user's path — no chip, absence is the signal — and
+     the three values inside it map to the same three labels the my-path list
+     already uses, plus one more for "selected but not yet started" (that
+     page never needs it — everything in it is, by definition, in the path). */
+  const statusLabel =
+    course.personalStatus === 'COMPLETED'
+      ? tMyPath('statusCompleted')
+      : course.personalStatus === 'IN_PROGRESS'
+        ? tMyPath('statusInProgress')
+        : course.personalStatus === 'NOT_STARTED'
+          ? t('statusInPath')
+          : null;
+
+  const hasMeta = hours !== null || course.paths.length > 0 || statusLabel !== null;
+
+  return (
     <div className="flex flex-col gap-6">
+      {/* Header block (§4.7): summary, then the meta row — duration as text,
+          path membership and personal status as quiet tags. Under the page
+          title, not inside the content card, so it reads as page framing
+          rather than one more section. */}
+      <div className="flex flex-col gap-3">
+        <p className="text-muted-foreground">{course.summary}</p>
+
+        {hasMeta ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {hours !== null ? (
+              <span className="text-sm text-muted-foreground">
+                {t('duration', { hours: format.number(hours) })}
+              </span>
+            ) : null}
+            {course.paths.map((path) => (
+              <Badge key={path.id} variant="soft">
+                {path.name}
+              </Badge>
+            ))}
+            {/* At most one chip, matching every course card that will carry
+                the same rule once TAM-127 lands — a course outside the user's
+                path gets none, absence is the signal. */}
+            {statusLabel !== null ? <Badge variant="soft">{statusLabel}</Badge> : null}
+          </div>
+        ) : null}
+      </div>
+
+      {addError ? (
+        <p role="alert" className="text-sm font-medium text-destructive">
+          {translateError(addError)}
+        </p>
+      ) : null}
+
       {/* No card title: the page header already carries the course name as the
           page's single h1, and repeating it is the redundant UI §3 forbids. */}
       <Card>
         <CardContent className="flex flex-col gap-5 pt-6">
-          <p className="text-muted-foreground">{course.summary}</p>
-
-          {hours !== null ? (
-            <p className="text-sm text-muted-foreground">
-              {t('duration', { hours: format.number(hours) })}
-            </p>
-          ) : null}
-
           {course.objectives.length > 0 ? (
             <section className="flex flex-col gap-2">
               <h2 className="text-sm font-semibold text-foreground">{t('objectives')}</h2>
@@ -93,24 +146,10 @@ function Detail({ course, onReload }: { course: CourseDetail; onReload: () => vo
             </section>
           ) : null}
 
-          {course.paths.length > 0 ? (
-            <section className="flex flex-col gap-2">
-              <h2 className="text-sm font-semibold text-foreground">{t('paths')}</h2>
-              <p className="text-sm text-muted-foreground">
-                {course.paths.map((path) => path.name).join('، ')}
-              </p>
-            </section>
-          ) : null}
-
+          {/* A quiet footnote, not a section heading — the certificate line
+              was never structured content, and giving it one now would be
+              the new content §3 forbids. */}
           <p className="text-sm text-muted-foreground">{t('certificate')}</p>
-
-          {add.error ? (
-            <p role="alert" className="text-sm font-medium text-destructive">
-              {translateError(add.error)}
-            </p>
-          ) : null}
-
-          <CourseAction course={course} isPending={add.isPending} onAdd={() => void onAdd()} />
         </CardContent>
       </Card>
 
@@ -121,7 +160,8 @@ function Detail({ course, onReload }: { course: CourseDetail; onReload: () => vo
   );
 }
 
-/** Renders the one action the server chose — never a menu of them. */
+/** Renders the one action the server chose, in the page header — never a
+ *  menu of them. */
 function CourseAction({
   course,
   isPending,
@@ -136,21 +176,21 @@ function CourseAction({
   switch (course.action) {
     case 'ADD_TO_PATH':
       return (
-        <Button type="button" onClick={onAdd} disabled={isPending} className="self-start">
+        <Button type="button" onClick={onAdd} disabled={isPending}>
           {isPending ? t('adding') : t('actionAdd')}
         </Button>
       );
 
     case 'IN_PATH':
       return (
-        <Button asChild variant="outline" className="self-start">
+        <Button asChild variant="outline">
           <Link href={`/paths/${course.buildablePathId}`}>{t('actionInPath')}</Link>
         </Button>
       );
 
     case 'START_COURSE':
       return (
-        <Button asChild className="self-start">
+        <Button asChild>
           {/* Through the player, which mints the signed handoff on click. A
               direct LMS link carries no session (D-044). */}
           <Link href={`/courses/${course.id}/player`}>{t('actionStart')}</Link>
@@ -158,8 +198,22 @@ function CourseAction({
       );
 
     case 'COMPLETED':
-      return (
-        <p className="self-start rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground">
+      /* A certificate is only guaranteed once the sync job has issued one;
+         until then this falls back to the old static pill rather than
+         linking to a certificate that does not exist yet. */
+      return course.certificateId !== null ? (
+        <Button asChild variant="outline">
+          <a
+            href={certificatesApi.fileUrl(course.certificateId, 'inline')}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t('actionCompletedAriaLabel')}
+          >
+            {t('actionCompleted')}
+          </a>
+        </Button>
+      ) : (
+        <p className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground">
           {t('actionCompleted')}
         </p>
       );
