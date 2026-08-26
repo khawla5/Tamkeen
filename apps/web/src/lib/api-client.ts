@@ -298,6 +298,12 @@ export const authApi = {
     api.post<{ status: string }>('/api/auth/reset-password', { token, password }),
 };
 
+/** §4.12 — an employee's own profile: name and department, saved together. */
+export const profileApi = {
+  update: (input: { fullName: string; department: string }) =>
+    api.patch<CurrentUser>('/api/me/profile', input),
+};
+
 /**
  * Phase 1 endpoints.
  *
@@ -637,6 +643,9 @@ export const adminApi = {
       isActive?: boolean;
     },
   ) => api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}`, patch),
+
+  /** Permanent removal, refused for any path somebody ever chose (§4C.4). */
+  deletePath: (pathId: string) => api.delete<void>(`/api/admin/paths/${pathId}`),
 
   attachPathCourse: (pathId: string, courseId: string) =>
     api.post<AdminPathDetail>(`/api/admin/paths/${pathId}/courses`, { courseId }),

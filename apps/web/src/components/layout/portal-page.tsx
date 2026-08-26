@@ -51,10 +51,7 @@ export function PortalPage({
         </header>
         <main id="main-content" className="p-6">
           <div
-            className={cn(
-              'mx-auto w-full',
-              width === 'narrow' ? NARROW_MAX_WIDTH : PAGE_MAX_WIDTH,
-            )}
+            className={cn('mx-auto w-full', width === 'narrow' ? NARROW_MAX_WIDTH : PAGE_MAX_WIDTH)}
           >
             {children}
           </div>

@@ -45,7 +45,7 @@ const USER: CurrentUser = {
   id: 'user-1',
   email: 'employee@ministry.gov.example',
   fullName: 'سارة العتيبي',
-  employeeId: 'EMP-2048',
+  employeeId: 'E-1',
   department: 'تقنية المعلومات',
   role: 'EMPLOYEE',
   /* Null follows the system default (§4.12, D-018). */

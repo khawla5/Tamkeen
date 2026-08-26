@@ -112,6 +112,7 @@ describe('MoodleHttpService', () => {
       await expect(service.provisionUser(input)).resolves.toEqual({
         lmsUserId: 42,
         email: EMAIL,
+        fullName: 'أحمد علي',
       });
 
       const create = calls.find((call) => call.wsfunction === 'core_user_create_users');
@@ -135,7 +136,13 @@ describe('MoodleHttpService', () => {
         throw new Error('must not reach create');
       });
 
-      await expect(service.provisionUser(input)).resolves.toEqual({ lmsUserId: 7, email: EMAIL });
+      await expect(service.provisionUser(input)).resolves.toEqual({
+        lmsUserId: 7,
+        email: EMAIL,
+        /* No firstname/lastname in this stub's lookup response — an honest
+           read-back of what Moodle actually returned, not a guess. */
+        fullName: '',
+      });
       expect(countOf(calls, 'core_user_create_users')).toBe(0);
     });
 
@@ -154,7 +161,12 @@ describe('MoodleHttpService', () => {
       const first = await service.provisionUser(input);
       const second = await service.provisionUser(input);
 
-      expect(second).toEqual(first);
+      /* The id, not the whole object: the second call takes the lookup path,
+         and this stub's lookup response carries no firstname/lastname, unlike
+         a real Moodle account's — which is a limitation of the stub, not a
+         behaviour under test here. The account identity is what idempotency
+         is actually about. */
+      expect(second.lmsUserId).toBe(first.lmsUserId);
       expect(countOf(calls, 'core_user_create_users')).toBe(1);
     });
 
@@ -197,6 +209,7 @@ describe('MoodleHttpService', () => {
 
       await expect(service.provisionUser(input)).resolves.toEqual({
         lmsUserId: 500,
+        fullName: '',
         email: EMAIL,
       });
     });
@@ -267,6 +280,7 @@ describe('MoodleHttpService', () => {
       await expect(service.findUserByEmail(EMAIL)).resolves.toEqual({
         lmsUserId: 11,
         email: EMAIL,
+        fullName: '',
       });
 
       expect(calls[0]!.params).toMatchObject({ field: 'username', values: [USERNAME] });
@@ -714,7 +728,7 @@ describe('MoodleHttpService', () => {
 
       const reference = await service.findUserByEmail(EMAIL);
 
-      expect(Object.keys(reference!).sort()).toEqual(['email', 'lmsUserId']);
+      expect(Object.keys(reference!).sort()).toEqual(['email', 'fullName', 'lmsUserId']);
     });
   });
 });

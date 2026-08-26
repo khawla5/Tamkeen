@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -33,11 +35,13 @@ import {
 /**
  * §4C.4 — study paths.
  *
- * **No delete endpoint, and not by omission.** `user_paths.path_id` is
- * `Restrict` and a path certificate names the path on a document somebody holds,
- * so removing a path anyone ever chose would falsify a credential. Retirement is
- * the operation, and it is narrower than deletion in exactly the way §2 needs:
- * the path leaves new selections and every learner holding it is untouched.
+ * **Two different removals, because they are two different decisions.**
+ * `PATCH { isActive: false }` retires a path: it leaves new selections and every
+ * learner holding it is untouched, which is what §2 needs and is reversible.
+ * `DELETE` removes it permanently and is refused for any path somebody ever
+ * chose — `user_paths.path_id` is `Restrict` and a path certificate names the
+ * path on a document somebody holds, so that deletion would falsify a
+ * credential. What is left deletable is the path created by mistake.
  *
  * The bounds endpoint returns 5-10 and nothing writes them (D-074).
  */
@@ -111,6 +115,22 @@ export class AdminPathsController {
     @Req() request: Request,
   ): Promise<AdminPathDetail> {
     return this.paths.reorderCourses(pathId, dto, actor.id, request.ip ?? null);
+  }
+
+  /**
+   * Permanently removes a path nobody ever chose (§4C.4).
+   *
+   * Returns 409 `PATH_HELD_BY_LEARNERS` for any other, where retirement is the
+   * operation the administrator actually wants.
+   */
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) pathId: string,
+    @Req() request: Request,
+  ): Promise<void> {
+    return this.paths.remove(pathId, actor.id, request.ip ?? null);
   }
 
   @Delete(':id/courses/:courseId')

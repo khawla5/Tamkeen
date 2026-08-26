@@ -331,7 +331,7 @@ function TabButton({
       aria-current={active ? 'page' : undefined}
       className={
         active
-          ? 'border-b-2 border-gold px-4 py-2 text-sm font-semibold text-foreground'
+          ? 'border-b-2 border-primary px-4 py-2 text-sm font-semibold text-foreground'
           : 'border-b-2 border-transparent px-4 py-2 text-sm text-muted-foreground hover:text-foreground'
       }
     >

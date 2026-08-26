@@ -79,6 +79,19 @@ export function splitFullName(fullName: string): { firstname: string; lastname: 
 }
 
 /**
+ * The inverse of `splitFullName`, for reading a name back from Moodle.
+ *
+ * Strips the `—` placeholder `splitFullName` writes in place of an absent
+ * last name, so a round trip through Moodle does not grow an em dash onto a
+ * name that never had one.
+ */
+export function joinFullName(firstname: string, lastname: string): string {
+  return [firstname.trim(), lastname.trim()]
+    .filter((part) => part.length > 0 && part !== '—')
+    .join(' ');
+}
+
+/**
  * A password for the Moodle account that **nobody ever learns**, including us.
  *
  * We are the identity owner: employees authenticate against our app and reach

@@ -1,10 +1,10 @@
 # TAM-129 — Embed foundation: `local_tamkeensso` author-embed mode, frame-ancestors, and the launch flag
 
-**Branch:** `feature/tam-129-embed-foundation` → `main` · Decision **D-098** · Epic `moodle-embed`
+**Branch:** `feature/tam-129-embed-foundation` → `main` · Decision **D-101** · Epic `moodle-embed`
 
 ## What was built
 
-The Moodle and API side that lets the entity portal frame Moodle's course editor safely. No UI in this PR — the entity Course Content page that puts the iframe on screen is **TAM-130**, which stacks on this.
+The Moodle and API side that lets the entity portal frame Moodle's course editor safely. No UI in this PR — the entity Course Content page that puts the iframe on screen is **TAM-134**, which stacks on this.
 
 **1. Plugin `local_tamkeensso` 0.1 → 0.2**
 
@@ -35,6 +35,6 @@ TAM-129's acceptance list in `tickets.md`, all five points. Product rules: no ne
 
 ## Docs
 
-`decisions.md` **D-098** (framing premise: Moodle on a subdomain of the app's site; plugin-not-theme; D-045 amendment for the entity page; D-044 follow-up). `progress.md` 2026-08-25 entry. `tickets.md` TAM-129 marked done.
+`decisions.md` **D-101** (framing premise: Moodle on a subdomain of the app's site; plugin-not-theme; D-045 amendment for the entity page; D-044 follow-up). `progress.md` 2026-08-25 entry. `tickets.md` TAM-129 marked done.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
