@@ -270,12 +270,19 @@ test.describe('Phase 4 — the entity portal', () => {
     expect(text).not.toContain('PW-');
   });
 
-  test('the entity profile is read-only', async () => {
+  test('the organisation name is read-only; the rest of the profile is the entity’s own (D-108)', async () => {
     await entityPage.getByRole('link', { name: 'بيانات الجهة' }).first().click();
 
+    /* Only the contracted identity (D-063) has no edit control — everything
+       else on the page is the account's or the organisation's own
+       housekeeping (D-108, TAM-138), so this asserts the read-only surface
+       shrank to exactly one field rather than the whole page. */
     await expect(entityPage.getByText(entity.entityName)).toBeVisible();
-    await expect(entityPage.getByText('تُدار بيانات الجهة من قِبل إدارة النظام.')).toBeVisible();
-    await expect(entityPage.getByRole('textbox')).toHaveCount(0);
+    await expect(entityPage.getByText('يُدار اسم الجهة من قِبل إدارة النظام.')).toBeVisible();
+
+    await expect(entityPage.getByLabel('الاسم الكامل')).toBeEditable();
+    await expect(entityPage.getByLabel('جهة الاتصال', { exact: true })).toBeEditable();
+    await expect(entityPage.getByLabel('بريد جهة الاتصال')).toBeEditable();
   });
 
   test('a learner who types /entity is sent back to their own portal', async () => {
