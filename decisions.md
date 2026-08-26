@@ -5,6 +5,14 @@
 
 ---
 
+## D-109 — Cards sit on radius 8, tags on the status tint, and the "selected" edge is a variant
+
+**Decision (TAM-118):** `--radius-card` is 0.5rem (the system's card radius); the landing hero's panels keep 16 explicitly. `Badge` takes Platforms Code's tag anatomy — a `-50` fill with the status colour for text and hairline, six tones — and is also exported as `Tag`. The recommended / selected treatment is `Card variant="selected"` (a 2px primary edge, never a fill); a status notice is `Card edge="…"` (a 4px start-edge). `Table` and `Tabs` exist as primitives; toasts do not.
+
+**Why:** the ticket's premise — the page sweep should be composition, not styling — only holds if the primitives carry the anatomy. Sixteen was the radius the landing chose for display panels and the portal inherited it for every card; the system's cards are 8, and one token change moves 21 call sites. The selected edge had been hand-rolled nine ways; a variant means the one place it is defined is the one place the WCAG 1.4.1 rule (colour never alone) is documented. Tags on the tint are what the system does and what the `Alert` already does — one vocabulary for "status". Toasts were offered conditionally and no page qualified: every confirmation in the product is a status the person is looking at.
+
+**Rejected:** a per-card radius prop (the point of a token is that nobody chooses); a filled "recommended" card (a fill competes with the primary action, §3); a data-grid library for two review lists.
+
 ## D-106 — The audit trail is written for the ministry, not for whoever debugs the system
 **Decision:** §4C.8 renders an entry as *what happened, to what, by whom, when, and why* — all in Arabic. Four changes make that true: `AUDIT_TARGET_TYPES` is one shared vocabulary and `AuditEntry.targetType` is typed against it (a migration normalises the rows already written); every row carries a **`targetLabel`** resolved server-side per page, so a retirement names the path rather than its uuid; **`reason` is its own field** and renders as an Arabic sentence; and the remaining detail is **stripped of every opaque identifier** before it leaves the server, then rendered through an Arabic label map. `AuditAction` and `AuditReason` moved to `@tamkeen/types` so the message catalogue can be asserted against them.
 

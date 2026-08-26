@@ -47,7 +47,7 @@ export default function AdminTemplatesPage() {
       >
         {shown ? (
           <div className="space-y-6">
-            <Card className="border-s-4 border-s-info p-5">
+            <Card edge="info" className="p-5">
               <p className="font-medium text-foreground">{t('templatesFutureOnlyTitle')}</p>
               <p className="mt-1 text-sm text-muted-foreground">{t('templatesFutureOnly')}</p>
             </Card>

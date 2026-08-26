@@ -18,10 +18,13 @@ export interface ErrorStateProps {
  * The error state every data view uses (§2B DoD 4) — "no dead blank screens, no
  * unhandled failures".
  *
- * `role="alert"` so the failure is announced immediately. The message is
- * deliberately plain Arabic with no technical detail: a stack trace or an
- * endpoint path would leak implementation information to an end user, and §2
- * forbids putting anything sensitive in front of them.
+ * On the `Alert` error tone (TAM-118): the danger hairline and `-50` fill, the
+ * danger colour for icon and title, so a failed view and a failed form say
+ * "something went wrong" in the same voice. `role="alert"` so the failure is
+ * announced immediately. The message is deliberately plain Arabic with no
+ * technical detail: a stack trace or an endpoint path would leak
+ * implementation information to an end user, and §2 forbids putting anything
+ * sensitive in front of them.
  */
 export function ErrorState({ title, body, onRetry, className }: ErrorStateProps) {
   const t = useTranslations('states');
@@ -31,13 +34,13 @@ export function ErrorState({ title, body, onRetry, className }: ErrorStateProps)
     <div
       role="alert"
       className={cn(
-        'flex flex-col items-center gap-3 rounded-card border border-destructive/40 bg-card px-6 py-12 text-center',
+        'flex flex-col items-center gap-3 rounded-card border border-danger bg-danger-50 px-6 py-12 text-center',
         className,
       )}
     >
-      <AlertTriangle aria-hidden="true" className="size-8 text-destructive" />
-      <p className="font-semibold text-destructive">{title ?? t('errorTitle')}</p>
-      <p className="max-w-prose text-sm text-muted-foreground">{body ?? t('errorBody')}</p>
+      <AlertTriangle aria-hidden="true" className="size-8 text-danger" />
+      <p className="font-semibold text-danger">{title ?? t('errorTitle')}</p>
+      <p className="max-w-prose text-sm text-neutral-700">{body ?? t('errorBody')}</p>
 
       {onRetry ? (
         <Button variant="outline" size="sm" onClick={onRetry}>
