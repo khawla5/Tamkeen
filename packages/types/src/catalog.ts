@@ -120,6 +120,21 @@ export interface CourseDetail extends CourseSummary {
   action: CourseAction;
   /** Set when `action` is `ADD_TO_PATH`, so the card can link to the build page. */
   buildablePathId: string | null;
+  /**
+   * The user's own progress on this course, when it is in their path; null
+   * when it is not (§4.7, shared with TAM-127's card chip — one resolution,
+   * not two). Distinguishes `START_COURSE`'s two underlying situations —
+   * confirmed-but-not-yet-attempted and actually in progress — which `action`
+   * alone cannot, since both resolve to the same single action.
+   */
+  personalStatus: UserPathCourseStatus | null;
+  /**
+   * Set once `action` is `COMPLETED`, so the header action can link straight
+   * to the certificate already earned — the same field TAM-126 adds to
+   * my-path. Null otherwise; a completed course with no certificate yet
+   * issued is not this ticket's concern (the sync job's).
+   */
+  certificateId: string | null;
 }
 
 export interface PathSummary {
