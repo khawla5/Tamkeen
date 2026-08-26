@@ -545,7 +545,7 @@
 
 ---
 
-> **Epic label: `admin-polish`** — a pass over the super-admin portal at the ministry's direction (2026-08-25), one ticket per page, worked in that order on `feature/tam-130-admin-polish`. Everything below is **DONE** and shipped in **PR #24** (five commits, awaiting review); the acceptance notes record what was actually asserted. Decisions: D-098 (two removals for a path), D-099 (the dashboard's distribution), D-100 (the dialog).
+> **Epic label: `admin-polish`** — a pass over the super-admin portal at the ministry's direction (2026-08-25), one ticket per page, worked in that order on `feature/tam-130-admin-polish`. Everything below is **DONE** and shipped in **PR #24** (five commits, merged 2026-08-26); the acceptance notes record what was actually asserted. Decisions: D-098 (two removals for a path), D-099 (the dashboard's distribution), D-100 (the dialog).
 
 ## TAM-130 — Admin home: a distribution that means something, and nothing on it that cannot be acted on — **DONE**
 
