@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import type { AdminCertificateTemplateView } from '@tamkeen/types';
 
+import { hasMinistryEmblem } from '../certificates/certificate-emblem';
 import { renderCertificateHtml } from '../certificates/certificate-template';
 import { qrSvgFor } from '../certificates/qr';
 import { SettingsService } from '../settings/settings.service';
@@ -47,6 +48,8 @@ export class AdminTemplatesService {
       signatory,
     });
 
-    return { signatory, previewHtml, hasLogo: false };
+    /* Asked of the renderer rather than restated here, so the notice on the
+       screen cannot outlive the artwork it is about (TAM-136). */
+    return { signatory, previewHtml, hasLogo: hasMinistryEmblem() };
   }
 }

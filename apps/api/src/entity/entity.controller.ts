@@ -33,6 +33,7 @@ import { EntityLearnersService } from './entity-learners.service';
 import { EntityProfileService } from './entity-profile.service';
 import { EntityScopeService } from './entity-scope.service';
 import {
+  AuthorLaunchDto,
   CreateEntityCourseDto,
   EntityCourseQueryDto,
   EntityLearnerQueryDto,
@@ -200,6 +201,7 @@ export class EntityController {
   async authorLaunch(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) courseId: string,
+    @Body() dto: AuthorLaunchDto,
     @Req() request: Request,
   ): Promise<EntityAuthorLaunchView> {
     return this.management.authorLaunch(
@@ -207,6 +209,7 @@ export class EntityController {
       courseId,
       user.id,
       request.ip ?? null,
+      { embed: dto.embed === true },
     );
   }
 

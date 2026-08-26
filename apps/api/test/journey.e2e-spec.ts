@@ -1007,6 +1007,9 @@ describe('Phase 1 journey (e2e)', () => {
       const view = (await get(`/api/courses/${unselected.id}`, session).expect(200))
         .body as CourseDetail;
       expect(view.action).toBe('ADD_TO_PATH');
+      /* Not in the user's path at all — no personal status, no certificate. */
+      expect(view.personalStatus).toBeNull();
+      expect(view.certificateId).toBeNull();
     });
 
     it('offers IN_PATH for a selected course before commitment', async () => {
@@ -1017,6 +1020,7 @@ describe('Phase 1 journey (e2e)', () => {
       const view = (await get(`/api/courses/${courseIds[0]}`, session).expect(200))
         .body as CourseDetail;
       expect(view.action).toBe('IN_PATH');
+      expect(view.personalStatus).toBe('NOT_STARTED');
     });
 
     it('offers START_COURSE once the path is confirmed', async () => {
@@ -1028,6 +1032,46 @@ describe('Phase 1 journey (e2e)', () => {
       const view = (await get(`/api/courses/${courseIds[0]}`, session).expect(200))
         .body as CourseDetail;
       expect(view.action).toBe('START_COURSE');
+      /* Confirmed but nothing attempted yet — `action` alone cannot tell this
+         apart from genuinely in progress; `personalStatus` is why §4.7's
+         status chip exists as its own field (TAM-128). */
+      expect(view.personalStatus).toBe('NOT_STARTED');
+    });
+
+    it('offers COMPLETED with a certificate link once the course is passed and a certificate exists', async () => {
+      const session = await signedInUser('x6');
+      await takeAssessment(session);
+      const { courseIds } = await buildPath(session, PATH_MIN_COURSES);
+      await post('/api/my-path/confirm', {}, session).expect(200);
+
+      const user = await prisma.user.findFirstOrThrow({
+        where: { email: { startsWith: `journey-${RUN_ID}-x6@` } },
+        select: { id: true },
+      });
+      await prisma.userPathCourse.updateMany({
+        where: { userPath: { userId: user.id }, courseId: courseIds[0] },
+        data: { status: 'COMPLETED' },
+      });
+      const certificate = await prisma.certificate.create({
+        data: {
+          userId: user.id,
+          type: 'COURSE',
+          courseId: courseIds[0],
+          verificationId: randomBytes(32).toString('base64url'),
+          pdfPath: `2026/${courseIds[0]}-course.pdf`,
+          pdfSha256: 'digest',
+          pdfBytes: 1,
+          holderName: 'موظف الاختبار',
+          subjectTitle: 'عنوان الدورة',
+          issuedAt: new Date(),
+        },
+      });
+
+      const view = (await get(`/api/courses/${courseIds[0]}`, session).expect(200))
+        .body as CourseDetail;
+      expect(view.action).toBe('COMPLETED');
+      expect(view.personalStatus).toBe('COMPLETED');
+      expect(view.certificateId).toBe(certificate.id);
     });
 
     it('never offers a second action alongside the first', async () => {

@@ -545,7 +545,7 @@
 
 ---
 
-> **Epic label: `admin-polish`** — a pass over the super-admin portal at the ministry's direction (2026-08-25), one ticket per page, worked in that order on `feature/tam-130-admin-polish`. Everything below is **DONE** and shipped in **PR #24** (five commits, awaiting review); the acceptance notes record what was actually asserted. Decisions: D-098 (two removals for a path), D-099 (the dashboard's distribution), D-100 (the dialog).
+> **Epic label: `admin-polish`** — a pass over the super-admin portal at the ministry's direction (2026-08-25), one ticket per page, worked in that order on `feature/tam-130-admin-polish`. Everything below is **DONE** and shipped in **PR #24** (five commits, merged 2026-08-26); the acceptance notes record what was actually asserted. Decisions: D-098 (two removals for a path), D-099 (the dashboard's distribution), D-100 (the dialog).
 
 ## TAM-130 — Admin home: a distribution that means something, and nothing on it that cannot be acted on — **DONE**
 
@@ -579,3 +579,48 @@
   3. **Hide vs delete** — `DELETE /api/admin/paths/:id`, refused for any path someone ever chose or that a certificate names, reported in advance as `canDelete`, audited both ways, with the P2003 race returned as the same refusal. Two sections, two words, a confirmation that names the path and offers the reversible alternative.
 - **Acceptance met:** 5 new integration tests against real PostgreSQL (the refusal + its audit, a successful delete with cascading membership and the course untouched, the named audit entry, 404 when already gone); 5 new page tests; 7 tests on `AdminDialog` including the centring class and the absent form; a browser test that deletes the path the suite creates. RBAC coverage is automatic — the suite reflects routes off the controller.
 - **Owed, recorded in progress.md:** the learner path card still shows `typicalDurationMinutes`, which now has no editor — deriving it from the path's courses is the fix, and it belongs with the learner-facing screens.
+
+---
+
+> **Epic label: `admin-courses-settings-certs`** — a second pass over the super-admin portal at the ministry's direction (2026-08-26), on `feature/tam-134-admin-courses-settings-certs`. Four tickets, one per area. Everything below is **DONE**. Decisions: D-101 (course states, availability period, delete), D-102 (the pass threshold leaves §4C.6), D-103 (setting editors from the schema), D-104 (the certificate emblem), D-105 (the audit trail).
+
+## TAM-134 — Courses: two states, an availability period that hides by itself, and a real delete — **DONE**
+
+- **Labels:** `admin-courses-settings-certs`, `frontend`, `backend`
+- **Priority:** High
+- **What shipped:** the oversight screen's four status words collapsed to **«متاحة» / «مخفية»**, with the _reason_ a course is hidden printed under the badge; the filter resolves through the same mapping, so it cannot return a row the badge contradicts. `courses.available_from` / `available_until` are set as calendar days in ministry time and stored as the first and last instant of those days; the window feeds `effectiveCourseStatus` and an ended period yields `HIDDEN_BUT_COMPLETABLE`, never `RETIRED` — a learner mid-course keeps it (§2, D-015). A new sync-cycle stage restates anything whose period opened or closed, and saving the dates recomputes immediately. `DELETE /api/admin/courses/:id` removes the course from Moodle and then from the catalogue, refused for anything a learner holds, a certificate names or a completion records, reported in advance as `canDelete` and audited both ways; `LmsPort` gained `deleteCourse` because our row is a mirror and deleting only our side would have the next sync re-enter the course as an unowned draft.
+- **Modal positioning** was already fixed by TAM-133's `AdminDialog` change (D-100) — the manage panel now opens centred, and that was verified in a browser rather than re-fixed.
+- **Acceptance met:** 12 unit tests on the derivation and the day helpers, 7 on the refresh service, 4 on the real adapter's warning handling, 3 in the shared LMS contract, 11 integration tests against real PostgreSQL, 16 page tests. Verified in a browser: a period set in the past flipped the course to «مخفية · خارج فترة الإتاحة» on save.
+
+## TAM-135 — Settings: a dropdown, a digits-only field, readable names, no pass threshold, and Settings last — **DONE**
+
+- **Labels:** `admin-courses-settings-certs`, `frontend`, `backend`
+- **Priority:** High
+- **What shipped:**
+  1. **Each field's shape comes from the server**, derived from the Zod field that validates the value (D-103). `REGISTRATION_MODE` and `NUMBER_FORMAT` are enums, so they render as dropdowns whose options are exactly what a save would accept — with Arabic labels, replacing free-text boxes the ministry had to type `restricted` / `admin-only` into from memory. `COMPLETION_SYNC_INTERVAL_MINUTES` is numeric, so its field takes digits and nothing else (stripped per keystroke: `type="number"` accepts `e`, `+` and `-` and then reports the field empty).
+  2. **The three certificate keys have Arabic names.** They had been reaching the ministry as the raw `admin.setting.CERT_SIGNATORY_NAME`; `SETTING_KEYS` moved into `packages/types` so the catalogue is asserted against it and the next such key fails CI instead of shipping.
+  3. **The pass threshold is gone from §4C.6** (D-102) — no field, no endpoint, and a migration deletes any stored override so the deployment's value is the only answer. Completion sync and the course player read it from the validated environment.
+  4. **Settings is the last item in the admin sidebar.**
+- **Acceptance met:** 14 page tests (dropdown options and their labels, the value saved is the option not the label, digits-only per keystroke, the three readable names, no `admin.setting` anywhere in the DOM, the absent pass threshold); a catalogue test asserting every `SETTING_KEY` has a label and a hint, and that no label names a key that is not one; the settings integration suite reworked onto keys that still exist, plus a new case proving `PASS_THRESHOLD` is absent from the view and 404s in both directions; the Playwright settings flow moved onto the sync interval.
+
+## TAM-136 — Certificates: the ministry emblem, and no rule above the signatory — **DONE**
+
+- **Labels:** `admin-courses-settings-certs`, `backend`
+- **Priority:** High
+- **What shipped:** the ministry's own `MOI.svg` is committed under `apps/api/src/certificates/assets/` and inlined into the certificate face in the slot the placeholder mark held — vector, no network, on both the course and the path certificate (D-104). The loader strips the XML prolog and dissolves the exported `.st0` class into per-path `fill` attributes, because an inline `<svg>` shares the document's stylesheet. The rule above the signatory's name is removed; the block keeps its position and spacing. §4C.7's "no logo supplied" notice is driven by `hasMinistryEmblem()` now, so it disappears with the blocker it named.
+- **Acceptance met:** 6 tests on the loader (single element, viewBox kept, stylesheet dissolved, no prolog, cached, reports the artwork), 5 on the face (inline not linked, no `.st0`, no prolog, both certificate types, no placeholder left beside it) and 1 asserting the signature block survives without its border; the templates e2e now asserts the notice is gone and the emblem is really in the preview.
+- **Still owed:** the ministry **seal** and the signatory's actual signature (D-051). This closes half that blocker.
+
+## TAM-137 — Records and reports: one action vocabulary, and a trail an administrator can read — **DONE**
+
+- **Labels:** `admin-courses-settings-certs`, `frontend`, `backend`
+- **Priority:** High
+- **What shipped:**
+  1. **One target vocabulary.** `AUDIT_TARGET_TYPES` (nine kinds, snake_case) lives in `packages/types` and `AuditEntry.targetType` is typed against it, so a wrong spelling is a compile error. Thirteen call sites wrote `User`/`Entity` beside the snake_case everything else used — one concept in two buckets, which made a filter over that column return a fraction of the rows. A migration normalises the 850-odd rows already written.
+  2. **Every entry names what it was about.** `AdminAuditRow.targetLabel` is resolved server-side per page — one query per kind, six for the page — so a retirement reads «مسار: البحوث وتقييم السياسات» instead of showing nothing. A setting resolves on the screen instead, since its id _is_ its key and §4C.6's Arabic name for it is already in the catalogue. A target that has since been deleted resolves to nothing and keeps its id, because those are the entries an investigation wants.
+  3. **No technical exposure.** `reason` became its own field and renders as an Arabic sentence; the remaining detail is stripped of every opaque identifier server-side (named ids, anything uuid-shaped, the LMS ids, and any value that merely restates the target) and then rendered through an Arabic label map. An `AUTHZ_DENIED` entry keeps its route — that is the entry's whole point — and both it and the setting value render `dir="auto"`, which fixed a real misreading: `/api/admin/settings` was displaying as `api/admin/settings/`.
+  4. **Nothing renders as a raw code.** Three action codes and **all thirty-seven reason codes** had no Arabic copy, so the deliberate fallback was the normal rendering of every failed entry. `AuditAction`/`AuditReason` moved to `packages/types`, all copy written, and the catalogue is now asserted against the constants in both directions.
+  5. **The filter row is on the shared `Select`** (it carried dead pre-token classes), the action list sorts by its Arabic label, and a failed outcome wears a new `danger` badge rather than the neutral `dark` one.
+- **Acceptance met:** 8 unit tests on the detail presenter; 3 new integration tests (the resolved label, no id anywhere in a page's details, one spelling per kind) against real PostgreSQL; 6 new page tests (the named target, the danger badge, Arabic labelled detail, the setting's own name, the shared `Select`, `dir="auto"` on a route); an exhaustive catalogue test — every action, every reason, every target type — that fails CI on the next untranslated code. **Full suites run for real this session:** 657 API unit · 663 web component · 557 API integration against real PostgreSQL · 114 browser tests in Chromium against the built apps, 113 passing (the one failure is a pre-existing path-build flake that passes on re-run).
+- **Also fixed, found by running the browser suite:** TAM-134 removed the «قرار النشر» column from §4C.5 but left the e2e asserting it. The previous session had no Docker and could not have caught it; the assertion now guards what TAM-134 actually built — two words in «الحالة», the reason beneath, and the availability column.
+- **Known, not caused here:** the API integration suite passes in full serially (`--runInBand`) and collides when Jest runs its fifteen suites in parallel against one database. Pre-existing test isolation, and very likely the "transient failure never reproduced" recorded on 2026-08-24.

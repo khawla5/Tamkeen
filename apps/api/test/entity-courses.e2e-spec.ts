@@ -695,6 +695,36 @@ describe('Entity course lifecycle (e2e)', () => {
       expect(first.url).not.toBe(second.url);
     });
 
+    it('frames on request, and says which it minted (TAM-129)', async () => {
+      const course = await createCourse();
+
+      const framed = (
+        await post(
+          `/api/entity/courses/${course.id}/author-launch`,
+          { embed: true },
+          session,
+        ).expect(200)
+      ).body as { url: string; mode: string };
+      const plain = (
+        await post(`/api/entity/courses/${course.id}/author-launch`, {}, session).expect(200)
+      ).body as { url: string; mode: string };
+
+      expect(framed.mode).toBe('embed');
+      expect(framed.url).toMatch(/[?&]embed=author(&|$)/);
+      expect(plain.mode).toBe('handoff');
+      expect(plain.url).not.toMatch(/embed=/);
+    });
+
+    it('rejects a malformed embed flag rather than guessing', async () => {
+      const course = await createCourse();
+
+      await post(
+        `/api/entity/courses/${course.id}/author-launch`,
+        { embed: 'yes' },
+        session,
+      ).expect(400);
+    });
+
     it('refuses another entity a handoff into a course it does not own', async () => {
       const course = await createCourse();
 

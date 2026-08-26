@@ -151,6 +151,16 @@ describe('the signature block (§4C.7)', () => {
     expect(visibleText(renderCertificateHtml(BASE))).toContain('الاسم');
   });
 
+  it('draws no rule above the signatory (TAM-136)', () => {
+    /* A signature line is drawn for somebody to sign *on*. This block prints a
+       name the ministry has already given, so the rule was furniture. The block
+       itself stays — the assertion is about the border, not the slot. */
+    const html = renderCertificateHtml(BASE);
+
+    expect(html).toContain('class="sign-line"');
+    expect(html).not.toMatch(/\.sign-line\s*\{[^}]*border-top/);
+  });
+
   it('omits the title line entirely when there is no title', () => {
     /* An empty line under a name reads as a missing field on a credential. */
     const html = renderCertificateHtml({
@@ -170,5 +180,46 @@ describe('the signature block (§4C.7)', () => {
     /* Not quite XSS — the output is a PDF — but unescaped markup in a credential
        could restyle or displace the text stating what was earned. */
     expect(html).not.toContain('<script>x</script>');
+  });
+});
+
+describe('the ministry emblem on the face (TAM-136)', () => {
+  it('carries the ministry’s own artwork, inline', () => {
+    const html = renderCertificateHtml(BASE);
+
+    /* Inline markup, not a URL: a credential that renders differently when a
+       host is unreachable is not a credential. */
+    expect(html).toContain('class="emblem"');
+    expect(html).toContain('<svg');
+    expect(html).not.toMatch(/<img[^>]+src=/);
+  });
+
+  it('leaks no stylesheet into the certificate', () => {
+    /* An inline `<svg>` shares the document's stylesheet, so the artwork's
+       exported `.st0` selector would be a global rule named after nothing. */
+    const html = renderCertificateHtml(BASE);
+
+    expect(html).not.toContain('.st0');
+    expect(html).not.toContain('class="st0"');
+  });
+
+  it('carries no XML prolog or generator comment into the body', () => {
+    const html = renderCertificateHtml(BASE);
+
+    expect(html).not.toContain('<?xml');
+    expect(html).not.toContain('Illustrator');
+  });
+
+  it('is on both the course and the path certificate', () => {
+    /* Who attests does not depend on which award it is. */
+    for (const type of ['COURSE', 'PATH'] as const) {
+      expect(renderCertificateHtml({ ...BASE, type })).toContain('class="emblem"');
+    }
+  });
+
+  it('shows no placeholder mark beside it', () => {
+    /* The neutral mark held the slot until the artwork arrived; leaving both
+       would print a crest next to a stand-in for a crest. */
+    expect(renderCertificateHtml(BASE)).not.toContain('class="mark"');
   });
 });

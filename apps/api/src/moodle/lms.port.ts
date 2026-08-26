@@ -105,6 +105,28 @@ export interface LmsPort {
   createCourse(input: CreateCourseInput): Promise<LmsCourse>;
 
   /**
+   * Permanently removes a course from the LMS (§4C.5, TAM-134).
+   *
+   * **Why this is on the port at all**, when nothing else in the product deletes
+   * anything: our `courses` row is a mirror, and the LMS is the source of truth
+   * for a course *existing* (§1). Deleting only our side would have the very next
+   * catalogue sync rediscover the course and re-enter it as an unowned draft —
+   * so a "permanent delete" that stopped at our database would put the course
+   * back in the administrator's own list minutes later. Either the deletion
+   * reaches the LMS or it is not a deletion, and calling it one would be worse
+   * than not offering it.
+   *
+   * **Idempotent**, like `provisionUser` and `enrol`: deleting a course the LMS
+   * no longer has is a successful no-op. The caller deletes there first and
+   * here second, so a half-failed delete must be safe to retry.
+   *
+   * The product refuses to call this for any course a learner holds or a
+   * certificate names — that rule is ours and lives in the admin service, not
+   * here (this port carries no product logic).
+   */
+  deleteCourse(lmsCourseId: LmsCourseId): Promise<void>;
+
+  /**
    * What the LMS holds inside a course (§4B.4, D-061).
    *
    * Read back so an entity can see, **before publishing**, whether the course is
@@ -164,8 +186,19 @@ export interface LmsPort {
    * It must therefore be minted **at the moment of the click**, not when a page
    * renders, so its short life starts when it is actually used. It must never
    * contain the web-services token.
+   *
+   * `options.embed` asks the LMS to open the course **inside the portal's
+   * frame** — chrome hidden, and for `'author'` editing already on (TAM-129).
+   * It is a hint on the URL, never part of the credential: being framed grants
+   * nothing, so it needs no signature.
    */
-  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): string;
+  courseLaunchUrl(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId, options?: LaunchOptions): string;
+}
+
+/** How the launched course should present itself (TAM-129). */
+export interface LaunchOptions {
+  /** `'author'`: framed by the entity portal, chrome hidden, editing on. */
+  embed?: 'author';
 }
 
 /**

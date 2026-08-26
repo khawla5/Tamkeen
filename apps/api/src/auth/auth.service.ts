@@ -97,7 +97,7 @@ export class AuthService {
         action: AuditAction.AUTH_REGISTRATION_REJECTED,
         outcome: 'FAILURE',
         ipAddress: context.ipAddress,
-        targetType: 'User',
+        targetType: 'user',
         targetId: existing.id,
         reason:
           existing.email === dto.email
@@ -128,7 +128,7 @@ export class AuthService {
       outcome: 'SUCCESS',
       actorUserId: user.id,
       ipAddress: context.ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: user.id,
     });
 
@@ -220,7 +220,7 @@ export class AuthService {
       outcome: 'SUCCESS',
       actorUserId: token.userId,
       ipAddress: context.ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: token.userId,
     });
   }
@@ -457,7 +457,7 @@ export class AuthService {
       outcome: 'SUCCESS',
       actorUserId: token.userId,
       ipAddress: context.ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: token.userId,
     });
   }
@@ -745,7 +745,7 @@ export class AuthService {
       outcome: 'SUCCESS',
       actorUserId: token.userId,
       ipAddress: context.ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: token.userId,
     });
 
@@ -833,7 +833,7 @@ export class AuthService {
         outcome: 'FAILURE',
         actorUserId: userId,
         ipAddress: context.ipAddress,
-        targetType: 'User',
+        targetType: 'user',
         targetId: userId,
         detail: { attempts },
       });

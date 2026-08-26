@@ -73,9 +73,11 @@ function log(overrides: Partial<AdminAuditPage> = {}): AdminAuditPage {
         action: 'ADMIN_USER_STATUS_CHANGED',
         outcome: 'FAILURE',
         actorName: 'مسؤول النظام',
-        targetType: 'User',
+        targetType: 'user',
         targetId: 'u1',
-        detail: { reason: 'SELF_MODIFICATION_REFUSED' },
+        targetLabel: 'سارة العتيبي',
+        reason: 'SELF_MODIFICATION_REFUSED',
+        detail: null,
       },
     ],
     nextBefore: null,
@@ -159,9 +161,138 @@ describe('Admin audit and reports (§4C.8)', () => {
       renderWithProviders(<AdminAuditPage />);
       await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
 
-      /* Half the value of a refused entry. Non-PII by construction — the audit
-         service accepts enumerated codes and scalars, never free text. */
-      expect(await screen.findByText(/reason=SELF_MODIFICATION_REFUSED/)).toBeInTheDocument();
+      /* Half the value of a refused entry, and in Arabic — the page used to
+         print the raw  left-to-right in the
+         middle of an Arabic page (TAM-137). */
+      expect(await screen.findByText('لا يجوز للمسؤول تعديل حسابه بنفسه')).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('SELF_MODIFICATION_REFUSED');
+    });
+
+    it('names what the entry was about, and never shows its id', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      /* «حساب: سارة العتيبي» — the kind, then the name. An administrator
+         reading a trail needs to know *which* account, and a uuid answers that
+         for nobody (TAM-137). */
+      expect(await screen.findByText(/حساب: سارة العتيبي/)).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('u1');
+    });
+
+    it('marks a failed outcome as a failure, not as an ordinary tag', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      /* The word carries the meaning; the colour only reinforces it. */
+      const badge = (await screen.findAllByText('أخفق')).find((node) =>
+        node.className.includes('border-danger'),
+      );
+      expect(badge).toBeDefined();
+    });
+
+    it('renders the remaining detail as labelled Arabic, never as key=value', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(
+        log({
+          rows: [
+            {
+              id: '2',
+              occurredAt: '2026-08-23T08:00:00.000Z',
+              action: 'PATH_CONFIRMED',
+              outcome: 'SUCCESS',
+              actorName: 'سارة العتيبي',
+              targetType: 'user_path',
+              targetId: 'up1',
+              targetLabel: 'خدمة المتعاملين',
+              reason: null,
+              detail: { courses: 5, status: 'ACTIVE' },
+            },
+          ],
+        }),
+      );
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      expect(await screen.findByText(/مسار موظف: خدمة المتعاملين/)).toBeInTheDocument();
+      /* Labels in Arabic, values through the shared formatter (D-018). */
+      expect(screen.getByText('الدورات:')).toBeInTheDocument();
+      expect(screen.getByText('5')).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('courses=5');
+    });
+
+    it('names a setting by its Arabic name, since the id is the key', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(
+        log({
+          rows: [
+            {
+              id: '3',
+              occurredAt: '2026-08-23T08:00:00.000Z',
+              action: 'ADMIN_SETTING_CHANGED',
+              outcome: 'SUCCESS',
+              actorName: 'مسؤول النظام',
+              targetType: 'setting',
+              targetId: 'CERT_SIGNATORY_NAME',
+              targetLabel: null,
+              reason: null,
+              detail: null,
+            },
+          ],
+        }),
+      );
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      expect(await screen.findByText(/إعداد: اسم الموقِّع على الشهادات/)).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('CERT_SIGNATORY_NAME');
+    });
+
+    it('lets a non-Arabic value keep its own direction', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(
+        log({
+          rows: [
+            {
+              id: '4',
+              occurredAt: '2026-08-23T08:00:00.000Z',
+              action: 'AUTHZ_DENIED',
+              outcome: 'FAILURE',
+              actorName: 'أحمد الموظف',
+              targetType: null,
+              targetId: null,
+              targetLabel: null,
+              reason: 'INSUFFICIENT_ROLE',
+              detail: { path: '/api/admin/settings', method: 'GET' },
+            },
+          ],
+        }),
+      );
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      /* The route rendered as `api/admin/settings/` — its leading slash thrown
+         to the end by the surrounding RTL run, which makes it read as a
+         different route than the one that was actually requested. */
+      const route = await screen.findByText('/api/admin/settings');
+      expect(route).toHaveAttribute('dir', 'auto');
+    });
+
+    it('filters on the shared Select rather than a raw control', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      const action = await screen.findByLabelText('الإجراء');
+      /* The pre-token classes the row used to carry (`border-input`,
+         `rounded-md`) name nothing in the D-069 palette — they rendered an
+         unstyled control. */
+      expect(action.className).not.toContain('border-input');
+      expect(action.className).toContain('border-neutral-400');
     });
 
     it('falls back to the raw code for an action with no Arabic copy', async () => {
@@ -177,6 +308,8 @@ describe('Admin audit and reports (§4C.8)', () => {
               actorName: null,
               targetType: null,
               targetId: null,
+              targetLabel: null,
+              reason: null,
               detail: null,
             },
           ],

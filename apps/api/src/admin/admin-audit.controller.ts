@@ -85,15 +85,19 @@ export class AdminAuditController {
        the way to take the API down. */
     const page = await this.audit.list({ ...query, pageSize: 5_000 });
 
+    /* The target as its *name*, with the id only where nothing resolved — the
+       same rule the screen follows (TAM-137). An export whose target column is
+       a uuid is one nobody can read without the database open beside them. */
     return toCsv(
-      ['التاريخ', 'الإجراء', 'النتيجة', 'المنفِّذ', 'نوع الهدف', 'الهدف', 'التفاصيل'],
+      ['التاريخ', 'الإجراء', 'النتيجة', 'المنفِّذ', 'نوع الهدف', 'الهدف', 'السبب', 'التفاصيل'],
       page.rows.map((row) => [
         row.occurredAt,
         row.action,
         row.outcome,
         row.actorName ?? '',
         row.targetType ?? '',
-        row.targetId ?? '',
+        row.targetLabel ?? row.targetId ?? '',
+        row.reason ?? '',
         row.detail ? JSON.stringify(row.detail) : '',
       ]),
     );
