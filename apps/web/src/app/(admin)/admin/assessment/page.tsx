@@ -173,7 +173,7 @@ function VersionCard({
   const format = useFormat();
 
   return (
-    <Card className={highlight ? 'border-s-4 border-s-primary p-5' : 'p-5'}>
+    <Card edge={highlight ? 'primary' : 'none'} className="p-5">
       <div className="flex flex-wrap items-center gap-3">
         <p className="font-medium text-foreground">
           {t('versionLabel', { version: format.number(version.version) })}

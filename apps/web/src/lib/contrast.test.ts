@@ -90,7 +90,12 @@ describe('text pairings used by the design system meet AA for body text', () => 
     ['success on white', PALETTE.success, PALETTE.surface],
     ['success on its fill', PALETTE.success, PALETTE['success-50']],
     ['warning on white', PALETTE.warning, PALETTE.surface],
+    ['warning on its fill (tag)', PALETTE.warning, PALETTE['warning-50']],
     ['info on white', PALETTE.info, PALETTE.surface],
+    ['info on its fill (tag)', PALETTE.info, PALETTE['info-50']],
+    ['neutral tag text on neutral-100', PALETTE['neutral-700'], PALETTE['neutral-100']],
+    ['table header text on neutral-50', PALETTE['neutral-700'], PALETTE['neutral-50']],
+    ['error-state body on the danger fill', PALETTE['neutral-700'], PALETTE['danger-50']],
   ];
 
   for (const [label, fg, bg] of bodyPairs) {

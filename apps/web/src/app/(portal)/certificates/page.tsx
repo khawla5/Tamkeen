@@ -86,7 +86,7 @@ function CertificateCard({ certificate }: { certificate: CertificateSummary }) {
   const Icon = isPath ? Medal : Award;
 
   return (
-    <Card className={cn('h-full', isPath ? 'border-2 border-primary-600' : 'border-border')}>
+    <Card className="h-full" variant={isPath ? 'selected' : 'default'}>
       <CardContent className="flex h-full flex-col gap-3 pt-6">
         <div className="flex items-start gap-3">
           <Icon

@@ -16,8 +16,10 @@ export interface EmptyStateProps {
  * The empty state every data view uses (§2B DoD 4) — "nothing here yet", which
  * is different from a failure and must never be styled as one.
  *
- * Not a live region: an empty result is the expected outcome of a successful
- * request, so it does not warrant interrupting a screen-reader user.
+ * A quiet centred block on the card anatomy (TAM-118): hairline, card radius,
+ * secondary text, one optional action. Not a live region: an empty result is
+ * the expected outcome of a successful request, so it does not warrant
+ * interrupting a screen-reader user.
  */
 export function EmptyState({ title, body, action, className }: EmptyStateProps) {
   const t = useTranslations('states');
@@ -25,11 +27,11 @@ export function EmptyState({ title, body, action, className }: EmptyStateProps) 
   return (
     <div
       className={cn(
-        'flex flex-col items-center gap-3 rounded-card border border-dashed border-border bg-card px-6 py-12 text-center',
+        'flex flex-col items-center gap-3 rounded-card border border-border bg-card px-6 py-12 text-center',
         className,
       )}
     >
-      <Inbox aria-hidden="true" className="size-8 text-muted-foreground" />
+      <Inbox aria-hidden="true" className="size-8 text-neutral-400" />
       <p className="font-semibold text-foreground">{title ?? t('emptyTitle')}</p>
       <p className="max-w-prose text-sm text-muted-foreground">{body ?? t('emptyBody')}</p>
       {action}
