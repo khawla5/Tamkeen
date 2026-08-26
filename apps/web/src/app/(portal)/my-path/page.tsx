@@ -109,7 +109,7 @@ function PathRun({ path }: { path: MyPathView }) {
       </section>
 
       {/* The locked certificate slot (§4.9). */}
-      <Card className={cn(path.pathCertificateUnlocked && 'border-2 border-primary-600')}>
+      <Card variant={path.pathCertificateUnlocked ? 'selected' : 'default'}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {!path.pathCertificateUnlocked ? (

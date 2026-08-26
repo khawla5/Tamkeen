@@ -11,9 +11,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Tabs } from '@/components/ui/tabs';
 import { useFormat } from '@/i18n/format-provider';
 import { cn } from '@/lib/utils';
 
@@ -43,7 +44,6 @@ const STAGES: ReadonlyArray<{ key: string; icon: LucideIcon; items: readonly str
 export function AboutSection() {
   const t = useTranslations('landing');
   const { number } = useFormat();
-  const baseId = useId();
 
   const [stageIndex, setStageIndex] = useState(0);
   const [itemIndex, setItemIndex] = useState(0);
@@ -61,62 +61,23 @@ export function AboutSection() {
     setItemIndex(0);
   }
 
-  function onTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
-    /* RTL tablist: the "next" tab is visually to the left, i.e. ArrowLeft. */
-    const delta = event.key === 'ArrowLeft' ? 1 : event.key === 'ArrowRight' ? -1 : 0;
-    if (delta === 0) return;
-    event.preventDefault();
-    const next = (index + delta + STAGES.length) % STAGES.length;
-    selectStage(next);
-    document.getElementById(`${baseId}-tab-${next}`)?.focus();
-  }
-
   return (
     <section id="about" className="scroll-mt-20 py-16 sm:py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <h2 className="text-3xl font-bold text-foreground">{t('aboutTitle')}</h2>
         <p className="mt-2 text-base text-muted-foreground">{t('aboutSubtitle')}</p>
 
-        <div
-          role="tablist"
-          aria-label={t('explorerStagesLabel')}
-          /* `pb-px` gives the tabs' 1px overhang (`-mb-px`, so the active underline
-             sits on this border) room inside the scroll container — without it
-             that pixel is vertical overflow and the row grows a scrollbar. */
-          className="mt-8 flex gap-2 overflow-x-auto border-b border-border pb-px"
-        >
-          {STAGES.map(({ key, icon: Icon }, index) => {
-            const selected = index === stageIndex;
-            return (
-              <button
-                key={key}
-                id={`${baseId}-tab-${index}`}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                aria-controls={`${baseId}-panel`}
-                tabIndex={selected ? 0 : -1}
-                onClick={() => selectStage(index)}
-                onKeyDown={(event) => onTabKeyDown(event, index)}
-                className={cn(
-                  '-mb-px flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-base font-medium transition-colors',
-                  selected
-                    ? 'border-primary-600 text-primary-700'
-                    : 'border-transparent text-neutral-700 hover:text-foreground',
-                )}
-              >
-                <Icon aria-hidden="true" className="size-5" />
-                {t(`stages.${key}.label`)}
-              </button>
-            );
-          })}
-        </div>
-
-        <div
-          id={`${baseId}-panel`}
-          role="tabpanel"
-          aria-labelledby={`${baseId}-tab-${stageIndex}`}
-          className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12"
+        <Tabs
+          className="mt-8"
+          label={t('explorerStagesLabel')}
+          items={STAGES.map(({ key, icon: Icon }) => ({
+            value: key,
+            icon: <Icon aria-hidden="true" className="size-5" />,
+            label: t(`stages.${key}.label`),
+          }))}
+          value={stage.key}
+          onValueChange={(next) => selectStage(STAGES.findIndex((item) => item.key === next))}
+          panelClassName="mt-8 grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12"
         >
           <ul aria-label={t('explorerItemsLabel')} className="flex flex-col gap-1">
             {stage.items.map((key, index) => {
@@ -162,7 +123,7 @@ export function AboutSection() {
               </Link>
             </Button>
           </div>
-        </div>
+        </Tabs>
       </div>
     </section>
   );

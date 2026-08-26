@@ -5,6 +5,13 @@
 
 ---
 
+## D-109 — Cards sit on radius 8, tags on the status tint, and the "selected" edge is a variant
+
+**Decision (TAM-118):** `--radius-card` is 0.5rem (the system's card radius); the landing hero's panels keep 16 explicitly. `Badge` takes Platforms Code's tag anatomy — a `-50` fill with the status colour for text and hairline, six tones — and is also exported as `Tag`. The recommended / selected treatment is `Card variant="selected"` (a 2px primary edge, never a fill); a status notice is `Card edge="…"` (a 4px start-edge). `Table` and `Tabs` exist as primitives; toasts do not.
+
+**Why:** the ticket's premise — the page sweep should be composition, not styling — only holds if the primitives carry the anatomy. Sixteen was the radius the landing chose for display panels and the portal inherited it for every card; the system's cards are 8, and one token change moves 21 call sites. The selected edge had been hand-rolled nine ways; a variant means the one place it is defined is the one place the WCAG 1.4.1 rule (colour never alone) is documented. Tags on the tint are what the system does and what the `Alert` already does — one vocabulary for "status". Toasts were offered conditionally and no page qualified: every confirmation in the product is a status the person is looking at.
+
+**Rejected:** a per-card radius prop (the point of a token is that nobody chooses); a filled "recommended" card (a fill competes with the primary action, §3); a data-grid library for two review lists.
 ## D-108 — An entity edits what is its own; the organisation's name stays the ministry's
 
 **Decision (TAM-138):** the entity profile (§4B.6) gains the employee's editable surface — the account holder's name, the organisation's contact name and contact email, the digits preference, the password — through one `PATCH /api/entity/me`. The organisation's _name_ remains read-only there, changed only in §4C.2. There is no email-change card on the entity page. Both profile pages use a two-column layout at the standard width.

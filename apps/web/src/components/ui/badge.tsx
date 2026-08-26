@@ -4,34 +4,51 @@ import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Eyebrow / tag label (Platforms Code, D-069). `primary` is a bordered chip —
- * the primary edge with display text, so the text colour never depends on the
- * accent; `dark` sits on light grounds; `soft` is the neutral chip for lists
- * of equal-weight items, which keeps the primary chip meaningful; `danger`
- * marks an outcome that failed — §4C.8 had been marking those with `dark`,
- * which reads as an ordinary tag rather than as something that did not
- * happen (TAM-137).
+ * Tag, on Platforms Code's tag anatomy (D-069, TAM-118): a small pill whose
+ * fill is the status colour's `-50` tint and whose text and hairline are the
+ * status colour itself. The word inside carries the meaning; the colour only
+ * repeats it (WCAG 1.4.1).
+ *
+ * Status tones: `neutral` for a list of equal-weight labels, `primary` for
+ * the one thing that matters (recommendation, the current stage), `success` /
+ * `warning` / `danger` / `info` for outcomes and states.
+ *
+ * The older names stay as aliases so the eleven call sites keep working:
+ * `soft` → `neutral`, `dark` → the inverse chip on light grounds, `onColor` →
+ * the white outline on a primary or dark surface.
  */
-const badgeVariants = cva('inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold', {
-  variants: {
-    variant: {
-      primary: 'border border-primary-600 text-foreground',
-      dark: 'bg-neutral-800 text-white',
-      /** On a primary/dark ground: a white outline chip. */
-      onColor: 'border border-surface/50 text-surface',
-      soft: 'border border-border bg-card text-neutral-700',
-      /* Status, not accent: the tinted fill and the danger edge, never colour
-         alone — the word inside it carries the meaning (WCAG 1.4.1). */
-      danger: 'border border-danger bg-danger-50 text-danger',
+const badgeVariants = cva(
+  'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold leading-5 whitespace-nowrap',
+  {
+    variants: {
+      variant: {
+        neutral: 'border-neutral-300 bg-neutral-100 text-neutral-700',
+        primary: 'border-primary-600 bg-primary-50 text-primary-800',
+        success: 'border-success bg-success-50 text-success',
+        warning: 'border-warning bg-warning-50 text-warning',
+        danger: 'border-danger bg-danger-50 text-danger',
+        info: 'border-info bg-info-50 text-info',
+        /** Inverse chip on a light ground — a count, a version. */
+        dark: 'border-neutral-800 bg-neutral-800 text-white',
+        /** On a primary or dark surface: a white outline chip. */
+        onColor: 'border-surface/50 bg-transparent text-surface',
+        /** @deprecated alias of `neutral`. */
+        soft: 'border-neutral-300 bg-neutral-100 text-neutral-700',
+      },
+    },
+    defaultVariants: {
+      variant: 'primary',
     },
   },
-  defaultVariants: {
-    variant: 'primary',
-  },
-});
+);
 
 export interface BadgeProps extends ComponentProps<'span'>, VariantProps<typeof badgeVariants> {}
 
 export function Badge({ className, variant, ...props }: BadgeProps) {
   return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
+
+/** The DGA name for the same thing. */
+export const Tag = Badge;
+
+export { badgeVariants };

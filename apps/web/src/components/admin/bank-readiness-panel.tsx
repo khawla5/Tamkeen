@@ -29,7 +29,7 @@ export function BankReadinessPanel({ readiness }: { readiness: AdminBankReadines
 
   if (clean) {
     return (
-      <Card className="border-s-4 border-s-success p-5">
+      <Card edge="success" className="p-5">
         <p className="text-sm font-medium text-foreground">{t('bankReady')}</p>
         <p className="mt-1 text-sm text-muted-foreground">{t('bankReadyHint')}</p>
       </Card>
@@ -39,7 +39,7 @@ export function BankReadinessPanel({ readiness }: { readiness: AdminBankReadines
   return (
     <div className="space-y-3">
       {readiness.blockers.length > 0 ? (
-        <Card className="border-s-4 border-s-destructive p-5" role="alert">
+        <Card edge="danger" className="p-5" role="alert">
           <h3 className="text-sm font-semibold text-foreground">{t('bankBlockedTitle')}</h3>
           <ul className="mt-2 list-disc space-y-1 pe-5 text-sm text-foreground">
             {readiness.blockers.map((code) => (
@@ -66,7 +66,7 @@ export function BankReadinessPanel({ readiness }: { readiness: AdminBankReadines
       ) : null}
 
       {readiness.warnings.length > 0 ? (
-        <Card className="border-s-4 border-s-warning p-5">
+        <Card edge="warning" className="p-5">
           <h3 className="text-sm font-semibold text-foreground">{t('bankWarningTitle')}</h3>
           <ul className="mt-2 list-disc space-y-1 pe-5 text-sm text-foreground">
             {readiness.warnings.map((code) => (
