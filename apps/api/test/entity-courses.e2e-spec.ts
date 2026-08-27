@@ -765,6 +765,96 @@ describe('Entity course lifecycle (e2e)', () => {
     });
   });
 
+  describe('resyncing after a live edit (§4B.4, TAM-133)', () => {
+    it('picks up a rename made in the frame immediately, not on the next schedule', async () => {
+      const course = await createCourse({ title: 'العنوان القديم' });
+
+      lms.simulateSettingsEdit(course.moodleCourseId, { title: 'العنوان الجديد' });
+
+      const resynced = (
+        await post(`/api/entity/courses/${course.id}/resync`, {}, session).expect(200)
+      ).body as EntityCourseDetail;
+
+      expect(resynced.title).toBe('العنوان الجديد');
+
+      const row = await prisma.course.findUniqueOrThrow({
+        where: { id: course.id },
+        select: { title: true },
+      });
+      expect(row.title).toBe('العنوان الجديد');
+    });
+
+    it('refreshes the content read-back and the publish blockers in the same response', async () => {
+      const course = await makePublishable(await createCourse());
+      expect(course.publishBlockers).toEqual([]);
+
+      /* Simulate the entity removing the quiz's completion criteria from
+         inside Moodle, then asking this portal to catch up. */
+      lms.simulateAuthoring(course.moodleCourseId, {
+        activityCount: 3,
+        hasQuiz: true,
+        completionConfigured: false,
+      });
+
+      const resynced = (
+        await post(`/api/entity/courses/${course.id}/resync`, {}, session).expect(200)
+      ).body as EntityCourseDetail;
+
+      expect(resynced.content).toMatchObject({ completionConfigured: false });
+      expect(resynced.publishBlockers).toContain('NO_COMPLETION_CRITERIA');
+    });
+
+    it('is refused for another entity’s course, the same as every scoped route', async () => {
+      const course = await createCourse();
+
+      await post(`/api/entity/courses/${course.id}/resync`, {}, otherSession).expect(404);
+    });
+
+    it('the response equals a subsequent GET', async () => {
+      const course = await createCourse();
+
+      const resynced = (
+        await post(`/api/entity/courses/${course.id}/resync`, {}, session).expect(200)
+      ).body as EntityCourseDetail;
+      const fetched = (await get(`/api/entity/courses/${course.id}`, session).expect(200))
+        .body as EntityCourseDetail;
+
+      expect(resynced).toEqual(fetched);
+    });
+
+    it('audits the resync', async () => {
+      const course = await createCourse();
+
+      await post(`/api/entity/courses/${course.id}/resync`, {}, session).expect(200);
+
+      const entry = await prisma.auditLog.findFirst({
+        where: { action: 'ENTITY_COURSE_RESYNCED', targetId: course.id },
+        select: { outcome: true, metadata: true },
+      });
+
+      expect(entry).toMatchObject({ outcome: 'SUCCESS' });
+      /* No PII — a course id and a resync outcome are all this is. */
+      expect(JSON.stringify(entry)).not.toContain('@ministry.gov.example');
+    });
+
+    it('two concurrent resyncs of the same course still leave it correct', async () => {
+      /* The unit suite proves the LMS is read once; this proves the outcome a
+         caller actually sees is unaffected by the coalescing underneath it. */
+      const course = await createCourse({ title: 'دورة متزامنة' });
+      lms.simulateSettingsEdit(course.moodleCourseId, { title: 'بعد التزامن' });
+
+      const [first, second] = await Promise.all([
+        post(`/api/entity/courses/${course.id}/resync`, {}, session),
+        post(`/api/entity/courses/${course.id}/resync`, {}, session),
+      ]);
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect((first.body as EntityCourseDetail).title).toBe('بعد التزامن');
+      expect((second.body as EntityCourseDetail).title).toBe('بعد التزامن');
+    });
+  });
+
   describe('learners and review (§4B.5, D-064)', () => {
     let reviewCourseId: string;
     let learnerId: string;
@@ -936,4 +1026,123 @@ describe('Entity course lifecycle (e2e)', () => {
       expect(dashboard.totalLearners).toBe(0);
     });
   });
+});
+
+/**
+ * Resync rate limiting (§4B.4, TAM-133), with the real ThrottlerGuard in
+ * place. Separate app instance so its counters are not shared with the
+ * lifecycle suite above — the same reasoning as `Auth rate limiting (e2e)`
+ * in auth.e2e-spec.ts.
+ */
+describe('Entity course resync rate limiting (e2e)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+
+  const RATE_RUN_ID = randomBytes(4).toString('hex');
+  let csrfCookie: string;
+  let csrfToken: string;
+  let session: string;
+  let courseId: string;
+
+  beforeAll(async () => {
+    process.env.RATE_LIMIT_ENABLED = 'true';
+
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(EmailService)
+      .useValue(new EmailCapture())
+      .compile();
+
+    app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api');
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    );
+    await app.init();
+
+    prisma = app.get(PrismaService);
+
+    const server = app.getHttpServer() as unknown as App;
+    const csrfResponse = await request(server).get('/api/auth/csrf').expect(200);
+    csrfCookie = (csrfResponse.headers['set-cookie'] as unknown as string[])
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    csrfToken = (csrfResponse.body as { csrfToken: string }).csrfToken;
+
+    const entity = await prisma.entity.create({
+      data: { key: `rate-${RATE_RUN_ID}`, name: 'جهة الحد' },
+      select: { id: true },
+    });
+
+    const email = `rate-${RATE_RUN_ID}@ministry.gov.example`;
+    await prisma.user.create({
+      data: {
+        email,
+        passwordHash: await hashPassword(PASSWORD),
+        fullName: 'مسؤول الجهة',
+        employeeId: `R-${RATE_RUN_ID}`.slice(0, 20),
+        department: 'قسم',
+        role: 'ENTITY',
+        entityId: entity.id,
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    const loginResponse = await request(server)
+      .post('/api/auth/login')
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({ email, password: PASSWORD })
+      .expect(200);
+    session = (loginResponse.headers['set-cookie'] as unknown as string[])
+      .find((value) => value.startsWith('tamkeen_session='))!
+      .split(';')[0]!;
+
+    const courseResponse = await request(server)
+      .post('/api/entity/courses')
+      .set('Cookie', [csrfCookie, session].join('; '))
+      .set('X-CSRF-Token', csrfToken)
+      .send({ title: 'دورة الحد', summary: 'وصف' })
+      .expect(201);
+    courseId = (courseResponse.body as EntityCourseDetail).id;
+  }, 120_000);
+
+  afterAll(async () => {
+    await prisma.course.deleteMany({ where: { id: courseId } });
+    await prisma.auditLog.deleteMany({
+      where: {
+        actorUserId: {
+          in: (
+            await prisma.user.findMany({
+              where: { email: { startsWith: `rate-${RATE_RUN_ID}` } },
+              select: { id: true },
+            })
+          ).map((user) => user.id),
+        },
+      },
+    });
+    await prisma.user.deleteMany({ where: { email: { startsWith: `rate-${RATE_RUN_ID}` } } });
+    await prisma.entity.deleteMany({ where: { key: `rate-${RATE_RUN_ID}` } });
+
+    await app.close();
+  }, 60_000);
+
+  it('returns 429 once the per-user resync limit is exceeded', async () => {
+    const server = app.getHttpServer() as unknown as App;
+
+    const attempt = () =>
+      request(server)
+        .post(`/api/entity/courses/${courseId}/resync`)
+        .set('Cookie', [csrfCookie, session].join('; '))
+        .set('X-CSRF-Token', csrfToken)
+        .send({});
+
+    const statuses: number[] = [];
+    /* The resync limit is 30 per minute; the 31st must be refused outright. */
+    for (let index = 0; index < 32; index += 1) {
+      statuses.push((await attempt()).status);
+    }
+
+    expect(statuses).toContain(429);
+  }, 120_000);
 });

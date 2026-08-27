@@ -288,7 +288,7 @@ The create + edit flow:
 - A clear "author content in Moodle" launch action keeps the seam smooth.
 
 ### 4B.4 Course Content (launch-to-Moodle)
-Thin: a launch-into-Moodle button for authoring, plus a read-back summary of what Moodle holds (activities, quiz presence, completion criteria configured — the exact gap D-042 flagged) so the entity can confirm the course is actually completable before publishing. We do not rebuild Moodle's editor.
+Thin: a launch-into-Moodle button for authoring, plus a read-back summary of what Moodle holds (activities, quiz presence, completion criteria configured — the exact gap D-042 flagged) so the entity can confirm the course is actually completable before publishing. We do not rebuild Moodle's editor. The launch is framed inline (TAM-129); a course-level edit in the frame's Settings tab (name, summary, visibility) fires the same `tamkeen:content-changed` signal a content edit does, and the portal answers it with an immediate per-course resync rather than waiting for the scheduled catalogue sync (D-115, TAM-133).
 
 ### 4B.5 Learners / Review
 For THIS entity's courses only: enrolled learners, per-learner progress, quiz results, completions. Strictly RBAC-scoped. Optional flag/note. No other entities' data; no PII beyond what review requires.

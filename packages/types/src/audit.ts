@@ -157,6 +157,12 @@ export const AuditAction = {
    * somewhere else, and here it carries editing rights.
    */
   ENTITY_COURSE_AUTHOR_LAUNCHED: 'ENTITY_COURSE_AUTHOR_LAUNCHED',
+  /**
+   * A single course was re-read from the LMS on demand (TAM-133) — triggered
+   * by the frame's own edit signal or by the entity's manual «تحديث», rather
+   * than waiting for the next scheduled catalogue sync.
+   */
+  ENTITY_COURSE_RESYNCED: 'ENTITY_COURSE_RESYNCED',
 
   // Super-admin portal (Phase 5)
   /**
@@ -288,6 +294,9 @@ export const AuditReason = {
   /** The LMS refused or could not be reached while creating a course shell. */
   LMS_COURSE_CREATE_FAILED: 'LMS_COURSE_CREATE_FAILED',
   LMS_COURSE_DELETE_FAILED: 'LMS_COURSE_DELETE_FAILED',
+  /** A per-course resync (TAM-133) could not read the course back from the LMS —
+   *  most likely it vanished between the frame's edit and this request. */
+  LMS_COURSE_RESYNC_FAILED: 'LMS_COURSE_RESYNC_FAILED',
 
   /* Phase 5 — refused administrative changes. Every one of these is a lockout
      or an integrity failure that was prevented, which makes them the entries a
@@ -395,6 +404,7 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ENTITY_COURSE_PUBLISHED: 'content',
   ENTITY_COURSE_UNPUBLISHED: 'content',
   ENTITY_COURSE_AUTHOR_LAUNCHED: 'content',
+  ENTITY_COURSE_RESYNCED: 'content',
   ADMIN_ASSESSMENT_DRAFT_OPENED: 'content',
   ADMIN_ASSESSMENT_DRAFT_DISCARDED: 'content',
   ADMIN_ASSESSMENT_PUBLISHED: 'content',

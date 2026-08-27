@@ -46,10 +46,15 @@ function harness(
   const upserts: Array<{ where: unknown; create: unknown; update: Record<string, unknown> }> = [];
   const updates: Array<{ id: string; status: string }> = [];
   const audits: AuditEntry[] = [];
+  const lmsCalls = { getCourse: 0 };
 
   const prisma = {
     course: {
       findMany: () => Promise.resolve(rows),
+      findUnique: (args: { where: { moodleCourseId: number } }) =>
+        Promise.resolve(
+          rows.find((row) => row.moodleCourseId === args.where.moodleCourseId) ?? null,
+        ),
       upsert: (args: { where: unknown; create: unknown; update: Record<string, unknown> }) => {
         upserts.push(args);
         return Promise.resolve({});
@@ -81,6 +86,12 @@ function harness(
 
   const lms = {
     listCourses: () => Promise.resolve(options.courses ?? []),
+    getCourse: (id: number) => {
+      lmsCalls.getCourse += 1;
+      return Promise.resolve(
+        (options.courses ?? []).find((course) => course.lmsCourseId === id) ?? null,
+      );
+    },
   } as unknown as LmsPort;
 
   const config = {
@@ -92,6 +103,7 @@ function harness(
     upserts,
     updates,
     audits,
+    lmsCalls,
   };
 }
 
@@ -446,5 +458,90 @@ describe('CatalogSyncService', () => {
 
     expect(entry).toMatchObject({ outcome: 'SUCCESS', detail: { seen: 1, created: 1 } });
     expect(JSON.stringify(entry)).not.toContain('دورة');
+  });
+
+  /**
+   * `syncOne` (§4B.4, TAM-133): the per-course resync a live edit in the
+   * frame triggers, without waiting for the next scheduled `sync()`.
+   */
+  describe('syncOne', () => {
+    it('writes the identical row sync() would, for the same LMS course (shared mapping)', async () => {
+      /* Two separate harnesses, not one service called twice — sync() and
+         syncOne must map a *fresh* upsert identically, not merely agree with
+         themselves on a second call. */
+      const course = lmsCourse({ lmsCourseId: 7, title: 'دورة محدّثة' });
+      const rows = [
+        {
+          id: 'c1',
+          moodleCourseId: 7,
+          publication: 'PUBLISHED',
+          durationMinutes: 45,
+          lmsPresent: true,
+        },
+      ];
+
+      const viaSync = harness({ courses: [course], rows });
+      const viaSyncOne = harness({ courses: [course], rows });
+
+      await viaSync.service.sync();
+      await viaSyncOne.service.syncOne(7);
+
+      /* `lastSyncedAt` is excluded for the same reason the idempotency test
+         above excludes it: it necessarily differs between two separate calls,
+         and everything that describes the course itself must not. */
+      const substantive = (call: { update: Record<string, unknown> }) => {
+        const { lastSyncedAt: _ignored, ...rest } = call.update;
+        return rest;
+      };
+
+      expect(viaSyncOne.upserts).toHaveLength(1);
+      expect(substantive(viaSyncOne.upserts[0]!)).toEqual(substantive(viaSync.upserts[0]!));
+    });
+
+    it('reads the LMS once for two concurrent resyncs of the same course', async () => {
+      const { service, lmsCalls, upserts } = harness({
+        courses: [lmsCourse({ lmsCourseId: 7 })],
+        rows: [
+          {
+            id: 'c1',
+            moodleCourseId: 7,
+            publication: 'PUBLISHED',
+            durationMinutes: null,
+            lmsPresent: true,
+          },
+        ],
+      });
+
+      const [a, b] = await Promise.all([service.syncOne(7), service.syncOne(7)]);
+
+      expect(a).toEqual(b);
+      expect(lmsCalls.getCourse).toBe(1);
+      expect(upserts).toHaveLength(1);
+    });
+
+    it('does not coalesce two different courses', async () => {
+      const { service, lmsCalls } = harness({
+        courses: [lmsCourse({ lmsCourseId: 7 }), lmsCourse({ lmsCourseId: 8 })],
+      });
+
+      await Promise.all([service.syncOne(7), service.syncOne(8)]);
+
+      expect(lmsCalls.getCourse).toBe(2);
+    });
+
+    it('refuses a course the LMS no longer has, rather than writing nothing silently', async () => {
+      const { service } = harness({ courses: [] });
+
+      await expect(service.syncOne(404)).rejects.toThrow('LMS_COURSE_RESYNC_FAILED');
+    });
+
+    it('a later call for the same course is not coalesced once the first has settled', async () => {
+      const { service, lmsCalls } = harness({ courses: [lmsCourse({ lmsCourseId: 7 })] });
+
+      await service.syncOne(7);
+      await service.syncOne(7);
+
+      expect(lmsCalls.getCourse).toBe(2);
+    });
   });
 });
