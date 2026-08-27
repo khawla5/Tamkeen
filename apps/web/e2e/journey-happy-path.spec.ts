@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { signedInEmployee } from './account';
-import { completeAssessment } from './journey';
+import { completeAssessment, selectFiveCourses } from './journey';
 import { assertMailpitReachable } from './mailpit';
 
 /**
@@ -112,10 +112,7 @@ test.describe('Phase 1 journey', () => {
     await expect(page.getByText('اخترت 0 من 5–10')).toBeVisible();
     await expect(page.getByRole('button', { name: 'تأكيد المسار' })).toBeDisabled();
 
-    for (let selected = 1; selected <= 5; selected += 1) {
-      await page.getByRole('button', { name: 'أضف' }).first().click();
-      await expect(page.getByText(`اخترت ${selected} من 5–10`)).toBeVisible();
-    }
+    await selectFiveCourses(page);
 
     await expect(page.getByRole('button', { name: 'تأكيد المسار' })).toBeEnabled();
 
@@ -219,10 +216,7 @@ test.describe('Phase 1 journey', () => {
     await expect(page).toHaveURL(/\/paths\//);
     const pathUrl = page.url();
 
-    for (let selected = 1; selected <= 5; selected += 1) {
-      await page.getByRole('button', { name: 'أضف' }).first().click();
-      await expect(page.getByText(`اخترت ${selected} من 5–10`)).toBeVisible();
-    }
+    await selectFiveCourses(page);
 
     await page.getByRole('button', { name: 'تأكيد المسار' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'نعم، أكّد المسار' }).click();
@@ -232,7 +226,7 @@ test.describe('Phase 1 journey', () => {
        whose submissions the server would reject. */
     await page.goto(pathUrl);
     await expect(page.getByText('مسارك مؤكَّد')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'أضف' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^أضف:/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'تأكيد المسار' })).toHaveCount(0);
   });
 
@@ -253,7 +247,9 @@ test.describe('Phase 1 journey', () => {
     /* 48 seeded courses, one of which the LMS no longer shows. */
     await expect(page.getByText('47 دورة')).toBeVisible();
 
-    await page.getByRole('link', { name: 'مقدمة في إدارة المشاريع' }).click();
+    /* Grouped by path (TAM-127): a course in two paths has a card in each, so
+       take the first — they are the same link. */
+    await page.getByRole('link', { name: 'مقدمة في إدارة المشاريع' }).first().click();
     await expect(page.getByRole('heading', { name: 'أهداف الدورة' })).toBeVisible();
 
     /* §4.7: exactly one action applies, and before a path exists none does —
@@ -275,7 +271,9 @@ test.describe('Phase 1 journey', () => {
 
     await page.getByLabel('ابحث في الدورات').fill('البيانات');
     await expect(page.getByText('47 دورة')).toBeHidden();
-    await expect(page.getByRole('link', { name: 'تحليل البيانات للمبتدئين' })).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: 'تحليل البيانات للمبتدئين' }).first(),
+    ).toBeVisible();
 
     await page.getByLabel('ابحث في الدورات').fill('لا-توجد-دورة-بهذا-الاسم');
     await expect(page.getByText('لا توجد دورات مطابقة')).toBeVisible();

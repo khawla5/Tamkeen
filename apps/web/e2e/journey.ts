@@ -25,15 +25,35 @@ export async function completeAssessment(page: Page, from = 1): Promise<void> {
   }
 }
 
+/**
+ * Selects five courses on the build page, each by name.
+ *
+ * Not `.first()` in a loop: that locator re-resolves on every attempt, so a
+ * click aimed at one card could land on another while the list re-rendered —
+ * the counter flake recorded in progress.md. The five titles are read once,
+ * up front, and each click then targets a single element that does not move.
+ */
+export async function selectFiveCourses(page: Page): Promise<void> {
+  const titles = (
+    await page
+      .getByRole('button', { name: /^أضف:/ })
+      .evaluateAll((cards) => cards.map((card) => card.getAttribute('aria-label') ?? ''))
+  ).slice(0, 5);
+
+  expect(titles).toHaveLength(5);
+
+  for (const [index, label] of titles.entries()) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    await expect(page.getByText(`اخترت ${index + 1} من 5–10`)).toBeVisible();
+  }
+}
+
 /** Picks the first offered path, selects five courses, and commits. */
 export async function confirmFirstPath(page: Page): Promise<void> {
   await page.getByRole('link', { name: 'استعرض المسار' }).first().click();
   await expect(page).toHaveURL(/\/paths\//);
 
-  for (let selected = 1; selected <= 5; selected += 1) {
-    await page.getByRole('button', { name: 'أضف' }).first().click();
-    await expect(page.getByText(`اخترت ${selected} من 5–10`)).toBeVisible();
-  }
+  await selectFiveCourses(page);
 
   await page.getByRole('button', { name: 'تأكيد المسار' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'نعم، أكّد المسار' }).click();

@@ -235,6 +235,17 @@ test.describe('Phase 4 — the entity portal', () => {
      * content out from under them silently.
      */
     await learnerPage.goto('/courses');
+    /*
+     * «كل المسارات» first. TAM-127 opens a committed learner's catalogue on
+     * their own path, and the borrowed course is not in it: `enrolLearnerOnCourse`
+     * writes the `user_path_courses` row directly, which is how this suite
+     * makes a holder without walking the 5-10 flow — through the API,
+     * `assertCoursesSelectable` would have refused a course outside the
+     * confirmed path, so the state cannot arise in production. Clearing the
+     * filter asks the question this test actually means to ask: is the course
+     * still in the catalogue for the person holding it?
+     */
+    await learnerPage.getByLabel('المسار').selectOption('');
     await expect(learnerPage.getByText(entity.borrowedCourse.title).first()).toBeVisible({
       timeout: 15_000,
     });
@@ -270,12 +281,26 @@ test.describe('Phase 4 — the entity portal', () => {
     expect(text).not.toContain('PW-');
   });
 
-  test('the entity profile is read-only', async () => {
+  /*
+   * Stale since TAM-138 / D-108, which made the entity's *own* contact details
+   * editable while keeping the organisation's name the ministry's. The test
+   * still asserted the whole page was read-only, and the sentence it looked
+   * for no longer exists anywhere in the app — repaired here because this
+   * branch runs the suite, not because it is this branch's subject.
+   */
+  test('the entity profile edits its own contact, never the ministry’s name for it', async () => {
     await entityPage.getByRole('link', { name: 'بيانات الجهة' }).first().click();
 
     await expect(entityPage.getByText(entity.entityName)).toBeVisible();
-    await expect(entityPage.getByText('تُدار بيانات الجهة من قِبل إدارة النظام.')).toBeVisible();
-    await expect(entityPage.getByRole('textbox')).toHaveCount(0);
+    await expect(entityPage.getByText('يُدار اسم الجهة من قِبل إدارة النظام.')).toBeVisible();
+
+    /* The organisation's name is text, not a field; the contact details are
+       fields. That split is the decision, so it is what gets asserted. */
+    await expect(entityPage.getByRole('textbox', { name: 'اسم الجهة' })).toHaveCount(0);
+    await expect(
+      entityPage.getByRole('textbox', { name: 'جهة الاتصال', exact: true }),
+    ).toBeVisible();
+    await expect(entityPage.getByRole('textbox', { name: 'بريد جهة الاتصال' })).toBeVisible();
   });
 
   test('a learner who types /entity is sent back to their own portal', async () => {
