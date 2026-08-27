@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 
 import { PortalPage } from '@/components/layout/portal-page';
+import { usePortal } from '@/components/layout/portal-provider';
 import { DataView } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,16 +23,21 @@ const DURATION_OPTIONS = [120, 180, 240] as const;
 /**
  * The courses catalogue (§4.6).
  *
- * Browsable before the assessment, which is why nothing here depends on a
- * Holland Code or a chosen path.
+ * Browsable before the assessment, which is why nothing here *requires* a
+ * Holland Code or a chosen path. The one concession to the journey: **the path
+ * filter starts on the learner's own path** when they have committed to one —
+ * a learner arriving here (most often through My Path's quiet add) is looking
+ * for courses they can actually add, and «جميع المسارات» stays one selection
+ * away.
  */
 export default function CoursesPage() {
   const t = useTranslations('courses');
   const format = useFormat();
+  const { dashboard } = usePortal();
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [pathId, setPathId] = useState('');
+  const [pathId, setPathId] = useState(() => dashboard.path?.id ?? '');
   const [maxDuration, setMaxDuration] = useState('');
 
   /* Debounced so typing does not fire a request per keystroke. 300ms is long

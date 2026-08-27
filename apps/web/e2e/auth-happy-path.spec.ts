@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-import { DEPARTMENT, PASSWORD, RUN_ID, accountFor, signedInEmployee } from './account';
+import { DEPARTMENT, PASSWORD, RUN_ID, accountFor, signedInEmployee, numericEmployeeId } from './account';
 import { completeAssessment } from './journey';
 import { assertMailpitReachable, tokenFromEmail } from './mailpit';
 
@@ -143,7 +143,7 @@ test.describe('Authentication happy path', () => {
     await fillRegistration(page, {
       fullName: 'شخص خارجي',
       email: `pw-${RUN_ID}-outsider@ministry.gov`,
-      employeeId: `PW-${RUN_ID}-out`.slice(0, 20),
+      employeeId: numericEmployeeId('out'),
       department: DEPARTMENT,
     });
 

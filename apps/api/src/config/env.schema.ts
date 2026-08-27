@@ -45,8 +45,8 @@ export const envSchema = z.object({
   REGISTRATION_MODE: z.enum(['restricted', 'admin-only']).default('restricted'),
   ALLOWED_EMAIL_DOMAINS: csv.default('ministry.gov.example'),
   /** Shape of a ministry employee number. Configurable because only the ministry
-   *  knows its real format; the default is permissive but not empty. */
-  EMPLOYEE_ID_PATTERN: z.string().default('^[A-Za-z0-9][A-Za-z0-9-]{3,19}$'),
+   *  knows its real format; the default is exactly ten digits. */
+  EMPLOYEE_ID_PATTERN: z.string().default('^[0-9]{10}$'),
   /* Global per-IP request ceiling. The stricter limits on individual auth
      endpoints are static in the controller: they are security floors, not knobs
      an operator should be able to loosen from a config file. */

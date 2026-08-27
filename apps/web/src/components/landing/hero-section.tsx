@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
 import { SaudiMap } from '@/components/brand/saudi-map';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -38,9 +37,7 @@ export function HeroSection() {
     <section className="bg-primary-deep text-surface">
       <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-2 lg:py-24">
         <div className="flex max-w-2xl flex-col items-start text-start">
-          <Badge variant="onColor">{t('eyebrow')}</Badge>
-
-          <h1 className="mt-6 text-4xl font-extrabold leading-tight text-surface sm:text-5xl">
+          <h1 className="text-4xl font-extrabold leading-tight text-surface sm:text-5xl">
             {t('heroTitle')}
           </h1>
 

@@ -28,6 +28,8 @@ import {
   type UserRole,
 } from '@tamkeen/types';
 
+import { FULL_NAME_NO_DIGITS } from '../auth/auth.dto';
+
 /**
  * Validation for the super-admin portal.
  *
@@ -92,6 +94,7 @@ export class CreateAdminUserDto {
   @IsString()
   @MinLength(2)
   @MaxLength(120)
+  @Matches(FULL_NAME_NO_DIGITS, { message: 'FULL_NAME_HAS_DIGITS' })
   fullName!: string;
 
   /**

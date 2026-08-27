@@ -12,6 +12,7 @@ import { AppModule } from '../src/app.module';
 import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * The super-admin portal is closed to everyone else (§4C, D-062, D-075).
@@ -212,7 +213,7 @@ describe('Admin portal RBAC (e2e)', () => {
         email,
         passwordHash: await hashPassword(PASSWORD),
         fullName: 'حساب تجريبي',
-        employeeId: `A-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'قسم',
         role,
         entityId: entity,
@@ -234,7 +235,7 @@ describe('Admin portal RBAC (e2e)', () => {
         email,
         password: PASSWORD,
         fullName: 'موظف تجريبي',
-        employeeId: `A-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'تقنية المعلومات',
       })
       .expect(202);

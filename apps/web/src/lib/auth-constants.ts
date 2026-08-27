@@ -17,10 +17,17 @@ export const PASSWORD_MIN_LENGTH = 12;
  * rule above: the server is authoritative, this only lets the form say so
  * before a round trip. Must be kept in step with the deployed value.
  */
-export const EMPLOYEE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{3,19}$/;
+export const EMPLOYEE_ID_PATTERN = /^[0-9]{10}$/;
 
 /** A full name shorter than this cannot be a name. */
 export const FULL_NAME_MIN_LENGTH = 3;
+
+/**
+ * A name never contains a digit — Western (0-9), Arabic-Indic (٠-٩) or
+ * Extended Arabic-Indic (۰-۹). Mirrors the server's `FULL_NAME_NO_DIGITS`
+ * rule on the register and profile DTOs.
+ */
+export const FULL_NAME_DIGITS = /[0-9٠-٩۰-۹]/;
 
 /**
  * The ministry's departments, as the registration and profile dropdowns offer
