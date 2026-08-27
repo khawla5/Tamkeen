@@ -43,9 +43,19 @@ export default function CourseContentPage() {
         <Card className="p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-foreground">{t('contentHeading')}</h2>
-            <Button variant="ghost" onClick={content.refetch}>
-              {t('contentRefresh')}
-            </Button>
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Quiet — this strip is exactly where "why is completion still
+                  false" comes up (§4B.4, TAM-134). */}
+              <Link
+                href="/entity/guide#completion"
+                className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
+              >
+                {t('guideLink')}
+              </Link>
+              <Button variant="ghost" onClick={content.refetch}>
+                {t('contentRefresh')}
+              </Button>
+            </div>
           </div>
 
           {/* First load only — the refresh button would otherwise replace the

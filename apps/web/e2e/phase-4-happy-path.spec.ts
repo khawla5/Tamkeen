@@ -281,26 +281,19 @@ test.describe('Phase 4 — the entity portal', () => {
     expect(text).not.toContain('PW-');
   });
 
-  /*
-   * Stale since TAM-138 / D-108, which made the entity's *own* contact details
-   * editable while keeping the organisation's name the ministry's. The test
-   * still asserted the whole page was read-only, and the sentence it looked
-   * for no longer exists anywhere in the app — repaired here because this
-   * branch runs the suite, not because it is this branch's subject.
-   */
-  test('the entity profile edits its own contact, never the ministry’s name for it', async () => {
+  test('the organisation name is read-only; the rest of the profile is the entity’s own (D-108)', async () => {
     await entityPage.getByRole('link', { name: 'بيانات الجهة' }).first().click();
 
+    /* Only the contracted identity (D-063) has no edit control — everything
+       else on the page is the account's or the organisation's own
+       housekeeping (D-108, TAM-138), so this asserts the read-only surface
+       shrank to exactly one field rather than the whole page. */
     await expect(entityPage.getByText(entity.entityName)).toBeVisible();
     await expect(entityPage.getByText('يُدار اسم الجهة من قِبل إدارة النظام.')).toBeVisible();
 
-    /* The organisation's name is text, not a field; the contact details are
-       fields. That split is the decision, so it is what gets asserted. */
-    await expect(entityPage.getByRole('textbox', { name: 'اسم الجهة' })).toHaveCount(0);
-    await expect(
-      entityPage.getByRole('textbox', { name: 'جهة الاتصال', exact: true }),
-    ).toBeVisible();
-    await expect(entityPage.getByRole('textbox', { name: 'بريد جهة الاتصال' })).toBeVisible();
+    await expect(entityPage.getByLabel('الاسم الكامل')).toBeEditable();
+    await expect(entityPage.getByLabel('جهة الاتصال', { exact: true })).toBeEditable();
+    await expect(entityPage.getByLabel('بريد جهة الاتصال')).toBeEditable();
   });
 
   test('a learner who types /entity is sent back to their own portal', async () => {
