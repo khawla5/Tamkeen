@@ -192,8 +192,13 @@ function CourseAction({
       return (
         <Button asChild>
           {/* Through the player, which mints the signed handoff on click. A
-              direct LMS link carries no session (D-044). */}
-          <Link href={`/courses/${course.id}/player`}>{t('actionStart')}</Link>
+              direct LMS link carries no session (D-044). `personalStatus` is
+              what tells "confirmed but unattempted" and "genuinely in
+              progress" apart (§4.7) — `action` alone collapses both into
+              START_COURSE, exactly why the field exists (TAM-128). */}
+          <Link href={`/courses/${course.id}/player`}>
+            {course.personalStatus === 'IN_PROGRESS' ? t('actionContinue') : t('actionStart')}
+          </Link>
         </Button>
       );
 

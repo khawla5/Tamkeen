@@ -214,10 +214,19 @@ describe('course detail — the one action, in the header', () => {
     );
   });
 
-  it('START_COURSE: links to the player, never the raw LMS URL', async () => {
-    await renderCourse({ action: 'START_COURSE' });
+  it('START_COURSE, not yet attempted: links to the player as «ابدأ الدورة»', async () => {
+    await renderCourse({ action: 'START_COURSE', personalStatus: 'NOT_STARTED' });
 
     expect(screen.getByRole('link', { name: 'ابدأ الدورة' })).toHaveAttribute(
+      'href',
+      '/courses/course-1/player',
+    );
+  });
+
+  it('START_COURSE, already in progress: the same link reads «أكمل الدورة» (§4.7, TAM-128)', async () => {
+    await renderCourse({ action: 'START_COURSE', personalStatus: 'IN_PROGRESS' });
+
+    expect(screen.getByRole('link', { name: 'أكمل الدورة' })).toHaveAttribute(
       'href',
       '/courses/course-1/player',
     );
