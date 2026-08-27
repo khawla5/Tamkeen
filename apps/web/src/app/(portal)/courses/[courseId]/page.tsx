@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import type { CourseDetail } from '@tamkeen/types';
 
 import { useErrorMessage } from '@/components/auth/use-error-message';
+import { CourseStatusChip } from '@/components/courses/course-status-chip';
 import { PortalPage } from '@/components/layout/portal-page';
 import { DataView } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
@@ -65,27 +66,12 @@ export default function CourseDetailPage() {
 
 function Detail({ course, addError }: { course: CourseDetail; addError: unknown }) {
   const t = useTranslations('courseDetail');
-  const tMyPath = useTranslations('myPath');
   const translateError = useErrorMessage();
   const format = useFormat();
 
   const hours = toHours(course.durationMinutes);
 
-  /* One resolution shared with TAM-127's card chip (§4.7): `personalStatus`
-     is null outside the user's path — no chip, absence is the signal — and
-     the three values inside it map to the same three labels the my-path list
-     already uses, plus one more for "selected but not yet started" (that
-     page never needs it — everything in it is, by definition, in the path). */
-  const statusLabel =
-    course.personalStatus === 'COMPLETED'
-      ? tMyPath('statusCompleted')
-      : course.personalStatus === 'IN_PROGRESS'
-        ? tMyPath('statusInProgress')
-        : course.personalStatus === 'NOT_STARTED'
-          ? t('statusInPath')
-          : null;
-
-  const hasMeta = hours !== null || course.paths.length > 0 || statusLabel !== null;
+  const hasMeta = hours !== null || course.paths.length > 0 || course.personalStatus !== null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -108,10 +94,10 @@ function Detail({ course, addError }: { course: CourseDetail; addError: unknown 
                 {path.name}
               </Badge>
             ))}
-            {/* At most one chip, matching every course card that will carry
-                the same rule once TAM-127 lands — a course outside the user's
-                path gets none, absence is the signal. */}
-            {statusLabel !== null ? <Badge variant="neutral">{statusLabel}</Badge> : null}
+            {/* At most one chip, and the same component every catalogue card
+                uses (TAM-127) — a course outside the user's path gets none,
+                absence is the signal. */}
+            <CourseStatusChip status={course.personalStatus} />
           </div>
         ) : null}
       </div>
