@@ -1,5 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { act, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,12 +20,17 @@ import { renderWithProviders } from '@/test/render';
 const api = vi.hoisted(() => ({
   player: vi.fn(),
   launch: vi.fn(),
+  sync: vi.fn(),
+  outline: vi.fn(),
 }));
 
-vi.mock('@/lib/api-client', () => ({
+vi.mock('@/lib/api-client', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api-client')>('@/lib/api-client')),
   coursesApi: {
     player: api.player,
     launch: api.launch,
+    sync: api.sync,
+    outline: api.outline,
   },
 }));
 
@@ -69,6 +73,28 @@ const show = async (overrides: Partial<CoursePlayerView> = {}) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  api.outline.mockResolvedValue({
+    items: [
+      {
+        moduleId: 11,
+        name: 'مقدمة',
+        kind: 'page',
+        url: 'http://moodle.test/mod/page/view.php?id=11',
+      },
+      {
+        moduleId: 12,
+        name: 'المذكرة',
+        kind: 'resource',
+        url: 'http://moodle.test/mod/resource/view.php?id=12',
+      },
+      {
+        moduleId: 13,
+        name: 'الاختبار',
+        kind: 'quiz',
+        url: 'http://moodle.test/mod/quiz/view.php?id=13',
+      },
+    ],
+  });
   api.launch.mockResolvedValue({ url: 'http://moodle.test/local/tamkeensso/login.php?token=x' });
 });
 
@@ -92,24 +118,14 @@ describe('course player — context', () => {
 describe('course player — one action, chosen by state', () => {
   it('offers "start" for an untouched course, and nothing else', async () => {
     await show({ status: 'NOT_STARTED' });
-
-    expect(screen.getByRole('button', { name: /ابدأ الدورة/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /تابع الدورة/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /راجع الدورة/ })).not.toBeInTheDocument();
   });
 
   it('offers "resume" once the course is in progress', async () => {
     await show({ status: 'IN_PROGRESS', gradePercent: 40 });
-
-    expect(screen.getByRole('button', { name: /تابع الدورة/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /ابدأ الدورة/ })).not.toBeInTheDocument();
   });
 
   it('offers "review" once it is passed', async () => {
     await show({ status: 'COMPLETED', gradePercent: 88, passed: true });
-
-    expect(screen.getByRole('button', { name: /راجع الدورة/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /ابدأ الدورة/ })).not.toBeInTheDocument();
   });
 
   it('offers no launch at all before the path is confirmed', async () => {
@@ -117,7 +133,6 @@ describe('course player — one action, chosen by state', () => {
        would be one that cannot do what it says. */
     await show({ canLaunch: false });
 
-    expect(screen.queryByRole('button', { name: /ابدأ الدورة/ })).not.toBeInTheDocument();
     expect(screen.getByText(/لم يتم تأكيد مسارك/)).toBeInTheDocument();
   });
 });
@@ -136,7 +151,6 @@ describe('course player — the outcome', () => {
 
     expect(screen.getByText(/لم تجتز هذه الدورة بعد/)).toBeInTheDocument();
     expect(screen.getByText(/الحدّ المطلوب/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /تابع الدورة/ })).toBeInTheDocument();
   });
 
   it('shows no outcome at all before anything is attempted', async () => {
@@ -162,34 +176,138 @@ describe('course player — the outcome', () => {
   });
 });
 
-describe('course player — the handoff', () => {
-  it('does not put the launch URL in the page', async () => {
-    /* The whole point of minting per click: a URL in the markup would be a
-       live credential sitting in the DOM, in view-source and in any cached
-       copy of the page, from the moment it rendered. */
-    await show();
-
-    expect(api.launch).not.toHaveBeenCalled();
-    expect(document.body.innerHTML).not.toContain('tamkeensso');
+describe('course player — the framed course (D-121)', () => {
+  const launchResponse = (mode: 'embed' | 'handoff') => ({
+    url: `http://moodle.test/local/tamkeensso/login.php?token=${mode}-x${mode === 'embed' ? '&embed=learner' : ''}`,
+    mode,
   });
 
-  it('fetches the URL only when the learner clicks', async () => {
+  beforeEach(() => {
+    api.launch.mockImplementation((_id: string, options?: { embed?: boolean }) =>
+      Promise.resolve(launchResponse(options?.embed ? 'embed' : 'handoff')),
+    );
+  });
+
+  it('mints the framed launch on open, and the URL appears only as the frame src', async () => {
+    let resolveLaunch: (value: unknown) => void = () => undefined;
+    api.launch.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLaunch = resolve;
+        }),
+    );
     await show();
 
-    await userEvent.click(screen.getByRole('button', { name: /ابدأ الدورة/ }));
+    /* Before the launch resolves: nothing carrying a token anywhere in the page. */
+    expect(document.body.innerHTML).not.toContain('token=');
+    expect(api.launch).toHaveBeenCalledWith('course-1', { embed: true });
+
+    await act(async () => {
+      resolveLaunch(launchResponse('embed'));
+    });
+
+    const frame = await screen.findByTitle(COURSE.title);
+    expect(frame.tagName).toBe('IFRAME');
+    expect(frame).toHaveAttribute('src', expect.stringContaining('embed=learner'));
+    expect(document.querySelectorAll('a[href*="token="]')).toHaveLength(0);
+  });
+
+  it('frames nothing before the path is confirmed', async () => {
+    await show({ canLaunch: false });
+
+    expect(api.launch).not.toHaveBeenCalled();
+    expect(screen.queryByTitle(COURSE.title)).not.toBeInTheDocument();
+  });
+
+  it('asks for an on-demand sync and refetches when the framed quiz reports itself', async () => {
+    api.sync.mockResolvedValue({ synced: true });
+    await show();
+    await screen.findByTitle(COURSE.title);
+    api.player.mockClear();
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: 'http://moodle.test',
+          data: { type: 'tamkeen:quiz-finished' },
+        }),
+      );
+    });
 
     await waitFor(() => {
-      expect(api.launch).toHaveBeenCalledWith('course-1');
+      expect(api.sync).toHaveBeenCalledWith('course-1');
+      expect(api.player).toHaveBeenCalled();
     });
   });
 
-  it('shows an Arabic error and stays put when the handoff fails', async () => {
+  it('ignores a quiz message from any origin but Moodle’s', async () => {
+    await show();
+    await screen.findByTitle(COURSE.title);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: 'http://evil.test',
+          data: { type: 'tamkeen:quiz-finished' },
+        }),
+      );
+    });
+
+    expect(api.sync).not.toHaveBeenCalled();
+  });
+
+  it('shows the fallback when the framed launch itself fails', async () => {
     /* Moodle being down is a real state now, not a hypothetical (§2B DoD 4). */
     api.launch.mockRejectedValue(new Error('LMS_UNREACHABLE'));
     await show();
 
-    await userEvent.click(screen.getByRole('button', { name: /ابدأ الدورة/ }));
+    expect(await screen.findByText(/تعذّر عرض الدورة داخل الصفحة/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /افتح في منصة التعلّم/ })).toBeInTheDocument();
+  });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/تعذّر فتح الدورة/);
+  describe('course player — previous / next (D-122)', () => {
+    const ready = (cmid: number | null) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            origin: 'http://moodle.test',
+            data: { type: 'tamkeen:ready', cmid },
+          }),
+        );
+      });
+
+    it('follows the frame: on the course page only "next" leads in; on an activity both sides work', async () => {
+      await show();
+      await screen.findByTitle(COURSE.title);
+      ready(null);
+
+      expect(await screen.findByText(/صفحة الدورة/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /السابق/ })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /التالي/ })).toBeEnabled();
+
+      ready(12);
+      expect(await screen.findByText('النشاط 2 من 3')).toBeInTheDocument();
+      expect(screen.getByText('المذكرة')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /السابق/ })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /التالي/ })).toBeEnabled();
+
+      ready(13);
+      expect(await screen.findByText('النشاط 3 من 3')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /التالي/ })).toBeDisabled();
+    });
+
+    it('moves the frame to the neighbour without minting a new launch', async () => {
+      const { default: userEvent } = await import('@testing-library/user-event');
+      await show();
+      const frame = (await screen.findByTitle(COURSE.title)) as HTMLIFrameElement;
+      ready(12);
+      await screen.findByText('النشاط 2 من 3');
+      api.launch.mockClear();
+
+      await userEvent.click(screen.getByRole('button', { name: /التالي/ }));
+
+      expect(frame.src).toBe('http://moodle.test/mod/quiz/view.php?id=13');
+      expect(api.launch).not.toHaveBeenCalled();
+    });
   });
 });

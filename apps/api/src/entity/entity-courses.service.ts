@@ -56,7 +56,7 @@ export class EntityCoursesService {
         status: true,
         pathCourses: {
           orderBy: { path: { displayOrder: 'asc' } },
-          select: { path: { select: { id: true, name: true, riasecLetter: true } } },
+          select: { status: true, path: { select: { id: true, name: true, riasecLetter: true } } },
         },
       },
     });
@@ -79,7 +79,7 @@ export class EntityCoursesService {
         language: course.language,
         publication: course.publication,
         status: course.status,
-        paths: course.pathCourses.map((entry) => entry.path),
+        paths: course.pathCourses.map((entry) => ({ ...entry.path, status: entry.status })),
         enrolledCount: stat.enrolled,
         /* Undefined rather than zero over an empty denominator. "0%" on a course
            nobody has started reads as failure, which is a different claim. */

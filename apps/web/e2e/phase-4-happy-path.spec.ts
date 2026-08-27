@@ -168,27 +168,41 @@ test.describe('Phase 4 — the entity portal', () => {
     await expect(entityPage.getByText(/اضبط شروط إكمال الدورة/)).toBeVisible();
   });
 
-  test('the course content read-back reports an empty course honestly', async () => {
-    await entityPage.getByRole('link', { name: 'محتوى الدورة' }).click();
-
-    await expect(entityPage.getByRole('heading', { name: 'محتوى الدورة' })).toBeVisible();
-    await expect(entityPage.getByText('ما تحتويه الدورة الآن')).toBeVisible();
-    await expect(entityPage.getByText('شروط الإكمال مضبوطة')).toBeVisible();
-    await expect(entityPage.getByText('لا').first()).toBeVisible();
-  });
-
-  test('the authoring handoff is never rendered into the page (D-045)', async () => {
-    /* It carries a live, single-use credential. As an href it would sit in the
-       DOM, in view-source and in any cached copy from the moment the page
-       loaded — so the URL is minted on the click instead. */
+  test('Manage Course carries no credential — the editor is reached by a link (D-101)', async () => {
+    /* The author credential is minted only where the editor opens. */
     const html = await entityPage.content();
 
     expect(html).not.toContain('local/tamkeensso');
     expect(html).not.toContain('token=');
 
+    await entityPage.getByRole('link', { name: 'افتح محرّر المحتوى' }).click();
+    await expect(entityPage.getByRole('heading', { name: 'محتوى الدورة' })).toBeVisible();
+  });
+
+  test('the content page frames the editor with the read-back and the publish gate beside it (TAM-139)', async () => {
+    /* The read-back, honest about an empty course… */
+    await expect(entityPage.getByText('شروط الإكمال مضبوطة')).toBeVisible();
+    /* Exact: the unpublish dialog's (hidden) copy also contains these letters. */
+    await expect(entityPage.getByText('لا', { exact: true }).first()).toBeVisible();
+    await expect(entityPage.getByText(/اضبط شروط إكمال الدورة/)).toBeVisible();
+
+    /* …the publish gate as the page's one action, still refusing… */
+    await expect(entityPage.getByRole('button', { name: 'انشر الدورة' })).toBeDisabled();
+
+    /* …and the editor framed on a launch URL asked for in embed mode. Against
+       the mock LMS the frame never becomes "ready", which is exactly the
+       blocked-frame case: the fallback must then appear, on its own token. */
+    const frame = entityPage.locator('iframe[title]');
+    await expect(frame).toHaveAttribute('src', /embed=author/);
     await expect(
-      entityPage.getByRole('button', { name: 'حرّر المحتوى في منصة التعلّم' }),
+      entityPage.getByRole('button', { name: 'افتح في منصة التعلّم' }).first(),
     ).toBeVisible();
+    await expect(entityPage.getByText('تعذّر عرض محرّر المحتوى داخل الصفحة')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await entityPage.getByRole('link', { name: 'إدارة الدورة' }).click();
+    await expect(entityPage.getByRole('heading', { name: 'إدارة الدورة' })).toBeVisible();
   });
 
   test('a learner can see the entity’s published course', async () => {

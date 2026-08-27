@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 
-import type { CourseLaunchView, CoursePlayerView } from '@tamkeen/types';
+import type { CourseLaunchView, CourseOutlineView, CoursePlayerView } from '@tamkeen/types';
 
 import { AuditAction } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
@@ -95,10 +95,38 @@ export class CoursePlayerService {
    * clicks. Every refusal below is a case where issuing one would grant entry
    * to a course the learner is not entitled to.
    */
+  /**
+   * The activities of a course the learner may enter (D-122). Same gate as
+   * the launch — a course outside the confirmed path answers as if it had no
+   * outline, so nothing is learned about courses in other people's paths.
+   */
+  async outline(userId: string, courseId: string): Promise<CourseOutlineView> {
+    const chosen = await this.prisma.userPathCourse.findFirst({
+      where: { courseId, userPath: { userId, confirmedAt: { not: null } } },
+      select: { course: { select: { moodleCourseId: true } } },
+    });
+
+    if (!chosen) {
+      return { items: [] };
+    }
+
+    const items = await this.lms.getCourseOutline(chosen.course.moodleCourseId);
+
+    return {
+      items: items.map((item) => ({
+        moduleId: item.lmsModuleId,
+        name: item.name,
+        kind: item.kind,
+        url: item.url,
+      })),
+    };
+  }
+
   async launch(
     userId: string,
     courseId: string,
     ipAddress: string | null,
+    options: { embed: boolean } = { embed: false },
   ): Promise<CourseLaunchView> {
     const course = await this.prisma.course.findUnique({
       where: { id: courseId },
@@ -158,7 +186,19 @@ export class CoursePlayerService {
       targetId: courseId,
     });
 
-    return { url: this.lms.courseLaunchUrl(user.moodleUserId, course.moodleCourseId) };
+    /* D-121: framed by the player, or the full-page handoff. Same credential,
+       same audit entry either way — only the presentation differs. */
+    return options.embed
+      ? {
+          url: this.lms.courseLaunchUrl(user.moodleUserId, course.moodleCourseId, {
+            embed: 'learner',
+          }),
+          mode: 'embed',
+        }
+      : {
+          url: this.lms.courseLaunchUrl(user.moodleUserId, course.moodleCourseId),
+          mode: 'handoff',
+        };
   }
 
   /** The next course in the path after this one, for "continue" after a pass. */

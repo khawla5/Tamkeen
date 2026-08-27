@@ -12,6 +12,7 @@ import { AppModule } from '../src/app.module';
 import { CertificateStorageService } from '../src/certificates/certificate-storage.service';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * The learner's own certificate gallery, over HTTP (§4.10).
@@ -73,7 +74,7 @@ describe('Certificate gallery (e2e)', () => {
       email,
       password: PASSWORD,
       fullName: 'موظف تجريبي',
-      employeeId: `G-${RUN_ID}-${label}`.slice(0, 20),
+      employeeId: numericEmployeeId(RUN_ID, label),
       department: 'تقنية المعلومات',
     }).expect(202);
 

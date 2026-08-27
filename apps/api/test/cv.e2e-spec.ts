@@ -12,6 +12,7 @@ import { AppModule } from '../src/app.module';
 import { PdfRendererService } from '../src/certificates/pdf-renderer.service';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * The CV builder over HTTP (§4.11, D-050).
@@ -124,7 +125,7 @@ describe('CV builder (e2e)', () => {
       email,
       password: PASSWORD,
       fullName: 'عبدالله بن محمد الدماطي',
-      employeeId: `CV-${RUN_ID}-${label}`.slice(0, 20),
+      employeeId: numericEmployeeId(RUN_ID, label),
       department: 'إدارة الموارد البشرية',
     }).expect(202);
 

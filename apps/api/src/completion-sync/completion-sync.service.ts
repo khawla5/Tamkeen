@@ -115,6 +115,49 @@ export class CompletionSyncService {
     return result;
   }
 
+  /** Per-learner cooldown for the on-demand sync (D-121). */
+  private readonly lastOnDemand = new Map<string, number>();
+  private static readonly ON_DEMAND_COOLDOWN_MS = 10_000;
+
+  /**
+   * The scheduled sync for one learner, on demand (D-121): the framed course
+   * reported a submitted quiz. Same `syncUser`, same idempotency; cooled down
+   * per learner so a burst of messages costs one LMS read. Returns false when
+   * the learner has no LMS account yet or the cooldown held.
+   */
+  async syncLearner(userId: string): Promise<boolean> {
+    const now = Date.now();
+    const last = this.lastOnDemand.get(userId) ?? 0;
+    if (now - last < CompletionSyncService.ON_DEMAND_COOLDOWN_MS) {
+      return false;
+    }
+    this.lastOnDemand.set(userId, now);
+
+    const learner = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, moodleUserId: true },
+    });
+    if (!learner || learner.moodleUserId === null) {
+      return false;
+    }
+
+    try {
+      await this.syncUser({
+        id: learner.id,
+        email: learner.email,
+        moodleUserId: learner.moodleUserId,
+      });
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `On-demand completion sync failed for learner ${learner.id}: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      );
+      return false;
+    }
+  }
+
   private async syncUser(learner: { id: string; email: string; moodleUserId: number }): Promise<{
     completions: number;
     newlyPassed: number;

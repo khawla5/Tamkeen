@@ -1,6 +1,13 @@
 import { randomBytes } from 'node:crypto';
 
-import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 
 import type {
   EntityAuthorLaunchView,
@@ -20,7 +27,9 @@ import { CatalogSyncService } from '../catalog-sync/catalog-sync.service';
 import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import { LmsOperationError, LmsUnavailableError } from '../moodle/lms.types';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { EntityScopeService, type EntityScope } from './entity-scope.service';
+import { checkPathMembership, exceedsLimits } from './path-membership-rules';
 import { publishBlockers } from './publish-readiness';
 
 /** What §4B.3's metadata form can change. All optional — it patches. */
@@ -56,6 +65,7 @@ export class EntityCourseManagementService {
     private readonly scope: EntityScopeService,
     private readonly catalogSync: CatalogSyncService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
+    private readonly settings: SettingsService,
   ) {}
 
   /**
@@ -177,16 +187,21 @@ export class EntityCourseManagementService {
         status: true,
         objectives: true,
         prerequisites: true,
+        isGeneral: true,
         pathCourses: {
           orderBy: { path: { displayOrder: 'asc' } },
-          select: { path: { select: { id: true, name: true, riasecLetter: true } } },
+          select: { status: true, path: { select: { id: true, name: true, riasecLetter: true } } },
         },
         _count: { select: { userPathCourses: true } },
       },
     });
 
     const content = await this.readContent(course.moodleCourseId);
-    const paths = course.pathCourses.map((entry) => entry.path);
+    const paths = course.pathCourses.map((entry) => ({ ...entry.path, status: entry.status }));
+    /* Only what the admin has accepted counts for learners — letters and the
+       publish gate alike (TAM-141). */
+    const approved = paths.filter((path) => path.status === 'APPROVED');
+    const limits = await this.membershipLimits();
 
     const availablePaths = await this.prisma.path.findMany({
       where: { isActive: true },
@@ -215,10 +230,19 @@ export class EntityCourseManagementService {
        * "S" sitting in an "E" path would be a contradiction the product has no
        * rule for resolving.
        */
-      riasecLetters: [...new Set(paths.map((path) => path.riasecLetter))],
+      riasecLetters: course.isGeneral
+        ? []
+        : [...new Set(approved.map((path) => path.riasecLetter))],
       content,
+      isGeneral: course.isGeneral,
+      pathRules: {
+        ...limits,
+        frozen: !course.isGeneral && exceedsLimits(paths, limits),
+        approvalRequired: (await this.settings.get('PATH_MEMBERSHIP_APPROVAL')) === 'on',
+      },
       publishBlockers: publishBlockers({
-        pathCount: paths.length,
+        /* A general course needs no memberships to be reachable (§4C.5). */
+        pathCount: course.isGeneral ? 1 : approved.length,
         language: course.language,
         objectives: course.objectives,
         durationMinutes: course.durationMinutes,
@@ -381,12 +405,19 @@ export class EntityCourseManagementService {
     return this.get(scope, courseId);
   }
 
+  private async membershipLimits(): Promise<{ maxPaths: number; maxLetters: number }> {
+    return {
+      maxPaths: await this.settings.get('COURSE_MAX_PATHS'),
+      maxLetters: await this.settings.get('COURSE_MAX_RIASEC_LETTERS'),
+    };
+  }
+
   private async replacePathMembership(courseId: string, pathIds: string[]): Promise<void> {
     const unique = [...new Set(pathIds)];
 
     const known = await this.prisma.path.findMany({
       where: { id: { in: unique }, isActive: true },
-      select: { id: true, displayOrder: true },
+      select: { id: true, displayOrder: true, riasecLetter: true },
     });
 
     if (known.length !== unique.length) {
@@ -397,14 +428,44 @@ export class EntityCourseManagementService {
       throw new NotFoundException('PATH_NOT_FOUND');
     }
 
+    /* The rules (TAM-141): cap, coherence, grandfathering, the general
+       exemption — decided by the pure module, on the rows as they are now. */
+    const [course, current, limits, approval] = await Promise.all([
+      this.prisma.course.findUniqueOrThrow({
+        where: { id: courseId },
+        select: { isGeneral: true },
+      }),
+      this.prisma.pathCourse.findMany({
+        where: { courseId },
+        select: { pathId: true, path: { select: { riasecLetter: true } } },
+      }),
+      this.membershipLimits(),
+      this.settings.get('PATH_MEMBERSHIP_APPROVAL'),
+    ]);
+
+    const verdict = checkPathMembership({
+      current: current.map((row) => ({ id: row.pathId, riasecLetter: row.path.riasecLetter })),
+      next: known.map((path) => ({ id: path.id, riasecLetter: path.riasecLetter })),
+      limits,
+      isGeneral: course.isGeneral,
+    });
+
+    if (!verdict.ok) {
+      throw new BadRequestException(verdict.error);
+    }
+
+    /* New memberships are proposals when approval is on; existing rows keep
+       whatever the admin already decided. */
+    const status = approval === 'on' ? 'PENDING' : 'APPROVED';
+
     await this.prisma.$transaction([
       this.prisma.pathCourse.deleteMany({ where: { courseId, pathId: { notIn: unique } } }),
       ...known.map((path) =>
         this.prisma.pathCourse.upsert({
           where: { pathId_courseId: { pathId: path.id, courseId } },
-          create: { pathId: path.id, courseId, displayOrder: path.displayOrder },
+          create: { pathId: path.id, courseId, displayOrder: path.displayOrder, status },
           /* Ordering *within* a path is not this form's business, so an existing
-             membership keeps the position it already had. */
+             membership keeps the position — and the decision — it already had. */
           update: {},
         }),
       ),

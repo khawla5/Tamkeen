@@ -26,6 +26,7 @@ import { AppModule } from '../src/app.module';
 import { SharedStateLock } from './shared-state-lock';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * Integration tests for the Phase 1 journey, against a real PostgreSQL database
@@ -202,7 +203,7 @@ describe('Phase 1 journey (e2e)', () => {
       email,
       password: PASSWORD,
       fullName: 'موظف تجريبي',
-      employeeId: `J-${RUN_ID}-${label}`.slice(0, 20),
+      employeeId: numericEmployeeId(RUN_ID, label),
       department: 'تقنية المعلومات',
     }).expect(202);
 

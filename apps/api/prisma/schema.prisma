@@ -609,6 +609,12 @@ model Course {
   /// catalogue.
   publication CoursePublication @default(DRAFT)
 
+  /// Admin-only (TAM-141, §4C.5): a cross-cutting course («عامة») that appears in
+  /// every path's build list without path_courses rows, carries no derived
+  /// RIASEC letters, and is exempt from the membership cap and coherence rules.
+  /// Entities can neither set nor clear it.
+  isGeneral Boolean @default(false) @map("is_general")
+
   /// **The LMS's**, and the only two course fields sync may set besides title
   /// and summary. `lmsVisible` is Moodle's own visibility flag; `lmsPresent` is
   /// whether Moodle still returns the course at all. Two facts rather than one
@@ -719,6 +725,16 @@ model Entity {
 
 /// Paths ↔ courses. A course may belong to several paths (D-003), which is why
 /// this is a join table rather than a `pathId` on `courses`.
+/// Whether an entity's path membership has been accepted (TAM-141). Path
+/// membership is path content the admin owns (§4C.4); what an entity saves is a
+/// proposal. Only APPROVED rows reach the learner catalogue, path build, the
+/// derived RIASEC letters and the publish gate. Auto-approved while
+/// PATH_MEMBERSHIP_APPROVAL=off (until Phase 5's queue exists).
+enum PathMembershipStatus {
+  PENDING
+  APPROVED
+}
+
 model PathCourse {
   id String @id @default(uuid()) @db.Uuid
 
@@ -729,6 +745,11 @@ model PathCourse {
   course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   displayOrder Int @map("display_order")
+
+  status      PathMembershipStatus @default(APPROVED)
+  /// The admin who approved or will have rejected it; null when auto-approved.
+  decidedById String?              @map("decided_by_id") @db.Uuid
+  decidedAt   DateTime?            @map("decided_at")
 
   @@unique([pathId, courseId])
   @@index([pathId, displayOrder])

@@ -45,8 +45,8 @@ export const envSchema = z.object({
   REGISTRATION_MODE: z.enum(['restricted', 'admin-only']).default('restricted'),
   ALLOWED_EMAIL_DOMAINS: csv.default('ministry.gov.example'),
   /** Shape of a ministry employee number. Configurable because only the ministry
-   *  knows its real format; the default is permissive but not empty. */
-  EMPLOYEE_ID_PATTERN: z.string().default('^[A-Za-z0-9][A-Za-z0-9-]{3,19}$'),
+   *  knows its real format; the default is exactly ten digits. */
+  EMPLOYEE_ID_PATTERN: z.string().default('^[0-9]{10}$'),
   /* Global per-IP request ceiling. The stricter limits on individual auth
      endpoints are static in the controller: they are security floors, not knobs
      an operator should be able to loosen from a config file. */
@@ -134,6 +134,15 @@ export const envSchema = z.object({
   CERT_SIGNATORY_TITLE: z.string().max(160).default(''),
   CERT_ISSUING_BODY: z.string().max(160).default('الجهة المصدرة: وزارة الداخلية'),
   PASS_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
+  /**
+   * Path membership rules for a course (TAM-141): how many paths one course
+   * may belong to, how many distinct RIASEC letters those paths may span, and
+   * whether an entity's membership needs admin approval before learners see it
+   * ('off' auto-approves — the state until Phase 5's queue exists).
+   */
+  COURSE_MAX_PATHS: z.coerce.number().int().min(1).max(12).default(3),
+  COURSE_MAX_RIASEC_LETTERS: z.coerce.number().int().min(1).max(6).default(2),
+  PATH_MEMBERSHIP_APPROVAL: z.enum(['off', 'on']).default('off'),
   COMPLETION_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5),
   /**
    * Whether the background sync scheduler runs. Off in tests regardless, since a

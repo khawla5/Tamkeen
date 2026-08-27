@@ -11,6 +11,7 @@ import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
 import { MockLmsService } from '../src/moodle/mock/mock-lms.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * §4.12's profile surface, over real HTTP against a real database (§2B).
@@ -146,7 +147,7 @@ describe('Profile (e2e)', () => {
         email,
         passwordHash: await hashPassword(PASSWORD),
         fullName: 'موظف الملف الشخصي',
-        employeeId: `P-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'قسم',
         role: 'EMPLOYEE',
         emailVerifiedAt: new Date(),
@@ -890,7 +891,7 @@ describe('Profile (e2e)', () => {
           email: target,
           passwordHash: await hashPassword(PASSWORD),
           fullName: 'موظف آخر',
-          employeeId: `PR-${RUN_ID}-race`.slice(0, 20),
+          employeeId: numericEmployeeId(RUN_ID, 'race'),
           department: 'قسم',
           role: 'EMPLOYEE',
           emailVerifiedAt: new Date(),

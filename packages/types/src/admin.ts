@@ -546,6 +546,15 @@ export interface AdminCoursePage {
 export const SETTING_KEYS = [
   /** How often the LMS is polled (D-042). Re-registers the scheduler on change. */
   'COMPLETION_SYNC_INTERVAL_MINUTES',
+  /**
+   * Path membership rules for a course (TAM-141): how many paths one course
+   * may belong to, how many distinct RIASEC letters those paths may span, and
+   * whether an entity's membership needs admin approval before learners see it
+   * ('off' auto-approves — the state until Phase 5's queue exists).
+   */
+  'COURSE_MAX_PATHS',
+  'COURSE_MAX_RIASEC_LETTERS',
+  'PATH_MEMBERSHIP_APPROVAL',
   /** D-017's registration gate: the mode, the domains, the employee-id shape. */
   'REGISTRATION_MODE',
   'ALLOWED_EMAIL_DOMAINS',

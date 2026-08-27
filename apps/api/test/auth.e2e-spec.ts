@@ -10,6 +10,7 @@ import { AppModule } from '../src/app.module';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { hashPassword } from '../src/common/password';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * Integration tests for the whole authentication surface, against a real
@@ -49,7 +50,7 @@ function emailFor(label: string): string {
 }
 
 function employeeIdFor(label: string): string {
-  return `E2E-${RUN_ID}-${label}`.slice(0, 20);
+  return numericEmployeeId(RUN_ID, label);
 }
 
 describe('Authentication (e2e)', () => {

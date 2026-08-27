@@ -130,7 +130,7 @@ describe('the entity portal navigation (§4B)', () => {
   });
 });
 
-describe('the active rail item (TAM-131)', () => {
+describe('the active rail item (TAM-140)', () => {
   const ENTITY = ['/entity', '/entity/courses', '/entity/learners', '/entity/profile'];
   const LEARNER = ['/', '/courses', '/my-path', '/certificates', '/cv', '/profile'];
 

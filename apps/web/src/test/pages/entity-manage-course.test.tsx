@@ -60,7 +60,7 @@ const detail = (overrides: Partial<EntityCourseDetail> = {}): EntityCourseDetail
   language: 'AR',
   publication: 'DRAFT',
   status: 'DRAFT',
-  paths: [{ id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E' }],
+  paths: [{ id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E', status: 'APPROVED' }],
   objectives: ['هدف أول'],
   prerequisites: null,
   riasecLetters: ['E'],
@@ -70,7 +70,12 @@ const detail = (overrides: Partial<EntityCourseDetail> = {}): EntityCourseDetail
   availablePaths: [
     { id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E' },
     { id: 'path-2', name: 'مسار التحليل', riasecLetter: 'I' },
+    { id: 'path-3', name: 'مسار الإدارة', riasecLetter: 'E' },
+    { id: 'path-4', name: 'مسار الميدان', riasecLetter: 'R' },
+    { id: 'path-5', name: 'مسار الخدمة', riasecLetter: 'S' },
   ],
+  isGeneral: false,
+  pathRules: { maxPaths: 3, maxLetters: 2, frozen: false, approvalRequired: false },
   enrolledCount: 0,
   completionRate: null,
   ...overrides,
@@ -126,7 +131,7 @@ describe('manage course', () => {
 
       expect(await screen.findByText(/لن يتمكّن أي متدرب من اجتياز/)).toBeInTheDocument();
 
-      /* The one blocker fixed inside Moodle, not this form (TAM-134) — its
+      /* The one blocker fixed inside Moodle, not this form (TAM-143) — its
          list item is the one that gets a guide deep link. */
       expect(screen.getByRole('link', { name: 'دليل إنشاء الدورة' })).toHaveAttribute(
         'href',
@@ -258,31 +263,103 @@ describe('manage course', () => {
     });
   });
 
-  describe('authoring in Moodle (D-045, D-060)', () => {
-    it('never renders the handoff URL into the page', async () => {
+  describe('the way to the editor (TAM-139, D-101)', () => {
+    it('links to the content page and mints nothing here', async () => {
       /*
-       * It carries a live, single-use credential. As an href it would sit in the
-       * DOM, in view-source and in any cached copy from the moment the page
-       * loaded — so it is fetched on the click instead.
+       * The author credential is minted in one place — the content page, when
+       * it opens. Manage Course only points there, so nothing carrying a token
+       * can appear on this page at all.
        */
       renderWithProviders(<ManageCoursePage />);
 
-      await screen.findByRole('button', { name: 'حرّر المحتوى في منصة التعلّم' });
+      const link = await screen.findByRole('link', { name: 'افتح محرّر المحتوى' });
+      expect(link).toHaveAttribute('href', '/entity/courses/course-1/content');
 
       expect(document.body.innerHTML).not.toContain('token=');
       expect(api.authorLaunch).not.toHaveBeenCalled();
     });
+  });
 
-    it('mints the handoff when the entity clicks', async () => {
+  describe('path membership rules (TAM-141)', () => {
+    /* The accessible name carries the disabled reason too, so match by prefix. */
+    const box = (name: string) => screen.getByRole('checkbox', { name: new RegExp('^' + name) });
+
+    it('disables the remaining paths once the cap is reached, and says why', async () => {
       const user = userEvent.setup();
-      api.authorLaunch.mockResolvedValue({ url: 'http://moodle.test/local/tamkeensso/login.php' });
-
       renderWithProviders(<ManageCoursePage />);
-      await user.click(await screen.findByRole('button', { name: 'حرّر المحتوى في منصة التعلّم' }));
+      await screen.findByLabelText('المدة بالدقائق');
 
-      await waitFor(() => {
-        expect(api.authorLaunch).toHaveBeenCalledWith('course-1');
-      });
+      /* E already; add E and I → three paths, two letters: allowed, and the cap. */
+      await user.click(box('مسار الإدارة'));
+      await user.click(box('مسار التحليل'));
+
+      expect(box('مسار الميدان')).toBeDisabled();
+      expect(box('مسار الخدمة')).toBeDisabled();
+      expect(screen.getAllByText('بلغت الحد الأقصى للمسارات.').length).toBeGreaterThan(0);
+      /* A ticked one stays removable. */
+      expect(box('مسار التحليل')).toBeEnabled();
+    });
+
+    it('disables a path that would add a third RIASEC letter, under the cap', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      /* E + I selected: two letters. R and S would be a third. E is still fine. */
+      await user.click(box('مسار التحليل'));
+
+      expect(box('مسار الميدان')).toBeDisabled();
+      expect(box('مسار الخدمة')).toBeDisabled();
+      expect(box('مسار الإدارة')).toBeEnabled();
+      expect(screen.getByText('E · I')).toBeInTheDocument();
+    });
+
+    it('freezes a grandfathered course to removals, and explains it', async () => {
+      api.getCourse.mockResolvedValue(
+        detail({
+          paths: [
+            { id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E', status: 'APPROVED' },
+            { id: 'path-2', name: 'مسار التحليل', riasecLetter: 'I', status: 'APPROVED' },
+            { id: 'path-4', name: 'مسار الميدان', riasecLetter: 'R', status: 'APPROVED' },
+          ],
+          pathRules: { maxPaths: 3, maxLetters: 2, frozen: true, approvalRequired: false },
+        }),
+      );
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      expect(screen.getAllByText(/يمكنك إزالة مسارات فقط/).length).toBeGreaterThan(0);
+      expect(box('مسار الخدمة')).toBeDisabled();
+      expect(box('مسار الإدارة')).toBeDisabled();
+      expect(box('مسار الميدان')).toBeEnabled();
+    });
+
+    it('marks a membership still awaiting the admin', async () => {
+      api.getCourse.mockResolvedValue(
+        detail({
+          paths: [
+            { id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E', status: 'APPROVED' },
+            { id: 'path-2', name: 'مسار التحليل', riasecLetter: 'I', status: 'PENDING' },
+          ],
+          pathRules: { maxPaths: 3, maxLetters: 2, frozen: false, approvalRequired: true },
+        }),
+      );
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      expect(screen.getByText('بانتظار موافقة الإدارة')).toBeInTheDocument();
+      expect(
+        screen.getByText('المسارات الجديدة تبقى بانتظار موافقة الإدارة قبل أن يراها المتدربون.'),
+      ).toBeInTheDocument();
+    });
+
+    it('offers no path choice on a general course', async () => {
+      api.getCourse.mockResolvedValue(detail({ isGeneral: true, paths: [], riasecLetters: [] }));
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      expect(screen.getByText(/دورة عامة/)).toBeInTheDocument();
+      expect(box('مسار القيادة')).toBeDisabled();
     });
   });
 

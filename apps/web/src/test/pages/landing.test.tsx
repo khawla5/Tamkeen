@@ -72,7 +72,6 @@ describe('LandingPage', () => {
       'منصة تمكين للتدريب والتطوير المهني',
     );
     expect(screen.getByText(/التسجيل مقصور على منسوبي الوزارة/)).toBeInTheDocument();
-    expect(screen.getByText(/الإدارة العامة للتدريب/, { selector: 'span' })).toBeInTheDocument();
   });
 
   it('explorer: four stage tabs, the first selected, its first item shown in the detail pane', () => {

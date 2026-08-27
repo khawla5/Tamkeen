@@ -8,7 +8,7 @@ import type { PublishBlocker } from '@tamkeen/types';
 /**
  * `NO_COMPLETION_CRITERIA` is the one blocker whose fix is inside Moodle, not
  * this portal — the create/metadata blockers all resolve on this page's own
- * form. Only that one gets a guide link (TAM-134); linking the others would
+ * form. Only that one gets a guide link (TAM-143); linking the others would
  * send someone looking in Moodle for a field that has always been right here.
  */
 const GUIDE_ANCHORS: Partial<Record<PublishBlocker, string>> = {
@@ -25,7 +25,14 @@ const GUIDE_ANCHORS: Partial<Record<PublishBlocker, string>> = {
  * Shared by the dashboard's needs-attention list and the manage screen, so the
  * two cannot describe the same course differently.
  */
-export function BlockerList({ blockers }: { blockers: readonly PublishBlocker[] }) {
+export function BlockerList({
+  blockers,
+  maxPaths = 3,
+}: {
+  blockers: readonly PublishBlocker[];
+  /** TAM-141: the cap, named in the NO_PATH message. */
+  maxPaths?: number;
+}) {
   const t = useTranslations('entity');
 
   if (blockers.length === 0) {
@@ -39,7 +46,7 @@ export function BlockerList({ blockers }: { blockers: readonly PublishBlocker[] 
 
         return (
           <li key={blocker}>
-            • {t(`blocker${blocker}`)}
+            • {t(`blocker${blocker}`, { max: maxPaths })}
             {anchor ? (
               <>
                 {' '}

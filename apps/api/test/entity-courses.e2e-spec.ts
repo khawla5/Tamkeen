@@ -19,6 +19,7 @@ import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
 import { MockLmsService } from '../src/moodle/mock/mock-lms.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * The §4B course lifecycle, over real HTTP against a real database (§2B).
@@ -185,7 +186,7 @@ describe('Entity course lifecycle (e2e)', () => {
         email,
         passwordHash: await hashPassword(PASSWORD),
         fullName: 'مسؤول الجهة',
-        employeeId: `L-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'قسم',
         role: 'ENTITY',
         entityId: forEntityId,
@@ -203,7 +204,7 @@ describe('Entity course lifecycle (e2e)', () => {
       email,
       password: PASSWORD,
       fullName: 'موظف تجريبي',
-      employeeId: `L-${RUN_ID}-${label}`.slice(0, 20),
+      employeeId: numericEmployeeId(RUN_ID, label),
       department: 'تقنية المعلومات',
     }).expect(202);
 
@@ -357,6 +358,110 @@ describe('Entity course lifecycle (e2e)', () => {
       const updated = await makePublishable(course);
 
       expect(updated.riasecLetters).toEqual([pathRiasecLetter]);
+    });
+
+    describe('path membership rules (TAM-141)', () => {
+      /** Active paths grouped by letter — the seed has several per letter. */
+      async function pathsByLetter(): Promise<Map<string, string[]>> {
+        const rows = await prisma.path.findMany({
+          where: { isActive: true },
+          select: { id: true, riasecLetter: true },
+          orderBy: { displayOrder: 'asc' },
+        });
+        const map = new Map<string, string[]>();
+        for (const row of rows)
+          map.set(row.riasecLetter, [...(map.get(row.riasecLetter) ?? []), row.id]);
+        return map;
+      }
+
+      it('accepts three paths spanning two letters', async () => {
+        const course = await createCourse();
+        const byLetter = await pathsByLetter();
+        const groups = [...byLetter.values()].filter((ids) => ids.length >= 1);
+        const a = groups[0]!;
+        const b = groups[1]!;
+        const ids = [a[0]!, b[0]!, (a[1] ?? b[1])!];
+
+        const updated = (
+          await patch(`/api/entity/courses/${course.id}`, { pathIds: ids }, session).expect(200)
+        ).body as {
+          paths: Array<{ status: string }>;
+          pathRules: { frozen: boolean; maxPaths: number };
+        };
+
+        expect(updated.paths).toHaveLength(ids.length);
+        /* Approval is off in this environment: memberships take effect at once. */
+        expect(updated.paths.every((row) => row.status === 'APPROVED')).toBe(true);
+        expect(updated.pathRules).toMatchObject({ frozen: false, maxPaths: 3 });
+      });
+
+      it('refuses a fourth path', async () => {
+        const course = await createCourse();
+        const byLetter = await pathsByLetter();
+        const ids = [...byLetter.values()].flat().slice(0, 4);
+
+        const response = await patch(
+          `/api/entity/courses/${course.id}`,
+          { pathIds: ids },
+          session,
+        ).expect(400);
+        expect(response.body).toMatchObject({ message: 'PATH_LIMIT_EXCEEDED' });
+      });
+
+      it('refuses three letters even under the cap', async () => {
+        const course = await createCourse();
+        const byLetter = await pathsByLetter();
+        const ids = [...byLetter.values()].slice(0, 3).map((group) => group[0]!);
+
+        const response = await patch(
+          `/api/entity/courses/${course.id}`,
+          { pathIds: ids },
+          session,
+        ).expect(400);
+        expect(response.body).toMatchObject({ message: 'PATH_MIX_INCOHERENT' });
+      });
+
+      it('lets a grandfathered course remove memberships but not add', async () => {
+        const course = await createCourse();
+        const byLetter = await pathsByLetter();
+        const over = [...byLetter.values()].slice(0, 4).map((group) => group[0]!);
+        /* Planted directly: rows from before the rule existed. */
+        const paths = await prisma.path.findMany({
+          where: { id: { in: over } },
+          select: { id: true, displayOrder: true },
+        });
+        await prisma.pathCourse.createMany({
+          data: paths.map((row) => ({
+            pathId: row.id,
+            courseId: course.id,
+            displayOrder: row.displayOrder,
+          })),
+        });
+
+        const detail = (await get(`/api/entity/courses/${course.id}`, session).expect(200))
+          .body as {
+          pathRules: { frozen: boolean };
+        };
+        expect(detail.pathRules.frozen).toBe(true);
+
+        const fresh = [...byLetter.values()].flat().find((id) => !over.includes(id))!;
+        const refused = await patch(
+          `/api/entity/courses/${course.id}`,
+          { pathIds: [...over.slice(0, 2), fresh] },
+          session,
+        ).expect(400);
+        expect(refused.body).toMatchObject({ message: 'PATH_MEMBERSHIP_FROZEN' });
+
+        const trimmed = (
+          await patch(
+            `/api/entity/courses/${course.id}`,
+            { pathIds: over.slice(0, 2) },
+            session,
+          ).expect(200)
+        ).body as { paths: unknown[]; pathRules: { frozen: boolean } };
+        expect(trimmed.paths).toHaveLength(2);
+        expect(trimmed.pathRules.frozen).toBe(false);
+      });
     });
 
     it('refuses a riasecLetter field outright', async () => {

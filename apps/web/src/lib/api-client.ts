@@ -47,6 +47,7 @@ import type {
   AssessmentView,
   CourseDetail,
   CourseLaunchView,
+  CourseOutlineView,
   CoursePlayerView,
   CourseLanguage,
   CoursePublication,
@@ -356,7 +357,14 @@ export const coursesApi = {
    * must not be prefetched or cached, and as a POST it carries the CSRF token
    * every mutating request does (D-044).
    */
-  launch: (courseId: string) => api.post<CourseLaunchView>(`/api/courses/${courseId}/launch`),
+  launch: (courseId: string, options: { embed?: boolean } = {}) =>
+    api.post<CourseLaunchView>(`/api/courses/${courseId}/launch`, {
+      embed: options.embed === true,
+    }),
+  /** The framed player's previous / next (D-122). */
+  outline: (courseId: string) => api.get<CourseOutlineView>(`/api/courses/${courseId}/outline`),
+  /** On-demand completion sync after the framed quiz reports itself (D-121). */
+  sync: (courseId: string) => api.post<{ synced: boolean }>(`/api/courses/${courseId}/sync`),
 };
 
 export const myPathApi = {

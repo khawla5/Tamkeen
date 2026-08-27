@@ -12,6 +12,7 @@ import { AppModule } from '../src/app.module';
 import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * The portal boundaries, over real HTTP against a real database (§2B, D-062).
@@ -209,7 +210,7 @@ describe('Entity portal scoping (e2e)', () => {
         email,
         passwordHash: await hashPassword(PASSWORD),
         fullName: 'حساب تجريبي',
-        employeeId: `S-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'قسم',
         role,
         entityId,
@@ -231,7 +232,7 @@ describe('Entity portal scoping (e2e)', () => {
       email,
       password: PASSWORD,
       fullName: 'موظف تجريبي',
-      employeeId: `S-${RUN_ID}-${label}`.slice(0, 20),
+      employeeId: numericEmployeeId(RUN_ID, label),
       department: 'تقنية المعلومات',
     }).expect(202);
 

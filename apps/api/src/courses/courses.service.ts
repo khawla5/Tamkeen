@@ -52,7 +52,9 @@ export class CoursesService {
       where: {
         AND: [
           this.visibleCourseFilter(state),
-          query.pathId ? { pathCourses: { some: { pathId: query.pathId } } } : {},
+          query.pathId
+            ? { pathCourses: { some: { pathId: query.pathId, status: 'APPROVED' } } }
+            : {},
           query.maxDurationMinutes ? { durationMinutes: { lte: query.maxDurationMinutes } } : {},
           query.q
             ? {
@@ -77,7 +79,8 @@ export class CoursesService {
         status: true,
         language: true,
         pathCourses: {
-          where: { path: { isActive: true } },
+          /* TAM-141: a membership still awaiting the admin is not a membership yet. */
+          where: { status: 'APPROVED', path: { isActive: true } },
           orderBy: { path: { displayOrder: 'asc' } },
           select: { path: { select: { id: true, name: true, riasecLetter: true } } },
         },
@@ -116,7 +119,8 @@ export class CoursesService {
         objectives: true,
         prerequisites: true,
         pathCourses: {
-          where: { path: { isActive: true } },
+          /* TAM-141: a membership still awaiting the admin is not a membership yet. */
+          where: { status: 'APPROVED', path: { isActive: true } },
           orderBy: { path: { displayOrder: 'asc' } },
           select: { pathId: true, path: { select: { id: true, name: true, riasecLetter: true } } },
         },

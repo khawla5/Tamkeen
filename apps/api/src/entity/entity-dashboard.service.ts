@@ -51,7 +51,7 @@ export class EntityDashboardService {
         durationMinutes: true,
         language: true,
         objectives: true,
-        _count: { select: { pathCourses: true } },
+        _count: { select: { pathCourses: { where: { status: 'APPROVED' } } } },
       },
     });
 

@@ -28,10 +28,20 @@ export interface Account {
 /** A department from the registration dropdown (DEPARTMENTS in auth-constants). */
 export const DEPARTMENT = DEPARTMENTS[0]!;
 
+/** A 10-digit employee id (the default `EMPLOYEE_ID_PATTERN`), unique per
+ *  run + label so a run never collides with dev data or another run. */
+export function numericEmployeeId(label: string): string {
+  let hash = 0;
+  for (const ch of `${RUN_ID}:${label}`) {
+    hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  }
+  return String(hash).padStart(10, '0');
+}
+
 export function accountFor(label: string): Account {
   return {
     email: `pw-${RUN_ID}-${label}@ministry.gov.example`,
-    employeeId: `PW-${RUN_ID}-${label}`.slice(0, 20),
+    employeeId: numericEmployeeId(label),
     fullName: 'أحمد الموظف',
     department: DEPARTMENT,
   };

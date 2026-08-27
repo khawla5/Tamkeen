@@ -7,6 +7,7 @@ import {
   type EnrolInput,
   type LmsCourse,
   type LmsCourseContentSummary,
+  LmsCourseOutlineItem,
   type LmsCourseId,
   type LmsCourseProgress,
   type LmsHealth,
@@ -314,6 +315,31 @@ export class MockLmsService implements LmsPort {
     this.createdShortNames.set(course.lmsCourseId, input.shortName);
 
     return { ...course };
+  }
+
+  /** As many stand-in activities as the simulated authoring says, quiz last. */
+  getCourseOutline(lmsCourseId: LmsCourseId): Promise<LmsCourseOutlineItem[]> {
+    if (!this.catalogue.some((course) => course.lmsCourseId === lmsCourseId)) {
+      return Promise.resolve([]);
+    }
+
+    const authored = this.authoring.get(lmsCourseId);
+    const count = authored?.activityCount ?? 3;
+    const hasQuiz = authored?.hasQuiz ?? true;
+
+    return Promise.resolve(
+      Array.from({ length: count }, (_, index) => {
+        const last = index === count - 1;
+        const kind = last && hasQuiz ? 'quiz' : 'page';
+        const lmsModuleId = lmsCourseId * 100 + index + 1;
+        return {
+          lmsModuleId,
+          name: kind === 'quiz' ? 'اختبار الدورة' : `النشاط ${index + 1}`,
+          kind,
+          url: `${MOCK_LMS_BASE_URL}/mod/${kind}/view.php?id=${lmsModuleId}`,
+        };
+      }),
+    );
   }
 
   getCourseContentSummary(lmsCourseId: LmsCourseId): Promise<LmsCourseContentSummary | null> {
