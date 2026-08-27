@@ -123,6 +123,13 @@ describe('manage course', () => {
       renderWithProviders(<ManageCoursePage />);
 
       expect(await screen.findByText(/لن يتمكّن أي متدرب من اجتياز/)).toBeInTheDocument();
+
+      /* The one blocker fixed inside Moodle, not this form (TAM-134) — its
+         list item is the one that gets a guide deep link. */
+      expect(screen.getByRole('link', { name: 'دليل إنشاء الدورة' })).toHaveAttribute(
+        'href',
+        '/entity/guide#completion',
+      );
     });
 
     it('publishes when nothing is blocking', async () => {
