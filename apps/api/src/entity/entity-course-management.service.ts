@@ -16,6 +16,7 @@ import {
   isWithinAvailabilityWindow,
   type CourseStatusValue,
 } from '../catalog-sync/catalog-mapping';
+import { CatalogSyncService } from '../catalog-sync/catalog-sync.service';
 import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import { LmsOperationError, LmsUnavailableError } from '../moodle/lms.types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -53,6 +54,7 @@ export class EntityCourseManagementService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly scope: EntityScopeService,
+    private readonly catalogSync: CatalogSyncService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
 
@@ -258,6 +260,64 @@ export class EntityCourseManagementService {
 
       return null;
     }
+  }
+
+  /**
+   * Re-reads this one course from the LMS right now, rather than waiting for
+   * the next scheduled catalogue sync (§4B.4, TAM-133).
+   *
+   * The gap this closes: title, description and visibility are a cached copy
+   * refreshed only every `COMPLETION_SYNC_INTERVAL_MINUTES`, so a rename made
+   * in the frame's Settings tab took minutes to appear anywhere in the
+   * portal. This is the fast path the frame's own edit signal (and the
+   * manual «تحديث») calls instead of waiting.
+   *
+   * Delegates the actual LMS read and upsert to `CatalogSyncService.syncOne`
+   * — the same mapping the scheduled sync uses, so the two can never
+   * describe the same course differently — and returns the full detail in
+   * one response, exactly like every other write on this service, so the
+   * page needs no second request to see title, status, the read-back and the
+   * publish blockers together.
+   */
+  async resync(
+    scope: EntityScope,
+    courseId: string,
+    actorUserId: string,
+    ipAddress: string | null,
+  ): Promise<EntityCourseDetail> {
+    await this.scope.requireOwnedCourse(scope, courseId);
+
+    const course = await this.prisma.course.findUniqueOrThrow({
+      where: { id: courseId },
+      select: { moodleCourseId: true },
+    });
+
+    try {
+      await this.catalogSync.syncOne(course.moodleCourseId);
+    } catch (error) {
+      await this.audit.record({
+        action: AuditAction.ENTITY_COURSE_RESYNCED,
+        outcome: 'FAILURE',
+        actorUserId,
+        ipAddress,
+        targetType: 'course',
+        targetId: courseId,
+        reason: AuditReason.LMS_COURSE_RESYNC_FAILED,
+      });
+
+      throw error;
+    }
+
+    await this.audit.record({
+      action: AuditAction.ENTITY_COURSE_RESYNCED,
+      outcome: 'SUCCESS',
+      actorUserId,
+      ipAddress,
+      targetType: 'course',
+      targetId: courseId,
+    });
+
+    return this.get(scope, courseId);
   }
 
   /**
