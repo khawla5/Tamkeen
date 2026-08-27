@@ -469,6 +469,15 @@ export const entityApi = {
   content: (courseId: string) =>
     api.get<EntityCourseContentView | null>(`/api/entity/courses/${courseId}/content`),
 
+  /**
+   * Re-reads this one course from the LMS right now (§4B.4, TAM-133) —
+   * called on the frame's own edit signal and on the manual «تحديث», never on
+   * a plain page load. Returns the full detail in one response, so title,
+   * status, the read-back and the publish blockers all refresh together.
+   */
+  resync: (courseId: string) =>
+    api.post<EntityCourseDetail>(`/api/entity/courses/${courseId}/resync`),
+
   publish: (courseId: string) =>
     api.post<EntityCourseDetail>(`/api/entity/courses/${courseId}/publish`),
 

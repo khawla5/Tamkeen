@@ -5,6 +5,24 @@
 
 ---
 
+### 2026-08-27 — TAM-133: per-course resync on the frame's own edit signal — branch `feature/tam-133-per-course-resync`
+
+Closes the gap where a rename made in the frame's Settings tab took up to `COMPLETION_SYNC_INTERVAL_MINUTES` (5 min) to appear anywhere in the portal, while a content edit already refreshed within seconds via the existing `tamkeen:content-changed` message.
+
+**Plugin.** `db/events.php` now also observes `\core\event\course_updated` through the same `observer::content_changed` callback — one message type for both kinds of edit, not a second one. `tests/observer_test.php` added (Moodle PHPUnit conventions; there is no Moodle instance in this repo to run it against, so it is verified by inspection rather than a green run).
+
+**API.** `CatalogSyncService.upsertLmsCourse` extracted from `sync()`'s loop body — byte-identical behaviour, now shared. New public `syncOne(moodleCourseId)`: reads the one course via the LMS port's existing `getCourse` (no new port method needed — `core_course_get_courses_by_field` by id was already there), applies the same upsert, and coalesces concurrent callers for the same course behind one in-flight promise. `EntityCourseManagementService.resync` wraps it with the usual scoping (`requireOwnedCourse`) and an `ENTITY_COURSE_RESYNCED` audit entry (new action + `LMS_COURSE_RESYNC_FAILED` reason, both in `@tamkeen/types`), then returns the full `EntityCourseDetail` via `get()`. `POST /api/entity/courses/:id/resync`, `@Throttle` at 30/min.
+
+**Web.** The Content page's author launch now opens **inline**, framed (`authorLaunch(id, { embed: true })`), rather than a full-page redirect — TAM-129 built the `embed: 'author'` contract at the API layer but the web side had never actually used it. A new `useFrameContentChanged` hook listens for the frame's message, checked against the frame's own origin, and calls `resync`; the page's existing «تحديث» button now calls it too. Manage Course gets a new quiet «تحديث» beside the status line. Both apply the resync response **directly** rather than triggering a second `getCourse` — the endpoint returns the full detail precisely so the page needs no second request, and the first draft of this got that wrong (refetched instead of applying the response) until the tests caught it.
+
+**Unclaimed-course note (D-060, restated):** the framed editor cannot reach "create course", so a course born directly in Moodle still has no owner and is not auto-claimed by whoever's resync first notices it — Phase 5's Course Oversight remains the only place that ownership is assigned.
+
+D-115 recorded. CLAUDE.md §4B.4 amended.
+
+**Tested:** 24 new/changed web component tests (`entity-content.test.tsx` new, `entity-manage-course.test.tsx` extended) — the inline frame, the origin check (a message from the wrong origin or of the wrong type is ignored), both resync triggers applying the response with no second request, and the failure path. 5 new API unit tests in `catalog-sync.service.spec.ts` — `syncOne` and `sync()` write an identical row for the same LMS course, two concurrent `syncOne` calls for one course make one LMS read, two different courses are not coalesced with each other, and a vanished LMS course refuses cleanly. 7 new API e2e tests added to `entity-courses.e2e-spec.ts` (rename propagates, content/blockers refresh together, cross-entity refusal, response equals a subsequent GET, audit entry, concurrent calls still leave the row correct) plus a separate-app-instance rate-limit suite mirroring `auth.e2e-spec.ts`'s pattern — **written but not run**, same as the e2e suite generally in this environment (no Docker/Postgres available here). Full web (766) and full API (654) unit suites green; typecheck and lint clean on both workspaces; prettier clean.
+
+**Next:** the user's review, then run the e2e/browser suites for real before merging, and open the PR.
+
 ### 2026-08-26 — TAM-113 + TAM-114: the results page is organised by the user's own ranking — branch `feature/tam-113-results-groups`
 
 The `results` epic, both tickets, on `main` (which already carries TAM-119's restyle of this page).
