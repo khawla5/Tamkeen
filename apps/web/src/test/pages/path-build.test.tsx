@@ -117,7 +117,7 @@ describe('path build — the counter', () => {
     const user = userEvent.setup();
     await renderBuilder();
 
-    await user.click(screen.getAllByRole('button', { name: 'أضف' })[0]!);
+    await user.click(screen.getAllByRole('button', { name: /^أضف:/ })[0]!);
 
     const counter = await screen.findByText('اخترت 1 من 5–10');
     /* aria-live so a screen-reader user hears the count change without the
@@ -129,11 +129,11 @@ describe('path build — the counter', () => {
     const user = userEvent.setup();
     await renderBuilder();
 
-    const add = screen.getAllByRole('button', { name: 'أضف' });
+    const add = screen.getAllByRole('button', { name: /^أضف:/ });
     await user.click(add[0]!);
     await screen.findByText('اخترت 1 من 5–10');
 
-    await user.click(screen.getByRole('button', { name: 'مضافة' }));
+    await user.click(screen.getByRole('button', { name: /^مضافة:/ }));
     expect(await screen.findByText('اخترت 0 من 5–10')).toBeInTheDocument();
   });
 });
@@ -145,7 +145,7 @@ describe('path build — the 5-10 rule', () => {
 
     expect(screen.getByRole('button', { name: 'تأكيد المسار' })).toBeDisabled();
 
-    await user.click(screen.getAllByRole('button', { name: 'أضف' })[0]!);
+    await user.click(screen.getAllByRole('button', { name: /^أضف:/ })[0]!);
     await screen.findByText('اخترت 1 من 5–10');
 
     expect(
@@ -159,7 +159,7 @@ describe('path build — the 5-10 rule', () => {
     await renderBuilder();
 
     for (let index = 0; index < PATH_MIN_COURSES; index += 1) {
-      await user.click(screen.getAllByRole('button', { name: 'أضف' })[0]!);
+      await user.click(screen.getAllByRole('button', { name: /^أضف:/ })[0]!);
       await screen.findByText(`اخترت ${index + 1} من 5–10`);
     }
 
@@ -171,14 +171,14 @@ describe('path build — the 5-10 rule', () => {
     await renderBuilder();
 
     for (let index = 0; index < PATH_MAX_COURSES; index += 1) {
-      await user.click(screen.getAllByRole('button', { name: 'أضف' })[0]!);
+      await user.click(screen.getAllByRole('button', { name: /^أضف:/ })[0]!);
       await screen.findByText(`اخترت ${index + 1} من 5–10`);
     }
 
     /* The remaining two courses now say so rather than silently failing when
        pressed — the bound is visible, not just enforced. */
-    expect(screen.queryAllByRole('button', { name: 'أضف' })).toHaveLength(0);
-    expect(screen.getAllByRole('button', { name: 'بلغت الحد الأقصى للدورات.' }).length).toBe(2);
+    expect(screen.queryAllByRole('button', { name: /^أضف:/ })).toHaveLength(0);
+    expect(screen.getAllByRole('button', { name: /^بلغت الحد الأقصى للدورات.:/ }).length).toBe(2);
     expect(screen.getByRole('button', { name: 'تأكيد المسار' })).toBeEnabled();
   });
 
@@ -190,7 +190,7 @@ describe('path build — the 5-10 rule', () => {
       ],
     });
 
-    const disabled = screen.getByRole('button', { name: 'غير متاحة للإضافة' });
+    const disabled = screen.getByRole('button', { name: /^غير متاحة للإضافة:/ });
     expect(disabled).toBeDisabled();
     expect(screen.getByText('لم تعد هذه الدورة معروضة للاختيارات الجديدة.')).toBeInTheDocument();
   });
@@ -199,12 +199,12 @@ describe('path build — the 5-10 rule', () => {
     const user = userEvent.setup();
     await renderBuilder();
 
-    const first = screen.getAllByRole('button', { name: 'أضف' })[0]!;
+    const first = screen.getAllByRole('button', { name: /^أضف:/ })[0]!;
     expect(first).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(first);
 
-    expect(await screen.findByRole('button', { name: 'مضافة' })).toHaveAttribute(
+    expect(await screen.findByRole('button', { name: /^مضافة:/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
@@ -214,7 +214,7 @@ describe('path build — the 5-10 rule', () => {
 describe('path build — the commitment gate', () => {
   async function selectFive(user: ReturnType<typeof userEvent.setup>) {
     for (let index = 0; index < PATH_MIN_COURSES; index += 1) {
-      await user.click(screen.getAllByRole('button', { name: 'أضف' })[0]!);
+      await user.click(screen.getAllByRole('button', { name: /^أضف:/ })[0]!);
       await screen.findByText(`اخترت ${index + 1} من 5–10`);
     }
   }
@@ -270,13 +270,92 @@ describe('path build — the commitment gate', () => {
   });
 });
 
+describe('path build — the header card (TAM-125)', () => {
+  it('names the path’s type and marks it recommended when it is', async () => {
+    await renderBuilder();
+
+    expect(screen.getByText('الاجتماعي')).toBeInTheDocument();
+    expect(screen.getByText('موصى به')).toBeInTheDocument();
+  });
+
+  it('does not claim a recommendation the user’s code does not support', async () => {
+    await renderBuilder({ recommended: false, recommendationRank: null });
+
+    expect(screen.getByText('الاجتماعي')).toBeInTheDocument();
+    expect(screen.queryByText('موصى به')).not.toBeInTheDocument();
+  });
+
+  it('states how many courses the path offers', async () => {
+    await renderBuilder({ courseCount: 11 });
+
+    expect(screen.getByText('11 دورة متاحة')).toBeInTheDocument();
+  });
+
+  it('grows the selected-hours total as courses are picked', async () => {
+    const user = userEvent.setup();
+    await renderBuilder();
+
+    /* Every seeded course is 120 minutes, so each tick is two more hours —
+       the point of the field is that it moves while the user is deciding. */
+    expect(screen.getByText('إجمالي المدة المختارة: 0 ساعة')).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: /^أضف:/ })[0]!);
+    expect(await screen.findByText('إجمالي المدة المختارة: 2 ساعة')).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: /^أضف:/ })[0]!);
+    expect(await screen.findByText('إجمالي المدة المختارة: 4 ساعة')).toBeInTheDocument();
+  });
+});
+
+describe('path build — the course card is the control (TAM-125)', () => {
+  it('gives each course exactly one interactive element, and no nested one', async () => {
+    await renderBuilder();
+
+    const cards = screen.getAllByRole('button').filter((element) => element.closest('li') !== null);
+    expect(cards).toHaveLength(12);
+
+    for (const card of cards) {
+      expect(card.querySelector('button, a, input, select')).toBeNull();
+    }
+  });
+
+  it('names the control by its state and its course, so the two are never confused', async () => {
+    await renderBuilder();
+
+    expect(screen.getByRole('button', { name: 'أضف: الدورة رقم 1' })).toBeInTheDocument();
+  });
+
+  it('toggles from the keyboard, not the pointer alone', async () => {
+    const user = userEvent.setup();
+    await renderBuilder();
+
+    await user.tab();
+    /* The first tab stop inside the list is the first card; walk to it rather
+       than clicking, because keyboard operability is the property under test. */
+    const first = screen.getByRole('button', { name: 'أضف: الدورة رقم 1' });
+    first.focus();
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByRole('button', { name: 'مضافة: الدورة رقم 1' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await user.keyboard(' ');
+    expect(await screen.findByRole('button', { name: 'أضف: الدورة رقم 1' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+});
+
 describe('path build — after commitment', () => {
   it('shows the locked state instead of the builder', async () => {
     mocks.detail.mockResolvedValue(detail({ canBuild: false }));
     renderWithProviders(<PathBuildPage />);
 
     expect(await screen.findByText('مسارك مؤكَّد')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'أضف' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^أضف:/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'تأكيد المسار' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'الذهاب إلى مساري' })).toHaveAttribute(
       'href',

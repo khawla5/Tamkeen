@@ -150,6 +150,9 @@ describe('Arabic message catalog', () => {
  * needs it renders. Everywhere else next-intl fails loudly at the call site.
  */
 const DYNAMIC_NAMESPACES = [
+  /* Keyed by `UserPathCourseStatus` — the catalogue card, the course page and
+     the chip component all read it with a computed key. */
+  'courseStatus',
   'admin.auditAction',
   'admin.riasec',
   'admin.courseVisibility',
