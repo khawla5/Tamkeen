@@ -304,6 +304,9 @@
     "coursesBody": "اختر ما بين {min} و{max} دورات من هذا المسار.",
     "counter": "اخترت {selected} من {min}–{max}",
     "counterLabel": "عدد الدورات المختارة",
+    "availableCourses": "{count} دورة متاحة",
+    "selectedHours": "إجمالي المدة المختارة: {hours} ساعة",
+    "cardLabel": "{state}: {title}",
     "add": "أضف",
     "remove": "إزالة",
     "added": "مضافة",
@@ -337,6 +340,7 @@
     "durationOption": "{hours} ساعة أو أقل",
     "resultCount": "{count} دورة",
     "duration": "{hours} ساعة",
+    "ungroupedHeading": "دورات خارج المسارات",
     "emptyTitle": "لا توجد دورات مطابقة",
     "emptyBody": "جرّب تعديل البحث أو إزالة عوامل التصفية.",
     "clearFilters": "إزالة عوامل التصفية"
@@ -355,8 +359,12 @@
     "actionCompletedAriaLabel": "مكتملة — عرض الشهادة",
     "actionUnavailable": "غير متاحة للإضافة",
     "adding": "جارٍ الإضافة…",
-    "backToCourses": "عودة إلى الدورات",
-    "statusInPath": "في مسارك"
+    "backToCourses": "عودة إلى الدورات"
+  },
+  "courseStatus": {
+    "NOT_STARTED": "في مسارك",
+    "IN_PROGRESS": "قيد التنفيذ",
+    "COMPLETED": "مكتملة"
   },
   "myPath": {
     "title": "مساري",
