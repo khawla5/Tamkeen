@@ -82,4 +82,22 @@ describe('parseMarkdown', () => {
 
     expect(container.querySelector('hr')).not.toBeNull();
   });
+
+  it('renders a standalone ![alt](src) as a screenshot, not a link', () => {
+    const { content } = parseMarkdown('![لقطة شاشة لمحرّر المحتوى](/entity-guide/open-editor.png)');
+    render(content);
+
+    const image = screen.getByRole('img', { name: 'لقطة شاشة لمحرّر المحتوى' });
+    expect(image).toHaveAttribute('src', '/entity-guide/open-editor.png');
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('keeps an image on its own line from being swallowed into the paragraph before it', () => {
+    const { content } = parseMarkdown('نص قبل الصورة.\n![وصف](/entity-guide/shot.png)\nنص بعدها.');
+    render(content);
+
+    expect(screen.getByText('نص قبل الصورة.')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'وصف' })).toBeInTheDocument();
+    expect(screen.getByText('نص بعدها.')).toBeInTheDocument();
+  });
 });

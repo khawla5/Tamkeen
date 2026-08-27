@@ -3,8 +3,9 @@ import { createElement, Fragment, type ReactNode } from 'react';
 /**
  * A parser for exactly the Markdown subset `entity-authoring-guide.md` uses —
  * headings (with an optional `{#id}` anchor), paragraphs, bold, inline code,
- * links, unordered lists, tables, blockquotes and horizontal rules. Nothing
- * more.
+ * links, unordered lists, tables, blockquotes, horizontal rules and a
+ * block-level `![alt](src)` image (a screenshot on its own line — this guide
+ * never needs one inline inside a sentence). Nothing more.
  *
  * Not `react-markdown`/`remark`: this renders one static, internally-authored
  * document, not arbitrary content, so the usual reasons for a full Markdown
@@ -95,6 +96,13 @@ function parseHeading(line: string): { level: 2 | 3; text: string; id: string } 
   return { level, text, id };
 }
 
+/** `![alt](src)`, alone on its line — a screenshot, not an inline image. */
+function parseImage(line: string): { alt: string; src: string } | null {
+  const match = /^!\[(.*?)\]\((\S+?)\)$/.exec(line.trim());
+
+  return match ? { alt: match[1]!, src: match[2]! } : null;
+}
+
 export function parseMarkdown(source: string): ParsedMarkdown {
   const lines = source.split('\n');
   const blocks: ReactNode[] = [];
@@ -133,6 +141,21 @@ export function parseMarkdown(source: string): ParsedMarkdown {
           },
           heading.text,
         ),
+      );
+      i += 1;
+      continue;
+    }
+
+    const image = parseImage(line);
+    if (image) {
+      blocks.push(
+        createElement('img', {
+          key: blockKey++,
+          src: image.src,
+          alt: image.alt,
+          loading: 'lazy',
+          className: 'w-full rounded-md border border-border',
+        }),
       );
       i += 1;
       continue;
@@ -255,7 +278,8 @@ export function parseMarkdown(source: string): ParsedMarkdown {
       lines[i]!.trim() !== '---' &&
       !lines[i]!.startsWith('- ') &&
       !lines[i]!.startsWith('> ') &&
-      !lines[i]!.startsWith('|')
+      !lines[i]!.startsWith('|') &&
+      !parseImage(lines[i]!)
     ) {
       paragraphLines.push(lines[i]!);
       i += 1;
