@@ -168,7 +168,7 @@ test.describe('Phase 4 — the entity portal', () => {
     await expect(entityPage.getByText(/اضبط شروط إكمال الدورة/)).toBeVisible();
   });
 
-  test('Manage Course carries no credential — the editor is reached by a link (D-098)', async () => {
+  test('Manage Course carries no credential — the editor is reached by a link (D-101)', async () => {
     /* The author credential is minted only where the editor opens. */
     const html = await entityPage.content();
 
@@ -179,7 +179,7 @@ test.describe('Phase 4 — the entity portal', () => {
     await expect(entityPage.getByRole('heading', { name: 'محتوى الدورة' })).toBeVisible();
   });
 
-  test('the content page frames the editor with the read-back and the publish gate beside it (TAM-130)', async () => {
+  test('the content page frames the editor with the read-back and the publish gate beside it (TAM-139)', async () => {
     /* The read-back, honest about an empty course… */
     await expect(entityPage.getByText('شروط الإكمال مضبوطة')).toBeVisible();
     /* Exact: the unpublish dialog's (hidden) copy also contains these letters. */
@@ -284,12 +284,19 @@ test.describe('Phase 4 — the entity portal', () => {
     expect(text).not.toContain('PW-');
   });
 
-  test('the entity profile is read-only', async () => {
+  test('the organisation name is read-only; the rest of the profile is the entity’s own (D-108)', async () => {
     await entityPage.getByRole('link', { name: 'بيانات الجهة' }).first().click();
 
+    /* Only the contracted identity (D-063) has no edit control — everything
+       else on the page is the account's or the organisation's own
+       housekeeping (D-108, TAM-138), so this asserts the read-only surface
+       shrank to exactly one field rather than the whole page. */
     await expect(entityPage.getByText(entity.entityName)).toBeVisible();
-    await expect(entityPage.getByText('تُدار بيانات الجهة من قِبل إدارة النظام.')).toBeVisible();
-    await expect(entityPage.getByRole('textbox')).toHaveCount(0);
+    await expect(entityPage.getByText('يُدار اسم الجهة من قِبل إدارة النظام.')).toBeVisible();
+
+    await expect(entityPage.getByLabel('الاسم الكامل')).toBeEditable();
+    await expect(entityPage.getByLabel('جهة الاتصال', { exact: true })).toBeEditable();
+    await expect(entityPage.getByLabel('بريد جهة الاتصال')).toBeEditable();
   });
 
   test('a learner who types /entity is sent back to their own portal', async () => {

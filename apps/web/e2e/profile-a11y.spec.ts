@@ -87,10 +87,16 @@ test.describe('profile — accessibility and layout', () => {
 
     /* Nothing has been edited, so save is disabled — and a disabled button is
        correctly not a tab stop at all, per the browser's own semantics. The
-       next control a keyboard user reaches is the email card below, not a
+       next control a keyboard user reaches is DigitsCard's own select, not a
        dead button — and not sign-out either, which now lives only in the
        header user menu (D-096), outside this page's own tab order. */
     await expect(page.getByRole('button', { name: 'حفظ' })).toBeDisabled();
+
+    /* TAM-138 moved DigitsCard to sit right below the account card, ahead of
+       the credential cards in the end column — so its select is the next tab
+       stop, before the email card is reached. */
+    await page.keyboard.press('Tab');
+    await expect(page.getByLabel('الأرقام المعروضة')).toBeFocused();
 
     await page.keyboard.press('Tab');
     await expect(page.getByLabel('البريد الإلكتروني الجديد')).toBeFocused();

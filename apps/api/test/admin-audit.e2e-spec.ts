@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import type { AdminAuditPage, AdminReports } from '@tamkeen/types';
+import { AUDIT_TARGET_TYPES, type AdminAuditPage, type AdminReports } from '@tamkeen/types';
 
 import { AppModule } from '../src/app.module';
 import { hashPassword } from '../src/common/password';
@@ -183,8 +183,41 @@ describe('Admin audit and reports (e2e)', () => {
       ).body as AdminAuditPage;
 
       /* Half the value of an entry is *why*. A trail that hides the reason is a
-         list of timestamps. */
-      expect(page.rows[0]!.detail).toMatchObject({ reason: 'SELF_MODIFICATION_REFUSED' });
+         list of timestamps. Its own field since TAM-137, because it is the one
+         detail the screen renders as a sentence rather than a labelled value. */
+      expect(page.rows[0]!.reason).toBe('SELF_MODIFICATION_REFUSED');
+      /* And it is gone from the payload, rather than carried in both places. */
+      expect(Object.keys(page.rows[0]!.detail ?? {})).not.toContain('reason');
+    });
+
+    it('names what each entry was about, and never leaks an id into the detail', async () => {
+      const page = (await get(`/api/admin/audit?actorUserId=${adminId}`, sessionAdmin).expect(200))
+        .body as AdminAuditPage;
+
+      /* The refusal above targeted the administrator's own account, so the row
+         resolves to their name. A uuid there answers nothing (TAM-137). */
+      const targeted = page.rows.find((row) => row.targetType === 'user');
+      expect(targeted?.targetLabel).toBe('مسؤول التدقيق');
+
+      /* And nothing anywhere on the page still prints an identifier as detail. */
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      for (const row of page.rows) {
+        for (const value of Object.values(row.detail ?? {})) {
+          expect(typeof value === 'string' && uuid.test(value)).toBe(false);
+        }
+        expect(Object.keys(row.detail ?? {})).not.toContain('pathId');
+      }
+    });
+
+    it('uses one spelling per target kind', async () => {
+      /* `User` and `user` were both in the log, which split every filter and
+         grouping over this column in two (TAM-137). */
+      const page = (await get('/api/admin/audit', sessionAdmin).expect(200)).body as AdminAuditPage;
+
+      const types = new Set(page.rows.map((row) => row.targetType).filter(Boolean));
+      for (const type of types) {
+        expect(AUDIT_TARGET_TYPES as readonly string[]).toContain(type);
+      }
     });
 
     it('filters by action and by outcome', async () => {
@@ -282,17 +315,29 @@ describe('Admin audit and reports (e2e)', () => {
       expect(response.text).toContain('التقرير');
     });
 
-    it('serves the trail as CSV, honouring the filter', async () => {
-      const response = await get(
-        `/api/admin/audit.csv?actorUserId=${adminId}&outcome=FAILURE`,
-        sessionAdmin,
-      ).expect(200);
+    /*
+     * The *trail* export moved into the browser (TAM-138): every column of it is
+     * Arabic copy, that copy lives in the message catalogue by convention, and
+     * an export written where the words are is the only way the file and the
+     * screen can agree. What the API still owes it is a page big enough to
+     * export, honouring the same filters — which is this.
+     */
+    it('serves a whole export-sized page of the trail, honouring the filter', async () => {
+      const page = (
+        await get(
+          `/api/admin/audit?actorUserId=${adminId}&outcome=FAILURE&pageSize=5000`,
+          sessionAdmin,
+        ).expect(200)
+      ).body as AdminAuditPage;
 
-      expect(response.text.charCodeAt(0)).toBe(0xfeff);
-      expect(response.text).toContain('SELF_MODIFICATION_REFUSED');
+      expect(page.rows.length).toBeGreaterThan(0);
       /* An export that ignored the filter would hand over the whole log to
          answer a narrow question. */
-      expect(response.text).not.toContain('AUTH_LOGIN_SUCCEEDED');
+      expect(page.rows.every((row) => row.outcome === 'FAILURE')).toBe(true);
+    });
+
+    it('refuses a page larger than the export bound', async () => {
+      await get('/api/admin/audit?pageSize=5001', sessionAdmin).expect(400);
     });
   });
 });

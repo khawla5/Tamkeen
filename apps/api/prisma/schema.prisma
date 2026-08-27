@@ -88,14 +88,14 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  authTokens    AuthToken[]
-  sessions      Session[]
-  notifications Notification[]
-  completions   Completion[]
-  certificates  Certificate[]
-  cvProfile     CvProfile?
-  auditEvents   AuditLog[]     @relation("AuditActor")
-  settingsEdited Setting[]     @relation("SettingEditor")
+  authTokens     AuthToken[]
+  sessions       Session[]
+  notifications  Notification[]
+  completions    Completion[]
+  certificates   Certificate[]
+  cvProfile      CvProfile?
+  auditEvents    AuditLog[]     @relation("AuditActor")
+  settingsEdited Setting[]      @relation("SettingEditor")
 
   /// Every attempt, newest wins. Retakes append rather than overwrite (D-033).
   assessmentResults AssessmentResult[]
@@ -609,7 +609,7 @@ model Course {
   /// catalogue.
   publication CoursePublication @default(DRAFT)
 
-  /// Admin-only (TAM-132, §4C.5): a cross-cutting course («عامة») that appears in
+  /// Admin-only (TAM-141, §4C.5): a cross-cutting course («عامة») that appears in
   /// every path's build list without path_courses rows, carries no derived
   /// RIASEC letters, and is exempt from the membership cap and coherence rules.
   /// Entities can neither set nor clear it.
@@ -643,6 +643,25 @@ model Course {
   ownerEntityId String? @map("owner_entity_id") @db.Uuid
   ownerEntity   Entity? @relation(fields: [ownerEntityId], references: [id], onDelete: Restrict)
 
+  /// The availability window the ministry sets from §4C.5 (TAM-134).
+  ///
+  /// **Both bounds are optional and mean "no bound".** A course with neither is
+  /// available for as long as its publication and the LMS allow — which is every
+  /// course that existed before this field, so adding it changed nothing about
+  /// them.
+  ///
+  /// Stored as instants, set from calendar days in Arabia Standard Time by
+  /// `availabilityWindowFrom`/`availabilityWindowUntil`: an administrator picks
+  /// «حتى ٣٠ سبتمبر» and means the end of that day where they are, not 03:00 the
+  /// following morning, which UTC midnight would have given them.
+  ///
+  /// The window is an *input to the status derivation*, never a status of its
+  /// own (D-059) — `effectiveCourseStatus` is still the only thing that decides
+  /// what a learner sees, so an expired window cannot contradict the publication
+  /// decision or strand a learner who already holds the course.
+  availableFrom  DateTime? @map("available_from")
+  availableUntil DateTime? @map("available_until")
+
   lastSyncedAt DateTime? @map("last_synced_at")
   /// When the entity first published it. Kept for the entity dashboard and the
   /// audit trail; publication state itself lives in `publication`.
@@ -657,6 +676,9 @@ model Course {
 
   @@index([status])
   @@index([ownerEntityId])
+  /// The availability refresh scans for a bound that has passed; without this it
+  /// reads the whole catalogue every sync cycle.
+  @@index([availableUntil])
   @@map("courses")
 }
 
@@ -703,7 +725,7 @@ model Entity {
 
 /// Paths ↔ courses. A course may belong to several paths (D-003), which is why
 /// this is a join table rather than a `pathId` on `courses`.
-/// Whether an entity's path membership has been accepted (TAM-132). Path
+/// Whether an entity's path membership has been accepted (TAM-141). Path
 /// membership is path content the admin owns (§4C.4); what an entity saves is a
 /// proposal. Only APPROVED rows reach the learner catalogue, path build, the
 /// derived RIASEC letters and the publish gate. Auto-approved while

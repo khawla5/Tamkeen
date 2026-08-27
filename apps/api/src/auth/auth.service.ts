@@ -97,7 +97,7 @@ export class AuthService {
         action: AuditAction.AUTH_REGISTRATION_REJECTED,
         outcome: 'FAILURE',
         ipAddress: context.ipAddress,
-        targetType: 'User',
+        targetType: 'user',
         targetId: existing.id,
         reason:
           existing.email === dto.email
@@ -128,7 +128,7 @@ export class AuthService {
       outcome: 'SUCCESS',
       actorUserId: user.id,
       ipAddress: context.ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: user.id,
     });
 
@@ -220,7 +220,7 @@ export class AuthService {
       outcome: 'SUCCESS',
       actorUserId: token.userId,
       ipAddress: context.ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: token.userId,
     });
   }
@@ -457,7 +457,7 @@ export class AuthService {
       outcome: 'SUCCESS',
       actorUserId: token.userId,
       ipAddress: context.ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: token.userId,
     });
   }
@@ -476,22 +476,49 @@ export class AuthService {
    * point is to evict whoever else is holding one — and signing the user out of
    * the tab they are looking at, immediately after they proved themselves, would
    * make the safe action feel like a failure.
+   *
+   * **A wrong current password counts toward the sign-in lockout** (TAM-110),
+   * and a locked account is refused here exactly as at sign-in. The endpoint
+   * verifies a password, so without this a stolen session would buy unlimited
+   * guesses at the one secret that turns a temporary foothold into ownership —
+   * a cheaper brute-force surface than the login it sits beside. One counter,
+   * one threshold, one lockout; proving the password clears it, as a
+   * successful sign-in does.
    */
   async changePassword(
     userId: string,
     sessionId: string,
     currentPassword: string,
     newPassword: string,
+    confirmPassword: string,
     context: SessionContext,
   ): Promise<void> {
     if (newPassword.length < this.config.get('PASSWORD_MIN_LENGTH')) {
       throw new BadRequestException('PASSWORD_TOO_SHORT');
     }
 
+    if (confirmPassword !== newPassword) {
+      /* Checked before the current password is verified: a typo in the
+         confirmation is not a guess at anything, and must not cost an attempt. */
+      throw new BadRequestException('PASSWORDS_DO_NOT_MATCH');
+    }
+
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { passwordHash: true },
+      select: { passwordHash: true, failedLoginAttempts: true, lockedUntil: true },
     });
+
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      await this.audit.record({
+        action: AuditAction.AUTH_PASSWORD_CHANGED,
+        outcome: 'FAILURE',
+        actorUserId: userId,
+        ipAddress: context.ipAddress,
+        reason: AuditReason.ACCOUNT_LOCKED,
+      });
+
+      throw new UnauthorizedException('ACCOUNT_LOCKED');
+    }
 
     if (!(await verifyPassword(user.passwordHash, currentPassword))) {
       await this.audit.record({
@@ -501,6 +528,7 @@ export class AuthService {
         ipAddress: context.ipAddress,
         reason: AuditReason.BAD_PASSWORD,
       });
+      await this.countFailedAttempt(userId, user.failedLoginAttempts, context);
 
       throw new UnauthorizedException('INVALID_CREDENTIALS');
     }
@@ -514,7 +542,11 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash: await hashPassword(newPassword) },
+      data: {
+        passwordHash: await hashPassword(newPassword),
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
     });
 
     await this.sessions.revokeAllForUserExcept(userId, sessionId);
@@ -745,7 +777,7 @@ export class AuthService {
       outcome: 'SUCCESS',
       actorUserId: token.userId,
       ipAddress: context.ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: token.userId,
     });
 
@@ -807,8 +839,22 @@ export class AuthService {
     }
   }
 
-  /** Increments the failure counter and locks the account at the threshold. */
+  /** A failed sign-in: records it, then counts it toward the lockout. */
   private async registerFailedAttempt(
+    userId: string,
+    currentAttempts: number,
+    context: SessionContext,
+  ): Promise<void> {
+    await this.recordLoginFailure(userId, context, AuditReason.BAD_PASSWORD);
+    await this.countFailedAttempt(userId, currentAttempts, context);
+  }
+
+  /**
+   * Increments the failure counter and locks the account at the threshold.
+   * Shared by sign-in and the password change: every place a password is
+   * verified feeds the same counter, so none is the cheaper one to guess at.
+   */
+  private async countFailedAttempt(
     userId: string,
     currentAttempts: number,
     context: SessionContext,
@@ -825,15 +871,13 @@ export class AuthService {
       },
     });
 
-    await this.recordLoginFailure(userId, context, AuditReason.BAD_PASSWORD);
-
     if (shouldLock) {
       await this.audit.record({
         action: AuditAction.AUTH_ACCOUNT_LOCKED,
         outcome: 'FAILURE',
         actorUserId: userId,
         ipAddress: context.ipAddress,
-        targetType: 'User',
+        targetType: 'user',
         targetId: userId,
         detail: { attempts },
       });

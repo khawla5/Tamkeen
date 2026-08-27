@@ -78,6 +78,14 @@ interface MoodleCreatedCourse {
   shortname?: string;
 }
 
+/**
+ * `core_course_delete_courses` reports per-course problems as warnings on a 200
+ * rather than as an error, so the warnings are the result and have to be read.
+ */
+interface MoodleDeleteCoursesResponse {
+  warnings?: Array<{ item?: string; itemid?: number; warningcode?: string; message?: string }>;
+}
+
 interface MoodleCourseModule {
   id?: number;
   name?: string;
@@ -216,7 +224,7 @@ export class MoodleHttpService implements LmsPort {
 
       try {
         /* Arabic-first (§2): Moodle's UI — framed inside the portal for authors
-           (D-098) — must open in Arabic. Left unset, Moodle gives a new account
+           (D-101) — must open in Arabic. Left unset, Moodle gives a new account
            English regardless of the site default. */
         created = await this.client.call<MoodleUser[]>('core_user_create_users', {
           users: [{ ...account, lang: 'ar' }],
@@ -481,7 +489,7 @@ export class MoodleHttpService implements LmsPort {
   }
 
   /**
-   * The course's activities in order (D-103). One read of
+   * The course's activities in order (D-119). One read of
    * `core_course_get_contents`; labels carry no page and are dropped, hidden
    * activities too — a learner's previous/next must never land on a page
    * Moodle would then refuse.
@@ -515,6 +523,55 @@ export class MoodleHttpService implements LmsPort {
         kind: module.modname ?? 'unknown',
         url: module.url!,
       }));
+  }
+
+  /**
+   * Deletes a course (§4C.5, TAM-134).
+   *
+   * **`core_course_delete_courses` needs `moodle/course:delete` on the
+   * integration role** — a capability the least-privilege role of §5.1 does not
+   * have today. Until it is granted the call fails and the administrator sees
+   * the refusal rather than a half-done deletion, which is the right way round:
+   * our row is only removed after this resolves.
+   *
+   * **Idempotent by contract, and Moodle nearly gives it for free.** Deleting an
+   * id it does not have is reported as a *warning* on a 200 rather than as an
+   * error, so an already-deleted course resolves here exactly as the port
+   * promises. A warning naming any other problem is a failure, since Moodle's
+   * habit of reporting real refusals this way would otherwise let a course we
+   * are not allowed to delete look deleted.
+   */
+  async deleteCourse(lmsCourseId: LmsCourseId): Promise<void> {
+    let response: MoodleDeleteCoursesResponse;
+
+    try {
+      response = await this.client.call<MoodleDeleteCoursesResponse>('core_course_delete_courses', {
+        courseids: [lmsCourseId],
+      });
+    } catch (error) {
+      if (error instanceof LmsUnavailableError) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Course deletion failed: ${error instanceof MoodleWsError ? error.errorcode : 'unknown'}`,
+      );
+      throw new LmsOperationError('DELETE_COURSE');
+    }
+
+    /* `unknowncourseidnumber` is Moodle's answer for an id it does not have,
+       which is the idempotent case and not a failure. Anything else — most
+       likely `cannotdeletecourse`, the missing capability — is. */
+    const blocking = (response?.warnings ?? []).filter(
+      (warning) => warning.warningcode !== 'unknowncourseidnumber',
+    );
+
+    if (blocking.length > 0) {
+      this.logger.error(
+        `Course ${lmsCourseId} was not deleted: ${blocking.map((w) => w.warningcode).join(',')}`,
+      );
+      throw new LmsOperationError('DELETE_COURSE');
+    }
   }
 
   /**

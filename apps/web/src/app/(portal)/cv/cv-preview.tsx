@@ -59,7 +59,7 @@ export function CvPreview({ profile, autofill }: { profile: CvProfile; autofill:
 
       <style>{cvDocumentCss()}</style>
 
-      <div className="overflow-auto rounded-card border border-border bg-white shadow-sm">
+      <div className="overflow-auto rounded-card border border-border bg-card shadow-sm">
         <div style={{ zoom: 0.62 }} className="w-[210mm]">
           {/*
             `aria-hidden`: the preview is a visual rendering of data the form

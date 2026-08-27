@@ -19,7 +19,7 @@ import { coursesApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 
 /**
- * Course view / player (§4.8) — the course inside the page (D-102).
+ * Course view / player (§4.8) — the course inside the page (D-118).
  *
  * Moodle still owns the material, the quiz and the grading; what changed is
  * that the learner no longer leaves for it. The page keeps what Moodle cannot
@@ -28,7 +28,7 @@ import { useApiQuery } from '@/lib/use-api';
  * fallback when the frame cannot establish a session.
  *
  * The launch URL is minted **on mount** and rendered only as the frame's `src`
- * once it has resolved; by then the plugin has spent the nonce (D-098). When
+ * once it has resolved; by then the plugin has spent the nonce (D-101). When
  * the frame reports a submitted quiz, the page asks for an on-demand sync and
  * refetches, so the outcome below updates within seconds rather than at the
  * next scheduled run.
@@ -59,7 +59,7 @@ function Player({ course, onOutcome }: { course: CoursePlayerView; onOutcome: ()
     [course.courseId],
   );
   const launchFullPage = useCallback(() => coursesApi.launch(course.courseId), [course.courseId]);
-  /* The outline (D-103): the activities in order, so the panel can say where
+  /* The outline (D-119): the activities in order, so the panel can say where
      the learner is and move the frame to the neighbour. Loaded only when the
      course can be entered; the frame reports which activity it shows. */
   const outline = useApiQuery<CourseOutlineView>(
@@ -234,19 +234,19 @@ function Outcome({ course }: { course: CoursePlayerView }) {
 
   if (course.passed) {
     return (
-      <div className="border-primary-600 bg-primary-50 rounded-lg border p-4">
-        <p className="font-semibold">{t('passedTitle')}</p>
-        <p className="text-sm">{t('passedBody', { grade })}</p>
-      </div>
+      <Card edge="success" className="p-4">
+        <p className="font-semibold text-foreground">{t('passedTitle')}</p>
+        <p className="text-sm text-neutral-700">{t('passedBody', { grade })}</p>
+      </Card>
     );
   }
 
   return (
-    <div className="border-danger/40 bg-danger/5 rounded-lg border p-4">
-      <p className="font-semibold">{t('failedTitle')}</p>
+    <Card edge="danger" className="p-4">
+      <p className="font-semibold text-foreground">{t('failedTitle')}</p>
       <p className="text-sm">
         {t('failedBody', { grade, threshold: format.percent(course.passThreshold / 100) })}
       </p>
-    </div>
+    </Card>
   );
 }

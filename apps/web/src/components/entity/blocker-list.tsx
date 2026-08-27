@@ -6,6 +6,16 @@ import { useTranslations } from 'next-intl';
 import type { PublishBlocker } from '@tamkeen/types';
 
 /**
+ * `NO_COMPLETION_CRITERIA` is the one blocker whose fix is inside Moodle, not
+ * this portal — the create/metadata blockers all resolve on this page's own
+ * form. Only that one gets a guide link (TAM-143); linking the others would
+ * send someone looking in Moodle for a field that has always been right here.
+ */
+const GUIDE_ANCHORS: Partial<Record<PublishBlocker, string>> = {
+  NO_COMPLETION_CRITERIA: '/entity/guide#completion',
+};
+
+/**
  * Why a course cannot be published (§4B.3, D-061).
  *
  * Renders **every** blocker rather than the first. A gate that reports one
@@ -15,25 +25,12 @@ import type { PublishBlocker } from '@tamkeen/types';
  * Shared by the dashboard's needs-attention list and the manage screen, so the
  * two cannot describe the same course differently.
  */
-/**
- * Where the guide explains the fix (TAM-134). Moodle-side blockers point at the
- * completion section; the metadata ones at بيانات الدورة. `LMS_UNREACHABLE`
- * has no fix an entity can make, so it carries no link.
- */
-const GUIDE_SECTION: Partial<Record<PublishBlocker, string>> = {
-  NO_COMPLETION_CRITERIA: 'completion',
-  NO_PATH: 'metadata',
-  NO_LANGUAGE: 'metadata',
-  NO_OBJECTIVES: 'metadata',
-  NO_DURATION: 'metadata',
-};
-
 export function BlockerList({
   blockers,
   maxPaths = 3,
 }: {
   blockers: readonly PublishBlocker[];
-  /** TAM-132: the cap, named in the NO_PATH message. */
+  /** TAM-141: the cap, named in the NO_PATH message. */
   maxPaths?: number;
 }) {
   const t = useTranslations('entity');
@@ -44,22 +41,26 @@ export function BlockerList({
 
   return (
     <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-      {blockers.map((blocker) => (
-        <li key={blocker}>
-          • {t(`blocker${blocker}`, { max: maxPaths })}
-          {GUIDE_SECTION[blocker] ? (
-            <>
-              {' '}
-              <Link
-                href={`/entity/courses/guide#${GUIDE_SECTION[blocker]}`}
-                className="text-primary-700 underline"
-              >
-                {t('blockerHow')}
-              </Link>
-            </>
-          ) : null}
-        </li>
-      ))}
+      {blockers.map((blocker) => {
+        const anchor = GUIDE_ANCHORS[blocker];
+
+        return (
+          <li key={blocker}>
+            • {t(`blocker${blocker}`, { max: maxPaths })}
+            {anchor ? (
+              <>
+                {' '}
+                <Link
+                  href={anchor}
+                  className="font-medium text-primary-700 underline-offset-4 hover:underline"
+                >
+                  {t('guideLink')}
+                </Link>
+              </>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -9,12 +9,13 @@ import type { MyPathCourseView, MyPathView } from '@tamkeen/types';
 import { PortalPage } from '@/components/layout/portal-page';
 import { DataView, EmptyState } from '@/components/states';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, cardVariants } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useFormat } from '@/i18n/format-provider';
 import { myPathApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 /**
  * My Path (§4.9).
@@ -109,7 +110,7 @@ function PathRun({ path }: { path: MyPathView }) {
       </section>
 
       {/* The locked certificate slot (§4.9). */}
-      <Card className={cn(path.pathCertificateUnlocked && 'border-2 border-primary-600')}>
+      <Card variant={path.pathCertificateUnlocked ? 'selected' : 'default'}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {!path.pathCertificateUnlocked ? (
@@ -153,25 +154,32 @@ function CourseRow({ course }: { course: MyPathCourseView }) {
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center justify-between gap-3 rounded-card border bg-card p-4',
-        course.isNextUp ? 'border-2 border-primary-600' : 'border-border',
+        cardVariants({ variant: course.isNextUp ? 'selected' : 'default' }),
+        'flex flex-wrap items-center justify-between gap-3 p-4',
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-medium text-foreground">{course.title}</h3>
-          {course.isNextUp ? (
-            <span className="rounded-full bg-accent px-2.5 py-0.5 text-sm font-semibold text-accent-foreground">
-              {t('nextUp')}
-            </span>
-          ) : null}
+          {course.isNextUp ? <Badge variant="primary">{t('nextUp')}</Badge> : null}
         </div>
 
-        <p className="text-sm text-muted-foreground">
-          {statusLabel}
-          {course.gradePercent !== null
-            ? ` · ${t('grade', { grade: format.percent(course.gradePercent) })}`
-            : ''}
+        <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          {/* The state as a tag (TAM-119): the word carries it, the tone repeats it. */}
+          <Badge
+            variant={
+              course.status === 'COMPLETED'
+                ? 'success'
+                : course.status === 'IN_PROGRESS'
+                  ? 'info'
+                  : 'neutral'
+            }
+          >
+            {statusLabel}
+          </Badge>
+          {course.gradePercent !== null ? (
+            <span>{t('grade', { grade: format.percent(course.gradePercent) })}</span>
+          ) : null}
         </p>
       </div>
 

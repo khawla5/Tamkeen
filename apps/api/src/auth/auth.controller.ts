@@ -212,10 +212,17 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
     @Req() request: Request,
   ): Promise<void> {
-    await this.auth.changePassword(user.id, user.sessionId, dto.currentPassword, dto.newPassword, {
-      ipAddress: request.ip ?? null,
-      userAgent: request.get('user-agent') ?? null,
-    });
+    await this.auth.changePassword(
+      user.id,
+      user.sessionId,
+      dto.currentPassword,
+      dto.newPassword,
+      dto.confirmPassword,
+      {
+        ipAddress: request.ip ?? null,
+        userAgent: request.get('user-agent') ?? null,
+      },
+    );
   }
 
   /**

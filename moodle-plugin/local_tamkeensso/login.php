@@ -100,7 +100,7 @@ if (!isloggedin() || isguestuser() || (int) $USER->id !== (int) $user->id) {
 if ($embed === 'author' || $embed === 'learner') {
     // Remembered for the whole session: every later page in the frame reads
     // it (hook_callbacks) to hide the chrome and post the ready message.
-    // 'learner' (D-102): the course framed by the learner portal — no editing,
+    // 'learner' (D-118): the course framed by the learner portal — no editing,
     // and the quiz review page announces itself.
     $SESSION->tamkeen_embed = $embed;
     // Editing on from the first page. The edit-mode switch sits in the navbar

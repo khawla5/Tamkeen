@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { adminApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 
@@ -21,10 +22,20 @@ import { useApiQuery } from '@/lib/use-api';
  *
  * **Two sections, and the read-only one is not filler.** The editable knobs are
  * what the ministry must be able to change while the system is running — the
- * pass threshold, the sync interval, the registration gate. The fixed ones are
+ * sync interval, the registration gate, the signature block. The fixed ones are
  * the 5-10 path bounds (D-074) and the auth rate limits, which §2 makes a
  * product rule and a security floor: an administrator asked to explain either
  * needs the number, and nobody needs a control that moves it.
+ *
+ * **The pass threshold is not here** — since the ministry's 2026-08-25 direction
+ * it is deployment configuration read from the environment, with no endpoint
+ * that can move it (D-102).
+ *
+ * **Each field's shape is the server's answer, not this file's guess** (TAM-135).
+ * `setting.editor` is derived from the very Zod field that validates the value,
+ * so a dropdown's options are exactly what a save would accept and a numeric
+ * field is numeric because the schema says so. A hand-written option list here
+ * would be a second source of truth for the allowed values.
  *
  * **What is on neither list is the point.** The Moodle token, the database URL
  * and the SMTP credentials are not settings and have no endpoint (D-072) — a
@@ -141,14 +152,37 @@ function SettingRow({
       <div className="mt-3 flex flex-wrap items-end gap-2">
         <div className="min-w-0 flex-1">
           <Field id={`setting-${setting.key}`} label={t('settingValue')}>
-            {(field) => (
-              <Input
-                {...field}
-                dir="ltr"
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-              />
-            )}
+            {(field) =>
+              setting.editor === 'select' ? (
+                <Select {...field} value={value} onChange={(event) => setValue(event.target.value)}>
+                  {setting.options.map((option) => (
+                    <option key={option} value={option}>
+                      {t(`settingOption.${setting.key}.${option}`)}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <Input
+                  {...field}
+                  dir="ltr"
+                  /* A numeric knob takes digits and nothing else. `inputMode`
+                     brings up the right keyboard; the strip is what actually
+                     enforces it, because `type="number"` still accepts `e`,
+                     `+` and `-` and then reports an empty value for them. */
+                  {...(setting.editor === 'number'
+                    ? { inputMode: 'numeric' as const, pattern: '[0-9]*' }
+                    : {})}
+                  value={value}
+                  onChange={(event) =>
+                    setValue(
+                      setting.editor === 'number'
+                        ? event.target.value.replace(/\D/g, '')
+                        : event.target.value,
+                    )
+                  }
+                />
+              )
+            }
           </Field>
         </div>
 

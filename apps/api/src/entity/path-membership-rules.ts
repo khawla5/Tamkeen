@@ -1,7 +1,7 @@
 import type { RiasecLetter } from '@tamkeen/types';
 
 /**
- * The rules for which paths a course may belong to (TAM-132).
+ * The rules for which paths a course may belong to (TAM-141).
  *
  * A course may sit in more than one path (§2 — a modelling fact so a shared
  * course is not duplicated), and until now the only rule was "at least one".

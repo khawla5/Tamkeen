@@ -198,13 +198,18 @@ function CreateCourseForm({
 
   return (
     <Card className="p-6">
-      <h2 className="text-lg font-semibold text-foreground">{t('createTitle')}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {t('createHint')}{' '}
-        <Link href="/entity/courses/guide#create" className="text-primary-700 underline">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="text-lg font-semibold text-foreground">{t('createTitle')}</h2>
+        {/* Quiet — the create moment is exactly where "what happens after I
+            save this?" comes up, and the guide answers it (§4B, TAM-143). */}
+        <Link
+          href="/entity/guide"
+          className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
+        >
           {t('guideLink')}
         </Link>
-      </p>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">{t('createHint')}</p>
 
       <form onSubmit={onSubmit} className="mt-4 space-y-4">
         <Field id="new-course-title" label={t('fieldTitle')} required>

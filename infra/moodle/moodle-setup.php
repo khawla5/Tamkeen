@@ -102,7 +102,7 @@ $capabilities = [
 // view, and a module's own `mod/<name>:view` capability decides that for a
 // user who is not enrolled — so without these the quiz an entity just added is
 // invisible to the read-back and the publish gate keeps refusing for a reason
-// the entity has already fixed (found 2026-08-25, TAM-130 follow-up). Granted
+// the entity has already fixed (found 2026-08-25, TAM-139 follow-up). Granted
 // for every installed module rather than a hand-kept list, plus hidden
 // activities/sections, which an author may keep hidden until publishing.
 // Bound parameters: a literal ':view' would be read as a named placeholder.

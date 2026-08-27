@@ -10,7 +10,7 @@ export const EMBED_READY_TIMEOUT_MS = 8_000;
 
 type Phase = 'launching' | 'loading' | 'ready' | 'failed';
 
-/** What a page may do to the frame (D-103): move it to another LMS page. */
+/** What a page may do to the frame (D-119): move it to another LMS page. */
 export interface MoodleEmbedHandle {
   /** Points the (already signed-in) frame at an LMS URL. */
   navigate: (url: string) => void;
@@ -25,14 +25,14 @@ export interface MoodleEmbedLabels {
 }
 
 /**
- * Moodle inside the page (D-098 for the entity's editor, D-102 for the
+ * Moodle inside the page (D-101 for the entity's editor, D-118 for the
  * learner's course). Portal-agnostic: the caller supplies the two launches and
  * the words; the frame supplies the discipline.
  *
  * `launchEmbed` is minted **on mount**, never prefetched, and never rendered
  * before the request resolves; once the frame has loaded it, the plugin has
  * spent the nonce, so the `src` left in the DOM is a used token that logs
- * nobody in (the D-045 amendment recorded in D-098).
+ * nobody in (the D-045 amendment recorded in D-101).
  *
  * The plugin talks back, and only from Moodle's own origin — anything else is
  * ignored:
@@ -108,7 +108,7 @@ export const MoodleEmbed = forwardRef<
     readyRef.current = onReady;
   });
 
-  /* Navigation from the page (D-103): setting `src` on a cross-origin frame is
+  /* Navigation from the page (D-119): setting `src` on a cross-origin frame is
      allowed, and the frame's session carries over, so no new token is minted. */
   useImperativeHandle(ref, () => ({
     navigate: (url: string) => {

@@ -25,7 +25,7 @@ import { useApiQuery } from '@/lib/use-api';
  * §4B.3 / §4B.4 — Add / Manage Course.
  *
  * Three regions, in the order an entity actually works: go to the content
- * page (where Moodle's editor is framed — TAM-130), set the product metadata
+ * page (where Moodle's editor is framed — TAM-139), set the product metadata
  * our app owns, then publish. The publish button and the reasons it is disabled
  * arrive together from one request, so the screen never offers an action it
  * would then refuse.
@@ -103,7 +103,7 @@ function ManageBody({ course, onChanged }: { course: EntityCourseDetail; onChang
 
 /**
  * The way to the editor (§4B.4). A link, not a launch: the content page mints
- * the credential when it opens (D-098), and minting it here as well would mean
+ * the credential when it opens (D-101), and minting it here as well would mean
  * two places issuing logins for one purpose.
  */
 function AuthoringCard({ course }: { course: EntityCourseDetail }) {
@@ -230,7 +230,7 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
               const checked = pathIds.includes(path.id);
               const membership = course.paths.find((entry) => entry.id === path.id);
               const wouldAddLetter = !selectedLetters.includes(path.riasecLetter);
-              /* The same three rules the server applies (TAM-132), decided
+              /* The same three rules the server applies (TAM-141), decided
                  per checkbox so the form never offers a choice it would then
                  refuse: frozen → removals only; the cap; coherence. */
               const disabled =

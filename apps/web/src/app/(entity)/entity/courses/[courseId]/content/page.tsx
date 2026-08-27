@@ -21,7 +21,7 @@ import { entityApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 
 /**
- * §4B.4 — Course Content: the authoring loop on one page (TAM-130, D-098).
+ * §4B.4 — Course Content: the authoring loop on one page (TAM-139, D-101).
  *
  * Moodle's own editor, framed inside the shell with editing on, and beside it
  * the **read-back** of what Moodle holds — activities, the quiz, completion
@@ -119,7 +119,7 @@ function ReadBackStrip({
           </p>
           {course.summary ? (
             /* The description learners will read — shown where the entity
-               edits the course, so the two never drift unnoticed (TAM-134). */
+               edits the course, so the two never drift unnoticed (TAM-143). */
             <p
               dir={directionForCourseLanguage(course.language)}
               lang={course.language === 'EN' ? 'en' : 'ar'}
@@ -131,7 +131,12 @@ function ReadBackStrip({
           <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span>{t(`publication${course.publication}`)}</span>
             <span>{t(`status${course.status}`)}</span>
-            <Link href="/entity/courses/guide#content" className="text-primary-700 underline">
+            {/* Quiet — this strip is exactly where "why is completion still
+                false" comes up (§4B.4, TAM-143). */}
+            <Link
+              href="/entity/guide#completion"
+              className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
+            >
               {t('guideLink')}
             </Link>
           </p>

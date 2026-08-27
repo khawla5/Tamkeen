@@ -43,7 +43,7 @@ export interface EntityCourseSummary {
   /** Paths this course belongs to, as product metadata the entity set. */
   /**
    * Every path the course is attached to, including memberships still awaiting
-   * the admin (TAM-132). Learners see only APPROVED ones.
+   * the admin (TAM-141). Learners see only APPROVED ones.
    */
   paths: Array<{
     id: string;
@@ -98,11 +98,11 @@ export interface EntityCourseContentView {
   completionConfigured: boolean;
 }
 
-/** Whether an entity's path membership has been accepted by the admin (TAM-132). */
+/** Whether an entity's path membership has been accepted by the admin (TAM-141). */
 export type PathMembershipStatus = 'PENDING' | 'APPROVED';
 
 /**
- * The membership rules the form enforces alongside the server (TAM-132) — sent
+ * The membership rules the form enforces alongside the server (TAM-141) — sent
  * with the course so the numbers live in one place, the settings.
  */
 export interface PathMembershipRules {

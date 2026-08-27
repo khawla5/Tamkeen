@@ -8,12 +8,16 @@ import { SETTING_KEYS, parseSetting, type SettingKey, type SettingValues } from 
  * The product knobs, database-backed with the environment as the default
  * (§4C.6, D-072).
  *
- * **Every consumer reads through this, and that is the whole point.** The pass
- * threshold alone has four callers — completion sync, the course player, the
- * entity course view and the verdict evaluator — and before this they each read
- * `config.get('PASS_THRESHOLD')` directly. Four independent readers of one
- * number is three chances to disagree, and the disagreement would show up as a
- * learner told they passed on one screen and failed on another.
+ * **Every consumer reads through this, and that is the whole point.** A knob
+ * with several callers — the registration gate is read by sign-up, by the admin
+ * screens and by the seed — is, without one reader, that many chances to
+ * disagree, and the disagreement shows up as a rule enforced in one place and
+ * not another.
+ *
+ * The pass threshold used to be the clearest example and is now the exception:
+ * D-102 took it out of the table, so it is read from the validated environment
+ * by the two consumers that judge with it. That is still one source — it is just
+ * a source no screen can move.
  *
  * **An absent row means the environment.** So a fresh deployment behaves exactly
  * as it did before the table existed, `.env.example` stays meaningful as

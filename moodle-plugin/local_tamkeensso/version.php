@@ -8,7 +8,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_tamkeensso';
-$plugin->version   = 2026082502; // D-103: the ready message names the activity.
+$plugin->version   = 2026082502; // D-119: the ready message names the activity.
 // Moodle 4.5 LTS is the production target (D-039); development runs 5.2.
 $plugin->requires  = 2024100700; // Moodle 4.5.
 $plugin->maturity  = MATURITY_ALPHA;

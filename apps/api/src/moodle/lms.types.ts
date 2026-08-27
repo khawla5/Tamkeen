@@ -130,7 +130,7 @@ export interface EnrolInput {
  */
 /**
  * One activity of a course, in course order — enough for the portal to say
- * "النشاط 3 من 8" and move the frame to the previous or next one (D-103).
+ * "النشاط 3 من 8" and move the frame to the previous or next one (D-119).
  * Still not content: a name, a kind and the LMS's own page for it.
  */
 export interface LmsCourseOutlineItem {
@@ -195,7 +195,8 @@ export class LmsUnavailableError extends Error {
  */
 export class LmsOperationError extends Error {
   constructor(
-    readonly operation: 'PROVISION' | 'ENROL' | 'SYNC' | 'CREATE_COURSE' | 'UPDATE_USER',
+    readonly operation:
+      'PROVISION' | 'ENROL' | 'SYNC' | 'CREATE_COURSE' | 'DELETE_COURSE' | 'UPDATE_USER',
   ) {
     super(`LMS_${operation}_REJECTED`);
     this.name = 'LmsOperationError';

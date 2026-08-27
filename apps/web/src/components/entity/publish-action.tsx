@@ -12,7 +12,7 @@ import { entityApi } from '@/lib/api-client';
 
 /**
  * Publish and unpublish (§4A's bridge, §2/D-015) — **one** implementation,
- * shared by Manage Course and Course Content (TAM-130), so the two pages cannot
+ * shared by Manage Course and Course Content (TAM-139), so the two pages cannot
  * disagree about whether a course may be published.
  *
  * Exactly one of the two is offered, never both — §3's context-dependent action

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { AUDIT_TARGET_TYPES, AuditAction, AuditReason, SETTING_KEYS } from '@tamkeen/types';
+
 import messages from '../../messages/ar.json';
 
 /**
@@ -57,6 +59,7 @@ const LATIN_LETTERS = /[A-Za-z]/;
  */
 const LITERAL_VALUE_PATHS = [
   /^admin\.settingHint\./,
+  /^admin\.settingOption\.NUMBER_FORMAT\./,
   /^errors\.SETTING_INVALID_/,
   /^profile\.digits(Western|Arabic)$/,
 ];
@@ -149,10 +152,15 @@ describe('Arabic message catalog', () => {
 const DYNAMIC_NAMESPACES = [
   'admin.auditAction',
   'admin.riasec',
-  'admin.courseStatus',
-  'admin.coursePublication',
+  'admin.courseVisibility',
   'admin.versionStatus',
   'admin.setting',
+  'admin.settingHint',
+  'admin.settingOption.REGISTRATION_MODE',
+  'admin.settingOption.NUMBER_FORMAT',
+  'admin.auditReason',
+  'admin.auditTargetType',
+  'admin.auditDetail',
 ];
 
 function at(path: string): unknown {
@@ -192,17 +200,73 @@ describe('dynamically-keyed namespaces', () => {
     }
   });
 
-  it('has Arabic copy for every audit action the API can emit', () => {
-    /*
-     * Read from the API's own constant rather than restated here. An action
-     * added in a later phase without copy would otherwise reach an administrator
-     * as a raw code, which the deliberate fallback makes look intentional —
-     * the exact failure this file exists to prevent.
-     */
+  /*
+   * Read from the shared constants rather than restated here. A code added in a
+   * later phase without copy reaches an administrator as a raw
+   * `AUTH_PASSWORD_CHANGED`, which the deliberate fallback makes look
+   * intentional — the exact failure this file exists to prevent, and one that
+   * had actually happened to three actions and to every reason code before the
+   * vocabulary was shared (TAM-137).
+   */
+  describe('the audit vocabulary is fully translated', () => {
     const actions = at('admin.auditAction') as Record<string, string>;
+    const reasons = at('admin.auditReason') as Record<string, string>;
+    const targets = at('admin.auditTargetType') as Record<string, string>;
 
-    expect(Object.keys(actions).length).toBeGreaterThan(40);
-    expect(actions.ADMIN_SETTING_CHANGED).toBeTruthy();
-    expect(actions.CERTIFICATE_ISSUED).toBeTruthy();
+    it.each(Object.values(AuditAction))('action %s has Arabic copy', (code) => {
+      expect(actions[code], `admin.auditAction.${code}`).toBeTruthy();
+    });
+
+    it.each(Object.values(AuditReason))('reason %s has Arabic copy', (code) => {
+      expect(reasons[code], `admin.auditReason.${code}`).toBeTruthy();
+    });
+
+    it.each(AUDIT_TARGET_TYPES)('target type %s has Arabic copy', (type) => {
+      expect(targets[type], `admin.auditTargetType.${type}`).toBeTruthy();
+    });
+
+    it('names no action or reason the code cannot emit', () => {
+      /* Copy for a code that no longer exists describes an event nobody can
+         cause — harmless on screen, but it is how a filter list grows entries
+         that never match anything. */
+      const emittable = new Set<string>(Object.values(AuditAction));
+      const refusable = new Set<string>(Object.values(AuditReason));
+
+      expect(Object.keys(actions).filter((code) => !emittable.has(code))).toEqual([]);
+      expect(Object.keys(reasons).filter((code) => !refusable.has(code))).toEqual([]);
+    });
+  });
+});
+
+/**
+ * §4C.6's settings screen renders one row per key and looks its copy up by key,
+ * so a key with no entry reaches the ministry as the raw
+ * `admin.setting.CERT_SIGNATORY_NAME` — which is exactly what the three
+ * certificate keys did until TAM-135. Nothing could catch it while the key list
+ * lived only in the API; now that `SETTING_KEYS` is shared, the catalogue is
+ * asserted against it and the next such key fails CI instead of shipping.
+ */
+describe('every system setting has readable Arabic copy', () => {
+  const labels = at('admin.setting') as Record<string, string>;
+  const hints = at('admin.settingHint') as Record<string, string>;
+
+  it.each(SETTING_KEYS)('%s has a label and a hint', (key) => {
+    expect(labels[key], `admin.setting.${key}`).toBeTruthy();
+    expect(hints[key], `admin.settingHint.${key}`).toBeTruthy();
+  });
+
+  it('names no key that is not a setting', () => {
+    /* A label left behind after a key is removed is a smaller problem than a
+       missing one, but it is still copy describing a control nobody can reach —
+       the pass threshold's label outlived its field for exactly one commit. */
+    const readOnly = ['PATH_MIN_COURSES', 'PATH_MAX_COURSES'];
+    const known = new Set<string>([
+      ...SETTING_KEYS,
+      ...readOnly,
+      'API_RATE_LIMIT_MAX_REQUESTS',
+      'API_RATE_LIMIT_WINDOW_SECONDS',
+    ]);
+
+    expect(Object.keys(labels).filter((key) => !known.has(key))).toEqual([]);
   });
 });

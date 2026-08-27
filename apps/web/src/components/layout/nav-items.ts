@@ -97,7 +97,7 @@ export function navPathMatches(pathname: string, href: string): boolean {
 }
 
 /**
- * The one rail item that is active for `pathname` (TAM-131): the **longest**
+ * The one rail item that is active for `pathname` (TAM-140): the **longest**
  * matching href wins.
  *
  * A dashboard is the root of its portal (`/`, `/entity`, `/admin`), so by

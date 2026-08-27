@@ -129,7 +129,11 @@ describe('Admin course oversight (e2e)', () => {
     await prisma.userPath.deleteMany({ where: { pathId } });
     await prisma.pathCourse.deleteMany({ where: { pathId } });
     await prisma.path.deleteMany({ where: { id: pathId } });
-    await prisma.course.deleteMany({ where: { id: { in: [plainCourseId, heldCourseId] } } });
+    /* By the run's marker rather than by the two ids the suite starts with:
+       the deletion tests create courses of their own, and a failure partway
+       through would otherwise leave them behind for the next run to collide
+       with on `moodle_course_id`. */
+    await prisma.course.deleteMany({ where: { title: { contains: RUN_ID } } });
 
     const created = await prisma.user.findMany({
       where: { email: { startsWith: `acourse-${RUN_ID}-` } },
@@ -275,6 +279,27 @@ describe('Admin course oversight (e2e)', () => {
       await get('/api/admin/courses?ownerEntityId=x', sessionAdmin).expect(400);
       await get('/api/admin/courses?pageSize=5000', sessionAdmin).expect(400);
     });
+
+    it("filters by the administrator's two words, not by the four-state status", async () => {
+      /*
+       * §4C.5's vocabulary (TAM-134). The filter resolves through the same
+       * `courseStatusesFor` mapping the badge renders with, so a query cannot
+       * return rows the screen would contradict — and the old four-value filter
+       * is refused rather than quietly ignored.
+       */
+      const available = (
+        await get(
+          `/api/admin/courses?visibility=AVAILABLE&q=${encodeURIComponent(RUN_ID)}`,
+          sessionAdmin,
+        ).expect(200)
+      ).body as AdminCoursePage;
+
+      expect(available.rows.length).toBeGreaterThan(0);
+      expect(available.rows.every((row) => row.status === 'AVAILABLE')).toBe(true);
+
+      await get('/api/admin/courses?status=AVAILABLE', sessionAdmin).expect(400);
+      await get('/api/admin/courses?visibility=RETIRED', sessionAdmin).expect(400);
+    });
   });
 
   describe('intervening', () => {
@@ -410,6 +435,183 @@ describe('Admin course oversight (e2e)', () => {
         404,
       );
       await get('/api/admin/courses/not-a-uuid', sessionAdmin).expect(400);
+    });
+  });
+
+  describe('the availability window (TAM-134)', () => {
+    /** Yesterday and tomorrow as ministry calendar days. */
+    const day = (offsetDays: number): string =>
+      new Date(Date.now() + offsetDays * 86_400_000 + 3 * 3_600_000).toISOString().slice(0, 10);
+
+    afterEach(async () => {
+      await prisma.course.updateMany({
+        where: { id: { in: [plainCourseId, heldCourseId] } },
+        data: { availableFrom: null, availableUntil: null, status: 'AVAILABLE' },
+      });
+    });
+
+    it('hides a course whose period has already ended, at the moment it is set', async () => {
+      /*
+       * The recompute is immediate on save rather than left to the next sync
+       * run: the case an administrator watches is the one they just typed, and
+       * waiting five minutes to see it take effect reads as the save failing.
+       */
+      const row = (
+        await send(
+          'patch',
+          `/api/admin/courses/${plainCourseId}`,
+          { availableUntil: day(-1) },
+          sessionAdmin,
+        ).expect(200)
+      ).body as AdminCourseRow;
+
+      expect(row.availableUntil).toBe(day(-1));
+      expect(row.status).toBe('HIDDEN_BUT_COMPLETABLE');
+    });
+
+    it('does not retire it — an ended period is a date that can be retyped', async () => {
+      await send(
+        'patch',
+        `/api/admin/courses/${plainCourseId}`,
+        { availableUntil: day(-1) },
+        sessionAdmin,
+      ).expect(200);
+
+      const row = (
+        await send(
+          'patch',
+          `/api/admin/courses/${plainCourseId}`,
+          { availableUntil: day(30) },
+          sessionAdmin,
+        ).expect(200)
+      ).body as AdminCourseRow;
+
+      /* Nothing had to undo the hiding: the derivation is re-run and answers
+         differently, which is what makes a corrected date take effect. */
+      expect(row.status).toBe('AVAILABLE');
+    });
+
+    it('leaves a course a learner holds completable when its period ends', async () => {
+      const row = (
+        await send(
+          'patch',
+          `/api/admin/courses/${heldCourseId}`,
+          { availableUntil: day(-1) },
+          sessionAdmin,
+        ).expect(200)
+      ).body as AdminCourseRow;
+
+      /* §2/D-015 through the derivation: no window produces RETIRED. */
+      expect(row.status).toBe('HIDDEN_BUT_COMPLETABLE');
+    });
+
+    it('clears a bound when it is sent as null, and leaves the other alone', async () => {
+      await send(
+        'patch',
+        `/api/admin/courses/${plainCourseId}`,
+        { availableFrom: day(-10), availableUntil: day(30) },
+        sessionAdmin,
+      ).expect(200);
+
+      const row = (
+        await send(
+          'patch',
+          `/api/admin/courses/${plainCourseId}`,
+          { availableUntil: null },
+          sessionAdmin,
+        ).expect(200)
+      ).body as AdminCourseRow;
+
+      expect(row.availableUntil).toBeNull();
+      expect(row.availableFrom).toBe(day(-10));
+    });
+
+    it('refuses a window that ends before it starts', async () => {
+      await send(
+        'patch',
+        `/api/admin/courses/${plainCourseId}`,
+        { availableFrom: day(30), availableUntil: day(1) },
+        sessionAdmin,
+      ).expect(409);
+    });
+
+    it('refuses a date the calendar does not have, and a malformed one', async () => {
+      await send(
+        'patch',
+        `/api/admin/courses/${plainCourseId}`,
+        { availableUntil: '2026-02-31' },
+        sessionAdmin,
+      ).expect(409);
+
+      await send(
+        'patch',
+        `/api/admin/courses/${plainCourseId}`,
+        { availableUntil: '30-09-2026' },
+        sessionAdmin,
+      ).expect(400);
+    });
+  });
+
+  describe('deleting (TAM-134)', () => {
+    it('refuses to delete a course a learner holds, and says so in advance', async () => {
+      const row = (await get(`/api/admin/courses/${heldCourseId}`, sessionAdmin).expect(200))
+        .body as AdminCourseRow;
+
+      /* Reported before the attempt, so the destructive control is absent
+         rather than offered and refused. */
+      expect(row.canDelete).toBe(false);
+
+      await send('delete', `/api/admin/courses/${heldCourseId}`, {}, sessionAdmin).expect(409);
+
+      /* And the course is still there — the refusal is not a partial delete. */
+      await get(`/api/admin/courses/${heldCourseId}`, sessionAdmin).expect(200);
+    });
+
+    it('audits the refusal with what is holding the course', async () => {
+      await send('delete', `/api/admin/courses/${heldCourseId}`, {}, sessionAdmin).expect(409);
+
+      const entry = await prisma.auditLog.findFirst({
+        where: { action: 'ADMIN_COURSE_DELETED', targetId: heldCourseId, outcome: 'FAILURE' },
+        orderBy: { occurredAt: 'desc' },
+      });
+
+      expect(entry?.metadata).toMatchObject({ reason: 'COURSE_HELD_BY_LEARNERS' });
+    });
+
+    it('deletes a course nobody has taken, with its path membership', async () => {
+      const doomedId = await course(7, 'دورة للحذف');
+
+      await prisma.pathCourse.create({ data: { pathId, courseId: doomedId, displayOrder: 9 } });
+
+      await send('delete', `/api/admin/courses/${doomedId}`, {}, sessionAdmin).expect(204);
+
+      await get(`/api/admin/courses/${doomedId}`, sessionAdmin).expect(404);
+      /* Membership cascades; the path itself is untouched. */
+      expect(await prisma.pathCourse.count({ where: { courseId: doomedId } })).toBe(0);
+      expect(await prisma.path.count({ where: { id: pathId } })).toBe(1);
+    });
+
+    it('names the deleted course in the audit trail', async () => {
+      const doomedId = await course(8, 'دورة تُذكر بالاسم');
+
+      await send('delete', `/api/admin/courses/${doomedId}`, {}, sessionAdmin).expect(204);
+
+      const entry = await prisma.auditLog.findFirst({
+        where: { action: 'ADMIN_COURSE_DELETED', targetId: doomedId, outcome: 'SUCCESS' },
+      });
+
+      /* After the delete returns there is no row left for the id to resolve
+         against, so the entry has to carry the name itself. */
+      expect(entry?.metadata).toMatchObject({ title: `دورة تُذكر بالاسم ${RUN_ID}` });
+    });
+
+    it('answers 404 for a course that is already gone', async () => {
+      await send(
+        'delete',
+        '/api/admin/courses/00000000-0000-4000-8000-000000000000',
+        {},
+        sessionAdmin,
+      ).expect(404);
     });
   });
 });

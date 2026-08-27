@@ -73,6 +73,19 @@ export class MockLmsService implements LmsPort {
   private readonly created: LmsCourse[] = [];
   /** Moodle rejects a duplicate shortname; so does this. */
   private readonly shortNames = new Set<string>();
+  /** Which shortname each created course took, so deleting can release it. */
+  private readonly createdShortNames = new Map<LmsCourseId, string>();
+  /**
+   * Courses `deleteCourse` has removed (§4C.5, TAM-134).
+   *
+   * A tombstone set rather than a splice, because the seeded catalogue is a
+   * module constant shared by every instance — mutating it would leak one
+   * suite's deletion into the next. Like the rest of the mock's state it dies
+   * with the process, so a deleted seeded course returns on restart; a real
+   * Moodle does not resurrect one, and the difference is the mock's, not the
+   * contract's.
+   */
+  private readonly deleted = new Set<LmsCourseId>();
   /** What `simulateAuthoring` has been told about a course's contents. */
   private readonly authoring = new Map<LmsCourseId, Omit<LmsCourseContentSummary, 'lmsCourseId'>>();
   /** Makes each stand-in handoff URL distinct; see `courseLaunchUrl`. */
@@ -214,9 +227,36 @@ export class MockLmsService implements LmsPort {
     return Promise.resolve(null);
   }
 
-  /** The seeded catalogue plus anything an entity created this process. */
+  /** The seeded catalogue plus anything an entity created this process, less
+   *  anything deleted through the port. */
   private get catalogue(): readonly LmsCourse[] {
-    return [...MOCK_COURSES, ...this.created];
+    return [...MOCK_COURSES, ...this.created].filter(
+      (course) => !this.deleted.has(course.lmsCourseId),
+    );
+  }
+
+  /**
+   * Removes a course, and is a no-op for one that is already gone.
+   *
+   * The idempotence is the part worth mocking honestly: the caller deletes here
+   * first and in our database second, so a retry after a half-failure lands on
+   * this branch and must succeed rather than report a course it cannot find.
+   */
+  deleteCourse(lmsCourseId: LmsCourseId): Promise<void> {
+    this.deleted.add(lmsCourseId);
+
+    /* Frees the shortname the way a real deletion does, so a course can be
+       recreated under the name it used to hold. */
+    const shortName = this.createdShortNames.get(lmsCourseId);
+
+    if (shortName !== undefined) {
+      this.shortNames.delete(shortName);
+      this.createdShortNames.delete(lmsCourseId);
+    }
+
+    this.authoring.delete(lmsCourseId);
+
+    return Promise.resolve();
   }
 
   listCourses(): Promise<LmsCourse[]> {
@@ -272,6 +312,7 @@ export class MockLmsService implements LmsPort {
     };
 
     this.created.push(course);
+    this.createdShortNames.set(course.lmsCourseId, input.shortName);
 
     return { ...course };
   }

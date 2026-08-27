@@ -128,6 +128,13 @@ describe('manage course', () => {
       renderWithProviders(<ManageCoursePage />);
 
       expect(await screen.findByText(/لن يتمكّن أي متدرب من اجتياز/)).toBeInTheDocument();
+
+      /* The one blocker fixed inside Moodle, not this form (TAM-143) — its
+         list item is the one that gets a guide deep link. */
+      expect(screen.getByRole('link', { name: 'دليل إنشاء الدورة' })).toHaveAttribute(
+        'href',
+        '/entity/guide#completion',
+      );
     });
 
     it('publishes when nothing is blocking', async () => {
@@ -254,7 +261,7 @@ describe('manage course', () => {
     });
   });
 
-  describe('the way to the editor (TAM-130, D-098)', () => {
+  describe('the way to the editor (TAM-139, D-101)', () => {
     it('links to the content page and mints nothing here', async () => {
       /*
        * The author credential is minted in one place — the content page, when
@@ -271,7 +278,7 @@ describe('manage course', () => {
     });
   });
 
-  describe('path membership rules (TAM-132)', () => {
+  describe('path membership rules (TAM-141)', () => {
     /* The accessible name carries the disabled reason too, so match by prefix. */
     const box = (name: string) => screen.getByRole('checkbox', { name: new RegExp('^' + name) });
 

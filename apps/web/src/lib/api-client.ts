@@ -51,8 +51,8 @@ import type {
   CoursePlayerView,
   CourseLanguage,
   CoursePublication,
-  CourseStatus,
   CourseSummary,
+  CourseVisibility,
   DashboardView,
   EntityAuthorLaunchView,
   EntityCourseContentView,
@@ -275,8 +275,12 @@ export const authApi = {
     api.post<{ status: string }>('/api/auth/forgot-password', { email }),
 
   /** §4.12: change your own password, proving the current one. */
-  changePassword: (currentPassword: string, newPassword: string) =>
-    api.post<void>('/api/auth/change-password', { currentPassword, newPassword }),
+  changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) =>
+    api.post<void>('/api/auth/change-password', {
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    }),
 
   /**
    * §4.12: ask to move the account to a new address.
@@ -357,9 +361,9 @@ export const coursesApi = {
     api.post<CourseLaunchView>(`/api/courses/${courseId}/launch`, {
       embed: options.embed === true,
     }),
-  /** The framed player's previous / next (D-103). */
+  /** The framed player's previous / next (D-119). */
   outline: (courseId: string) => api.get<CourseOutlineView>(`/api/courses/${courseId}/outline`),
-  /** On-demand completion sync after the framed quiz reports itself (D-102). */
+  /** On-demand completion sync after the framed quiz reports itself (D-118). */
   sync: (courseId: string) => api.post<{ synced: boolean }>(`/api/courses/${courseId}/sync`),
 };
 
@@ -436,6 +440,9 @@ export const certificatesApi = {
  */
 export const entityApi = {
   profile: () => api.get<EntityProfileView | null>('/api/entity/me'),
+  /** §4B.6 — the account's own name and the organisation's contact, one save. */
+  updateProfile: (input: { fullName: string; contactName: string; contactEmail: string }) =>
+    api.patch<EntityProfileView>('/api/entity/me', input),
   dashboard: () => api.get<EntityDashboardView>('/api/entity/dashboard'),
 
   listCourses: (filters: { q?: string; publication?: CoursePublication } = {}) => {
@@ -669,7 +676,7 @@ export const adminApi = {
     filters: {
       q?: string;
       publication?: CoursePublication;
-      status?: CourseStatus;
+      visibility?: CourseVisibility;
       entityId?: string;
       unowned?: boolean;
       page?: number;
@@ -679,7 +686,7 @@ export const adminApi = {
 
     if (filters.q) query.set('q', filters.q);
     if (filters.publication) query.set('publication', filters.publication);
-    if (filters.status) query.set('status', filters.status);
+    if (filters.visibility) query.set('visibility', filters.visibility);
     if (filters.entityId) query.set('entityId', filters.entityId);
     if (filters.unowned) query.set('unowned', 'true');
     if (filters.page && filters.page > 1) query.set('page', String(filters.page));
@@ -689,11 +696,30 @@ export const adminApi = {
     return api.get<AdminCoursePage>(`/api/admin/courses${suffix ? `?${suffix}` : ''}`);
   },
 
-  /** Hide, restore, or place a course with an organisation. Never sets status. */
+  /**
+   * Hide, restore, place a course with an organisation, or set its availability
+   * window. Never sets status — that is derived (D-059).
+   *
+   * The window bounds are `YYYY-MM-DD` or `null` to clear; omitting one leaves
+   * it as it was, which is why they are optional *and* nullable.
+   */
   interveneCourse: (
     courseId: string,
-    patch: { publication?: CoursePublication; ownerEntityId?: string | null },
+    patch: {
+      publication?: CoursePublication;
+      ownerEntityId?: string | null;
+      availableFrom?: string | null;
+      availableUntil?: string | null;
+    },
   ) => api.patch<AdminCourseRow>(`/api/admin/courses/${courseId}`, patch),
+
+  /**
+   * Permanent removal — from the LMS and from the catalogue (§4C.5, TAM-134).
+   *
+   * Refused for any course a learner holds, a certificate names, or a completion
+   * records; the row's `canDelete` says so in advance.
+   */
+  deleteCourse: (courseId: string) => api.delete<void>(`/api/admin/courses/${courseId}`),
 
   // §4C.6 — system settings
   settings: () => api.get<AdminSettingsView>('/api/admin/settings'),
@@ -715,13 +741,26 @@ export const adminApi = {
 
   // §4C.8 — audit and reports
   auditLog: (
-    filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE'; before?: string } = {},
+    filters: {
+      action?: string;
+      outcome?: 'SUCCESS' | 'FAILURE';
+      /** Inclusive dates, as the `<input type="date">` values the screen holds. */
+      from?: string;
+      to?: string;
+      before?: string;
+      pageSize?: number;
+    } = {},
   ) => {
     const query = new URLSearchParams();
 
     if (filters.action) query.set('action', filters.action);
     if (filters.outcome) query.set('outcome', filters.outcome);
+    /* A day, not an instant: `to=2026-08-26` alone means midnight, which would
+       drop everything that happened on the day the administrator asked for. */
+    if (filters.from) query.set('from', `${filters.from}T00:00:00.000`);
+    if (filters.to) query.set('to', `${filters.to}T23:59:59.999`);
     if (filters.before) query.set('before', filters.before);
+    if (filters.pageSize) query.set('pageSize', String(filters.pageSize));
 
     const suffix = query.toString();
 
@@ -731,23 +770,12 @@ export const adminApi = {
   reports: () => api.get<AdminReports>('/api/admin/reports'),
 
   /**
-   * Where the CSV exports live.
+   * Where the reports export lives.
    *
-   * Plain URLs rather than a fetch-and-blob: the session is an httpOnly cookie
+   * A plain URL rather than a fetch-and-blob: the session is an httpOnly cookie
    * on the API's origin, so an ordinary link carries it and the browser handles
-   * the download — while a fetched blob would need the bytes in memory and a
-   * synthetic anchor to save them.
+   * the download. The *audit* export is built in the browser instead (TAM-138) —
+   * its every column is Arabic copy, and that lives in the message catalogue.
    */
   reportsCsvUrl: () => `${API_URL}/api/admin/reports.csv`,
-
-  auditCsvUrl: (filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE' } = {}) => {
-    const query = new URLSearchParams();
-
-    if (filters.action) query.set('action', filters.action);
-    if (filters.outcome) query.set('outcome', filters.outcome);
-
-    const suffix = query.toString();
-
-    return `${API_URL}/api/admin/audit.csv${suffix ? `?${suffix}` : ''}`;
-  },
 };

@@ -1,7 +1,7 @@
 <?php
 /**
  * Fills an existing course with one of every content kind the authoring guide
- * (docs/entity-authoring-guide.md, TAM-134) describes, so an entity or a tester
+ * (docs/entity-authoring-guide.md, TAM-143) describes, so an entity or a tester
  * can see and try each one without building it by hand:
  *
  *   video link (url) · PDF (resource) · page with an image · folder with two

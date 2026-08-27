@@ -1,7 +1,7 @@
 import { checkPathMembership, distinctLetters, exceedsLimits } from './path-membership-rules';
 
 /**
- * TAM-132. The rules are pure, so the whole matrix is cheap to pin: the cap,
+ * TAM-141. The rules are pure, so the whole matrix is cheap to pin: the cap,
  * coherence, the order they are reported in, grandfathering as remove-only,
  * and the general-course exemption.
  */
@@ -9,7 +9,7 @@ import { checkPathMembership, distinctLetters, exceedsLimits } from './path-memb
 const P = (id: string, riasecLetter: 'R' | 'I' | 'A' | 'S' | 'E' | 'C') => ({ id, riasecLetter });
 const limits = { maxPaths: 3, maxLetters: 2 };
 
-describe('path membership rules (TAM-132)', () => {
+describe('path membership rules (TAM-141)', () => {
   it('derives distinct letters in first-seen order', () => {
     expect(distinctLetters([P('a', 'S'), P('b', 'S'), P('c', 'E')])).toEqual(['S', 'E']);
   });

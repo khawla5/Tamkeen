@@ -1,3 +1,4 @@
+import type { AuditTargetType } from './audit';
 import type { CourseLanguage, CoursePublication, CourseStatus } from './catalog';
 import type { RiasecLetter } from './riasec';
 import type { UserRole } from './roles';
@@ -483,6 +484,28 @@ export interface AdminCourseRow {
   paths: Array<{ id: string; name: string }>;
   /** How many learners hold it — why it may not be retired outright. */
   heldByLearners: number;
+  /** How many issued certificates name it. Part of why it may not be deleted. */
+  certificatesIssued: number;
+  /**
+   * Whether this course may be deleted outright (§4C.5, TAM-134).
+   *
+   * Reported in advance so the destructive control is simply absent for a course
+   * that cannot be deleted, with the reason in its place — rather than offered,
+   * clicked, and refused. The server enforces the same rule regardless; this is
+   * how the administrator learns it without being refused by it.
+   */
+  canDelete: boolean;
+  /**
+   * The availability window, as calendar days (`YYYY-MM-DD`) or null for "no
+   * bound" (§4C.5, TAM-134).
+   *
+   * Days rather than instants, and resolved server-side: the bounds are stored
+   * as the first and last moment of a day in the ministry's own time zone, and
+   * sending instants would leave the browser to reconstruct which day that was —
+   * getting it wrong by one for anybody whose machine is set elsewhere.
+   */
+  availableFrom: string | null;
+  availableUntil: string | null;
   /** When it first entered the catalogue. Written since Phase 4, read here. */
   publishedAt: string | null;
   lastSyncedAt: string | null;
@@ -502,6 +525,76 @@ export interface AdminCoursePage {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Which knobs an administrator may change without a deployment (§4C.6, D-072).
+ *
+ * **Shared rather than API-only, and that is the point of moving it here
+ * (TAM-135).** The screen renders one row per key and looks up Arabic copy by
+ * key, so a key with no copy reached the ministry as the raw
+ * `admin.setting.CERT_SIGNATORY_NAME` — invisible to every test, because
+ * nothing could enumerate the keys on the web side. With the list shared, the
+ * message catalogue is asserted against it and the same defect fails CI.
+ *
+ * **The list is short on purpose, and what is missing from it is the point.**
+ * Secrets are absent — the Moodle web-services token, the database URL, the SMTP
+ * credentials — because a setting readable by the screen that edits it is a
+ * setting that appears in a network response. So are the auth rate limits, which
+ * §2 makes security floors rather than knobs an operator may loosen; the 5-10
+ * path bounds, which §2 makes a product rule and D-074 keeps in code; and, since
+ * the ministry's 2026-08-25 direction, the pass threshold, which is deployment
+ * configuration rather than a screen (D-102).
+ */
+export const SETTING_KEYS = [
+  /** How often the LMS is polled (D-042). Re-registers the scheduler on change. */
+  'COMPLETION_SYNC_INTERVAL_MINUTES',
+  /**
+   * Path membership rules for a course (TAM-141): how many paths one course
+   * may belong to, how many distinct RIASEC letters those paths may span, and
+   * whether an entity's membership needs admin approval before learners see it
+   * ('off' auto-approves — the state until Phase 5's queue exists).
+   */
+  'COURSE_MAX_PATHS',
+  'COURSE_MAX_RIASEC_LETTERS',
+  'PATH_MEMBERSHIP_APPROVAL',
+  /** D-017's registration gate: the mode, the domains, the employee-id shape. */
+  'REGISTRATION_MODE',
+  'ALLOWED_EMAIL_DOMAINS',
+  'EMPLOYEE_ID_PATTERN',
+  /** D-018's single switch point between Western and Arabic-Indic digits. */
+  'NUMBER_FORMAT',
+  /** Which Moodle we talk to. Not a secret; the token is, and is not here. */
+  'MOODLE_BASE_URL',
+  /**
+   * §4C.7's signature block (D-073).
+   *
+   * Settings rather than template code, so the ministry can name its signatory
+   * without a deployment — and settings rather than a `certificate_templates`
+   * table, because three strings do not need a table and issued certificates
+   * store their rendered bytes regardless (D-052).
+   */
+  'CERT_SIGNATORY_NAME',
+  'CERT_SIGNATORY_TITLE',
+  'CERT_ISSUING_BODY',
+] as const;
+
+export type SettingKey = (typeof SETTING_KEYS)[number];
+
+/**
+ * How a setting is edited (TAM-135).
+ *
+ * **Derived on the server from the very Zod field that validates the value**,
+ * never declared a second time: a `select` is a setting whose schema is an enum,
+ * and its `options` are that enum's members. A hand-written list would be a
+ * second source of truth for the allowed values, and the day the two disagreed
+ * the screen would offer an option the server refuses.
+ *
+ * `number` likewise comes from the schema, so the field that only accepts digits
+ * is exactly the field that would reject anything else on save.
+ */
+export const SETTING_EDITORS = ['text', 'number', 'select'] as const;
+
+export type SettingEditor = (typeof SETTING_EDITORS)[number];
+
+/**
  * One product knob (§4C.6, D-072).
  *
  * `value` is the effective one — the stored override, or the environment's
@@ -510,9 +603,13 @@ export interface AdminCoursePage {
  * that sometimes does nothing.
  */
 export interface AdminSetting {
-  key: string;
+  key: SettingKey;
   value: string;
   isOverridden: boolean;
+  /** How to render the field — see `SETTING_EDITORS`. */
+  editor: SettingEditor;
+  /** The allowed values, for `select`; empty for everything else. */
+  options: string[];
 }
 
 /**
@@ -563,13 +660,36 @@ export interface AdminAuditRow {
   action: string;
   outcome: 'SUCCESS' | 'FAILURE';
   actorName: string | null;
-  targetType: string | null;
+  /** From the one shared vocabulary (`AUDIT_TARGET_TYPES`, TAM-137). */
+  targetType: AuditTargetType | null;
   targetId: string | null;
   /**
-   * The structured detail, non-PII by construction (`AuditService` accepts only
-   * enumerated reason codes and scalar values). Shown because half its value is
-   * the reason a refusal happened, and a trail that hides that is a list of
-   * timestamps.
+   * What the target is called — the person's name, the path's, the course's
+   * (TAM-137).
+   *
+   * Resolved server-side per page, because an administrator reading a trail
+   * needs to know *which* path was retired, and a uuid answers that for nobody.
+   * Null when the row names no target, or when the target has since been
+   * deleted — the id is still carried, so the entry stays traceable.
+   */
+  targetLabel: string | null;
+  /**
+   * Why a refusal happened, as an enumerated code (`AuditReason`).
+   *
+   * Lifted out of the detail payload and given its own field because it is the
+   * one piece of detail almost every failure carries, and the one §4C.8 renders
+   * as a sentence rather than as a labelled value.
+   */
+  reason: string | null;
+  /**
+   * The remaining structured detail, non-PII by construction (`AuditService`
+   * accepts only enumerated reason codes and scalar values).
+   *
+   * **Opaque identifiers are stripped before it leaves the server** (TAM-137).
+   * A uuid tells an administrator nothing the resolved `targetLabel` does not
+   * tell them better, and a screen that prints `pathId=fa9f3562-…` is exposing
+   * internals in place of information. What is left is counts, statuses,
+   * changed-field names and the like — things that mean something read aloud.
    */
   detail: Record<string, string | number | boolean> | null;
 }

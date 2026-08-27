@@ -359,7 +359,7 @@ describe('Entity course lifecycle (e2e)', () => {
       expect(updated.riasecLetters).toEqual([pathRiasecLetter]);
     });
 
-    describe('path membership rules (TAM-132)', () => {
+    describe('path membership rules (TAM-141)', () => {
       /** Active paths grouped by letter — the seed has several per letter. */
       async function pathsByLetter(): Promise<Map<string, string[]>> {
         const rows = await prisma.path.findMany({

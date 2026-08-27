@@ -59,7 +59,7 @@ test.describe('Phase 1 journey', () => {
 
     await completeAssessment(page, 3);
 
-    // ── Results: the code, then gold paths ────────────────────────────────────
+    // ── Results: the code, then the ranked letter groups ──────────────────────
     await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
     await expect(page.getByRole('heading', { name: 'ميولك المهنية' })).toBeVisible();
 
@@ -68,15 +68,30 @@ test.describe('Phase 1 journey', () => {
        which is the whole point of that rule. */
     await expect(page.getByText('الواقعي').first()).toBeVisible();
 
-    const recommended = page.getByRole('heading', { name: 'مسارات موصى بها لك' });
-    await expect(recommended).toBeVisible();
+    /* TAM-113: one group per letter of the code, in the user's rank order, and
+       the heading is what says why these paths are recommended. */
+    await expect(
+      page.getByRole('heading', { name: 'الأقرب إلى ميلك الأول — الواقعي' }),
+    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'مناسب أيضًا — البحثي' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'مناسب أيضًا — الفني' })).toBeVisible();
+    await expect(page.getByText('ميلك الثاني')).toBeVisible();
+    await expect(page.getByText('ميلك الثالث')).toBeVisible();
+
     /* Two paths per letter × three letters in the code. `exact` matters: without
-       it the substring also matches "الموصى بها" in the section heading and the
-       explanatory sentence, which would quietly inflate the count. */
+       it the substring also matches "الموصى بها" in the explanatory sentence,
+       which would quietly inflate the count. */
     await expect(page.getByText('موصى به', { exact: true })).toHaveCount(6);
 
-    /* Gold is a highlight, not a filter — the other paths are still listed. */
-    await expect(page.getByRole('heading', { name: 'مسارات أخرى' })).toBeVisible();
+    /* The description left the card — it lives on the page the card opens. */
+    await expect(page.getByText('مسار للتعامل المباشر مع الجمهور')).toHaveCount(0);
+
+    /* Collapsed, not hidden (§3A): the first screenful is the code and the six
+       paths that fit, and the other six are one keystroke away. */
+    await expect(page.getByRole('link', { name: 'استعرض المسار' })).toHaveCount(6);
+
+    await page.getByText('عرض المسارات الأخرى (6)').focus();
+    await page.keyboard.press('Enter');
     await expect(page.getByRole('link', { name: 'استعرض المسار' })).toHaveCount(12);
 
     /* The retake entry point exists while nothing is committed (D-015). */
@@ -178,6 +193,17 @@ test.describe('Phase 1 journey', () => {
     await expect(page.getByRole('heading', { name: 'ميولك المهنية' })).toBeVisible();
     /* The retake option is gone — not disabled, gone (D-015). */
     await expect(page.getByRole('link', { name: 'إعادة التقييم' })).toHaveCount(0);
+
+    /* TAM-114: switching is impossible, so exactly one card keeps an action —
+       the user's own path, pointing at مساري — and every other card, in the
+       groups and behind the toggle alike, has none. */
+    await expect(page.getByText('مسارك', { exact: true })).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'الانتقال إلى مساري' })).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'استعرض المسار' })).toHaveCount(0);
+
+    await page.getByText('عرض المسارات الأخرى (6)').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('link', { name: 'استعرض المسار' })).toHaveCount(0);
   });
 
   test('a confirmed path cannot be rebuilt or switched from the UI', async ({ page }) => {

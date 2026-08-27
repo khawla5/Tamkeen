@@ -240,7 +240,7 @@ export class AdminUsersService {
       outcome: 'SUCCESS',
       actorUserId: actorId,
       ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: user.id,
       /* The role, not the address: §2 keeps PII out of audit payloads, and the
          target id resolves to the person for anyone entitled to look. */
@@ -280,7 +280,7 @@ export class AdminUsersService {
       outcome: 'SUCCESS',
       actorUserId: actorId,
       ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: user.id,
     });
 
@@ -329,7 +329,7 @@ export class AdminUsersService {
       outcome: 'SUCCESS',
       actorUserId: actorId,
       ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: userId,
       detail: { status },
     });
@@ -387,7 +387,7 @@ export class AdminUsersService {
       outcome: 'SUCCESS',
       actorUserId: actorId,
       ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: userId,
       detail: { from: facts.currentRole, to: role },
     });
@@ -487,7 +487,7 @@ export class AdminUsersService {
       outcome: 'FAILURE',
       actorUserId: context.actorId,
       ipAddress: context.ipAddress,
-      targetType: 'User',
+      targetType: 'user',
       targetId: context.targetId,
       reason,
     });

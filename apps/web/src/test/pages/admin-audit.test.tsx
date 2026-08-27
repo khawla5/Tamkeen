@@ -22,7 +22,6 @@ const api = vi.hoisted(() => ({
   reports: vi.fn(),
   auditLog: vi.fn(),
   reportsCsvUrl: vi.fn(() => 'http://api/api/admin/reports.csv'),
-  auditCsvUrl: vi.fn(() => 'http://api/api/admin/audit.csv'),
 }));
 
 vi.mock('@/lib/api-client', async () => {
@@ -73,15 +72,28 @@ function log(overrides: Partial<AdminAuditPage> = {}): AdminAuditPage {
         action: 'ADMIN_USER_STATUS_CHANGED',
         outcome: 'FAILURE',
         actorName: 'مسؤول النظام',
-        targetType: 'User',
+        targetType: 'user',
         targetId: 'u1',
-        detail: { reason: 'SELF_MODIFICATION_REFUSED' },
+        targetLabel: 'سارة العتيبي',
+        reason: 'SELF_MODIFICATION_REFUSED',
+        detail: null,
       },
     ],
     nextBefore: null,
     actions: ['ADMIN_USER_STATUS_CHANGED', 'PATH_CONFIRMED'],
     ...overrides,
   };
+}
+
+/** jsdom's `Blob` has no `text()`; `FileReader` is what it does implement. */
+function read(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
 }
 
 describe('Admin audit and reports (§4C.8)', () => {
@@ -134,7 +146,26 @@ describe('Admin audit and reports (§4C.8)', () => {
     expect(await screen.findAllByText('لا توجد بيانات كافية بعد.')).toHaveLength(2);
   });
 
-  it('offers the export as an ordinary link, so the session cookie carries it', async () => {
+  it('shows the Holland-code distribution in Arabic type names', async () => {
+    renderWithProviders(<AdminAuditPage />);
+
+    /* §4C.8 asks for it, the API has always computed it and the export has
+       always carried it — the page never showed it (TAM-138). And spelled out,
+       because «SIA» in an Arabic report names nothing. */
+    expect(await screen.findByText('الاجتماعي · البحثي · الفني')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SIA');
+  });
+
+  it('counts every stage the export reports, not four of the six', async () => {
+    renderWithProviders(<AdminAuditPage />);
+
+    /* The file and the page it came from used to disagree about how the
+       programme was doing. */
+    expect(await screen.findByText('يختارون دوراتهم')).toBeInTheDocument();
+    expect(screen.getByText('دورات مجتازة')).toBeInTheDocument();
+  });
+
+  it('offers the reports export as an ordinary link, so the session cookie carries it', async () => {
     renderWithProviders(<AdminAuditPage />);
 
     const link = await screen.findByRole('link', { name: 'تصدير البيانات' });
@@ -159,9 +190,138 @@ describe('Admin audit and reports (§4C.8)', () => {
       renderWithProviders(<AdminAuditPage />);
       await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
 
-      /* Half the value of a refused entry. Non-PII by construction — the audit
-         service accepts enumerated codes and scalars, never free text. */
-      expect(await screen.findByText(/reason=SELF_MODIFICATION_REFUSED/)).toBeInTheDocument();
+      /* Half the value of a refused entry, and in Arabic — the page used to
+         print the raw  left-to-right in the
+         middle of an Arabic page (TAM-137). */
+      expect(await screen.findByText('لا يجوز للمسؤول تعديل حسابه بنفسه')).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('SELF_MODIFICATION_REFUSED');
+    });
+
+    it('names what the entry was about, and never shows its id', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      /* «حساب: سارة العتيبي» — the kind, then the name. An administrator
+         reading a trail needs to know *which* account, and a uuid answers that
+         for nobody (TAM-137). */
+      expect(await screen.findByText(/حساب: سارة العتيبي/)).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('u1');
+    });
+
+    it('marks a failed outcome as a failure, not as an ordinary tag', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      /* The word carries the meaning; the colour only reinforces it. */
+      const badge = (await screen.findAllByText('أخفق')).find((node) =>
+        node.className.includes('border-danger'),
+      );
+      expect(badge).toBeDefined();
+    });
+
+    it('renders the remaining detail as labelled Arabic, never as key=value', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(
+        log({
+          rows: [
+            {
+              id: '2',
+              occurredAt: '2026-08-23T08:00:00.000Z',
+              action: 'PATH_CONFIRMED',
+              outcome: 'SUCCESS',
+              actorName: 'سارة العتيبي',
+              targetType: 'user_path',
+              targetId: 'up1',
+              targetLabel: 'خدمة المتعاملين',
+              reason: null,
+              detail: { courses: 5, status: 'ACTIVE' },
+            },
+          ],
+        }),
+      );
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      expect(await screen.findByText(/مسار موظف: خدمة المتعاملين/)).toBeInTheDocument();
+      /* Labels in Arabic, values through the shared formatter (D-018). */
+      expect(screen.getByText('الدورات:')).toBeInTheDocument();
+      expect(screen.getByText('5')).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('courses=5');
+    });
+
+    it('names a setting by its Arabic name, since the id is the key', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(
+        log({
+          rows: [
+            {
+              id: '3',
+              occurredAt: '2026-08-23T08:00:00.000Z',
+              action: 'ADMIN_SETTING_CHANGED',
+              outcome: 'SUCCESS',
+              actorName: 'مسؤول النظام',
+              targetType: 'setting',
+              targetId: 'CERT_SIGNATORY_NAME',
+              targetLabel: null,
+              reason: null,
+              detail: null,
+            },
+          ],
+        }),
+      );
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      expect(await screen.findByText(/إعداد: اسم الموقِّع على الشهادات/)).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('CERT_SIGNATORY_NAME');
+    });
+
+    it('lets a non-Arabic value keep its own direction', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(
+        log({
+          rows: [
+            {
+              id: '4',
+              occurredAt: '2026-08-23T08:00:00.000Z',
+              action: 'AUTHZ_DENIED',
+              outcome: 'FAILURE',
+              actorName: 'أحمد الموظف',
+              targetType: null,
+              targetId: null,
+              targetLabel: null,
+              reason: 'INSUFFICIENT_ROLE',
+              detail: { path: '/api/admin/settings', method: 'GET' },
+            },
+          ],
+        }),
+      );
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      /* The route rendered as `api/admin/settings/` — its leading slash thrown
+         to the end by the surrounding RTL run, which makes it read as a
+         different route than the one that was actually requested. */
+      const route = await screen.findByText('/api/admin/settings');
+      expect(route).toHaveAttribute('dir', 'auto');
+    });
+
+    it('filters on the shared Select rather than a raw control', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      const action = await screen.findByLabelText('الإجراء');
+      /* The pre-token classes the row used to carry (`border-input`,
+         `rounded-md`) name nothing in the D-069 palette — they rendered an
+         unstyled control. */
+      expect(action.className).not.toContain('border-input');
+      expect(action.className).toContain('border-neutral-400');
     });
 
     it('falls back to the raw code for an action with no Arabic copy', async () => {
@@ -177,6 +337,8 @@ describe('Admin audit and reports (§4C.8)', () => {
               actorName: null,
               targetType: null,
               targetId: null,
+              targetLabel: null,
+              reason: null,
               detail: null,
             },
           ],
@@ -207,6 +369,123 @@ describe('Admin audit and reports (§4C.8)', () => {
       await user.click(await screen.findByRole('button', { name: 'عمليات أقدم' }));
 
       expect(api.auditLog).toHaveBeenLastCalledWith(expect.objectContaining({ before: '900' }));
+    });
+
+    it('says what a coded value means, not what it is called in the codebase', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(
+        log({
+          rows: [
+            {
+              id: '5',
+              occurredAt: '2026-08-23T08:00:00.000Z',
+              action: 'ADMIN_COURSE_INTERVENED',
+              outcome: 'SUCCESS',
+              actorName: 'مسؤول النظام',
+              targetType: 'course',
+              targetId: 'c1',
+              targetLabel: 'مقدمة في الحوكمة',
+              reason: null,
+              detail: {
+                status: 'HIDDEN_BUT_COMPLETABLE',
+                fields: 'department,fullName',
+                race: true,
+              },
+            },
+          ],
+        }),
+      );
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      /* The keys were translated and the values were not: the row read «الحالة:
+         HIDDEN_BUT_COMPLETABLE» — an Arabic label followed by the codebase's own
+         vocabulary (TAM-138). A list is split and each part translated; a
+         boolean is a word. */
+      expect(await screen.findByText('مخفية عن الاختيار')).toBeInTheDocument();
+      expect(screen.getByText('الإدارة، الاسم')).toBeInTheDocument();
+      expect(screen.getByText('نعم')).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('HIDDEN_BUT_COMPLETABLE');
+      expect(document.body.textContent).not.toContain('fullName');
+    });
+
+    it('groups the action filter by the area each action belongs to', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+
+      const action = await screen.findByLabelText('الإجراء');
+      const groups = [...action.querySelectorAll('optgroup')].map((node) => node.label);
+
+      /* Fifty-three options in one flat list is not a filter anybody uses; the
+         grouping is the vocabulary's own, so a heading here cannot disagree with
+         what the codebase records (TAM-138). */
+      expect(groups).toEqual(['رحلة الموظف', 'إدارة المنصة']);
+    });
+
+    it('filters by a period, and starts the paging over when it changes', async () => {
+      const user = userEvent.setup();
+      api.auditLog.mockResolvedValue(log({ nextBefore: '900' }));
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('button', { name: 'عمليات أقدم' }));
+
+      await user.type(screen.getByLabelText('من تاريخ'), '2026-08-01');
+
+      /* A cursor from the previous result set points into rows the new filter
+         may not contain. */
+      expect(api.auditLog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ from: '2026-08-01', before: undefined }),
+      );
+    });
+
+    it('exports the trail in the same words the screen shows', async () => {
+      const user = userEvent.setup();
+      const blobs: Blob[] = [];
+
+      /* jsdom implements neither half of the object-URL API, so they are
+         assigned rather than spied on. */
+      URL.createObjectURL = vi.fn((blob: Blob) => {
+        blobs.push(blob);
+        return 'blob:audit';
+      });
+      URL.revokeObjectURL = vi.fn();
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('button', { name: 'تصدير البيانات' }));
+
+      /* The export used to be a link to `/api/admin/audit.csv`, which wrote the
+         raw vocabulary — so the file said something different from the screen it
+         came from (TAM-138). */
+      expect(api.auditLog).toHaveBeenLastCalledWith(expect.objectContaining({ pageSize: 5000 }));
+
+      const csv = await read(blobs[0]!);
+      /* The BOM is not asserted here — `readAsText` consumes it as the encoding
+         signature it is; `toCsv`'s own spec owns that, and this export goes
+         through the same shared writer. */
+      expect(csv).toContain('تغيير حالة حساب');
+      expect(csv).toContain('لا يجوز للمسؤول تعديل حسابه بنفسه');
+      expect(csv).toContain('حساب: سارة العتيبي');
+      expect(csv).not.toContain('ADMIN_USER_STATUS_CHANGED');
+      expect(csv).not.toContain('SELF_MODIFICATION_REFUSED');
+      expect(csv).not.toContain('u1');
+    });
+
+    it('says so rather than failing silently when the export cannot be built', async () => {
+      const user = userEvent.setup();
+
+      renderWithProviders(<AdminAuditPage />);
+      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await screen.findAllByText(/تغيير حالة حساب/);
+
+      api.auditLog.mockRejectedValueOnce(new Error('down'));
+      await user.click(screen.getByRole('button', { name: 'تصدير البيانات' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('تعذّر تحضير الملف');
     });
 
     it('offers nothing that changes an entry', async () => {

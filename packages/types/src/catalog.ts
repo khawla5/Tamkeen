@@ -120,6 +120,21 @@ export interface CourseDetail extends CourseSummary {
   action: CourseAction;
   /** Set when `action` is `ADD_TO_PATH`, so the card can link to the build page. */
   buildablePathId: string | null;
+  /**
+   * The user's own progress on this course, when it is in their path; null
+   * when it is not (§4.7, shared with TAM-127's card chip — one resolution,
+   * not two). Distinguishes `START_COURSE`'s two underlying situations —
+   * confirmed-but-not-yet-attempted and actually in progress — which `action`
+   * alone cannot, since both resolve to the same single action.
+   */
+  personalStatus: UserPathCourseStatus | null;
+  /**
+   * Set once `action` is `COMPLETED`, so the header action can link straight
+   * to the certificate already earned — the same field TAM-126 adds to
+   * my-path. Null otherwise; a completed course with no certificate yet
+   * issued is not this ticket's concern (the sync job's).
+   */
+  certificateId: string | null;
 }
 
 export interface PathSummary {
@@ -199,7 +214,7 @@ export interface CoursePlayerView {
  * minted per request rather than embedded in a page: it carries a short-lived
  * credential, so its life must start when the learner actually clicks (D-044).
  */
-/** The framed player's previous / next (D-103): the course's activities in order. */
+/** The framed player's previous / next (D-119): the course's activities in order. */
 export interface CourseOutlineView {
   items: Array<{
     /** The LMS's module id — what the frame reports it is showing. */
@@ -213,6 +228,49 @@ export interface CourseOutlineView {
 
 export interface CourseLaunchView {
   url: string;
-  /** `embed`: meant for the player's iframe (D-102); `handoff`: full page. */
+  /** `embed`: meant for the player's iframe (D-118); `handoff`: full page. */
   mode: 'embed' | 'handoff';
+}
+
+/**
+ * The two words the super-admin portal uses for a course (§4C.5, ministry
+ * direction 2026-08-25).
+ *
+ * **A vocabulary, not a second state.** `CourseStatus` above stays exactly as it
+ * is — it is what the derivation produces and what the entity portal and the
+ * learner-facing gates read. What the ministry asked for is that the *admin*
+ * screens stop asking an administrator to distinguish four states when only one
+ * question is being asked of them: can an employee choose this course right now,
+ * or not. So `AVAILABLE` is «متاحة» and everything else is «مخفية».
+ *
+ * Shared here rather than written into the page, on D-034's reasoning: the
+ * admin list's filter is applied in SQL and its badge is rendered in React, and
+ * if those two disagreed about which statuses count as hidden the filter would
+ * quietly return rows the badge contradicts.
+ *
+ * **Why the underlying status is still carried on the row.** Collapsing the
+ * vocabulary must not collapse the *explanation* — "hidden" is the answer, and
+ * an administrator looking at a course nobody can see still needs to know
+ * whether that is a withdrawal, a draft, an expired availability window or the
+ * LMS having dropped it. The row keeps `status` and the LMS flags for exactly
+ * that, and the page prints the reason under the badge.
+ */
+export const COURSE_VISIBILITIES = ['AVAILABLE', 'HIDDEN'] as const;
+
+export type CourseVisibility = (typeof COURSE_VISIBILITIES)[number];
+
+/** The one mapping from the derived status to the administrator's vocabulary. */
+export function courseVisibility(status: CourseStatus): CourseVisibility {
+  return status === 'AVAILABLE' ? 'AVAILABLE' : 'HIDDEN';
+}
+
+/**
+ * The statuses a given visibility covers — the filter's half of the mapping.
+ *
+ * Derived from `courseVisibility` rather than listed a second time, so the two
+ * cannot drift: adding a status to `COURSE_STATUSES` places it on whichever
+ * side the mapping says, in the badge and in the query, together.
+ */
+export function courseStatusesFor(visibility: CourseVisibility): CourseStatus[] {
+  return COURSE_STATUSES.filter((status) => courseVisibility(status) === visibility);
 }

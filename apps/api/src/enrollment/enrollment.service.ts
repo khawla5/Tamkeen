@@ -18,7 +18,7 @@ import {
   type UserPathCourseStatus,
 } from '@tamkeen/types';
 
-import { AuditAction, AuditReason } from '../audit/audit.actions';
+import { AuditAction, AuditReason, type AuditTargetType } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { JourneyStateService, type JourneyState } from '../journey/journey-state.service';
 import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
@@ -65,6 +65,7 @@ export class EnrollmentService {
     if (JourneyStateService.isCommitted(state)) {
       await this.auditFailure(AuditAction.PATH_SELECTED, userId, ipAddress, {
         reason: AuditReason.PATH_ALREADY_CONFIRMED,
+        targetType: 'path',
         targetId: pathId,
       });
       throw new ConflictException('PATH_ALREADY_CONFIRMED');
@@ -118,6 +119,7 @@ export class EnrollmentService {
     if (courseIds.length > PATH_MAX_COURSES) {
       await this.auditFailure(AuditAction.PATH_COURSES_UPDATED, userId, ipAddress, {
         reason: AuditReason.COURSE_COUNT_OUT_OF_RANGE,
+        targetType: 'path',
         targetId: userPath.pathId,
       });
       throw new BadRequestException('COURSE_COUNT_OUT_OF_RANGE');
@@ -172,6 +174,7 @@ export class EnrollmentService {
     if (userPath.selectedCourseIds.length >= PATH_MAX_COURSES) {
       await this.auditFailure(AuditAction.PATH_COURSES_UPDATED, userId, ipAddress, {
         reason: AuditReason.COURSE_COUNT_OUT_OF_RANGE,
+        targetType: 'user_path',
         targetId: userPath.id,
       });
       throw new BadRequestException('COURSE_COUNT_OUT_OF_RANGE');
@@ -586,6 +589,7 @@ export class EnrollmentService {
     if (notInPath.length > 0) {
       await this.auditFailure(AuditAction.PATH_COURSES_UPDATED, userId, ipAddress, {
         reason: AuditReason.COURSE_NOT_IN_PATH,
+        targetType: 'path',
         targetId: pathId,
       });
       throw new BadRequestException('COURSE_NOT_IN_PATH');
@@ -596,6 +600,7 @@ export class EnrollmentService {
     if (membership.some((entry) => entry.course.status !== 'AVAILABLE')) {
       await this.auditFailure(AuditAction.PATH_COURSES_UPDATED, userId, ipAddress, {
         reason: AuditReason.COURSE_NOT_AVAILABLE,
+        targetType: 'path',
         targetId: pathId,
       });
       throw new BadRequestException('COURSE_NOT_AVAILABLE');
@@ -824,17 +829,32 @@ export class EnrollmentService {
     return reference.lmsUserId;
   }
 
+  /**
+   * A refused attempt, named as precisely as the successful one (TAM-138).
+   *
+   * **`targetType` is required, and that is the fix.** These entries carried an
+   * id and no type, and §4C.8 renders a target only when it knows what kind of
+   * thing it is — so every refusal in the trail appeared with no subject at all,
+   * while the id sat in the row unused. Requiring the type here makes the pair
+   * impossible to separate, and forces each call site to say honestly whether
+   * the id it holds is a path or one learner's journey through one.
+   */
   private async auditFailure(
     action: (typeof AuditAction)[keyof typeof AuditAction],
     userId: string,
     ipAddress: string | null,
-    options: { reason: (typeof AuditReason)[keyof typeof AuditReason]; targetId: string },
+    options: {
+      reason: (typeof AuditReason)[keyof typeof AuditReason];
+      targetType: AuditTargetType;
+      targetId: string;
+    },
   ): Promise<void> {
     await this.audit.record({
       action,
       outcome: 'FAILURE',
       actorUserId: userId,
       ipAddress,
+      targetType: options.targetType,
       targetId: options.targetId,
       reason: options.reason,
     });

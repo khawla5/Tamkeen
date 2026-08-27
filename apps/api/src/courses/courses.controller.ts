@@ -75,7 +75,7 @@ export class CoursesController {
    * be prefetched by a browser, cached, or arrived at by following a link — and
    * as a POST it is covered by the CSRF protection every mutating endpoint gets.
    */
-  /** The framed player's previous / next (D-103). */
+  /** The framed player's previous / next (D-119). */
   @Get(':id/outline')
   outline(
     @CurrentUser() user: AuthenticatedUser,
@@ -95,7 +95,7 @@ export class CoursesController {
   }
 
   /**
-   * An on-demand completion sync for the signed-in learner (D-102).
+   * An on-demand completion sync for the signed-in learner (D-118).
    *
    * The framed course reports a submitted quiz; waiting up to the scheduled
    * interval to show the grade would make the frame feel broken. Same code

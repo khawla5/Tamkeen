@@ -62,10 +62,10 @@ class hook_callbacks {
         // Consumed: one change, one message.
         unset($SESSION->tamkeen_content_changed);
         // A learner has just submitted a quiz when the review page renders
-        // (D-102); the portal then asks for an on-demand completion sync.
+        // (D-118); the portal then asks for an on-demand completion sync.
         $quizfinished = $mode === 'learner' && strpos((string) $PAGE->pagetype, 'mod-quiz-review') === 0;
         // Which activity this page is — the portal's previous/next keeps in
-        // step with what the frame shows (D-103). Null on the course page.
+        // step with what the frame shows (D-119). Null on the course page.
         $cmid = ($PAGE->cm !== null) ? (int) $PAGE->cm->id : null;
 
         $hook->add_html(self::chrome_css($mode));

@@ -49,7 +49,7 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
   const t = useTranslations('nav');
   const tA11y = useTranslations('a11y');
   const pathname = usePathname();
-  /* Exactly one active item: the longest matching href (TAM-131). */
+  /* Exactly one active item: the longest matching href (TAM-140). */
   const activeHref = activeNavHref(
     pathname,
     items.map((item) => item.href),

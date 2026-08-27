@@ -9,7 +9,7 @@ import { MoodleEmbed } from '@/components/moodle-embed';
 import { renderWithProviders } from '@/test/render';
 
 /**
- * §4B.4 — Course Content with Moodle's editor framed (TAM-130, D-098).
+ * §4B.4 — Course Content with Moodle's editor framed (TAM-139, D-101).
  *
  * What a screen could quietly break: the credential must not be in the page
  * before the launch resolves and must be only the frame's `src` after; a
@@ -283,7 +283,7 @@ describe('course content — the page action', () => {
     ).toBeInTheDocument();
   });
 
-  describe('course content — title, description and the guide (TAM-134)', () => {
+  describe('course content — title, description and the guide (TAM-143)', () => {
     it('shows the course title and description learners will read', async () => {
       renderWithProviders(<CourseContentPage />);
 
@@ -291,17 +291,17 @@ describe('course content — the page action', () => {
       expect(screen.getByText('وصف')).toBeInTheDocument();
     });
 
-    it('links the completion blocker to the section of the guide that fixes it', async () => {
+    it('links the completion blocker and the strip to the guide', async () => {
       renderWithProviders(<CourseContentPage />);
       await screen.findByText('إدارة المخاطر');
 
-      const how = screen.getAllByRole('link', { name: 'كيف؟' });
-      expect(how.length).toBeGreaterThan(0);
-      expect(how[0]).toHaveAttribute('href', '/entity/courses/guide#completion');
-      expect(screen.getByRole('link', { name: 'دليل إنشاء الدورة' })).toHaveAttribute(
-        'href',
-        '/entity/courses/guide#content',
-      );
+      /* The blocker's link and the read-back strip's both lead to the guide's
+         completion section (TAM-143 — the guide shipped on main). */
+      const guide = screen.getAllByRole('link', { name: 'دليل إنشاء الدورة' });
+      expect(guide.length).toBeGreaterThanOrEqual(2);
+      for (const link of guide) {
+        expect(link).toHaveAttribute('href', '/entity/guide#completion');
+      }
     });
   });
 });
