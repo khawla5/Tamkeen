@@ -249,6 +249,17 @@ test.describe('Phase 4 — the entity portal', () => {
      * content out from under them silently.
      */
     await learnerPage.goto('/courses');
+    /*
+     * «كل المسارات» first. TAM-127 opens a committed learner's catalogue on
+     * their own path, and the borrowed course is not in it: `enrolLearnerOnCourse`
+     * writes the `user_path_courses` row directly, which is how this suite
+     * makes a holder without walking the 5-10 flow — through the API,
+     * `assertCoursesSelectable` would have refused a course outside the
+     * confirmed path, so the state cannot arise in production. Clearing the
+     * filter asks the question this test actually means to ask: is the course
+     * still in the catalogue for the person holding it?
+     */
+    await learnerPage.getByLabel('المسار').selectOption('');
     await expect(learnerPage.getByText(entity.borrowedCourse.title).first()).toBeVisible({
       timeout: 15_000,
     });

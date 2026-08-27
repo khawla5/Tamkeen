@@ -130,7 +130,7 @@ export interface EnrolInput {
  */
 /**
  * One activity of a course, in course order — enough for the portal to say
- * "النشاط 3 من 8" and move the frame to the previous or next one (D-119).
+ * "النشاط 3 من 8" and move the frame to the previous or next one (D-122).
  * Still not content: a name, a kind and the LMS's own page for it.
  */
 export interface LmsCourseOutlineItem {

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { directionForCourseLanguage, type EntityCourseDetail } from '@tamkeen/types';
 
@@ -19,7 +19,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { entityApi } from '@/lib/api-client';
-import { useApiQuery } from '@/lib/use-api';
+import { useApiMutation, useApiQuery } from '@/lib/use-api';
 
 /**
  * §4B.3 / §4B.4 — Add / Manage Course.
@@ -41,13 +41,27 @@ export default function ManageCoursePage() {
   const params = useParams<{ courseId: string }>();
   const courseId = params.courseId;
 
-  const course = useApiQuery(() => entityApi.getCourse(courseId), [courseId]);
+  const query = useApiQuery(() => entityApi.getCourse(courseId), [courseId]);
+
+  /*
+   * Local state rather than reading `query.data` directly. Every mutation on
+   * this page except resync (save, publish, unpublish) still confirms itself
+   * through `query.refetch()`, exactly as before — but a resync returns the
+   * refreshed course in its own response precisely so the page needs no
+   * second request (§4B.4, TAM-133), and reading `query.data` here would
+   * throw that response away in favour of a redundant re-read.
+   */
+  const [course, setCourse] = useState<EntityCourseDetail | undefined>(undefined);
+
+  useEffect(() => {
+    setCourse(query.data);
+  }, [query.data]);
 
   return (
     <EntityPage title={t('manageTitle')}>
       {/*
-        `course.data === undefined` guards the loading state, so it appears on
-        the FIRST load only.
+        `course === undefined` guards the loading state, so it appears on the
+        FIRST load only.
 
         Without it, every refetch — and this page refetches after each save,
         publish and withdrawal — unmounts the whole view and mounts it again.
@@ -56,17 +70,27 @@ export default function ManageCoursePage() {
         in another field goes with it. The browser suite caught exactly that.
       */}
       <DataView
-        isLoading={course.isLoading && course.data === undefined}
-        error={course.error}
-        onRetry={course.refetch}
+        isLoading={query.isLoading && course === undefined}
+        error={query.error}
+        onRetry={query.refetch}
       >
-        {course.data ? <ManageBody course={course.data} onChanged={course.refetch} /> : null}
+        {course ? (
+          <ManageBody course={course} onChanged={query.refetch} onResynced={setCourse} />
+        ) : null}
       </DataView>
     </EntityPage>
   );
 }
 
-function ManageBody({ course, onChanged }: { course: EntityCourseDetail; onChanged: () => void }) {
+function ManageBody({
+  course,
+  onChanged,
+  onResynced,
+}: {
+  course: EntityCourseDetail;
+  onChanged: () => void;
+  onResynced: (course: EntityCourseDetail) => void;
+}) {
   const t = useTranslations('entity');
 
   return (
@@ -80,6 +104,8 @@ function ManageBody({ course, onChanged }: { course: EntityCourseDetail; onChang
           {course.title}
         </p>
         {course.summary ? (
+          /* The description learners will read — shown where the entity edits
+             the course, so the two never drift unnoticed (TAM-143). */
           <p
             dir={directionForCourseLanguage(course.language)}
             lang={course.language === 'EN' ? 'en' : 'ar'}
@@ -88,15 +114,57 @@ function ManageBody({ course, onChanged }: { course: EntityCourseDetail; onChang
             {course.summary}
           </p>
         ) : null}
-        <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          <span>{t(`publication${course.publication}`)}</span>
-          <span>{t(`status${course.status}`)}</span>
-        </p>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span>{t(`publication${course.publication}`)}</span>
+            <span>{t(`status${course.status}`)}</span>
+          </p>
+          <ResyncButton courseId={course.id} onResynced={onResynced} />
+        </div>
       </Card>
 
       <AuthoringCard course={course} />
       <MetadataForm course={course} onSaved={onChanged} />
       <PublishCard course={course} onChanged={onChanged} />
+    </div>
+  );
+}
+
+/**
+ * The manual half of §4B.4's fast path (D-115) — quiet, beside the status
+ * line, for an entity who edited in Moodle and came straight back here rather
+ * than through the Content page's own «تحديث» (which the frame's own signal
+ * also drives, since this screen never hosts the frame itself).
+ */
+function ResyncButton({
+  courseId,
+  onResynced,
+}: {
+  courseId: string;
+  onResynced: (course: EntityCourseDetail) => void;
+}) {
+  const t = useTranslations('entity');
+  const translateError = useErrorMessage();
+  const resync = useApiMutation(() => entityApi.resync(courseId));
+
+  async function onClick() {
+    const result = await resync.run();
+
+    if (result) {
+      onResynced(result);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button variant="ghost" size="sm" onClick={() => void onClick()} disabled={resync.isPending}>
+        {t('contentRefresh')}
+      </Button>
+      {resync.error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {translateError(resync.error)}
+        </p>
+      ) : null}
     </div>
   );
 }

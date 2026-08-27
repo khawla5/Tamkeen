@@ -28,6 +28,7 @@ const api = vi.hoisted(() => ({
   publish: vi.fn(),
   unpublish: vi.fn(),
   authorLaunch: vi.fn(),
+  resync: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async () => ({
@@ -37,6 +38,7 @@ vi.mock('@/lib/api-client', async () => ({
     publish: api.publish,
     unpublish: api.unpublish,
     authorLaunch: api.authorLaunch,
+    resync: api.resync,
   },
 }));
 
@@ -97,7 +99,9 @@ beforeEach(() => {
   api.getCourse.mockReset();
   api.publish.mockReset();
   api.authorLaunch.mockReset();
+  api.resync.mockReset();
   api.getCourse.mockResolvedValue(detail());
+  api.resync.mockResolvedValue(detail());
   api.authorLaunch.mockImplementation((_id: string, options?: { embed?: boolean }) =>
     Promise.resolve(
       options?.embed ? { url: EMBED_URL, mode: 'embed' } : { url: HANDOFF_URL, mode: 'handoff' },
@@ -156,9 +160,10 @@ describe('course content — the framed editor', () => {
 
     expect(screen.getByText('جارٍ فتح محرّر المحتوى')).toBeInTheDocument();
     expect(api.getCourse).not.toHaveBeenCalled();
+    expect(api.resync).not.toHaveBeenCalled();
   });
 
-  it('refreshes the read-back — and the publish gate with it — when content changes', async () => {
+  it('answers a content change with a resync — the response applied, no second read (D-115)', async () => {
     renderWithProviders(<CourseContentPage />);
     await screen.findByTitle('إدارة المخاطر');
     postFromFrame(MOODLE, { type: 'tamkeen:ready' });
@@ -166,7 +171,7 @@ describe('course content — the framed editor', () => {
     expect(screen.getByText('لا يمكن نشر الدورة بعد')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'انشر الدورة' })).toBeDisabled();
 
-    api.getCourse.mockResolvedValue(
+    api.resync.mockResolvedValue(
       detail({
         content: { activityCount: 3, hasQuiz: true, completionConfigured: true },
         publishBlockers: [],
@@ -179,6 +184,24 @@ describe('course content — the framed editor', () => {
     });
     expect(screen.queryByText('لا يمكن نشر الدورة بعد')).not.toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
+    /* The endpoint returns the full detail so the page needs no second
+       request: the only getCourse is the page's own first load. */
+    expect(api.resync).toHaveBeenCalledTimes(1);
+    expect(api.getCourse).toHaveBeenCalledTimes(1);
+  });
+
+  it('«تحديث» is the same resync, applied the same way', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CourseContentPage />);
+    await screen.findByTitle('إدارة المخاطر');
+
+    api.resync.mockResolvedValue(
+      detail({ content: { activityCount: 5, hasQuiz: true, completionConfigured: true } }),
+    );
+    await user.click(screen.getByRole('button', { name: 'تحديث' }));
+
+    expect(await screen.findByText('5')).toBeInTheDocument();
+    expect(api.getCourse).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to the full-page handoff on a fresh token when the frame never reports', async () => {

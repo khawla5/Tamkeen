@@ -176,7 +176,7 @@ describe('course player — the outcome', () => {
   });
 });
 
-describe('course player — the framed course (D-118)', () => {
+describe('course player — the framed course (D-121)', () => {
   const launchResponse = (mode: 'embed' | 'handoff') => ({
     url: `http://moodle.test/local/tamkeensso/login.php?token=${mode}-x${mode === 'embed' ? '&embed=learner' : ''}`,
     mode,
@@ -265,7 +265,7 @@ describe('course player — the framed course (D-118)', () => {
     expect(screen.getByRole('button', { name: /افتح في منصة التعلّم/ })).toBeInTheDocument();
   });
 
-  describe('course player — previous / next (D-119)', () => {
+  describe('course player — previous / next (D-122)', () => {
     const ready = (cmid: number | null) =>
       act(() => {
         window.dispatchEvent(

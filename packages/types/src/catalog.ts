@@ -214,7 +214,7 @@ export interface CoursePlayerView {
  * minted per request rather than embedded in a page: it carries a short-lived
  * credential, so its life must start when the learner actually clicks (D-044).
  */
-/** The framed player's previous / next (D-119): the course's activities in order. */
+/** The framed player's previous / next (D-122): the course's activities in order. */
 export interface CourseOutlineView {
   items: Array<{
     /** The LMS's module id — what the frame reports it is showing. */
@@ -228,7 +228,7 @@ export interface CourseOutlineView {
 
 export interface CourseLaunchView {
   url: string;
-  /** `embed`: meant for the player's iframe (D-118); `handoff`: full page. */
+  /** `embed`: meant for the player's iframe (D-121); `handoff`: full page. */
   mode: 'embed' | 'handoff';
 }
 

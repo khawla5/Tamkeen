@@ -517,6 +517,29 @@ export class MockLmsService implements LmsPort {
     });
   }
 
+  /**
+   * Stands in for an entity editing a course's name, summary or visibility
+   * from Moodle's own Settings tab (§4B.4, TAM-133). Mock-only, like
+   * `simulateAuthoring` — the real adapter cannot drive Moodle's UI, so this
+   * must never reach `LmsPort`.
+   *
+   * Only ever touches a course this process created: the seeded catalogue is
+   * a shared module constant, and mutating it would leak one suite's edit
+   * into every other test that reads `MOCK_COURSES`.
+   */
+  simulateSettingsEdit(
+    lmsCourseId: LmsCourseId,
+    patch: Partial<Pick<LmsCourse, 'title' | 'summary' | 'visible'>>,
+  ): void {
+    const course = this.created.find((entry) => entry.lmsCourseId === lmsCourseId);
+
+    if (!course) {
+      throw new Error(`simulateSettingsEdit: ${lmsCourseId} was not created by this mock instance`);
+    }
+
+    Object.assign(course, patch);
+  }
+
   /** Whether an enrolment carries editing capabilities. Mock-only. */
   isAuthorEnrolment(lmsUserId: LmsUserId, lmsCourseId: LmsCourseId): boolean {
     return this.authorEnrolments.has(this.key(lmsUserId, lmsCourseId));

@@ -489,7 +489,7 @@ export class MoodleHttpService implements LmsPort {
   }
 
   /**
-   * The course's activities in order (D-119). One read of
+   * The course's activities in order (D-122). One read of
    * `core_course_get_contents`; labels carry no page and are dropped, hidden
    * activities too — a learner's previous/next must never land on a page
    * Moodle would then refuse.

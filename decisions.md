@@ -5,7 +5,7 @@
 
 ---
 
-## D-119 — Previous / next in the framed player: the portal navigates the frame, the frame reports where it is
+## D-122 — Previous / next in the framed player: the portal navigates the frame, the frame reports where it is
 
 **Decision (at the user's direction, 2026-08-25):** the player's side panel carries «السابق / التالي» and «النشاط 3 من 8 · <name>». Two small additions make it honest: the LMS port gains `getCourseOutline` (the course's activities in order — id, name, kind, URL; labels and hidden activities omitted; one `core_course_get_contents` read), exposed as `GET /api/courses/:id/outline` behind the launch's own gate (a course outside the confirmed path answers an empty outline, so nothing is learned about other people's paths); and the plugin's `tamkeen:ready` message now carries `cmid`, the module the framed page shows (null on the course page). The panel keeps its position from that message — so navigating *inside* the frame (the course index, a link) keeps the counter in step — and moves the frame by setting the iframe's `src` to the neighbour's LMS URL through a `MoodleEmbedHandle.navigate`. **No new token is minted for a move:** the frame already holds the session; setting `src` on a cross-origin frame is permitted and the cookie rides along. The first «التالي» from the course page leads into the first activity.
 
@@ -13,7 +13,7 @@
 
 **Verified live** as `demo-student`: «صفحة الدورة · 7 أنشطة» → «التالي» → `/mod/forum/view.php` «النشاط 1 من 7» → «التالي» → «النشاط 2 من 7 · فيديو تعريفي (رابط)», the embedded video rendered. Tests: player suite +2 (follows the frame; moves without a launch), contract case for the outline, web 521, API 164.
 
-## D-118 — The learner's course is framed too; the handoff becomes the fallback for everyone
+## D-121 — The learner's course is framed too; the handoff becomes the fallback for everyone
 
 **Decision (at the user's direction, 2026-08-25):** §4.8's course player renders the Moodle course **inside the page**, the same way the entity's editor is framed (D-101). The plugin gains `embed=learner` (chrome hidden as for authors, **plus the course tabs** — a learner has no business in Settings, Participants or Grades; the course index stays; no editing) and posts `tamkeen:quiz-finished` when the quiz review page renders. The launch endpoint takes `{ embed: true }` and answers `mode: 'embed' | 'handoff'`; the frame component is now one, portal-agnostic `components/moodle-embed.tsx` fed the two launches and its words. D-045's "the player is a handoff page" is superseded: the handoff is the **fallback** — when the frame never reports ready, and always as the quiet «افتح في منصة التعلّم» beneath it. Its other rules stand unchanged: launch is a POST per visit, never prefetched, enrolment on demand, refusals indistinguishable, no `courseUrl` in the API.
 
@@ -23,7 +23,7 @@
 
 **Verified:** as `demo-student`, `/courses/<id>/player` frames Moodle course 85 with `tamkeen:ready` received, `body.editing` false, navbar and course tabs hidden, course index present, all eight demo activities listed. Web 519, API unit 209, journey + entity e2e 105 green.
 
-## D-117 — The authoring guide is one Markdown file, rendered in the portal by a forty-line converter of our own
+## D-120 — The authoring guide is one Markdown file, rendered in the portal by a forty-line converter of our own
 
 **Decision (TAM-143):** the entity authoring guide lives once, in Arabic, at `docs/entity-authoring-guide.md`, and the portal renders it at `/entity/courses/guide` through `lib/simple-markdown.ts` — a converter for exactly the subset the guide uses (three heading levels with `{#anchor}` ids, paragraphs, one-level lists, bold, inline code, links to `#`, relative or http(s) targets). The source is HTML-escaped before any tag is written, so the only markup in the output is the converter's own. Blockers whose fix is in Moodle or in بيانات الدورة carry a «كيف؟» link straight to the section; the create card and the Content page link to the guide; it is not a nav destination (§4B keeps the entity nav to four) and it sits under `/entity/courses/…` so TAM-140's longest-match rule lights «دوراتي».
 
@@ -35,7 +35,7 @@
 
 **Amended 2026-08-27 (merge with `main`):** the guide shipped to `main` independently at `/entity/guide`, rendered by `apps/web/src/lib/markdown.ts`; this branch’s `/entity/courses/guide` route and `lib/simple-markdown.ts` were dropped when the two met. The decision’s substance — one Arabic Markdown file in `docs/`, an in-repo converter, links from the create card / Content page / publish blockers, not a nav destination — stands in that implementation.
 
-## D-116 — A course belongs to at most three paths, within two RIASEC letters; membership is a proposal; «عامة» is the admin's word for "everywhere"
+## D-119 — A course belongs to at most three paths, within two RIASEC letters; membership is a proposal; «عامة» is the admin's word for "everywhere"
 
 **Decision (TAM-141, at the user's direction 2026-08-25):** four rules for which paths a course may belong to.
 
@@ -49,7 +49,7 @@
 
 **Rejected:** letting the entity mark «عامة» (the same hole); cap without coherence; approval with no auto-approve setting (would block entities until Phase 5); trimming existing memberships by migration (touches confirmed learner paths); `@ArrayMaxSize` on the DTO (would bake the number into a decorator instead of reading the setting).
 
-## D-115 — The authoring loop is one page, and the publish gate is one component offered on two
+## D-118 — The authoring loop is one page, and the publish gate is one component offered on two
 
 **Decision:** Course Content (§4B.4) is where an entity authors: Moodle's editor framed with editing on, the D-061 read-back strip above it, and **publish / unpublish as the page header's single action** — the same `PublishAction` component Manage Course renders in its publish card, so the two pages cannot disagree about whether a course may be published, and the blockers clear on the page the entity is looking at (one `getCourse` request carries both the read-back and the gate, refetched on the frame's `content-changed` message). Manage Course no longer mints a launch; it links to the content page, so the author credential is issued in one place with one audit trail.
 
@@ -63,6 +63,43 @@
 
 **Noticed, not fixed here:** Moodle renders in English for users our app provisions (the created Moodle user's language is not set to `ar` — the site default is). Arabic-first (§2) says provisioning should set it; a one-line change in `provisionUser`, owed to the next Moodle-module pass.
 
+
+## D-117 — The catalogue opens where the reader is, and groups the rest by the path that explains it
+
+**Decision (TAM-127):** the courses catalogue stays **global for everyone** (§4.6 unchanged) and changes only where it *starts*. A learner with a **confirmed path** lands with that path preselected in the path filter — «كل المسارات» is one selection away, and their later choice wins. A learner still deciding lands on the whole catalogue **grouped by path**, one `<section>` per path in the API's order (recommended first, in the user's letter rank), each heading carrying the path name, the «موصى به» badge when it applies, and the group's course count. **Any search text or filter collapses the grouping into the flat grid** and clearing it restores the grouping. Courses in the learner's own path carry **exactly one status chip** — «مكتملة» / «قيد التنفيذ» / «في مسارك» — and courses outside it carry none. Path membership renders as quiet neutral tags instead of a comma-joined sentence, and the three filters are rebuilt on the shared `Field` + `Input` + `Select` primitives. **§4.6's "category" filter is satisfied by the path filter** — that is the reading recorded here.
+
+**Why the default:** the product already does not treat these two readers alike. `assertCoursesSelectable` refuses to add any course outside the confirmed path, so a committed learner browsing forty-eight courses was looking at roughly forty they can never act on, with nothing marking the eight that are theirs. For the *un*committed learner the catalogue is the opposite tool — it is how "what does this path actually teach?" gets answered — and a flat grid of forty-eight cards answers it for nobody. One page, two starting positions, both a click from the other.
+
+**Why grouping collapses under a filter:** a filtered result is an answer to a question, not a tour. Keeping the sections would spread three matches across three headings and make the answer harder to read than the question.
+
+**Why the chip and not colour, and why absence:** the chip's word carries the meaning (WCAG 1.4.1) and it is neutral, never the primary accent — the accent means *recommended* (D-069), and a chip in it would recommend a course the learner has already committed to. A "not in your path" chip on forty cards would be noise on every card that is not the answer; absence is the signal (§3). The resolution is **one component** (`CourseStatusChip`) shared with the course page (TAM-128), reading a `courseStatus` namespace of its own — three screens share those three words, and a namespace named after one of them would make the other two look like borrowers.
+
+**No API change.** The chips come from `myPathApi.get()`, fetched once alongside the list and only when a path is confirmed; its failure is deliberately **not** wired into the `DataView`, because blocking the catalogue on a decoration trades the page for a badge. The grouping comes from `pathsApi.list()`, which already carries `recommendationRank` — nothing is re-sorted in the browser (D-113's rule holds here too). A course in two paths appears in both groups: the grouping is a lens, not a partition. A course belonging to no listed path falls into a final «دورات خارج المسارات» section rather than vanishing from a view whose own count line still counts it.
+
+**Rejected:** *restricting* a committed learner to their path (that is a gate, and §4.6 says browse is global); adding per-user status to the courses list response as well as fetching my-path (two sources for one fact); a RIASEC-type filter beside the path filter (two filters narrowing the same dimension compete, and users think in paths); pagination (the grouped default and the filters keep screens short at seed scale — it becomes its own ticket when real ministry data lands); deep-linking a card straight to the player (the chip informs, the detail page acts — §4.7 owns the single action).
+
+## D-116 — The build page answers "what am I committing to" before it asks
+
+**Decision (TAM-125):** the path build page gains a **header card** — the description, the path's RIASEC type as a tag, the «موصى به» badge when the path is in the user's code, the count of courses on offer, and a **live total of the selected hours** that moves on every toggle — and the eleven stacked rows become a **1/2/3-column grid of selectable cards where the whole card is the control**. One `<button>` per course, `aria-pressed`, a decorative tick glyph plus the primary border for the selected state, and the state word (أضف / مضافة / بلغت الحد الأقصى / غير متاحة للإضافة) printed on the card. The accessible name pairs the state with the course title. Unavailable and at-max cards stay buttons and stay disabled, with their reason on the card. The counter bar, the 5–10 rule, the confirmation dialog and the locked state are untouched.
+
+**Why:** the page's subject is a comparison — pick five to ten of eleven — and it was rendering as six screenfuls of mostly-empty full-width rows with the decision pushed below all of them. Nothing about the *path* was on the page either: its type and its recommendation lived only on Results, so arriving by link or reloading lost the one fact that explained why this path was suggested. The hours total exists because "5 to 10 courses" is not what the user is actually committing to — time is, and it should be visible while it is still changing.
+
+**Why the card and not a button inside it:** §3's "exactly one control per course" was already the rule here, and a card with a button in the corner makes the other 90% of the card a dead target that looks clickable. Making the card the button keeps one control and makes the whole card the target. The explicit `aria-label` (state + title) is what stops a screen reader reading the summary and the duration aloud at every tab stop, and it still contains both visible labels the control offers (WCAG 2.5.3).
+
+**No API change was needed** — `PathDetail extends PathSummary`, so `riasecLetter`, `recommended`, `recommendationRank` and `courseCount` were already on the detail response; the ticket's note to verify them was checked, not assumed.
+
+**Rejected:** a checkbox input inside the card (two focus targets, and the label-vs-card click ambiguity is exactly what this replaces); leaving unavailable cards as plain non-interactive text (the ticket's own acceptance asks for the disabled control, and a disabled button still announces its state where a `<div>` announces nothing); letting the card's accessible name be its concatenated content (title + summary + hours + state on every tab stop); a fourth "remove" word for the selected state («مضافة» *is* the toggle's current state, and `aria-pressed` carries the rest).
+## D-115 — Per-course resync is the immediate path; the scheduled sync is only the net
+
+**Decision (TAM-133):** a rename, summary edit or visibility change made in the frame's own Settings tab now fires the same `tamkeen:content-changed` message a content edit does (`\core\event\course_updated` added to `db/events.php`, one message type for both). The portal answers it, and the entity's own manual «تحديث», with `POST /api/entity/courses/:id/resync` — a **synchronous, single-course** re-read of the LMS (`core_course_get_courses_by_field` by id), applied through the exact mapping the scheduled catalogue sync uses (`CatalogSyncService.upsertLmsCourse`, extracted so `sync()`'s loop and the new `syncOne(moodleCourseId)` can never map a field differently). The scheduled sync (`COMPLETION_SYNC_INTERVAL_MINUTES`) is kept, unchanged, as the safety net for a course edited some other way — directly against the LMS's own admin, or by a job — that never passes through this portal's frame at all.
+
+**Why:** title, summary and visibility were a cached copy refreshed only on that schedule, so a rename at 13:31 stayed wrong everywhere in the portal — the Content page header, Manage Course, «دوراتي», the learner catalogue — until 13:35 (observed 2026-08-25). A five-minute lag on structure was already covered by the frame's existing message; the same lag on the course's own name was not, for no product reason — an entity watching the Content page after a rename should not need to know which kind of edit propagates immediately and which does not. Extracting the shared upsert rather than writing a second mapping is what keeps `sync()` and `syncOne` from silently disagreeing about what a given LMS course means, the same reasoning D-059 already applies to `status`.
+
+**Coalesced, not merely rate-limited:** the frame can post its signal several times in one burst (an activity edit and a settings save land within the same couple of seconds), and each is a separate call into `resync`. `CatalogSyncService` holds one in-flight promise per `moodleCourseId`; a second caller for the same course during that window is handed the first's result rather than triggering its own LMS read. The `@Throttle` ceiling (30/min per user) is a second, cheaper backstop against a caller retrying faster than the LMS can answer — the two are independent, not alternatives to each other.
+
+**Courses created directly in Moodle stay unclaimed.** An entity in the framed editor cannot reach "create course" — the primary nav is hidden — and D-060 already makes the portal the only place a course shell is created, so a course born in Moodle has no owner. This ticket does not change that or auto-claim such a course for whichever entity happened to resync it; it remains Phase 5's Course Oversight matter, shown there as unclaimed exactly as it is today. Noted here so a future convenience does not quietly attach ownership to whoever's frame first noticed the course.
+
+**Rejected:** shortening the scheduled interval instead (fixes every course's lag at the cost of load, when only the course an entity is actively looking at needs to be fast); polling the single course from the Content page instead of the frame signalling (reintroduces the polling this event-based design was written to avoid, TAM-129); writing a second, resync-specific mapping function (the exact drift risk D-059 exists to close off — the two-harness unit test that feeds `sync()` and `syncOne` the same LMS course and asserts identical rows is what keeps this true rather than merely intended).
 
 ## D-114 — After the commitment, one card keeps an action and the rest become reference
 

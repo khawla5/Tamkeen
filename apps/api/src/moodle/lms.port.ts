@@ -136,7 +136,7 @@ export interface LmsPort {
   getCourseContentSummary(lmsCourseId: LmsCourseId): Promise<LmsCourseContentSummary | null>;
 
   /**
-   * The course's activities in order (D-119) — the framed player's previous /
+   * The course's activities in order (D-122) — the framed player's previous /
    * next. Labels and anything without a page of its own are omitted. Empty for
    * a course the LMS does not know.
    */
@@ -208,7 +208,7 @@ export interface LaunchOptions {
   /**
    * `'author'`: framed by the entity portal, chrome hidden, editing on.
    * `'learner'`: framed by the learner portal, chrome hidden, no editing,
-   * the quiz review page announces itself (D-118).
+   * the quiz review page announces itself (D-121).
    */
   embed?: 'author' | 'learner';
 }

@@ -23,7 +23,7 @@ export class CourseQueryDto {
 }
 
 /**
- * The launch's one option (D-118). `embed` asks for a URL the player can
+ * The launch's one option (D-121). `embed` asks for a URL the player can
  * frame — chrome hidden, the quiz announcing itself. Absent or false: the
  * full-page handoff, unchanged.
  */

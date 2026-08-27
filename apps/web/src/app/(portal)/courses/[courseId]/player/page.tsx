@@ -19,7 +19,7 @@ import { coursesApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 
 /**
- * Course view / player (§4.8) — the course inside the page (D-118).
+ * Course view / player (§4.8) — the course inside the page (D-121).
  *
  * Moodle still owns the material, the quiz and the grading; what changed is
  * that the learner no longer leaves for it. The page keeps what Moodle cannot
@@ -59,7 +59,7 @@ function Player({ course, onOutcome }: { course: CoursePlayerView; onOutcome: ()
     [course.courseId],
   );
   const launchFullPage = useCallback(() => coursesApi.launch(course.courseId), [course.courseId]);
-  /* The outline (D-119): the activities in order, so the panel can say where
+  /* The outline (D-122): the activities in order, so the panel can say where
      the learner is and move the frame to the neighbour. Loaded only when the
      course can be entered; the frame reports which activity it shows. */
   const outline = useApiQuery<CourseOutlineView>(

@@ -115,12 +115,12 @@ export class CompletionSyncService {
     return result;
   }
 
-  /** Per-learner cooldown for the on-demand sync (D-118). */
+  /** Per-learner cooldown for the on-demand sync (D-121). */
   private readonly lastOnDemand = new Map<string, number>();
   private static readonly ON_DEMAND_COOLDOWN_MS = 10_000;
 
   /**
-   * The scheduled sync for one learner, on demand (D-118): the framed course
+   * The scheduled sync for one learner, on demand (D-121): the framed course
    * reported a submitted quiz. Same `syncUser`, same idempotency; cooled down
    * per learner so a burst of messages costs one LMS read. Returns false when
    * the learner has no LMS account yet or the cooldown held.

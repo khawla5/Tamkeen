@@ -361,9 +361,9 @@ export const coursesApi = {
     api.post<CourseLaunchView>(`/api/courses/${courseId}/launch`, {
       embed: options.embed === true,
     }),
-  /** The framed player's previous / next (D-119). */
+  /** The framed player's previous / next (D-122). */
   outline: (courseId: string) => api.get<CourseOutlineView>(`/api/courses/${courseId}/outline`),
-  /** On-demand completion sync after the framed quiz reports itself (D-118). */
+  /** On-demand completion sync after the framed quiz reports itself (D-121). */
   sync: (courseId: string) => api.post<{ synced: boolean }>(`/api/courses/${courseId}/sync`),
 };
 
@@ -476,6 +476,15 @@ export const entityApi = {
 
   content: (courseId: string) =>
     api.get<EntityCourseContentView | null>(`/api/entity/courses/${courseId}/content`),
+
+  /**
+   * Re-reads this one course from the LMS right now (§4B.4, TAM-133) —
+   * called on the frame's own edit signal and on the manual «تحديث», never on
+   * a plain page load. Returns the full detail in one response, so title,
+   * status, the read-back and the publish blockers all refresh together.
+   */
+  resync: (courseId: string) =>
+    api.post<EntityCourseDetail>(`/api/entity/courses/${courseId}/resync`),
 
   publish: (courseId: string) =>
     api.post<EntityCourseDetail>(`/api/entity/courses/${courseId}/publish`),

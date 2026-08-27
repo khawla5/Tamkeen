@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
   publish: vi.fn(),
   unpublish: vi.fn(),
   authorLaunch: vi.fn(),
+  resync: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async () => ({
@@ -33,6 +34,7 @@ vi.mock('@/lib/api-client', async () => ({
     publish: api.publish,
     unpublish: api.unpublish,
     authorLaunch: api.authorLaunch,
+    resync: api.resync,
   },
 }));
 
@@ -358,6 +360,39 @@ describe('manage course', () => {
 
       expect(screen.getByText(/دورة عامة/)).toBeInTheDocument();
       expect(box('مسار القيادة')).toBeDisabled();
+    });
+  });
+
+  describe('the manual resync (§4B.4, TAM-133)', () => {
+    it('applies the resync response directly, with no second request', async () => {
+      const user = userEvent.setup();
+      api.resync.mockResolvedValue(detail({ title: 'إدارة المخاطر — محدّثة' }));
+
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByText('إدارة المخاطر');
+      const callsBefore = api.getCourse.mock.calls.length;
+
+      await user.click(screen.getByRole('button', { name: 'تحديث' }));
+
+      await waitFor(() => {
+        expect(api.resync).toHaveBeenCalledWith('course-1');
+      });
+      expect(await screen.findByText('إدارة المخاطر — محدّثة')).toBeInTheDocument();
+      /* The endpoint returns the full detail precisely so this page needs no
+         second request — a `getCourse` here would mean the resync response
+         was thrown away. */
+      expect(api.getCourse.mock.calls.length).toBe(callsBefore);
+    });
+
+    it('reports a failed resync without losing the course', async () => {
+      const user = userEvent.setup();
+      api.resync.mockRejectedValue(new Error('network'));
+
+      renderWithProviders(<ManageCoursePage />);
+      await user.click(await screen.findByRole('button', { name: 'تحديث' }));
+
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText('إدارة المخاطر')).toBeInTheDocument();
     });
   });
 });

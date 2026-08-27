@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useErrorMessage } from '@/components/auth/use-error-message';
 
@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useFormat } from '@/i18n/format-provider';
 import { entityApi } from '@/lib/api-client';
-import { useApiQuery } from '@/lib/use-api';
+import { useApiMutation, useApiQuery } from '@/lib/use-api';
 
 /**
  * §4B.4 — Course Content: the authoring loop on one page (TAM-139, D-101).
@@ -32,6 +32,15 @@ import { useApiQuery } from '@/lib/use-api';
  * We still do not rebuild the editor (D-046): everything inside the frame is
  * Moodle's. What this page owns is the seam — the launch, the read-back, the
  * D-042 warning where it can be acted on, and the decision to publish.
+ *
+ * **The frame's edit signal calls `resync`, never a plain re-read (D-115).**
+ * `tamkeen:content-changed` (fired for a content edit and for a Settings-tab
+ * rename alike) and the manual «تحديث» both hit
+ * `POST /api/entity/courses/:id/resync` — a synchronous single-course re-read
+ * of the LMS — so title, status, the read-back and the publish blockers all
+ * refresh together from one response, instead of waiting for the next
+ * scheduled catalogue sync. The response is applied as local state: the
+ * endpoint returns the full detail precisely so no second request is needed.
  */
 export default function CourseContentPage() {
   const t = useTranslations('entity');
@@ -41,36 +50,57 @@ export default function CourseContentPage() {
   /* One request carries the read-back AND the publish gate, so a change in the
      editor refreshes both — the blockers clear on the page the entity is
      looking at. */
-  const course = useApiQuery(() => entityApi.getCourse(courseId), [courseId]);
-  const refresh = course.refetch;
+  const query = useApiQuery(() => entityApi.getCourse(courseId), [courseId]);
+  const resync = useApiMutation(() => entityApi.resync(courseId));
+
+  const [course, setCourse] = useState<EntityCourseDetail | undefined>(undefined);
+
+  useEffect(() => {
+    setCourse(query.data);
+  }, [query.data]);
+
   const translateError = useErrorMessage();
   const launchEmbed = useCallback(
     () => entityApi.authorLaunch(courseId, { embed: true }),
     [courseId],
   );
   const launchFullPage = useCallback(() => entityApi.authorLaunch(courseId), [courseId]);
-  const onContentChanged = useCallback(() => {
-    refresh();
-  }, [refresh]);
+
+  /* `run` is stable (useApiMutation memoises it), so this identity holds. */
+  const resyncRun = resync.run;
+  const onResync = useCallback(async () => {
+    const result = await resyncRun();
+
+    if (result) {
+      setCourse(result);
+    }
+  }, [resyncRun]);
 
   return (
     <EntityPage
       title={t('contentTitle')}
-      action={course.data ? <PublishAction course={course.data} onChanged={refresh} /> : undefined}
+      action={
+        course ? <PublishAction course={course} onChanged={() => query.refetch()} /> : undefined
+      }
     >
-      {/* First load only: the read-back refetches after every edit, and a
+      {/* First load only: the read-back refreshes after every edit, and a
           spinner over the editor each time would be exactly the interruption
           the frame exists to remove. */}
       <DataView
-        isLoading={course.isLoading && course.data === undefined}
-        error={course.error}
-        onRetry={course.refetch}
+        isLoading={query.isLoading && course === undefined}
+        error={query.error}
+        onRetry={query.refetch}
       >
-        {course.data ? (
+        {course ? (
           <div className="space-y-6">
-            <ReadBackStrip course={course.data} onRefresh={refresh} />
+            <ReadBackStrip
+              course={course}
+              onRefresh={() => void onResync()}
+              refreshPending={resync.isPending}
+              refreshError={resync.error}
+            />
             <MoodleEmbed
-              title={course.data.title}
+              title={course.title}
               labels={{
                 loading: t('embedLoading'),
                 failedTitle: t('embedFailedTitle'),
@@ -81,7 +111,7 @@ export default function CourseContentPage() {
               launchEmbed={launchEmbed}
               launchFullPage={launchFullPage}
               translateError={translateError}
-              onContentChanged={onContentChanged}
+              onContentChanged={() => void onResync()}
             />
           </div>
         ) : null}
@@ -97,12 +127,17 @@ export default function CourseContentPage() {
 function ReadBackStrip({
   course,
   onRefresh,
+  refreshPending,
+  refreshError,
 }: {
   course: EntityCourseDetail;
   onRefresh: () => void;
+  refreshPending: boolean;
+  refreshError: unknown;
 }) {
   const t = useTranslations('entity');
   const format = useFormat();
+  const translateError = useErrorMessage();
   const content = course.content;
   const blocked = course.publication !== 'PUBLISHED' && course.publishBlockers.length > 0;
 
@@ -143,7 +178,7 @@ function ReadBackStrip({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" onClick={onRefresh}>
+          <Button variant="ghost" onClick={onRefresh} disabled={refreshPending}>
             {t('contentRefresh')}
           </Button>
           <Button asChild variant="outline">
@@ -151,6 +186,12 @@ function ReadBackStrip({
           </Button>
         </div>
       </div>
+
+      {refreshError !== undefined && refreshError !== null ? (
+        <p role="alert" className="mt-3 text-sm font-medium text-destructive">
+          {translateError(refreshError)}
+        </p>
+      ) : null}
 
       {content ? (
         <dl className="mt-4 grid gap-3 sm:grid-cols-3">

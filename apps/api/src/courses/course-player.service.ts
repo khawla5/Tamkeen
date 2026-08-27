@@ -96,7 +96,7 @@ export class CoursePlayerService {
    * to a course the learner is not entitled to.
    */
   /**
-   * The activities of a course the learner may enter (D-119). Same gate as
+   * The activities of a course the learner may enter (D-122). Same gate as
    * the launch — a course outside the confirmed path answers as if it had no
    * outline, so nothing is learned about courses in other people's paths.
    */
@@ -186,7 +186,7 @@ export class CoursePlayerService {
       targetId: courseId,
     });
 
-    /* D-118: framed by the player, or the full-page handoff. Same credential,
+    /* D-121: framed by the player, or the full-page handoff. Same credential,
        same audit entry either way — only the presentation differs. */
     return options.embed
       ? {
