@@ -104,14 +104,14 @@ function Detail({ course, addError }: { course: CourseDetail; addError: unknown 
               </span>
             ) : null}
             {course.paths.map((path) => (
-              <Badge key={path.id} variant="soft">
+              <Badge key={path.id} variant="neutral">
                 {path.name}
               </Badge>
             ))}
             {/* At most one chip, matching every course card that will carry
                 the same rule once TAM-127 lands — a course outside the user's
                 path gets none, absence is the signal. */}
-            {statusLabel !== null ? <Badge variant="soft">{statusLabel}</Badge> : null}
+            {statusLabel !== null ? <Badge variant="neutral">{statusLabel}</Badge> : null}
           </div>
         ) : null}
       </div>
@@ -213,9 +213,9 @@ function CourseAction({
           </a>
         </Button>
       ) : (
-        <p className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground">
+        <Badge variant="success" className="text-sm">
           {t('actionCompleted')}
-        </p>
+        </Badge>
       );
 
     case 'UNAVAILABLE':

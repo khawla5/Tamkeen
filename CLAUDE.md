@@ -177,7 +177,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 ### Recommendation rule (how the recommendation highlight works — LOCKED)
 - A path is shown as **recommended** if its `riasec_letter` **appears in the user's top-three Holland Code**.
 - Recommended paths are **ranked by how high their letter sits in the user's profile** (paths tagged with the user's #1 letter come first, then #2, then #3).
-- All other paths (letters outside the top three) are still shown, normally styled, and **fully selectable** — the highlight is recommendation, not restriction. The treatment is the primary-600 border plus the "موصى به" badge (§3, D-069); "gold" in older decisions refers to this same highlight under the retired palette.
+- All other paths (letters outside the top three) are still **available one click below** — normally styled and **fully selectable**, behind the collapsed "مسارات أخرى" toggle on Results (§4.4, D-113). The highlight is recommendation, not restriction. The treatment is the primary-600 border plus the "موصى به" badge (§3, D-069); "gold" in older decisions refers to this same highlight under the retired palette.
 - The user still commits to **exactly one** path (see §2).
 
 > If the product later wants stricter matching (only the single #1 letter) or looser matching, that is a change to this rule and must be recorded in `decisions.md`.
@@ -215,9 +215,11 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 
 ### 4.4 Results & Path Selection (النتيجة والمسارات)
 - Top: the user's **Holland Code** (the three letters with their Arabic type names, e.g. اجتماعي / بحثي / فني) + a short plain-language description (2–3 sentences) of what the code means. Optionally a compact visual of the six-dimension ranking.
-- All paths as cards. **Paths whose `riasec_letter` is in the user's top-three code are rendered as recommended** (primary border + "موصى به" badge, D-069) and **sorted by the user's letter ranking** (#1 letter's paths first). All other paths shown normally below, fully selectable.
-- Each card: name, its RIASEC type, one-line description, number of courses available, typical duration.
+- **Recommended paths are grouped by the letter that recommends them (D-113), one section per letter of the user's code, in the user's rank order:** "الأقرب إلى ميلك الأول — الاجتماعي" for #1, then "مناسب أيضًا — {type}" with a quiet "ميلك الثاني" / "ميلك الثالث" tag. **Paths whose `riasec_letter` is in the top-three code are rendered as recommended** (primary border + "موصى به" badge, D-069). A letter with no paths produces no heading. Ordering inside a group is the API's — never re-sorted in the browser.
+- **Compact cards:** name, its RIASEC type, the "موصى به" badge, number of courses available, typical duration, one action. **The description is not on the card** — it lives on the path page the action opens.
+- **Other paths (letters outside the code) sit behind one native `<details>` toggle, "عرض المسارات الأخرى (n)", collapsed on every visit** (D-113) — available one click below, fully selectable, never removed. §3A's _recommendation, not restriction_ is preserved.
 - User must actively choose (the highlight is a recommendation, not a default selection).
+- **After a path is confirmed (D-114):** the chosen path's card carries a "مسارك" marker (neutral, never the recommendation accent) and its one action becomes a link to مساري; **every other card loses its button entirely** — absence, not a disabled control (§3). The result card keeps working as the user's permanent Holland profile; the retake is already gone via `canRetake` (D-015).
 
 ### 4.5 Path detail / build (تفاصيل المسار)
 - Path description at top, then the courses belonging to that path as selectable cards (title, short description, duration, "أضف" toggle).

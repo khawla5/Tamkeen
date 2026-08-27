@@ -11,10 +11,18 @@ import { usePortal } from '@/components/layout/portal-provider';
 import { HollandCodeChips } from '@/components/riasec/holland-code-chips';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  cardVariants,
+} from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useFormat } from '@/i18n/format-provider';
 import type { CurrentUser } from '@/lib/api-client';
+import { cn } from '@/lib/utils';
 
 /**
  * The dashboard, in its three states (§4.2), made meaningful (TAM-123).
@@ -133,7 +141,10 @@ function AssessedNoPath({ dashboard }: { dashboard: DashboardView }) {
               <li key={path.id}>
                 <Link
                   href={`/paths/${path.id}`}
-                  className="flex h-full flex-col gap-1 rounded-card border border-primary-600 bg-card p-4 transition-colors hover:bg-primary-50"
+                  className={cn(
+                    cardVariants({ variant: 'selected' }),
+                    'flex h-full flex-col gap-1 p-4 transition-colors hover:bg-primary-50',
+                  )}
                 >
                   <span className="font-semibold text-foreground">{path.name}</span>
                   <span className="text-sm text-primary-700">
@@ -178,17 +189,14 @@ function ActivePath({ dashboard }: { dashboard: DashboardView }) {
         aria-label={t('statusHeading')}
         className="grid grid-cols-2 gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr]"
       >
-        <li className="flex flex-col justify-center rounded-card border border-border bg-card px-4 py-3">
+        <li className={cn(cardVariants(), 'flex flex-col justify-center px-4 py-3')}>
           <span className="text-sm font-bold text-foreground">{path.name}</span>
           <span className="text-xs font-medium text-primary-700">
             {tRiasec(`${path.riasecLetter}.name`)}
           </span>
         </li>
         {counts.map(({ key, value }) => (
-          <li
-            key={key}
-            className="flex flex-col justify-center rounded-card border border-border bg-card px-4 py-3"
-          >
+          <li key={key} className={cn(cardVariants(), 'flex flex-col justify-center px-4 py-3')}>
             <span data-count className="text-xl font-bold text-foreground tabular-nums">
               {format.number(value)}
             </span>
@@ -261,7 +269,7 @@ function ActivePath({ dashboard }: { dashboard: DashboardView }) {
 
         <section
           aria-labelledby="latest-certificate-heading"
-          className="flex flex-col gap-3 rounded-card border border-border bg-card p-6"
+          className={cn(cardVariants(), 'flex flex-col gap-3 p-6')}
         >
           <h2 id="latest-certificate-heading" className="text-lg font-semibold text-foreground">
             {t('latestCertificateHeading')}
@@ -312,7 +320,10 @@ function ActivePath({ dashboard }: { dashboard: DashboardView }) {
           <Link
             key={href}
             href={href}
-            className="rounded-card border border-border bg-card p-5 font-medium transition-colors hover:border-primary-600"
+            className={cn(
+              cardVariants(),
+              'p-5 font-medium transition-colors hover:border-primary-600',
+            )}
           >
             {t(key)}
           </Link>
@@ -333,7 +344,7 @@ function ActivityFeed({ activity }: { activity: DashboardActivity[] }) {
       </h2>
       <ol
         aria-label={t('activityHeading')}
-        className="flex flex-col divide-y divide-border rounded-card border border-border bg-card"
+        className={cn(cardVariants(), 'flex flex-col divide-y divide-border')}
       >
         {activity.map((event) => (
           <li

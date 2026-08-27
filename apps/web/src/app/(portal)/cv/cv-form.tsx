@@ -22,6 +22,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useFormat } from '@/i18n/format-provider';
+import { Badge } from '@/components/ui/badge';
 import { EntryActions, moveItem } from './entry-actions';
 
 /**
@@ -599,10 +600,7 @@ function SkillsEditor({
         <ul className="flex flex-wrap gap-2">
           {skills.map((skill) => (
             <li key={skill}>
-              <span
-                dir="auto"
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-sm"
-              >
+              <Badge variant="neutral" dir="auto" className="gap-1.5 text-sm font-medium">
                 {skill}
                 <button
                   type="button"
@@ -612,7 +610,7 @@ function SkillsEditor({
                 >
                   <X aria-hidden="true" className="size-3.5" />
                 </button>
-              </span>
+              </Badge>
             </li>
           ))}
         </ul>

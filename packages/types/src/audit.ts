@@ -328,3 +328,100 @@ export const AuditReason = {
 } as const;
 
 export type AuditReasonCode = (typeof AuditReason)[keyof typeof AuditReason];
+
+/**
+ * What area of the system an action belongs to (TAM-138).
+ *
+ * **The filter was fifty-three flat options and the rows carried no sense of
+ * kind.** An administrator arriving at §4C.8 is almost never looking for one
+ * named action — they are looking for "what happened to accounts this week" or
+ * "did the LMS sync run". A category answers that question directly, groups the
+ * filter into lists a person can scan, and lets a row say what area it concerns
+ * without repeating the action name.
+ *
+ * Five, and the boundary is *who the entry is about*, not which module wrote it:
+ * - `auth` — getting in, and being refused. Sessions, passwords, addresses.
+ * - `learner` — one employee's own journey: assessment, path, courses, certificate.
+ * - `content` — the catalogue everybody is offered: courses, paths, the instrument.
+ * - `administration` — accounts, organisations and the product's own settings.
+ * - `integration` — the LMS and the scheduled jobs; nobody performed these.
+ */
+export const AUDIT_ACTION_CATEGORIES = [
+  'auth',
+  'learner',
+  'content',
+  'administration',
+  'integration',
+] as const;
+
+export type AuditActionCategory = (typeof AUDIT_ACTION_CATEGORIES)[number];
+
+/**
+ * Every action's category.
+ *
+ * Exhaustive by type — `Record<AuditActionCode, …>` means adding an action
+ * without categorising it fails the build rather than quietly landing in a
+ * group the screen has no heading for. A test asserts the reverse direction too.
+ */
+export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory> = {
+  AUTH_REGISTERED: 'auth',
+  AUTH_REGISTRATION_REJECTED: 'auth',
+  AUTH_EMAIL_VERIFIED: 'auth',
+  AUTH_LOGIN_SUCCEEDED: 'auth',
+  AUTH_LOGIN_FAILED: 'auth',
+  AUTH_ACCOUNT_LOCKED: 'auth',
+  AUTH_LOGGED_OUT: 'auth',
+  AUTH_PASSWORD_RESET_REQUESTED: 'auth',
+  AUTH_PASSWORD_RESET_COMPLETED: 'auth',
+  AUTH_PASSWORD_CHANGED: 'auth',
+  AUTH_EMAIL_CHANGE_REQUESTED: 'auth',
+  AUTH_EMAIL_CHANGED: 'auth',
+  AUTHZ_DENIED: 'auth',
+
+  ASSESSMENT_SUBMITTED: 'learner',
+  PATH_SELECTED: 'learner',
+  PATH_COURSES_UPDATED: 'learner',
+  PATH_CONFIRMED: 'learner',
+  PATH_ENROLMENT_REQUESTED: 'learner',
+  PATH_COMPLETED: 'learner',
+  LMS_COURSE_PASSED: 'learner',
+  LMS_COURSE_LAUNCHED: 'learner',
+  CERTIFICATE_ISSUED: 'learner',
+  PROFILE_UPDATED: 'learner',
+  PROFILE_LMS_SYNC_FAILED: 'learner',
+
+  ENTITY_COURSE_CREATED: 'content',
+  ENTITY_COURSE_METADATA_UPDATED: 'content',
+  ENTITY_COURSE_PUBLISHED: 'content',
+  ENTITY_COURSE_UNPUBLISHED: 'content',
+  ENTITY_COURSE_AUTHOR_LAUNCHED: 'content',
+  ADMIN_ASSESSMENT_DRAFT_OPENED: 'content',
+  ADMIN_ASSESSMENT_DRAFT_DISCARDED: 'content',
+  ADMIN_ASSESSMENT_PUBLISHED: 'content',
+  ADMIN_PATH_CREATED: 'content',
+  ADMIN_PATH_UPDATED: 'content',
+  ADMIN_PATH_ACTIVATED: 'content',
+  ADMIN_PATH_RETIRED: 'content',
+  ADMIN_PATH_DELETED: 'content',
+  ADMIN_PATH_COURSE_ATTACHED: 'content',
+  ADMIN_PATH_COURSE_DETACHED: 'content',
+  ADMIN_COURSE_INTERVENED: 'content',
+  ADMIN_COURSE_DELETED: 'content',
+
+  ADMIN_USER_CREATED: 'administration',
+  ADMIN_USER_INVITED: 'administration',
+  ADMIN_USER_STATUS_CHANGED: 'administration',
+  ADMIN_USER_ROLE_CHANGED: 'administration',
+  ADMIN_ENTITY_CREATED: 'administration',
+  ADMIN_ENTITY_UPDATED: 'administration',
+  /* The entity editing its own §4B.6 record — the same subject as the two
+     above, reached from the other portal. */
+  ENTITY_PROFILE_UPDATED: 'administration',
+  ADMIN_SETTING_CHANGED: 'administration',
+  ADMIN_SETTING_RESET: 'administration',
+
+  LMS_CATALOG_SYNCED: 'integration',
+  LMS_COURSE_WITHDRAWN: 'integration',
+  COURSE_AVAILABILITY_APPLIED: 'integration',
+  LMS_COMPLETION_SYNCED: 'integration',
+};
