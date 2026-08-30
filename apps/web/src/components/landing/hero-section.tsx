@@ -1,24 +1,32 @@
-import { ArrowLeft } from 'lucide-react';
+'use client';
+
 import Image from 'next/image';
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useEffect, useState } from 'react';
 
 import { SaudiMap } from '@/components/brand/saudi-map';
-import { Button } from '@/components/ui/button';
+
+/** Three real photos of the same building, rotated rather than picking one —
+ *  the interval lives here, next to the images it cycles. */
+const BACKGROUND_PHOTOS = [
+  '/landing/moi-headquarters.jpg',
+  '/landing/moi-headquarters-2.jpg',
+  '/landing/moi-headquarters-3.jpg',
+];
+
+const ROTATION_MS = 2000;
 
 /**
- * `ArrowLeft` is the "forward" glyph here, not "back". This product is
- * RTL-only with no LTR toggle (D-024), and in RTL reading flow, forward
- * motion points visually start-to-end, i.e. left. Reaching for `ArrowRight`
- * and mirroring it would produce the same pixels through an extra step; using
- * the left-pointing glyph directly is the correct icon for this direction,
- * not a workaround.
- */
-/**
- * The hero of a government front page: who this is for, what it does, and the
- * one thing to do next — one sentence from the BRD's executive summary (§1)
- * and the registration rule (BR-101), in the ministry's own register. No
- * feature pills, no stat row: the paragraph carries the message.
+ * The hero of a government front page: who this is for and what it does —
+ * one sentence from the BRD's executive summary (§1), in the ministry's own
+ * register. No feature pills, no stat row: the paragraph carries the message.
+ *
+ * **No CTA row, no eligibility line, no sign-in link here.** `SiteHeader`
+ * immediately above already offers both "تسجيل الدخول" and "إنشاء حساب" on
+ * every scroll position, the explorer just below repeats "إنشاء حساب" per
+ * path, and the eligibility line is answered again in the FAQ — stating the
+ * same three things a fourth time here read as clutter rather than emphasis,
+ * flagged directly against the live page.
  *
  * Two columns from `lg`: the text block on the start edge; on the end edge the
  * ministry emblem over the Kingdom's map, the map revealing region by region. The emblem is decorative here (`alt=""`) —
@@ -31,22 +39,44 @@ import { Button } from '@/components/ui/button';
  */
 export function HeroSection() {
   const t = useTranslations('landing');
-  const tAuth = useTranslations('auth');
+  const [photoIndex, setPhotoIndex] = useState(0);
+
+  useEffect(() => {
+    /* A visitor who asked the OS for less motion should not get an
+       auto-advancing background regardless of how gentle the crossfade is
+       (WCAG 2.3.3) — the first photo simply holds. */
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setPhotoIndex((index) => (index + 1) % BACKGROUND_PHOTOS.length);
+    }, ROTATION_MS);
+
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <section className="relative overflow-hidden bg-primary-deep text-surface">
       {/* The ministry headquarters, behind a dark tint that keeps the white
           text at the contrast ratio D-069's palette work already measured —
           the photo reads as texture, not as a background the copy competes
-          with. */}
-      <Image
-        src="/landing/moi-headquarters.jpg"
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className="object-cover"
-      />
+          with. All three photos are mounted throughout and crossfade on
+          opacity — swapping `src` instead would flash to blank while the next
+          one decodes, and the first is `priority` so there is no flash on
+          load either. */}
+      {BACKGROUND_PHOTOS.map((src, index) => (
+        <Image
+          key={src}
+          src={src}
+          alt=""
+          fill
+          priority={index === 0}
+          sizes="100vw"
+          className="object-cover transition-opacity duration-1000 ease-in-out"
+          style={{ opacity: index === photoIndex ? 1 : 0 }}
+        />
+      ))}
       <div className="absolute inset-0 bg-primary-deep/78" />
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-2 lg:py-24">
@@ -56,30 +86,6 @@ export function HeroSection() {
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-primary-50">{t('heroBody')}</p>
-
-          <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-            <Button asChild size="lg" variant="onColor">
-              <Link href="/register">
-                {t('heroCta')}
-                <ArrowLeft aria-hidden="true" />
-              </Link>
-            </Button>
-
-            {/* Same-page jump to the explorer, not a route — a plain anchor is
-                correct here, not next/link. */}
-            <Button asChild size="lg" variant="outlineOnColor">
-              <a href="#about">{t('heroSecondaryCta')}</a>
-            </Button>
-          </div>
-
-          <p className="mt-4 text-sm text-primary-50/90">{t('heroEligibility')}</p>
-
-          <p className="mt-2 text-sm text-primary-50/90">
-            {tAuth('haveAccount')}{' '}
-            <Link href="/login" className="font-medium text-surface underline underline-offset-4">
-              {tAuth('signInLink')}
-            </Link>
-          </p>
         </div>
 
         {/* Owner over territory: the emblem above, the Kingdom's map — every

@@ -63,17 +63,17 @@ describe('LandingPage', () => {
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content');
   });
 
-  it('the primary hero action links to registration, not a dead button', () => {
+  it('every "إنشاء حساب" action on the page links to registration, not a dead button', () => {
     renderWithProviders(<LandingPage />);
 
-    const heroLinks = screen.getAllByRole('link', { name: /إنشاء حساب/ });
-    expect(heroLinks.length).toBeGreaterThan(0);
-    for (const link of heroLinks) {
+    const registerLinks = screen.getAllByRole('link', { name: /إنشاء حساب/ });
+    expect(registerLinks.length).toBeGreaterThan(0);
+    for (const link of registerLinks) {
       expect(link).toHaveAttribute('href', '/register');
     }
   });
 
-  it('offers a quiet sign-in link for existing users next to the primary action', () => {
+  it('offers a quiet sign-in link for existing users (header and footer)', () => {
     renderWithProviders(<LandingPage />);
 
     const signInLinks = screen.getAllByRole('link', { name: 'تسجيل الدخول' });
@@ -95,39 +95,45 @@ describe('LandingPage', () => {
     expect(await screen.findByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
   });
 
-  it('hero: states who the platform is for, and who may register (BR-101)', () => {
+  it('hero: states who the platform is for (BR-101)', () => {
     renderWithProviders(<LandingPage />);
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
       'منصة تمكين للتدريب والتطوير المهني',
     );
-    expect(screen.getByText(/التسجيل مقصور على منسوبي الوزارة/)).toBeInTheDocument();
   });
 
-  it('explorer: one tab per real path, the first selected, its name shown in the panel', async () => {
+  it('explorer: a dropdown of real paths, the first selected, its name shown in the panel', async () => {
     renderWithProviders(<LandingPage />);
 
-    const tabs = await screen.findAllByRole('tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['خدمة المتعاملين', 'الحوكمة والامتثال']);
-    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+    const picker = await screen.findByRole('combobox', { name: 'المسارات التدريبية' });
+    const options = within(picker).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      'خدمة المتعاملين',
+      'الحوكمة والامتثال',
+    ]);
+    expect(picker).toHaveValue('path-1');
     expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('خدمة المتعاملين');
   });
 
-  it('explorer: choosing a path tab updates the panel to that path', async () => {
+  it('explorer: choosing a path from the dropdown updates the panel to that path', async () => {
     const user = userEvent.setup();
     renderWithProviders(<LandingPage />);
 
-    const tab = await screen.findByRole('tab', { name: 'الحوكمة والامتثال' });
-    await user.click(tab);
+    const picker = await screen.findByRole('combobox', { name: 'المسارات التدريبية' });
+    await user.selectOptions(picker, 'الحوكمة والامتثال');
 
-    expect(tab).toHaveAttribute('aria-selected', 'true');
+    expect(picker).toHaveValue('path-2');
     expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('الحوكمة والامتثال');
   });
 
   it('explorer: the panel shows career type, skill outcomes, description, course count and duration — from the API, never typed', async () => {
     renderWithProviders(<LandingPage />);
 
-    const panel = await screen.findByRole('tabpanel');
+    /* The panel is a two-column grid — the heading's immediate wrapper is only
+       the start column, so its parent is what actually holds both the
+       description column and the skill-outcomes column beside it. */
+    const panel = (await screen.findByRole('heading', { level: 3 })).closest('div')!.parentElement!;
     /* Career type in Arabic (D-099), never the raw letter. */
     expect(within(panel).getByText('الاجتماعي')).toBeInTheDocument();
     expect(within(panel).queryByText(/^S$/)).not.toBeInTheDocument();
@@ -144,7 +150,7 @@ describe('LandingPage', () => {
     renderWithProviders(<LandingPage />);
 
     expect(await screen.findByText('ستظهر المسارات هنا قريبًا.')).toBeInTheDocument();
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'المسارات التدريبية' })).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     /* The strip beneath still renders — it is static copy, not API data. */
     expect(screen.getByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
@@ -170,6 +176,9 @@ describe('LandingPage', () => {
     for (const item of items) expect(item.open).toBe(false);
     expect(within(faq).getByText('هل يمكن تغيير المسار بعد تأكيده؟')).toBeInTheDocument();
     expect(within(faq).getByText(/مسار واحد لكل موظف/)).toBeInTheDocument();
+    /* Who may register (BR-101) — moved here from the hero, which repeated it
+       alongside the header and the explorer's own "إنشاء حساب" action. */
+    expect(within(faq).getByText('من يستطيع التسجيل في المنصة؟')).toBeInTheDocument();
     expect(container.querySelectorAll('h3')).toHaveLength(1);
   });
 

@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react';
 import { PATH_MAX_COURSES, PATH_MIN_COURSES, type PublicPathSummary } from '@tamkeen/types';
 
 import { Button } from '@/components/ui/button';
-import { Tabs } from '@/components/ui/tabs';
+import { Select } from '@/components/ui/select';
 import { useFormat } from '@/i18n/format-provider';
 import { publicApi } from '@/lib/api-client';
 import { toHours } from '@/lib/duration';
@@ -16,14 +16,14 @@ import { useApiQuery } from '@/lib/use-api';
 
 /**
  * "عن المنصة" as an explorer of the real paths, not the generic four-stage
- * process it used to walk through (TAM-150). One tab per active path — the
- * same tablist semantics as before (arrow keys, `aria-current`, its own
- * accessible name, and a horizontal scroll at twelve paths that `Tabs`
- * already handles) — each panel answering "what will I be able to do":
- * the path's career type, the skills it produces, its description, and how
- * much of it there is, all read from the API rather than typed here.
+ * process it used to walk through (TAM-150). A dropdown of active paths — the
+ * platform's own `Select` (native `<select>`, so keyboard and mobile pickers
+ * come free, and its hover/focus states are the ones every form field on the
+ * site already uses) — with the chosen path's panel answering "what will I be
+ * able to do": its career type, the skills it produces, its description, and
+ * how much of it there is, all read from the API rather than typed here.
  *
- * Beneath the tabs, a compact four-line strip explains *how* a path is
+ * Beneath the picker, a compact four-line strip explains *how* a path is
  * reached — the one thing the old stage-by-stage walkthrough got right and
  * the only trace of it kept.
  */
@@ -54,15 +54,35 @@ export function AboutSection() {
               fetch failure and a catalogue with no active paths — the same
               honest fallback either way. */}
           {!paths.isLoading && active ? (
-            <Tabs
-              label={t('explorerPathsLabel')}
-              items={list.map((path) => ({ value: path.id, label: path.name }))}
-              value={active.id}
-              onValueChange={setSelectedId}
-              panelClassName="mt-8"
-            >
-              <PathPanel path={active} />
-            </Tabs>
+            <>
+              <div className="max-w-sm">
+                <label htmlFor="explorer-path" className="text-sm font-medium text-foreground">
+                  {t('explorerPathsLabel')}
+                </label>
+                <div className="mt-2">
+                  <Select
+                    id="explorer-path"
+                    value={active.id}
+                    onChange={(event) => setSelectedId(event.target.value)}
+                    className="cursor-pointer transition-colors hover:bg-primary-50"
+                  >
+                    {list.map((path) => (
+                      <option key={path.id} value={path.id}>
+                        {path.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              {/* A `<select>` change moves the panel below it, off-screen from
+                  where a screen reader user's focus stays — `aria-live`
+                  announces the new path rather than leaving that update
+                  silent. */}
+              <div aria-live="polite" className="mt-8">
+                <PathPanel path={active} />
+              </div>
+            </>
           ) : !paths.isLoading ? (
             <p role="status" className="text-base text-muted-foreground">
               {t('explorerFallback')}
