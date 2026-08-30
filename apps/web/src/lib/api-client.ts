@@ -45,6 +45,15 @@ import type {
   CertificateVerificationView,
   AssessmentSubmission,
   AssessmentView,
+  EnglishAssessmentResultView,
+  EnglishAssessmentSubmission,
+  EnglishAssessmentView,
+  AdminEnglishDraft,
+  AdminEnglishOverview,
+  AdminEnglishVersion,
+  CefrBand,
+  CefrLevel,
+  EnglishSkill,
   CourseDetail,
   CourseLaunchView,
   CourseOutlineView,
@@ -323,6 +332,17 @@ export const assessmentApi = {
     api.post<AssessmentResultView>('/api/assessment/submit', submission),
 };
 
+/**
+ * §4.13 — the English placement test. A sibling of `assessmentApi`, on the
+ * sibling endpoints; the two share no request or response type.
+ */
+export const englishAssessmentApi = {
+  get: () => api.get<EnglishAssessmentView>('/api/english-assessment'),
+  result: () => api.get<EnglishAssessmentResultView | null>('/api/english-assessment/result'),
+  submit: (submission: EnglishAssessmentSubmission) =>
+    api.post<EnglishAssessmentResultView>('/api/english-assessment/submit', submission),
+};
+
 export const pathsApi = {
   list: () => api.get<PathRecommendations>('/api/paths'),
   detail: (pathId: string) => api.get<PathDetail>(`/api/paths/${pathId}`),
@@ -590,6 +610,52 @@ export const adminApi = {
       status?: 'ACTIVE' | 'SUSPENDED';
     },
   ) => api.patch<AdminEntityRow>(`/api/admin/entities/${entityId}`, patch),
+
+  /* §4C.9 — the English placement test. Its own endpoints, its own types; the
+     RIASEC calls above are untouched by it (D-124). This is the one group in
+     this client that receives the English answer key. */
+  englishOverview: () => api.get<AdminEnglishOverview>('/api/admin/english'),
+
+  englishDraft: () => api.get<AdminEnglishDraft>('/api/admin/english/draft'),
+
+  createEnglishDraft: () => api.post<AdminEnglishDraft>('/api/admin/english/draft', {}),
+
+  discardEnglishDraft: () => api.delete<void>('/api/admin/english/draft'),
+
+  updateEnglishDraft: (patch: { title?: string; description?: string }) =>
+    api.patch<AdminEnglishDraft>('/api/admin/english/draft', patch),
+
+  addEnglishQuestion: (input: {
+    text: string;
+    marks: number;
+    level: CefrLevel;
+    skill: EnglishSkill;
+    options: string[];
+    correctIndex: number;
+  }) => api.post<AdminEnglishDraft>('/api/admin/english/draft/questions', input),
+
+  updateEnglishQuestion: (
+    questionId: string,
+    patch: { text?: string; marks?: number; level?: CefrLevel; skill?: EnglishSkill },
+  ) => api.patch<AdminEnglishDraft>(`/api/admin/english/draft/questions/${questionId}`, patch),
+
+  removeEnglishQuestion: (questionId: string) =>
+    api.delete<AdminEnglishDraft>(`/api/admin/english/draft/questions/${questionId}`),
+
+  reorderEnglishDraft: (questionIds: string[]) =>
+    api.patch<AdminEnglishDraft>('/api/admin/english/draft/order', { questionIds }),
+
+  updateEnglishOption: (optionId: string, patch: { label?: string; isCorrect?: boolean }) =>
+    api.patch<AdminEnglishDraft>(`/api/admin/english/draft/options/${optionId}`, patch),
+
+  /** The whole band table, never one band — see the endpoint's own note. */
+  setEnglishBands: (bands: CefrBand[]) =>
+    api.put<AdminEnglishDraft>('/api/admin/english/draft/bands', { bands }),
+
+  publishEnglish: () => api.post<AdminEnglishVersion>('/api/admin/english/draft/publish', {}),
+
+  englishVersion: (assessmentId: string) =>
+    api.get<AdminEnglishDraft>(`/api/admin/english/versions/${assessmentId}`),
 
   // §4C.3 — the assessment
   assessmentOverview: () => api.get<AdminAssessmentOverview>('/api/admin/assessment'),

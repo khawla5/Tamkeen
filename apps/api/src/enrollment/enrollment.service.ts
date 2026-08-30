@@ -367,7 +367,25 @@ export class EnrollmentService {
    */
   async getDashboard(userId: string): Promise<DashboardView> {
     const state = await this.journey.getState(userId);
+
+    /*
+     * Read in every state, including PRE_ASSESSMENT (D-123). The English test is
+     * independent of the Holland journey, so its card is on the dashboard from
+     * the first sign-in and its level is reported the moment there is one — it
+     * does not wait for an assessment it has nothing to do with.
+     *
+     * Read here rather than through `JourneyStateService`, deliberately: the
+     * journey service exists so the rules that depend on *both* the result and
+     * the path live in one place, and nothing about the English level depends on
+     * either. Putting it there would imply a relationship that does not exist.
+     */
+    const english = await this.prisma.englishAssessmentResult.findUnique({
+      where: { userId },
+      select: { level: true },
+    });
+
     const empty = {
+      englishLevel: english?.level ?? null,
       recommendedPaths: [],
       upcomingCourses: [],
       latestCertificate: null,
@@ -417,6 +435,7 @@ export class EnrollmentService {
     return {
       state: 'ACTIVE_PATH',
       codeString,
+      englishLevel: empty.englishLevel,
       recommendedPaths: [],
       /* Current first, then what follows, in path order — the "what's after
          this one" a learner actually wants. Three is a glance, not a list. */

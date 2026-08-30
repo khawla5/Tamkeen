@@ -23,6 +23,12 @@ export const ADMIN_NAV: readonly NavItem[] = [
   { key: 'adminDashboard', href: '/admin', icon: 'dashboard' },
   { key: 'adminUsers', href: '/admin/users', icon: 'learners' },
   { key: 'adminAssessment', href: '/admin/assessment', icon: 'assessment' },
+  /* §4C.9 — the English placement test, beside the career assessment rather
+     than inside it. They are two instruments an administrator edits separately
+     (D-124), and folding one into the other's page would hide it. Nine items
+     now; §3's six-item rule governs the *learner's* nav, and §4C's own note
+     already explains why an administrator's surface is the whole product. */
+  { key: 'adminEnglish', href: '/admin/english', icon: 'assessment' },
   { key: 'adminPaths', href: '/admin/paths', icon: 'myPath' },
   { key: 'adminCourses', href: '/admin/courses', icon: 'courses' },
   { key: 'adminTemplates', href: '/admin/templates', icon: 'templates' },

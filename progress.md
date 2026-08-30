@@ -5,6 +5,123 @@
 
 ---
 
+### 2026-08-30 — The English assessment run for real: migration, seed and the whole loop against live Postgres — branch `english-assessment`
+
+At the user's request the stack was brought up and the feature exercised end to end. **This closes E.4's stated limitation** ("not run against a real database") and covers part of E.5 by hand; the automated integration and browser specs E.5 owns are still outstanding.
+
+**Environment.** Docker Desktop was not running and had to be started; `npm run db:up` then found the existing `tamkeen-postgres` / `redis` / `mailpit` containers and started them. The database already held prior development data — 206 Holland results among it — so this was a migration onto a **populated** database, not a fresh one, which is the more useful test.
+
+**`prisma migrate deploy` applied `20260830120000_english_assessment` cleanly** — six tables, two enums, the partial unique indexes — with no effect on any existing row. `npm run db:seed` then reported *"30 questions (150 options), 30 English placement questions, 48 courses, 12 paths, 133 memberships"*.
+
+**What the database actually holds, read back directly:**
+- `english-cefr` v1 ACTIVE · 30 questions · 6 bands · 0 results
+- bands `A1 0-14 | A2 15-24 | B1 25-34 | B2 35-44 | C1 45-53 | C2 54-60`
+- per level `A1 5q/5m | A2 5q/5m | B1 5q/10m | B2 5q/10m | C1 5q/15m | C2 5q/15m`, attainable total **60**
+- **30/30 questions carry exactly one correct option**
+- correct-answer positions `{1:8, 2:8, 3:7, 4:7}` — E.4's rotation fix working on real rows rather than in a constant
+
+**The loop, over HTTP against the running API:** sign in → `GET /api/english-assessment` returns 30 questions and **no `isCorrect`, no `marks`, no level** (grepped over the whole response body) → submit 20 correct answers → **30/60 → B1**, `canRetake: false` → **second submit refused 409 `ENGLISH_ASSESSMENT_ALREADY_TAKEN`**. The answer key had to be read out of the database to build that submission, which is the property being demonstrated: a client cannot know the answers from the API alone.
+
+**Holland, live and side by side:** `GET /api/assessment` still returns `تقييم الميول المهنية`, 30 Arabic RIASEC items, version 1, with no weight, dimension or points anywhere in the payload — **with a second ACTIVE instrument now present in the system**. That is the precise failure D-124 was written to prevent (`getActive` and `createDraft` both call `findFirst({ status: 'ACTIVE' })` with no key filter), and it is now demonstrated not to occur rather than only argued. `riasec-core` v1 remains ACTIVE with its **206 results untouched**.
+
+**Operational note, not a code change:** the three seeded demo accounts already existed, so `seedSuperAdmin` / `seedDemoEntity` / `seedDemoStudent` correctly declined to touch their passwords (D-080's discipline — a seed must not reset a credential somebody is using), leaving their generated passwords unrecoverable. A known password was set on those three plus four throwaway learners (`en1`–`en4`) **directly in the development database**. Four learners rather than one because the test is taken once per account (D-123), so a single demo learner allows exactly one trial run. No application code was involved and nothing in the repository changed.
+
+**Worth chasing in Phase 6, unconfirmed:** during the hand-over the user reported "email or password is wrong" while the credentials verified correctly at the API. Sign-in is throttled at 5 attempts/minute/IP, and if the page renders a **429** as `INVALID_CREDENTIALS` then a rate-limited person is told their password is wrong and sent off changing a password that was fine. Not reproduced, so not recorded as a defect — but the auth error mapping is worth an explicit look.
+
+### 2026-08-30 — E.4: the thirty seeded English questions — branch `english-assessment`
+
+The content: thirty MCQs across grammar, vocabulary, reading and practical English, five per CEFR level from A1 to C2, seeded as editable data in `seed-data/english-assessment.ts` and written by `seedEnglishAssessment` in the same pass as the band table.
+
+**Marks rise with the level** — A1/A2 worth 1, B1/B2 worth 2, C1/C2 worth 3, **sixty marks in total**. This is the distinction that made the sibling schema necessary in the first place: weighting a harder item more heavily is difficulty weighting doing its job, not a skew, and D-032's balance rule has nothing to say about it (D-125). The seeded band table partitions 0–60 with the middle bands widest.
+
+**Items run in ascending level order**, where the RIASEC bank deliberately interleaves (D-032). The reasoning that makes interleaving right there makes ascending order right here: a Holland item invites a self-description that can be answered in blocks, so the bank breaks up the blocks; a placement item has a right answer, and opening with C2 grammar makes a genuine A2 speaker give up on a test that was about to place them correctly.
+
+**A real defect found in my own content, and fixed.** Every one of the thirty items was authored with its correct answer as the **first option** — which is how a human reviews an answer key (reading down the file, the first option is the one being asserted correct) and is a catastrophe if seeded that way: a taker who noticed would score sixty out of sixty without a word of English, and *every structural property would still have held*. The stored bank now rotates each item's options by its index — deterministic, never random, because a shuffled seed would put the answer somewhere new on every run, so a stored response could not be re-read against the bank that produced it and two environments would hold different instruments under the same version number. Two tests guard it: the correct answer's **distribution** across positions (not merely "not always zero" — one stray item would satisfy that while twenty-nine others gave the game away), and a spot-check that rotation moved the options without moving the *answer*.
+
+**The items are in English, and the spec asserts it.** §2 is Arabic-first and `messages.test.ts` enforces that over the message catalogue — but an English proficiency item cannot be posed in Arabic without ceasing to measure anything. D-047's rule for course content, applied to assessment content; the chrome stays Arabic, and the spec asserts *both* halves (no Arabic in any item, Arabic in the instrument's own title and description).
+
+**The seed bootstraps; it does not maintain** (D-083, applied to the second instrument). Once §4C.9 has published an edit, re-running the seed leaves every row alone and says so. For this instrument the loss it prevents includes the band boundaries that decide what every future placement *means*.
+
+**Tested: 750 API unit (46 suites, +32 new) · 865 web · 51 types.** Two new specs. `english-assessment.spec.ts` (24) asserts the content properties that must fail CI rather than be noticed later — thirty items, five per level, all four skills, a reading and a practical item at every level, exactly one existing correct answer each, no duplicate or blank options, marks non-decreasing up the scale, the band table partitioning 0–60 with **every one of the sixty-one integers in exactly one band**, and the whole bank passing `assessEnglishBank` with no blockers *and no warnings*. It also asserts two things about the instrument's shape: a taker answering every A and B item correctly (30 marks) lands below C1, and one answering only the A-level items lands at A1. `english-seed-runner.spec.ts` (8) covers D-083 against a Prisma stub — the ministry-owned case asserts **every write mock is untouched**, enumerated over the whole set rather than the ones that came to mind, because the failure it guards is a *new* write added later without the guard in front of it.
+
+**Honest limitation, unchanged from the standing note:** there is no Docker or Postgres in this environment and no `.env`, so `npm run db:seed` has **not been run** against a real database. The seed function is verified by typecheck and by the stub-based spec, which asserts which writes are issued — a stronger property than reading rows back, but not the same as having run it. **E.5 owns running it for real.**
+
+**Next:** E.5 — integration and the full verification, including the explicit Holland-intact proof.
+
+### 2026-08-30 — E.3: the sibling admin editor at `/admin/english` — branch `english-assessment`
+
+§4C.9 built: the version overview, the draft-then-publish editor over copy-on-write, question text / level / skill / marks, the correct answer, and **the band table as the configurable scoring rule**. The RIASEC editor is not touched — no file under §4C.3 changed, and `admin-assessment.test.tsx` runs unaltered.
+
+**A parallel surface, not a retrofit.** `AdminEnglishService` imports nothing from `AdminAssessmentService` and vice versa; `AdminEnglishController` is mounted at `admin/english`. It joins `ADMIN_CONTROLLERS`, which is the list `AdminModule` registers **and** `admin-rbac.e2e-spec.ts` enumerates — so every new route is covered against an employee, an entity and an anonymous caller the moment it is routable, with no second place to remember.
+
+**Two invalid states are made unreachable rather than merely refused, and both guards stay in the gate anyway.**
+- *The correct answer is a radio.* `updateOption` with `isCorrect: true` clears the question's other options in the same transaction, so two-correct cannot be produced from the screen. `MULTIPLE_CORRECT_OPTIONS` stays in `assessEnglishBank` precisely because it is now unreachable through the UI: it guards rows arriving another way — an import, a hand-run SQL fix — and nothing else would catch those.
+- *The band table is edited as five numbers, not twelve.* A partition of `0 … maxScore` is completely determined by its five internal ceilings; A1 starts at 0, each band starts one above the previous ceiling, and C2 is pinned to the attainable total. Gaps and overlaps are **not representable** in the editor. The server still validates the complete table.
+
+**`setBands` takes the whole table, `PUT` not `PATCH`.** Moving one boundary necessarily changes two bands, so a per-band endpoint would force the administrator through states that are invalid by construction. Same reasoning as `reorder` taking the complete order. Validation is the publish gate's, not the save's (D-073): a draft whose bank has just grown has a stale table *by definition*, and refusing the save would leave no way to fix it.
+
+**Where §4C.9 deliberately diverges from §4C.3.** (a) **`createDraft` works with no active version**, creating an empty version 1 — the RIASEC bank is seeded and has always had an ACTIVE row to copy, so its refusal is right there and would be an editor that cannot create what it edits here. (b) **Adding a question asks for its options**, where §4C.3 generates five Likert levels from a dimension — a RIASEC item's options are the same five agreement levels every time, but an English item's distractors are content somebody wrote, and generating them would be inventing assessment content. Blank rows are dropped on submit and **the correct index is re-pointed at the option it was actually on**, which a test guards: filling options 1 and 3 and marking 3 correct must not silently move the right answer.
+
+**Nav.** A ninth admin item, `/admin/english`, beside the career assessment rather than inside it. §3's six-item rule governs the *learner's* nav; §4C's own note already explains why an administrator's surface is the whole product.
+
+**Files:** `admin-english.{service,controller,dto}.ts`, `admin.controllers.ts`, `admin.module.ts`, `audit.ts` (+3 actions, +1 reason), `english-assessment.ts` (the admin half of the contract, kept in the same file so "what is English" is one file to read), `api-client.ts`, `components/admin/english-{assessment-editor,band-editor,readiness-panel}.tsx`, `app/(admin)/admin/english/page.tsx`, `admin-nav-items.ts`, `messages/ar.json` (the §4C.9 namespace, 9 blocker strings, 23 error codes, the audit copy).
+
+**Tested: 865 web (61 files, +21 new) · 719 API · 51 types — all green.** The new suite asserts the properties: five ceilings and no twelfth field, the derived table's contiguity checked **across the whole table** rather than one pair, the top band pinned, publish refused with the blocker named in the dialog, publish allowed past a warning that names the missing levels, the radio sending exactly one call, the correct-index re-pointing, and — explicitly — that **no RIASEC concept appears anywhere on this screen** and no RIASEC endpoint is reachable from it. Typecheck, lint, prettier clean; `messages.test.ts` (158 assertions) passes, so every new audit code has Arabic copy and the catalogue is still free of Latin letters and bare digits.
+
+**Owed to E.5:** API integration tests for the fourteen new routes (the RBAC suite covers them structurally today), and the browser e2e for admin-edits-then-learner-takes.
+
+**Next:** E.4 — the thirty seeded questions.
+
+### 2026-08-30 — E.2: the English taking flow, the CEFR result, and the entry points — branch `english-assessment`
+
+The learner half of §4.13. A learner can now take the placement test and see their level; the admin surface (E.3) and the real thirty questions (E.4) are still to come.
+
+**API.** `EnglishAssessmentModule` — `GET /api/english-assessment`, `GET /api/english-assessment/result`, `POST /api/english-assessment/submit`, all `@Roles('EMPLOYEE')`. **`JourneyModule` is deliberately not imported**: the Holland assessment needs it because its retake rule turns on whether a path is confirmed (D-015), and the English test gates on nothing and is gated by nothing (D-123) — not importing it is what keeps that true as both grow.
+
+**The absence rule carries over, and further.** `getActive` selects options without `isCorrect` — the answer key outright — and questions without `marks` or their CEFR `level`. Neither of the latter two is the key, but both let a taker triage: knowing an item is worth three marks, or is a C1 item, tells them where to guess, and a placement test is only useful if it measures what somebody can do unaided across the whole range.
+
+**"Taken once" is enforced twice, on purpose.** A read-then-refuse gives the learner a clear 409 and an audited `ENGLISH_ASSESSMENT_ALREADY_TAKEN`; the unique index on `user_id` catches the race that no read-then-write can, and its `P2002` is answered *identically* — a caller must not be able to tell the two apart, and the second request genuinely did nothing either way.
+
+**Entry points, per D-123.** A dashboard card in **all three states**, below the state's own card and carrying an **outline** action, so §4.2's one-primary-action rule survives — a new employee's single primary call is still «ابدأ التقييم» for the career assessment. A read-only card on the profile. **No new learner nav item** (§4's steady-state six stands; the test is a flow page reached from its card, exactly as `/assessment` and `/results` are), and **no change to `DashboardState`, `navForState`, `JourneyStateService`, or the path-confirm gate.** The only change to an existing shared contract is one nullable `englishLevel` on `DashboardView`.
+
+**`CefrLevelBadge` shows the Latin code, where `HollandCodeChips` deliberately hides its letters.** A RIASEC letter is a storage key — "S" means nothing to an Arabic-speaking employee and «الاجتماعي» is the whole result. A CEFR level is the opposite: "B2" is the internationally recognised name of the thing and the token an employee would put on the CV §4.11 exports in English, so hiding it would withhold the useful half. The code is rendered from the data, never from `ar.json`, which is what keeps the catalogue free of Latin letters and bare digits — the two rules `messages.test.ts` enforces.
+
+**One existing test was changed, and it should be read rather than skimmed.** `dashboard.test.tsx`'s "offers the assessment as the single primary action" asserted a raw count of **one link** on the pre-assessment dashboard. The English card puts a second one there by design. The count was never the rule — §4.2's rule is one *primary* action — so the assertion now says that directly: exactly one filled (`bg-primary-600`) link, which is the career assessment, and the only other link is named explicitly as «ابدأ تقييم اللغة». A future change that promoted the English action to primary now fails here rather than quietly doubling the call to action a new employee is given. No Holland behaviour changed; the test's intent is intact and better expressed.
+
+**Files:** `english-assessment.{service,controller,dto,module}.ts`, `app.module.ts`, `enrollment.service.ts` (the one `englishLevel` read, done directly rather than through `JourneyStateService` — nothing about the level depends on the result or the path, and putting it there would imply a relationship that does not exist), `audit.ts` (+1 action, +6 reasons), `journey.ts`, `api-client.ts`, `components/english/cefr-level-badge.tsx`, `app/(portal)/english-assessment/page.tsx` and `…/result/page.tsx`, the dashboard and profile pages, `messages/ar.json` (the `english` namespace, 9 error codes, the audit copy).
+
+**Tested: 844 web component tests green (60 files, +30 new) · 719 API unit · 51 types.** The new web tests assert the properties rather than the rendering: the answer key never appears in the DOM, a learner who already holds a result is redirected instead of being offered a second attempt, the draft resumes across a remount and is discarded when the bank changes, the result page has **no button at all** (absence, not a disabled control), the level is named in Arabic *and* keeps its code, and the English card never renders as the primary action. Typecheck, lint and prettier clean across all three workspaces.
+
+**Owed, and deliberate:** the flow is unreachable in practice until E.4 seeds a bank — `getActive` answers `ENGLISH_ASSESSMENT_NOT_FOUND` and the page shows its empty state, which is the honest behaviour for a version nobody has published. API integration tests for the three endpoints, and the browser e2e, belong to E.5.
+
+**Next:** E.3 — the sibling admin editor at `/admin/english`, including the band-threshold editor.
+
+### 2026-08-30 — E.1: the English (CEFR) data model and scoring engine — branch `english-assessment`
+
+First of five sub-phases adding an English proficiency test alongside the Holland instrument. **Logic and schema only — no UI, no endpoints, no seeded content.**
+
+**The architecture call, and the evidence for it.** The English test gets **sibling tables**, not a `kind` discriminator on `assessments` (D-124). The deciding fact came out of the inspection rather than from preference: `AssessmentService.getActive`, `AdminAssessmentService.createDraft` and `requireDraft` all call `findFirst({ where: { status: 'ACTIVE' } })` — or `'DRAFT'` — **with no filter on `key`**, and `overview()` reads the whole table. The partial unique indexes from the Phase 5 versioning migration are per-key, so the database would accept a second ACTIVE instrument quite happily and the code would then serve whichever row Postgres returned first as the learner's Holland assessment. Making those queries key-aware means editing the live RIASEC path, which this work is forbidden to touch. Separate tables make "Holland is unchanged" a property of the diff.
+
+**Schema** (`20260830120000_english_assessment`, hand-written as every migration since Phase 5 has been): `english_assessments` / `_questions` / `_options` / `_bands` / `_results` / `_responses`, plus `CefrLevel` (declared ascending, so `ORDER BY level` sorts A1→C2) and `EnglishSkill`. `AssessmentStatus` is reused — DRAFT/ACTIVE/RETIRED is a lifecycle, not a RIASEC fact. Copy-on-write and the partial unique indexes are carried over verbatim from D-072, because D-049 applies here unchanged. **Nothing existing is altered** beyond one new foreign key into `users` and one back-relation on the `User` model.
+
+**What English adds that Holland lacks:** `options.is_correct` and `questions.marks`. Marks sit on the *question* rather than the option because exactly one option scores and the rest score nothing — on the option it would invite a bank where two options are worth different amounts of "correct". "Exactly one correct option" is checked at publish, not by a constraint, on D-073's reasoning that a draft must be free to be temporarily invalid.
+
+**The bands are on the version, not in `settings`** (D-125). A band table is what turns a total into the level a person is told they are; held globally, moving the B2 boundary would silently re-interpret every result ever issued — the exact gap copy-on-write exists to close. Held on the version, they are frozen with it.
+
+**The balance rule is not here, deliberately.** `assessEnglishBank` does not import, call or modify `isBalancedBank` or `assessBank`. D-032 protects a comparison *across* six dimensions; English has one scale and an item worth four marks is difficulty weighting doing its job. What takes its place is the rule English actually has — **the band table must partition `0 … maxScore` exactly** (all six levels once, no inverted range, no gap, no overlap, starting at 0 and ending at the attainable total), plus per-question well-formedness, and one *warning* for a CEFR level with no item targeting it (D-074's severity reasoning, applied to content coverage).
+
+**Files:** `packages/types/src/english-assessment.ts` (vocabulary + contract; the D-034 absence rule carries over — no view type exposes `isCorrect`, and none exposes `marks` or an item's level either, because both let a taker triage), `apps/api/src/english-assessment/english-scoring.ts`, `apps/api/src/admin/english-bank-readiness.ts`, both specs, the migration, `schema.prisma`, `packages/types/src/index.ts`.
+
+**Tested: 719 API unit tests green (44 suites), of which 55 are new.** The boundary cases are the point — every internal band boundary asserted from both sides, the two ends of the scale, a single-score band (a half-open reading would make B2 unreachable with no symptom), an uncovered score refused rather than defaulted, and each of the four submission refusals. The readiness spec asserts every way a band table can fail to be a partition, that one fault is named for one mistake, that a table ordered by number rather than by level is rejected, and — explicitly — **that the seeded Holland bank still passes `assessBank` balanced with no blockers**, which is where a stray import would show. Typecheck, lint and prettier clean across all three workspaces. (Four pre-existing prettier warnings remain in files this work does not touch: `apps/web/e2e/auth-happy-path.spec.ts` and three `.tmp.mjs` scratch files.)
+
+**Not done here, by design:** no endpoints, no module, no UI, no seed content, no admin surface. E.2 builds the learner flow, E.3 the sibling admin editor, E.4 the thirty questions, E.5 the integration and the Holland-intact proof.
+
+**Decisions recorded:** D-123 (independent, optional, taken once), D-124 (sibling tables), D-125 (bands on the version; the partition rule replaces balance).
+
+**Also noticed, not fixed:** the Phase 5 assessment code comments cite **D-069/D-070/D-071** for copy-on-write / draft-then-publish / the balance guard. Those are the pre-rebase numbers; `decisions.md` renumbered them **D-072/D-073/D-074**, and D-069 is now the Platforms Code design system. The comments are stale, not wrong, and correcting them touches live Holland files — a one-line-per-site cleanup for a separate change, noted so the next reader is not sent to the wrong entry.
+
+**Next:** E.2 — the learner taking flow and the CEFR result, wired to the dashboard card in all three states.
+
 ### 2026-08-27 — TAM-133: per-course resync on the frame's own edit signal — branch `feature/tam-133-per-course-resync`
 
 Closes the gap where a rename made in the frame's Settings tab took up to `COMPLETION_SYNC_INTERVAL_MINUTES` (5 min) to appear anywhere in the portal, while a content edit already refreshed within seconds via the existing `tamkeen:content-changed` message.
