@@ -5,6 +5,32 @@
 
 ---
 
+### 2026-08-30 — E.1: the English (CEFR) data model and scoring engine — branch `english-assessment`
+
+First of five sub-phases adding an English proficiency test alongside the Holland instrument. **Logic and schema only — no UI, no endpoints, no seeded content.**
+
+**The architecture call, and the evidence for it.** The English test gets **sibling tables**, not a `kind` discriminator on `assessments` (D-124). The deciding fact came out of the inspection rather than from preference: `AssessmentService.getActive`, `AdminAssessmentService.createDraft` and `requireDraft` all call `findFirst({ where: { status: 'ACTIVE' } })` — or `'DRAFT'` — **with no filter on `key`**, and `overview()` reads the whole table. The partial unique indexes from the Phase 5 versioning migration are per-key, so the database would accept a second ACTIVE instrument quite happily and the code would then serve whichever row Postgres returned first as the learner's Holland assessment. Making those queries key-aware means editing the live RIASEC path, which this work is forbidden to touch. Separate tables make "Holland is unchanged" a property of the diff.
+
+**Schema** (`20260830120000_english_assessment`, hand-written as every migration since Phase 5 has been): `english_assessments` / `_questions` / `_options` / `_bands` / `_results` / `_responses`, plus `CefrLevel` (declared ascending, so `ORDER BY level` sorts A1→C2) and `EnglishSkill`. `AssessmentStatus` is reused — DRAFT/ACTIVE/RETIRED is a lifecycle, not a RIASEC fact. Copy-on-write and the partial unique indexes are carried over verbatim from D-072, because D-049 applies here unchanged. **Nothing existing is altered** beyond one new foreign key into `users` and one back-relation on the `User` model.
+
+**What English adds that Holland lacks:** `options.is_correct` and `questions.marks`. Marks sit on the *question* rather than the option because exactly one option scores and the rest score nothing — on the option it would invite a bank where two options are worth different amounts of "correct". "Exactly one correct option" is checked at publish, not by a constraint, on D-073's reasoning that a draft must be free to be temporarily invalid.
+
+**The bands are on the version, not in `settings`** (D-125). A band table is what turns a total into the level a person is told they are; held globally, moving the B2 boundary would silently re-interpret every result ever issued — the exact gap copy-on-write exists to close. Held on the version, they are frozen with it.
+
+**The balance rule is not here, deliberately.** `assessEnglishBank` does not import, call or modify `isBalancedBank` or `assessBank`. D-032 protects a comparison *across* six dimensions; English has one scale and an item worth four marks is difficulty weighting doing its job. What takes its place is the rule English actually has — **the band table must partition `0 … maxScore` exactly** (all six levels once, no inverted range, no gap, no overlap, starting at 0 and ending at the attainable total), plus per-question well-formedness, and one *warning* for a CEFR level with no item targeting it (D-074's severity reasoning, applied to content coverage).
+
+**Files:** `packages/types/src/english-assessment.ts` (vocabulary + contract; the D-034 absence rule carries over — no view type exposes `isCorrect`, and none exposes `marks` or an item's level either, because both let a taker triage), `apps/api/src/english-assessment/english-scoring.ts`, `apps/api/src/admin/english-bank-readiness.ts`, both specs, the migration, `schema.prisma`, `packages/types/src/index.ts`.
+
+**Tested: 719 API unit tests green (44 suites), of which 55 are new.** The boundary cases are the point — every internal band boundary asserted from both sides, the two ends of the scale, a single-score band (a half-open reading would make B2 unreachable with no symptom), an uncovered score refused rather than defaulted, and each of the four submission refusals. The readiness spec asserts every way a band table can fail to be a partition, that one fault is named for one mistake, that a table ordered by number rather than by level is rejected, and — explicitly — **that the seeded Holland bank still passes `assessBank` balanced with no blockers**, which is where a stray import would show. Typecheck, lint and prettier clean across all three workspaces. (Four pre-existing prettier warnings remain in files this work does not touch: `apps/web/e2e/auth-happy-path.spec.ts` and three `.tmp.mjs` scratch files.)
+
+**Not done here, by design:** no endpoints, no module, no UI, no seed content, no admin surface. E.2 builds the learner flow, E.3 the sibling admin editor, E.4 the thirty questions, E.5 the integration and the Holland-intact proof.
+
+**Decisions recorded:** D-123 (independent, optional, taken once), D-124 (sibling tables), D-125 (bands on the version; the partition rule replaces balance).
+
+**Also noticed, not fixed:** the Phase 5 assessment code comments cite **D-069/D-070/D-071** for copy-on-write / draft-then-publish / the balance guard. Those are the pre-rebase numbers; `decisions.md` renumbered them **D-072/D-073/D-074**, and D-069 is now the Platforms Code design system. The comments are stale, not wrong, and correcting them touches live Holland files — a one-line-per-site cleanup for a separate change, noted so the next reader is not sent to the wrong entry.
+
+**Next:** E.2 — the learner taking flow and the CEFR result, wired to the dashboard card in all three states.
+
 ### 2026-08-27 — TAM-133: per-course resync on the frame's own edit signal — branch `feature/tam-133-per-course-resync`
 
 Closes the gap where a rename made in the frame's Settings tab took up to `COMPLETION_SYNC_INTERVAL_MINUTES` (5 min) to appear anywhere in the portal, while a content edit already refreshed within seconds via the existing `tamkeen:content-changed` message.

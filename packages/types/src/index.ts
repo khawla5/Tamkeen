@@ -16,6 +16,10 @@ export * from './assessment';
 export * from './catalog';
 export * from './journey';
 
+/* The English (CEFR) placement test — a sibling instrument, sharing no type
+   with the RIASEC one (§4.13, D-123). */
+export * from './english-assessment';
+
 /* Phase 3 — certificates and the CV. */
 export * from './certificates';
 export * from './notifications';
