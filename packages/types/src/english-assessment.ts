@@ -137,3 +137,90 @@ export interface EnglishAssessmentResultView {
    */
   canRetake: boolean;
 }
+
+/* ------------------------------------------------------------------ *
+ * §4C.9 — the admin contract.
+ *
+ * Held in this file rather than beside `AdminAssessment*` in `admin.ts`,
+ * deliberately: the sibling principle is that "what is English" should be one
+ * file to read and one file to delete, and splitting the contract across two
+ * would put half of it next to the RIASEC types it must not be confused with.
+ *
+ * These types **do** carry the answer key — `isCorrect`, `marks`, the item's
+ * level. That is the whole difference between this surface and the learner's,
+ * and `@Roles('SUPER_ADMIN')` on the controller is the whole of what keeps it
+ * there.
+ * ------------------------------------------------------------------ */
+
+export type EnglishVersionStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
+
+export interface AdminEnglishOption {
+  id: string;
+  key: string;
+  label: string;
+  order: number;
+  /** Exactly one option per question carries this in a publishable bank. */
+  isCorrect: boolean;
+}
+
+export interface AdminEnglishQuestion {
+  id: string;
+  key: string;
+  text: string;
+  order: number;
+  /** What a correct answer is worth. Holland has no analogue. */
+  marks: number;
+  /** The level the item targets, and the skill it tests. Authoring metadata. */
+  level: CefrLevel;
+  skill: EnglishSkill;
+  options: AdminEnglishOption[];
+}
+
+/** Why a proposed version cannot be published, or should not be without thought. */
+export interface AdminEnglishReadiness {
+  /** Refusals. Publishing with any of these is impossible. */
+  blockers: string[];
+  /** Advisory. Publishing proceeds; the editor says so first. */
+  warnings: string[];
+  /** The highest attainable total — what the band table must cover. */
+  maxScore: number;
+  /** Levels with no question targeting them, in CEFR order. */
+  levelsWithoutQuestion: CefrLevel[];
+  /** True when the bands partition `0 … maxScore` exactly. */
+  bandsCoverRange: boolean;
+}
+
+/** A version in the history list (§4C.9's "version + effective date"). */
+export interface AdminEnglishVersion {
+  id: string;
+  version: number;
+  status: EnglishVersionStatus;
+  title: string;
+  effectiveFrom: string | null;
+  retiredAt: string | null;
+  questionCount: number;
+  /** How many people this version placed. Never mutated (D-049, D-123). */
+  resultCount: number;
+}
+
+/** §4C.9's landing state: what is live, what is being edited, what came before. */
+export interface AdminEnglishOverview {
+  active: AdminEnglishVersion | null;
+  draft: AdminEnglishVersion | null;
+  history: AdminEnglishVersion[];
+}
+
+/** The draft bank, answer key included, as only an administrator may see it. */
+export interface AdminEnglishDraft {
+  id: string;
+  key: string;
+  version: number;
+  title: string;
+  description: string;
+  questions: AdminEnglishQuestion[];
+  /** The configurable scoring rule (D-125). Ascending by level. */
+  bands: CefrBand[];
+  readiness: AdminEnglishReadiness;
+  /** The version this draft was copied from, for "what am I changing". */
+  basedOnVersion: number | null;
+}

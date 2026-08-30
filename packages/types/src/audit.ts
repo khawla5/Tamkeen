@@ -208,6 +208,21 @@ export const AuditAction = {
    * explicable months later without reconstructing the bank as it stood.
    */
   ADMIN_ASSESSMENT_PUBLISHED: 'ADMIN_ASSESSMENT_PUBLISHED',
+  /* §4C.9 — the English placement test's own editing trail (D-123, D-124).
+     Separate actions rather than shared ones, because a trail filtered to "who
+     changed the career assessment" must not also return English edits: the two
+     are different instruments and the target ids point at different tables. */
+  ADMIN_ENGLISH_DRAFT_OPENED: 'ADMIN_ENGLISH_DRAFT_OPENED',
+  ADMIN_ENGLISH_DRAFT_DISCARDED: 'ADMIN_ENGLISH_DRAFT_DISCARDED',
+  /**
+   * A new English version became the one new takers receive.
+   *
+   * Consequential in the way §4C.3's publish is: every CEFR level produced from
+   * this moment comes from a different instrument, and — because the bands
+   * travel with the version (D-125) — potentially from a different scale.
+   * Recorded on refusal too, with the blockers.
+   */
+  ADMIN_ENGLISH_PUBLISHED: 'ADMIN_ENGLISH_PUBLISHED',
   /** A study path was created (§4C.4). Always inactive to begin with. */
   ADMIN_PATH_CREATED: 'ADMIN_PATH_CREATED',
   /** A path's content changed — name, description, duration, letter, order. */
@@ -303,6 +318,8 @@ export const AuditReason = {
   ENGLISH_ASSESSMENT_NO_BAND: 'ENGLISH_ASSESSMENT_NO_BAND',
   /** A second attempt at a test that is taken once (D-123). */
   ENGLISH_ASSESSMENT_ALREADY_TAKEN: 'ENGLISH_ASSESSMENT_ALREADY_TAKEN',
+  /** §4C.9 refused a publish. The specific blockers travel in `detail`. */
+  ENGLISH_BANK_NOT_PUBLISHABLE: 'ENGLISH_BANK_NOT_PUBLISHABLE',
 
   // Phase 1 — path building and commitment
   PATH_ALREADY_CONFIRMED: 'PATH_ALREADY_CONFIRMED',
@@ -432,6 +449,9 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ADMIN_ASSESSMENT_DRAFT_OPENED: 'content',
   ADMIN_ASSESSMENT_DRAFT_DISCARDED: 'content',
   ADMIN_ASSESSMENT_PUBLISHED: 'content',
+  ADMIN_ENGLISH_DRAFT_OPENED: 'content',
+  ADMIN_ENGLISH_DRAFT_DISCARDED: 'content',
+  ADMIN_ENGLISH_PUBLISHED: 'content',
   ADMIN_PATH_CREATED: 'content',
   ADMIN_PATH_UPDATED: 'content',
   ADMIN_PATH_ACTIVATED: 'content',

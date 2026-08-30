@@ -5,6 +5,18 @@
 
 ---
 
+## D-127 — Make the invalid state unreachable in the editor; keep the guard in the gate
+
+**Decision (E.3):** §4C.9's editor is shaped so that two of `assessEnglishBank`'s blockers cannot be produced through it. Marking an option correct **clears the question's other options in the same transaction** (radio semantics, server-side), so `MULTIPLE_CORRECT_OPTIONS` is unreachable. The band editor exposes **five ceilings, not twelve bounds** — A1 starts at 0, each band starts one above the previous ceiling, C2 is pinned to the attainable total — so `BANDS_NOT_CONTIGUOUS` and `BANDS_DO_NOT_COVER_RANGE` are unreachable. **Both blockers stay in the publish gate regardless.**
+
+**Why not delete the now-unreachable guards:** because "unreachable" is a statement about *this screen*, and rows arrive by other routes — the E.4 seed, a future import, a hand-run SQL fix during an incident. A blocker that no UI can trigger is exactly the one worth keeping: nothing else would catch the case, and it costs one branch in a pure function. The inverse — trusting the UI and dropping the check — is how a data fix made at 2am becomes a learner placed at the wrong level with nothing reporting it.
+
+**Why not the other way round (free-form fields, refuse afterwards):** an editor that lets somebody type a gap and then refuses them for it is an editor that teaches its own rules by rejection. Deriving the lower bounds means the administrator is *only ever* choosing the thing they actually have an opinion about — where B1 ends — and the structure holds itself together.
+
+**A convenience that is not a policy:** «توزيع متساوٍ» fills the five boundaries evenly. Growing a bank from twenty items to thirty makes every boundary stale at once, and retyping five numbers to get back to "roughly even" is work the screen can do; the administrator then moves the ones they care about. It is a starting point, never applied automatically — the band table is a ministry judgement, and a screen that silently rebalanced it would be making that judgement.
+
+**Rejected:** a checkbox per option with a "only one may be correct" validator (the state is reachable, so it must be explained, so the screen grows an error nobody needs to see); twelve band fields with live validation (same); auto-rescaling the bands when `maxScore` changes (the editor would be deciding what B2 means).
+
 ## D-126 — The CEFR code is shown; the RIASEC letter is not
 
 **Decision (E.2):** `CefrLevelBadge` renders «B2 · فوق المتوسط» — the Latin level code beside its Arabic name — where `HollandCodeChips` renders «الاجتماعي» and never the letter S.

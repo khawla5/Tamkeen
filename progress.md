@@ -5,6 +5,30 @@
 
 ---
 
+### 2026-08-30 — E.3: the sibling admin editor at `/admin/english` — branch `english-assessment`
+
+§4C.9 built: the version overview, the draft-then-publish editor over copy-on-write, question text / level / skill / marks, the correct answer, and **the band table as the configurable scoring rule**. The RIASEC editor is not touched — no file under §4C.3 changed, and `admin-assessment.test.tsx` runs unaltered.
+
+**A parallel surface, not a retrofit.** `AdminEnglishService` imports nothing from `AdminAssessmentService` and vice versa; `AdminEnglishController` is mounted at `admin/english`. It joins `ADMIN_CONTROLLERS`, which is the list `AdminModule` registers **and** `admin-rbac.e2e-spec.ts` enumerates — so every new route is covered against an employee, an entity and an anonymous caller the moment it is routable, with no second place to remember.
+
+**Two invalid states are made unreachable rather than merely refused, and both guards stay in the gate anyway.**
+- *The correct answer is a radio.* `updateOption` with `isCorrect: true` clears the question's other options in the same transaction, so two-correct cannot be produced from the screen. `MULTIPLE_CORRECT_OPTIONS` stays in `assessEnglishBank` precisely because it is now unreachable through the UI: it guards rows arriving another way — an import, a hand-run SQL fix — and nothing else would catch those.
+- *The band table is edited as five numbers, not twelve.* A partition of `0 … maxScore` is completely determined by its five internal ceilings; A1 starts at 0, each band starts one above the previous ceiling, and C2 is pinned to the attainable total. Gaps and overlaps are **not representable** in the editor. The server still validates the complete table.
+
+**`setBands` takes the whole table, `PUT` not `PATCH`.** Moving one boundary necessarily changes two bands, so a per-band endpoint would force the administrator through states that are invalid by construction. Same reasoning as `reorder` taking the complete order. Validation is the publish gate's, not the save's (D-073): a draft whose bank has just grown has a stale table *by definition*, and refusing the save would leave no way to fix it.
+
+**Where §4C.9 deliberately diverges from §4C.3.** (a) **`createDraft` works with no active version**, creating an empty version 1 — the RIASEC bank is seeded and has always had an ACTIVE row to copy, so its refusal is right there and would be an editor that cannot create what it edits here. (b) **Adding a question asks for its options**, where §4C.3 generates five Likert levels from a dimension — a RIASEC item's options are the same five agreement levels every time, but an English item's distractors are content somebody wrote, and generating them would be inventing assessment content. Blank rows are dropped on submit and **the correct index is re-pointed at the option it was actually on**, which a test guards: filling options 1 and 3 and marking 3 correct must not silently move the right answer.
+
+**Nav.** A ninth admin item, `/admin/english`, beside the career assessment rather than inside it. §3's six-item rule governs the *learner's* nav; §4C's own note already explains why an administrator's surface is the whole product.
+
+**Files:** `admin-english.{service,controller,dto}.ts`, `admin.controllers.ts`, `admin.module.ts`, `audit.ts` (+3 actions, +1 reason), `english-assessment.ts` (the admin half of the contract, kept in the same file so "what is English" is one file to read), `api-client.ts`, `components/admin/english-{assessment-editor,band-editor,readiness-panel}.tsx`, `app/(admin)/admin/english/page.tsx`, `admin-nav-items.ts`, `messages/ar.json` (the §4C.9 namespace, 9 blocker strings, 23 error codes, the audit copy).
+
+**Tested: 865 web (61 files, +21 new) · 719 API · 51 types — all green.** The new suite asserts the properties: five ceilings and no twelfth field, the derived table's contiguity checked **across the whole table** rather than one pair, the top band pinned, publish refused with the blocker named in the dialog, publish allowed past a warning that names the missing levels, the radio sending exactly one call, the correct-index re-pointing, and — explicitly — that **no RIASEC concept appears anywhere on this screen** and no RIASEC endpoint is reachable from it. Typecheck, lint, prettier clean; `messages.test.ts` (158 assertions) passes, so every new audit code has Arabic copy and the catalogue is still free of Latin letters and bare digits.
+
+**Owed to E.5:** API integration tests for the fourteen new routes (the RBAC suite covers them structurally today), and the browser e2e for admin-edits-then-learner-takes.
+
+**Next:** E.4 — the thirty seeded questions.
+
 ### 2026-08-30 — E.2: the English taking flow, the CEFR result, and the entry points — branch `english-assessment`
 
 The learner half of §4.13. A learner can now take the placement test and see their level; the admin surface (E.3) and the real thirty questions (E.4) are still to come.
