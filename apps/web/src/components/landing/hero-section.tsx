@@ -34,8 +34,22 @@ export function HeroSection() {
   const tAuth = useTranslations('auth');
 
   return (
-    <section className="bg-primary-deep text-surface">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-2 lg:py-24">
+    <section className="relative overflow-hidden bg-primary-deep text-surface">
+      {/* The ministry headquarters, behind a dark tint that keeps the white
+          text at the contrast ratio D-069's palette work already measured —
+          the photo reads as texture, not as a background the copy competes
+          with. */}
+      <Image
+        src="/landing/moi-headquarters.jpg"
+        alt=""
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover"
+      />
+      <div className="absolute inset-0 bg-primary-deep/78" />
+
+      <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-2 lg:py-24">
         <div className="flex max-w-2xl flex-col items-start text-start">
           <h1 className="text-4xl font-extrabold leading-tight text-surface sm:text-5xl">
             {t('heroTitle')}
