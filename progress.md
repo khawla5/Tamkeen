@@ -5,6 +5,26 @@
 
 ---
 
+### 2026-08-30 — E.4: the thirty seeded English questions — branch `english-assessment`
+
+The content: thirty MCQs across grammar, vocabulary, reading and practical English, five per CEFR level from A1 to C2, seeded as editable data in `seed-data/english-assessment.ts` and written by `seedEnglishAssessment` in the same pass as the band table.
+
+**Marks rise with the level** — A1/A2 worth 1, B1/B2 worth 2, C1/C2 worth 3, **sixty marks in total**. This is the distinction that made the sibling schema necessary in the first place: weighting a harder item more heavily is difficulty weighting doing its job, not a skew, and D-032's balance rule has nothing to say about it (D-125). The seeded band table partitions 0–60 with the middle bands widest.
+
+**Items run in ascending level order**, where the RIASEC bank deliberately interleaves (D-032). The reasoning that makes interleaving right there makes ascending order right here: a Holland item invites a self-description that can be answered in blocks, so the bank breaks up the blocks; a placement item has a right answer, and opening with C2 grammar makes a genuine A2 speaker give up on a test that was about to place them correctly.
+
+**A real defect found in my own content, and fixed.** Every one of the thirty items was authored with its correct answer as the **first option** — which is how a human reviews an answer key (reading down the file, the first option is the one being asserted correct) and is a catastrophe if seeded that way: a taker who noticed would score sixty out of sixty without a word of English, and *every structural property would still have held*. The stored bank now rotates each item's options by its index — deterministic, never random, because a shuffled seed would put the answer somewhere new on every run, so a stored response could not be re-read against the bank that produced it and two environments would hold different instruments under the same version number. Two tests guard it: the correct answer's **distribution** across positions (not merely "not always zero" — one stray item would satisfy that while twenty-nine others gave the game away), and a spot-check that rotation moved the options without moving the *answer*.
+
+**The items are in English, and the spec asserts it.** §2 is Arabic-first and `messages.test.ts` enforces that over the message catalogue — but an English proficiency item cannot be posed in Arabic without ceasing to measure anything. D-047's rule for course content, applied to assessment content; the chrome stays Arabic, and the spec asserts *both* halves (no Arabic in any item, Arabic in the instrument's own title and description).
+
+**The seed bootstraps; it does not maintain** (D-083, applied to the second instrument). Once §4C.9 has published an edit, re-running the seed leaves every row alone and says so. For this instrument the loss it prevents includes the band boundaries that decide what every future placement *means*.
+
+**Tested: 750 API unit (46 suites, +32 new) · 865 web · 51 types.** Two new specs. `english-assessment.spec.ts` (24) asserts the content properties that must fail CI rather than be noticed later — thirty items, five per level, all four skills, a reading and a practical item at every level, exactly one existing correct answer each, no duplicate or blank options, marks non-decreasing up the scale, the band table partitioning 0–60 with **every one of the sixty-one integers in exactly one band**, and the whole bank passing `assessEnglishBank` with no blockers *and no warnings*. It also asserts two things about the instrument's shape: a taker answering every A and B item correctly (30 marks) lands below C1, and one answering only the A-level items lands at A1. `english-seed-runner.spec.ts` (8) covers D-083 against a Prisma stub — the ministry-owned case asserts **every write mock is untouched**, enumerated over the whole set rather than the ones that came to mind, because the failure it guards is a *new* write added later without the guard in front of it.
+
+**Honest limitation, unchanged from the standing note:** there is no Docker or Postgres in this environment and no `.env`, so `npm run db:seed` has **not been run** against a real database. The seed function is verified by typecheck and by the stub-based spec, which asserts which writes are issued — a stronger property than reading rows back, but not the same as having run it. **E.5 owns running it for real.**
+
+**Next:** E.5 — integration and the full verification, including the explicit Holland-intact proof.
+
 ### 2026-08-30 — E.3: the sibling admin editor at `/admin/english` — branch `english-assessment`
 
 §4C.9 built: the version overview, the draft-then-publish editor over copy-on-write, question text / level / skill / marks, the correct answer, and **the band table as the configurable scoring rule**. The RIASEC editor is not touched — no file under §4C.3 changed, and `admin-assessment.test.tsx` runs unaltered.
