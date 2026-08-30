@@ -5,6 +5,22 @@
 
 ---
 
+### 2026-08-30 — TAM-150: the landing page reframed around skills, the explorer driven by real paths — branch `feature/tam-150-landing-skill-development-explorer`
+
+Five parts, one message: the platform trains people into nameable capabilities, not through a sequence of screens.
+
+**Data (§4C.4).** `paths.skill_outcomes` (`text[]`, default `[]`) — three to five short noun phrases, directorate-authored beside `description`. New `Field` in `path-detail-panel.tsx`, one outcome per line (the same convention the entity's objectives editor uses). The twelve seeded paths carry **placeholder** outcomes, topically plausible but not directorate-authored, marked as such in `catalog.ts` — the ticket is not done until these are signed off, the same rule the landing copy itself lives under.
+
+**A second public endpoint.** `GET /api/public/paths` (`PublicPathsController`, its own controller rather than a `@Public()` method bolted onto the authenticated `PathsController`, which is `@Roles('EMPLOYEE')` at the class level and answers "for *this* learner" on every field) returns `{ id, name, riasecLetter, description, skillOutcomes, courseCount, typicalDurationMinutes }` for active paths, `courseCount` computed the same way `PathsService.listForUser` already does (approved + available). `@Throttle` at 30/min, a five-minute in-process cache (no Redis — this is one read-mostly query behind the highest-traffic anonymous page, and staleness up to five minutes costs nothing real). `certificates.controller.ts`'s doc comment, which claimed verification was "the only unauthenticated read in the product," is corrected to name both.
+
+**The explorer («عن المنصة»).** Rewritten from a four-stage generic walkthrough into one tab per active path — same `Tabs` component, same tablist semantics (arrow keys, `aria-current`, its own accessible name, horizontal scroll at twelve paths already handled by the shared component's `overflow-x-auto`). Each panel: career type in Arabic (D-099 names, never the raw letter), skill outcomes as a list, description, course count and duration — all interpolated from the API response, nothing typed into `ar.json`. A four-line "how a path is reached" strip sits beneath the tabs (assessment → recommended → build within `{min}`–`{max}` → certificate), the one thing the old stage walkthrough got right. On a fetch failure or an empty active-path list, the explorer shows the strip alone with an Arabic "ستظهر المسارات هنا قريبًا" line — never an error page on the ministry's front door.
+
+**Hero, FAQ, footer — angle only, no structural change.** Hero body is one sentence: the ministry builds capabilities through paths matched to interests, the assessment named only as the matching mechanism. FAQ re-chosen for a manager reading first (how matching works, what the certificate attests) before the employee questions (registration, where courses are studied, verification) — three of the six keys (`who`, `where`, `verify`) were already the right question and kept their content unchanged. Footer line rewritten in skill-development terms.
+
+D-123 recorded. Tests: `landing.test.tsx` rewritten around the real-paths explorer (mocked `publicApi.paths`, including the API-failure fallback case), `admin-paths.test.tsx` fixture gained `skillOutcomes`; 811 web unit + 664 API unit green, typecheck/lint/format clean both workspaces. Verified live against the reseeded catalogue (`MOODLE_MODE=mock` — the shared dev `.env` currently has `MOODLE_MODE=real` from concurrent work on this machine, overridden inline rather than edited): all twelve paths render as tabs, the first panel shows real career type, description, skill outcomes, course count and duration, and the matching strip interpolates 5–10 correctly.
+
+**Owed:** the twelve seeded paths' `skill_outcomes` are placeholders pending directorate sign-off (see `catalog.ts`'s `SeedPath.skillOutcomes` doc comment) — the ticket's own "not done until" clause.
+
 ### 2026-08-27 — TAM-133: per-course resync on the frame's own edit signal — branch `feature/tam-133-per-course-resync`
 
 Closes the gap where a rename made in the frame's Settings tab took up to `COMPLETION_SYNC_INTERVAL_MINUTES` (5 min) to appear anywhere in the portal, while a content edit already refreshed within seconds via the existing `tamkeen:content-changed` message.

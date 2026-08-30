@@ -66,6 +66,7 @@ import type {
   NumberFormat,
   PathDetail,
   PathRecommendations,
+  PublicPathSummary,
   UnreadNotificationsView,
 } from '@tamkeen/types';
 
@@ -326,6 +327,12 @@ export const assessmentApi = {
 export const pathsApi = {
   list: () => api.get<PathRecommendations>('/api/paths'),
   detail: (pathId: string) => api.get<PathDetail>(`/api/paths/${pathId}`),
+};
+
+/** The landing explorer's one unauthenticated read (TAM-150) — no session, no
+ *  CSRF, so it is deliberately not folded into `pathsApi`. */
+export const publicApi = {
+  paths: () => api.get<PublicPathSummary[]>('/api/public/paths'),
 };
 
 export interface CourseFilters {
@@ -661,6 +668,7 @@ export const adminApi = {
     patch: {
       name?: string;
       description?: string;
+      skillOutcomes?: string[];
       riasecLetter?: RiasecLetter;
       typicalDurationMinutes?: number;
       displayOrder?: number;

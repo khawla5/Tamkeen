@@ -400,6 +400,10 @@ export interface AdminPathCourseRow {
 
 export interface AdminPathDetail extends AdminPathRow {
   description: string;
+  /** Three to five short noun phrases naming what the path produces —
+   *  directorate-authored, alongside `description` (TAM-150). Empty until it
+   *  is; the landing explorer reads this same list. */
+  skillOutcomes: string[];
   typicalDurationMinutes: number | null;
   courses: AdminPathCourseRow[];
   learners: AdminPathLearners;

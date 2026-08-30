@@ -559,6 +559,11 @@ model Path {
   name        String
   description String
 
+  /// Three to five short noun phrases naming what the path produces — «تحليل
+  /// البيانات الميدانية», never a sentence. Authored by the directorate
+  /// alongside `description` (§4C.4, TAM-150); empty until they are.
+  skillOutcomes String[] @default([]) @map("skill_outcomes")
+
   /// Drives the gold recommendation: a path is gold when this letter is in the
   /// user's top-three Holland Code.
   riasecLetter RiasecDimension @map("riasec_letter")

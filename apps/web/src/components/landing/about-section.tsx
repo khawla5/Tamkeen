@@ -1,65 +1,46 @@
 'use client';
 
-import { PATH_MAX_COURSES, PATH_MIN_COURSES } from '@tamkeen/types';
-import {
-  ArrowLeft,
-  Award,
-  ClipboardCheck,
-  GraduationCap,
-  Route,
-  type LucideIcon,
-} from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+
+import { PATH_MAX_COURSES, PATH_MIN_COURSES, type PublicPathSummary } from '@tamkeen/types';
 
 import { Button } from '@/components/ui/button';
 import { Tabs } from '@/components/ui/tabs';
 import { useFormat } from '@/i18n/format-provider';
-import { cn } from '@/lib/utils';
+import { publicApi } from '@/lib/api-client';
+import { toHours } from '@/lib/duration';
+import { useApiQuery } from '@/lib/use-api';
 
 /**
- * "عن المنصة" as an explorer, in the pattern Absher uses for its services: a
- * row of stage tabs, a list of that stage's steps on the start side, and the
- * selected step explained on the end side with the one action that follows.
- * The reader browses what the platform does instead of reading a wall of
- * prose, and every explanation comes from the BRD's functional requirements.
+ * "عن المنصة" as an explorer of the real paths, not the generic four-stage
+ * process it used to walk through (TAM-150). One tab per active path — the
+ * same tablist semantics as before (arrow keys, `aria-current`, its own
+ * accessible name, and a horizontal scroll at twelve paths that `Tabs`
+ * already handles) — each panel answering "what will I be able to do":
+ * the path's career type, the skills it produces, its description, and how
+ * much of it there is, all read from the API rather than typed here.
  *
- * Semantics: the stages are a real tablist (arrow keys move between them,
- * the panel is labelled by its tab); the steps are buttons marked
- * `aria-current` rather than a nested tablist — one level of tabs is enough
- * for a screen reader to hold in mind.
+ * Beneath the tabs, a compact four-line strip explains *how* a path is
+ * reached — the one thing the old stage-by-stage walkthrough got right and
+ * the only trace of it kept.
  */
-
-/** The bank is thirty Likert items, balanced by construction (D-032). */
-const ASSESSMENT_ITEM_COUNT = 30;
-
-const STAGES: ReadonlyArray<{ key: string; icon: LucideIcon; items: readonly string[] }> = [
-  { key: 'assessment', icon: ClipboardCheck, items: ['test', 'result', 'retake'] },
-  { key: 'path', icon: Route, items: ['recommended', 'build', 'confirm'] },
-  { key: 'courses', icon: GraduationCap, items: ['enter', 'quiz', 'progress'] },
-  { key: 'certificates', icon: Award, items: ['course', 'path', 'verify', 'cv'] },
-];
-
 export function AboutSection() {
   const t = useTranslations('landing');
   const { number } = useFormat();
 
-  const [stageIndex, setStageIndex] = useState(0);
-  const [itemIndex, setItemIndex] = useState(0);
-  const stage = STAGES[stageIndex]!;
-  const itemKey = stage.items[itemIndex]!;
+  const paths = useApiQuery(() => publicApi.paths(), []);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const values = {
-    count: number(ASSESSMENT_ITEM_COUNT),
-    min: number(PATH_MIN_COURSES),
-    max: number(PATH_MAX_COURSES),
-  };
+  const list = paths.data ?? [];
+  const active = list.find((path) => path.id === selectedId) ?? list[0] ?? null;
 
-  function selectStage(next: number) {
-    setStageIndex(next);
-    setItemIndex(0);
-  }
+  const matchValues = useMemo(
+    () => ({ min: number(PATH_MIN_COURSES), max: number(PATH_MAX_COURSES) }),
+    [number],
+  );
 
   return (
     <section id="about" className="scroll-mt-20 py-16 sm:py-20">
@@ -67,64 +48,97 @@ export function AboutSection() {
         <h2 className="text-3xl font-bold text-foreground">{t('aboutTitle')}</h2>
         <p className="mt-2 text-base text-muted-foreground">{t('aboutSubtitle')}</p>
 
-        <Tabs
-          className="mt-8"
-          label={t('explorerStagesLabel')}
-          items={STAGES.map(({ key, icon: Icon }) => ({
-            value: key,
-            icon: <Icon aria-hidden="true" className="size-5" />,
-            label: t(`stages.${key}.label`),
-          }))}
-          value={stage.key}
-          onValueChange={(next) => selectStage(STAGES.findIndex((item) => item.key === next))}
-          panelClassName="mt-8 grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12"
-        >
-          <ul aria-label={t('explorerItemsLabel')} className="flex flex-col gap-1">
-            {stage.items.map((key, index) => {
-              const current = index === itemIndex;
-              return (
-                <li key={key}>
-                  <button
-                    type="button"
-                    aria-current={current ? 'true' : undefined}
-                    onClick={() => setItemIndex(index)}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-lg px-4 py-3 text-start text-base font-semibold transition-colors',
-                      current
-                        ? 'bg-primary-50 text-primary-800'
-                        : 'text-neutral-700 hover:bg-neutral-100',
-                    )}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        'size-2 shrink-0 rounded-full',
-                        current ? 'bg-primary-600' : 'bg-neutral-300',
-                      )}
-                    />
-                    {t(`stages.${stage.key}.items.${key}.title`)}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="flex flex-col items-start">
-            <h3 className="text-2xl font-bold text-foreground">
-              {t(`stages.${stage.key}.items.${itemKey}.title`)}
-            </h3>
-            <p className="mt-3 max-w-xl text-base leading-relaxed text-neutral-700">
-              {t(`stages.${stage.key}.items.${itemKey}.body`, values)}
+        <div className="mt-8">
+          {/* Not an error state: a marketing page's front door does not fail
+              on an outage, it just has nothing new to show yet. Covers both a
+              fetch failure and a catalogue with no active paths — the same
+              honest fallback either way. */}
+          {!paths.isLoading && active ? (
+            <Tabs
+              label={t('explorerPathsLabel')}
+              items={list.map((path) => ({ value: path.id, label: path.name }))}
+              value={active.id}
+              onValueChange={setSelectedId}
+              panelClassName="mt-8"
+            >
+              <PathPanel path={active} />
+            </Tabs>
+          ) : !paths.isLoading ? (
+            <p role="status" className="text-base text-muted-foreground">
+              {t('explorerFallback')}
             </p>
-            <Button asChild size="lg" className="mt-8">
-              <Link href="/register">
-                {t('explorerAction')}
-                <ArrowLeft aria-hidden="true" />
-              </Link>
-            </Button>
-          </div>
-        </Tabs>
+          ) : (
+            <div aria-hidden="true" className="h-64 animate-pulse rounded-2xl bg-neutral-100" />
+          )}
+        </div>
+
+        <ul className="mt-10 flex flex-col gap-3 border-t border-border pt-8 sm:flex-row sm:flex-wrap sm:gap-x-8 sm:gap-y-3">
+          {(['assessment', 'recommend', 'build', 'certificate'] as const).map((key, index) => (
+            <li key={key} className="flex items-start gap-2 text-sm text-neutral-700 sm:flex-1">
+              <span
+                aria-hidden="true"
+                className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-800"
+              >
+                {number(index + 1)}
+              </span>
+              {t(`matchStrip.${key}`, matchValues)}
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
+  );
+}
+
+function PathPanel({ path }: { path: PublicPathSummary }) {
+  const t = useTranslations('landing');
+  const tRiasec = useTranslations('riasec');
+  const { number } = useFormat();
+
+  const hours = toHours(path.typicalDurationMinutes);
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-12">
+      <div className="flex flex-col items-start">
+        <h3 className="text-2xl font-bold text-foreground">{path.name}</h3>
+
+        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-sm font-medium text-primary-800">
+          <span className="text-primary-600">{t('explorerRiasecLabel')}:</span>
+          {tRiasec(`${path.riasecLetter}.name`)}
+        </span>
+
+        <p className="mt-4 max-w-xl text-base leading-relaxed text-neutral-700">
+          {path.description}
+        </p>
+
+        <p className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span>{t('explorerCourseCount', { count: number(path.courseCount) })}</span>
+          {hours !== null ? <span>{t('explorerDuration', { hours: number(hours) })}</span> : null}
+        </p>
+
+        <Button asChild size="lg" className="mt-8">
+          <Link href="/register">
+            {t('explorerAction')}
+            <ArrowLeft aria-hidden="true" />
+          </Link>
+        </Button>
+      </div>
+
+      {path.skillOutcomes.length > 0 ? (
+        <div>
+          <h4 className="text-sm font-semibold text-foreground">{t('explorerSkillsHeading')}</h4>
+          <ul className="mt-3 flex flex-col gap-2">
+            {path.skillOutcomes.map((outcome) => (
+              <li
+                key={outcome}
+                className="rounded-lg border border-border bg-card px-4 py-3 text-base font-medium text-foreground"
+              >
+                {outcome}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }

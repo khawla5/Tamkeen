@@ -95,6 +95,7 @@ export class AdminPathsService {
         key: true,
         name: true,
         description: true,
+        skillOutcomes: true,
         riasecLetter: true,
         typicalDurationMinutes: true,
         displayOrder: true,
@@ -142,6 +143,7 @@ export class AdminPathsService {
       key: path.key,
       name: path.name,
       description: path.description,
+      skillOutcomes: path.skillOutcomes,
       riasecLetter: path.riasecLetter,
       typicalDurationMinutes: path.typicalDurationMinutes,
       displayOrder: path.displayOrder,
@@ -233,6 +235,7 @@ export class AdminPathsService {
         key,
         name: dto.name,
         description: dto.description,
+        skillOutcomes: dto.skillOutcomes ?? [],
         riasecLetter: dto.riasecLetter,
         typicalDurationMinutes: dto.typicalDurationMinutes ?? null,
         displayOrder: dto.displayOrder ?? (maxOrder._max.displayOrder ?? 0) + 1,
@@ -290,6 +293,7 @@ export class AdminPathsService {
       data: {
         ...(dto.name === undefined ? {} : { name: dto.name }),
         ...(dto.description === undefined ? {} : { description: dto.description }),
+        ...(dto.skillOutcomes === undefined ? {} : { skillOutcomes: dto.skillOutcomes }),
         ...(dto.riasecLetter === undefined ? {} : { riasecLetter: dto.riasecLetter }),
         ...(dto.typicalDurationMinutes === undefined
           ? {}

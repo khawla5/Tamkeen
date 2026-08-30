@@ -75,8 +75,9 @@ export class CertificatesController {
   /**
    * Confirms a certificate to a third party, without a login (D-016).
    *
-   * **The only unauthenticated read in the product**, which is why three things
-   * are true of it at once:
+   * One of two unauthenticated reads in the product — the landing explorer's
+   * `GET /public/paths` is the other (TAM-150) — and both are marked the same
+   * deliberate way, for the same three reasons:
    *
    *  - **`@Public()` is deliberate and greppable.** Authentication is on by
    *    default via a global guard, so this line is the whole exposure.

@@ -99,6 +99,7 @@ function detail(overrides: Partial<AdminPathDetail> = {}): AdminPathDetail {
   return {
     ...row(),
     description: 'وصف المسار الكامل الذي يقرأه الموظف قبل اختياره.',
+    skillOutcomes: ['تحليل البيانات الميدانية', 'كتابة التقارير المؤسسية'],
     typicalDurationMinutes: 600,
     courses: [course(1), course(2), course(3), course(4), course(5)],
     learners: { building: 3, active: 9, completed: 3 },

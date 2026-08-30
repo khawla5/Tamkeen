@@ -265,6 +265,7 @@ async function seedCatalog(
         key: seedPath.key,
         name: seedPath.name,
         description: seedPath.description,
+        skillOutcomes: seedPath.skillOutcomes,
         riasecLetter: seedPath.riasecLetter,
         typicalDurationMinutes: seedPath.typicalDurationMinutes,
         displayOrder: seedPath.displayOrder,
@@ -272,6 +273,7 @@ async function seedCatalog(
       update: {
         name: seedPath.name,
         description: seedPath.description,
+        skillOutcomes: seedPath.skillOutcomes,
         riasecLetter: seedPath.riasecLetter,
         typicalDurationMinutes: seedPath.typicalDurationMinutes,
         displayOrder: seedPath.displayOrder,

@@ -1,6 +1,8 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { PublicPathSummary } from '@tamkeen/types';
 
 import LandingPage from '@/app/landing/page';
 import { renderWithProviders } from '@/test/render';
@@ -10,8 +12,40 @@ import { renderWithProviders } from '@/test/render';
  * scope: auth/assessment/application functionality"). Tests assert the
  * marketing content and its structure, not product logic, since there is
  * none here.
+ *
+ * The explorer is now real-paths data (TAM-150), so `publicApi.paths` is
+ * mocked rather than left to hit a real endpoint.
  */
+const api = vi.hoisted(() => ({ paths: vi.fn() }));
+
+vi.mock('@/lib/api-client', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api-client')>('@/lib/api-client');
+
+  return { ...actual, publicApi: { paths: api.paths } };
+});
+
+function path(overrides: Partial<PublicPathSummary> = {}): PublicPathSummary {
+  return {
+    id: 'path-1',
+    name: 'خدمة المتعاملين',
+    riasecLetter: 'S',
+    description: 'مسار للتعامل المباشر مع الجمهور.',
+    skillOutcomes: ['استقبال طلبات المتعاملين', 'معالجة الشكاوى بمهنية'],
+    courseCount: 11,
+    typicalDurationMinutes: 1215,
+    ...overrides,
+  };
+}
+
 describe('LandingPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.paths.mockResolvedValue([
+      path(),
+      path({ id: 'path-2', name: 'الحوكمة والامتثال', riasecLetter: 'C' }),
+    ]);
+  });
+
   it('renders one h1 and the required landmarks', () => {
     renderWithProviders(<LandingPage />);
 
@@ -49,20 +83,16 @@ describe('LandingPage', () => {
     }
   });
 
-  it('renders exactly one h3 — the selected item in the explorer; no card grids', () => {
+  it('renders exactly one h3 — the selected path in the explorer; no card grids', async () => {
     renderWithProviders(<LandingPage />);
 
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1);
+    expect(await screen.findAllByRole('heading', { level: 3 })).toHaveLength(1);
   });
 
-  it('mentions the assessment length and, on the path stage, the 5–10 range using real numerals', async () => {
-    const user = userEvent.setup();
+  it('the matching strip mentions the 5–10 course range using real numerals', async () => {
     renderWithProviders(<LandingPage />);
 
-    expect(screen.getByText(/نحو 30 عبارة/)).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'المسار التدريبي' }));
-    await user.click(screen.getByRole('button', { name: 'بناء المسار' }));
-    expect(screen.getByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
+    expect(await screen.findByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
   });
 
   it('hero: states who the platform is for, and who may register (BR-101)', () => {
@@ -74,39 +104,50 @@ describe('LandingPage', () => {
     expect(screen.getByText(/التسجيل مقصور على منسوبي الوزارة/)).toBeInTheDocument();
   });
 
-  it('explorer: four stage tabs, the first selected, its first item shown in the detail pane', () => {
+  it('explorer: one tab per real path, the first selected, its name shown in the panel', async () => {
     renderWithProviders(<LandingPage />);
 
-    const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'التقييم المهني',
-      'المسار التدريبي',
-      'الدورات',
-      'الشهادات والسيرة الذاتية',
-    ]);
+    const tabs = await screen.findAllByRole('tab');
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['خدمة المتعاملين', 'الحوكمة والامتثال']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('تقييم الميول المهنية');
+    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('خدمة المتعاملين');
   });
 
-  it('explorer: choosing an item updates the detail pane and marks it current', async () => {
+  it('explorer: choosing a path tab updates the panel to that path', async () => {
     const user = userEvent.setup();
     renderWithProviders(<LandingPage />);
 
-    const item = screen.getByRole('button', { name: 'إعادة التقييم' });
-    await user.click(item);
-    expect(item).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('إعادة التقييم');
-    expect(screen.getByText(/لم يؤكّد مساره/)).toBeInTheDocument();
+    const tab = await screen.findByRole('tab', { name: 'الحوكمة والامتثال' });
+    await user.click(tab);
+
+    expect(tab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('الحوكمة والامتثال');
   });
 
-  it("explorer: switching stage resets to that stage's first item, and the action always leads to registration", async () => {
-    const user = userEvent.setup();
+  it('explorer: the panel shows career type, skill outcomes, description, course count and duration — from the API, never typed', async () => {
     renderWithProviders(<LandingPage />);
 
-    await user.click(screen.getByRole('tab', { name: 'الشهادات والسيرة الذاتية' }));
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('شهادة الدورة');
-    const panel = screen.getByRole('tabpanel');
+    const panel = await screen.findByRole('tabpanel');
+    /* Career type in Arabic (D-099), never the raw letter. */
+    expect(within(panel).getByText('الاجتماعي')).toBeInTheDocument();
+    expect(within(panel).queryByText(/^S$/)).not.toBeInTheDocument();
+    expect(within(panel).getByText('استقبال طلبات المتعاملين')).toBeInTheDocument();
+    expect(within(panel).getByText('معالجة الشكاوى بمهنية')).toBeInTheDocument();
+    expect(within(panel).getByText('مسار للتعامل المباشر مع الجمهور.')).toBeInTheDocument();
+    expect(within(panel).getByText(/11 دورة متاحة/)).toBeInTheDocument();
+    expect(within(panel).getByText(/20 ساعة تدريبية/)).toBeInTheDocument();
     expect(panel.querySelector('a[href="/register"]')).not.toBeNull();
+  });
+
+  it('explorer: on an API failure, shows the fallback line and the matching strip — never an error page', async () => {
+    api.paths.mockRejectedValue(new Error('down'));
+    renderWithProviders(<LandingPage />);
+
+    expect(await screen.findByText('ستظهر المسارات هنا قريبًا.')).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    /* The strip beneath still renders — it is static copy, not API data. */
+    expect(screen.getByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
   });
 
   it('hero: no feature pills — the paragraph carries the message', () => {
@@ -115,8 +156,13 @@ describe('LandingPage', () => {
     expect(container.querySelector('section')?.querySelector('ul')).toBeNull();
   });
 
-  it('faq: six questions as native disclosures, closed by default, each answered from a product rule', () => {
+  it('faq: six questions as native disclosures, closed by default, each answered from a product rule', async () => {
     const { container } = renderWithProviders(<LandingPage />);
+
+    /* The explorer's own h3 arrives asynchronously (its data is fetched);
+       waiting for it here is what makes "exactly one h3 on the page" a fair
+       check rather than a race against that fetch. */
+    await screen.findByRole('heading', { level: 3 });
 
     const faq = screen.getByRole('region', { name: 'الأسئلة الشائعة' });
     const items = faq.querySelectorAll('details');
@@ -148,9 +194,14 @@ describe('LandingPage', () => {
     const { container } = renderWithProviders(<LandingPage />);
 
     const hero = container.querySelector('section');
-    const figure = hero?.querySelector('img[alt=""]');
-    expect(figure).not.toBeNull();
-    expect(decodeURIComponent(figure?.getAttribute('src') ?? '')).toContain('/brand/MOI.svg');
+    /* Two decorative images share the hero now — the background photo behind
+       everything, and the emblem in its own circle — both correctly `alt=""`,
+       so the emblem is found by its own source rather than by being first. */
+    const images = Array.from(hero?.querySelectorAll('img[alt=""]') ?? []);
+    const emblem = images.find((img) =>
+      decodeURIComponent(img.getAttribute('src') ?? '').includes('/brand/MOI.svg'),
+    );
+    expect(emblem).not.toBeUndefined();
   });
 
   it('hero: the emblem sits over the Kingdom map, all thirteen regions present', () => {

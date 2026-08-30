@@ -343,6 +343,16 @@ export class CreatePathDto {
   @MaxLength(2000)
   description!: string;
 
+  /* Short noun phrases, not sentences — "three to five" is editorial guidance
+     (TAM-150), not a bound the form enforces; the cap here is generous
+     headroom, not the target count. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  skillOutcomes?: string[];
+
   @IsIn(RIASEC_LETTERS)
   riasecLetter!: RiasecLetter;
 
@@ -378,6 +388,13 @@ export class UpdatePathDto {
   @MinLength(10)
   @MaxLength(2000)
   description?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  skillOutcomes?: string[];
 
   @IsOptional()
   @IsIn(RIASEC_LETTERS)
