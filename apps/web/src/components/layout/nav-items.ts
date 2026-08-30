@@ -32,6 +32,13 @@ export interface NavItem {
   key: string;
   href: string;
   icon: NavIconName;
+  /**
+   * Reveals a hover flyout of the learner's paths as shortcuts into the
+   * catalogue pre-filtered by `?pathId=`. Mouse-only by nature — a real link
+   * to `href` still renders underneath, so a keyboard or touch user loses
+   * nothing but the shortcut.
+   */
+  dropdown?: boolean;
 }
 
 /**
@@ -45,7 +52,7 @@ export interface NavItem {
  */
 export const STEADY_STATE_NAV: readonly NavItem[] = [
   { key: 'dashboard', href: '/', icon: 'dashboard' },
-  { key: 'courses', href: '/courses', icon: 'courses' },
+  { key: 'courses', href: '/courses', icon: 'courses', dropdown: true },
   { key: 'myPath', href: '/my-path', icon: 'myPath' },
   { key: 'certificates', href: '/certificates', icon: 'certificates' },
   { key: 'cv', href: '/cv', icon: 'cv' },
