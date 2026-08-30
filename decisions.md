@@ -5,6 +5,16 @@
 
 ---
 
+## D-126 — The CEFR code is shown; the RIASEC letter is not
+
+**Decision (E.2):** `CefrLevelBadge` renders «B2 · فوق المتوسط» — the Latin level code beside its Arabic name — where `HollandCodeChips` renders «الاجتماعي» and never the letter S.
+
+**Why the two differ rather than one of them being wrong:** a RIASEC letter is a *storage key*. "S" is an index into a framework an employee has no reason to know, and «الاجتماعي» is the whole of the result; showing the letter would be showing them our database. A CEFR level is the opposite — "B2" **is** the internationally recognised name of the thing. It is what a training officer screens on, what a course prerequisite is written in, and what an employee would put on the English CV §4.11 exports (D-050). Hiding it would withhold the half that travels, and leave «فوق المتوسط» to be translated back by whoever needed it.
+
+**Consequence for the message catalogue:** the code is rendered from the data — the `level` field — and never from `ar.json`, so the catalogue stays free of Latin letters and bare digits and `messages.test.ts` needs no exemption for it. The Arabic name carries the meaning; the code carries the currency. `dir="ltr"` is set on the code span alone, because an isolated Latin token in an RTL run throws its neighbouring punctuation to the wrong end.
+
+**Rejected:** hiding the code for consistency with Holland (consistency with a rule whose reason does not apply here); showing the code alone (an Arabic-first product must not make a level readable only to people who already know the framework); putting the codes in `ar.json` (would need a third `LITERAL_VALUE_PATHS` exemption, for data that is not copy).
+
 ## D-125 — The CEFR bands live on the assessment version, and they are what the balance rule is not
 
 **Decision (E.1):** the six CEFR bands are rows on the `english_assessments` version that owns them (`english_assessment_bands`), copied by copy-on-write with everything else, **not** entries in the `settings` table. Publishing an English version is gated by `assessEnglishBank`, whose central rule is that the band table must **partition `0 … maxScore` exactly**: all six levels present once, no inverted range, no gap, no overlap, starting at zero and ending at the highest attainable total. `isBalancedBank` and `assessBank` are not imported, not called and not modified.

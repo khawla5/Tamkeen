@@ -1,3 +1,4 @@
+import type { CefrLevel } from './english-assessment';
 import type { RiasecLetter } from './riasec';
 
 /**
@@ -92,6 +93,17 @@ export interface DashboardView {
   state: DashboardState;
   /** Present from ASSESSED_NO_PATH onward. */
   codeString: string | null;
+  /**
+   * The English placement level, or null if the test has not been taken
+   * (§4.13, D-123).
+   *
+   * Present in **every** state, and deliberately not part of `DashboardState`.
+   * The English test is independent of the Holland journey — takeable at any
+   * time, gating nothing — so folding it into the state machine would couple two
+   * instruments that have no product relationship, and would give the dashboard
+   * a fourth branch for a card that is the same card in all three.
+   */
+  englishLevel: CefrLevel | null;
   /**
    * ASSESSED_NO_PATH only: the recommended paths in rank order, at most three,
    * so the dashboard can put the decision in front of the user (TAM-123).

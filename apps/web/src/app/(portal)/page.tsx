@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
 import { JourneyTracker } from '@/components/dashboard/journey-tracker';
+import { CefrLevelBadge } from '@/components/english/cefr-level-badge';
 import { PortalPage } from '@/components/layout/portal-page';
 import { usePortal } from '@/components/layout/portal-provider';
 import { HollandCodeChips } from '@/components/riasec/holland-code-chips';
@@ -56,6 +57,18 @@ export default function DashboardPage() {
           <ActivePath dashboard={dashboard} />
         )}
 
+        {/*
+         * The English placement test (§4.13, D-123), in every state and below
+         * the state's own card.
+         *
+         * It is independent of the Holland journey, so it does not belong inside
+         * any of the three branches — and it must not compete with them. §4.2
+         * gives each state one primary action; this card's action is secondary
+         * (an outline button, beneath), so a new employee's single primary
+         * action is still «ابدأ التقييم» for the career assessment.
+         */}
+        <EnglishCard level={dashboard.englishLevel} />
+
         {dashboard.recentActivity.length > 0 ? (
           <ActivityFeed activity={dashboard.recentActivity} />
         ) : null}
@@ -93,6 +106,46 @@ function PreAssessment() {
         <Button asChild size="lg">
           <Link href="/assessment">{t('startAssessment')}</Link>
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * The English placement test, in both of its states (§4.13, D-123).
+ *
+ * One card rather than two, because it is the same card: it names the
+ * instrument and offers the one thing that applies — take it, or read the level
+ * — which is §3's context-dependent action rule, not a branch of the dashboard's
+ * own state machine.
+ *
+ * Never a primary button. The dashboard's primary action belongs to whichever
+ * of the three states the learner is in; this is a second, optional thing they
+ * may do, and rendering it at equal weight would put two competing calls on a
+ * page §4.2 says should have one.
+ */
+function EnglishCard({ level }: { level: DashboardView['englishLevel'] }) {
+  const t = useTranslations('english');
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('cardTitle')}</CardTitle>
+        <CardDescription>{level ? t('cardTakenBody') : t('cardBody')}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-4">
+        {level ? (
+          <>
+            <CefrLevelBadge level={level} />
+            <Button asChild variant="outline">
+              <Link href="/english-assessment/result">{t('viewResult')}</Link>
+            </Button>
+          </>
+        ) : (
+          <Button asChild variant="outline">
+            <Link href="/english-assessment">{t('start')}</Link>
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

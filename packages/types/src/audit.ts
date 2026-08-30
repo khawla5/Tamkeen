@@ -69,6 +69,16 @@ export const AuditAction = {
 
   // Assessment and path (Phase 1)
   ASSESSMENT_SUBMITTED: 'ASSESSMENT_SUBMITTED',
+  /**
+   * The English placement test was taken (§4.13, D-123).
+   *
+   * Its own action rather than a variant of `ASSESSMENT_SUBMITTED`, because the
+   * two instruments are separate: a trail filtered to "who took the career
+   * assessment" must not also return English takers, and the target id points at
+   * a row in a different table. Recorded on refusal too — the test is taken once,
+   * so a second attempt is a fact worth being able to see.
+   */
+  ENGLISH_ASSESSMENT_SUBMITTED: 'ENGLISH_ASSESSMENT_SUBMITTED',
   /** A path entered the BUILDING state, or the user switched which one. */
   PATH_SELECTED: 'PATH_SELECTED',
   PATH_COURSES_UPDATED: 'PATH_COURSES_UPDATED',
@@ -281,6 +291,19 @@ export const AuditReason = {
   ASSESSMENT_UNKNOWN_OPTION: 'ASSESSMENT_UNKNOWN_OPTION',
   ASSESSMENT_DUPLICATE_ANSWER: 'ASSESSMENT_DUPLICATE_ANSWER',
 
+  /* §4.13 — rejected English submissions. These match ENGLISH_SCORING_ERROR
+     exactly, for the same reason the four above match SCORING_ERROR: `reason:
+     error.code` typechecks without a cast. Named separately rather than reused,
+     so a change to one instrument's refusals cannot silently alter the other's. */
+  ENGLISH_ASSESSMENT_INCOMPLETE: 'ENGLISH_ASSESSMENT_INCOMPLETE',
+  ENGLISH_ASSESSMENT_UNKNOWN_QUESTION: 'ENGLISH_ASSESSMENT_UNKNOWN_QUESTION',
+  ENGLISH_ASSESSMENT_UNKNOWN_OPTION: 'ENGLISH_ASSESSMENT_UNKNOWN_OPTION',
+  ENGLISH_ASSESSMENT_DUPLICATE_ANSWER: 'ENGLISH_ASSESSMENT_DUPLICATE_ANSWER',
+  /** The bands did not cover the score. Unreachable past the publish gate. */
+  ENGLISH_ASSESSMENT_NO_BAND: 'ENGLISH_ASSESSMENT_NO_BAND',
+  /** A second attempt at a test that is taken once (D-123). */
+  ENGLISH_ASSESSMENT_ALREADY_TAKEN: 'ENGLISH_ASSESSMENT_ALREADY_TAKEN',
+
   // Phase 1 — path building and commitment
   PATH_ALREADY_CONFIRMED: 'PATH_ALREADY_CONFIRMED',
   PATH_NOT_SELECTED: 'PATH_NOT_SELECTED',
@@ -388,6 +411,7 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   AUTHZ_DENIED: 'auth',
 
   ASSESSMENT_SUBMITTED: 'learner',
+  ENGLISH_ASSESSMENT_SUBMITTED: 'learner',
   PATH_SELECTED: 'learner',
   PATH_COURSES_UPDATED: 'learner',
   PATH_CONFIRMED: 'learner',

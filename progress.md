@@ -5,6 +5,30 @@
 
 ---
 
+### 2026-08-30 — E.2: the English taking flow, the CEFR result, and the entry points — branch `english-assessment`
+
+The learner half of §4.13. A learner can now take the placement test and see their level; the admin surface (E.3) and the real thirty questions (E.4) are still to come.
+
+**API.** `EnglishAssessmentModule` — `GET /api/english-assessment`, `GET /api/english-assessment/result`, `POST /api/english-assessment/submit`, all `@Roles('EMPLOYEE')`. **`JourneyModule` is deliberately not imported**: the Holland assessment needs it because its retake rule turns on whether a path is confirmed (D-015), and the English test gates on nothing and is gated by nothing (D-123) — not importing it is what keeps that true as both grow.
+
+**The absence rule carries over, and further.** `getActive` selects options without `isCorrect` — the answer key outright — and questions without `marks` or their CEFR `level`. Neither of the latter two is the key, but both let a taker triage: knowing an item is worth three marks, or is a C1 item, tells them where to guess, and a placement test is only useful if it measures what somebody can do unaided across the whole range.
+
+**"Taken once" is enforced twice, on purpose.** A read-then-refuse gives the learner a clear 409 and an audited `ENGLISH_ASSESSMENT_ALREADY_TAKEN`; the unique index on `user_id` catches the race that no read-then-write can, and its `P2002` is answered *identically* — a caller must not be able to tell the two apart, and the second request genuinely did nothing either way.
+
+**Entry points, per D-123.** A dashboard card in **all three states**, below the state's own card and carrying an **outline** action, so §4.2's one-primary-action rule survives — a new employee's single primary call is still «ابدأ التقييم» for the career assessment. A read-only card on the profile. **No new learner nav item** (§4's steady-state six stands; the test is a flow page reached from its card, exactly as `/assessment` and `/results` are), and **no change to `DashboardState`, `navForState`, `JourneyStateService`, or the path-confirm gate.** The only change to an existing shared contract is one nullable `englishLevel` on `DashboardView`.
+
+**`CefrLevelBadge` shows the Latin code, where `HollandCodeChips` deliberately hides its letters.** A RIASEC letter is a storage key — "S" means nothing to an Arabic-speaking employee and «الاجتماعي» is the whole result. A CEFR level is the opposite: "B2" is the internationally recognised name of the thing and the token an employee would put on the CV §4.11 exports in English, so hiding it would withhold the useful half. The code is rendered from the data, never from `ar.json`, which is what keeps the catalogue free of Latin letters and bare digits — the two rules `messages.test.ts` enforces.
+
+**One existing test was changed, and it should be read rather than skimmed.** `dashboard.test.tsx`'s "offers the assessment as the single primary action" asserted a raw count of **one link** on the pre-assessment dashboard. The English card puts a second one there by design. The count was never the rule — §4.2's rule is one *primary* action — so the assertion now says that directly: exactly one filled (`bg-primary-600`) link, which is the career assessment, and the only other link is named explicitly as «ابدأ تقييم اللغة». A future change that promoted the English action to primary now fails here rather than quietly doubling the call to action a new employee is given. No Holland behaviour changed; the test's intent is intact and better expressed.
+
+**Files:** `english-assessment.{service,controller,dto,module}.ts`, `app.module.ts`, `enrollment.service.ts` (the one `englishLevel` read, done directly rather than through `JourneyStateService` — nothing about the level depends on the result or the path, and putting it there would imply a relationship that does not exist), `audit.ts` (+1 action, +6 reasons), `journey.ts`, `api-client.ts`, `components/english/cefr-level-badge.tsx`, `app/(portal)/english-assessment/page.tsx` and `…/result/page.tsx`, the dashboard and profile pages, `messages/ar.json` (the `english` namespace, 9 error codes, the audit copy).
+
+**Tested: 844 web component tests green (60 files, +30 new) · 719 API unit · 51 types.** The new web tests assert the properties rather than the rendering: the answer key never appears in the DOM, a learner who already holds a result is redirected instead of being offered a second attempt, the draft resumes across a remount and is discarded when the bank changes, the result page has **no button at all** (absence, not a disabled control), the level is named in Arabic *and* keeps its code, and the English card never renders as the primary action. Typecheck, lint and prettier clean across all three workspaces.
+
+**Owed, and deliberate:** the flow is unreachable in practice until E.4 seeds a bank — `getActive` answers `ENGLISH_ASSESSMENT_NOT_FOUND` and the page shows its empty state, which is the honest behaviour for a version nobody has published. API integration tests for the three endpoints, and the browser e2e, belong to E.5.
+
+**Next:** E.3 — the sibling admin editor at `/admin/english`, including the band-threshold editor.
+
 ### 2026-08-30 — E.1: the English (CEFR) data model and scoring engine — branch `english-assessment`
 
 First of five sub-phases adding an English proficiency test alongside the Holland instrument. **Logic and schema only — no UI, no endpoints, no seeded content.**

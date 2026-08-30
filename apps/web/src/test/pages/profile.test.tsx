@@ -1,7 +1,9 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { DashboardView } from '@tamkeen/types';
 
 import type { CurrentUser } from '@/lib/api-client';
 
@@ -41,7 +43,11 @@ vi.mock('@/lib/api-client', async () => {
 });
 
 const portal = vi.hoisted(() => ({
-  value: { user: {} as CurrentUser, refreshSession: vi.fn() },
+  value: {
+    user: {} as CurrentUser,
+    dashboard: { englishLevel: null } as DashboardView,
+    refreshSession: vi.fn(),
+  },
 }));
 
 vi.mock('@/components/layout/portal-provider', () => ({
@@ -69,9 +75,15 @@ const BASE_USER: CurrentUser = {
   numberFormat: null,
 };
 
-function setUser(overrides: Partial<CurrentUser> = {}) {
+function setUser(
+  overrides: Partial<CurrentUser> = {},
+  englishLevel: DashboardView['englishLevel'] = null,
+) {
   portal.value = {
     user: { ...BASE_USER, ...overrides },
+    /* §4.13's level card reads it from the portal rather than fetching its own
+       copy, so the page now needs a dashboard in scope. */
+    dashboard: { englishLevel } as DashboardView,
     refreshSession: vi.fn(),
   };
 }
@@ -445,5 +457,45 @@ describe('profile — changing the email (§4.12)', () => {
     await user.click(screen.getByRole('button', { name: 'إرسال رابط التأكيد' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/نطاقات الوزارة/);
+  });
+});
+
+/**
+ * §4.13's placement level on the profile — read-only, because there is nothing
+ * to edit and no retake (D-123).
+ */
+describe('profile — the English placement level', () => {
+  it('shows the level when there is one, with a way back to the result', () => {
+    setUser({}, 'C1');
+    renderWithProviders(<ProfilePage />);
+
+    expect(screen.getByText('C1')).toBeInTheDocument();
+    expect(screen.getByText('متقدّم')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'عرض النتيجة' })).toHaveAttribute(
+      'href',
+      '/english-assessment/result',
+    );
+  });
+
+  it('offers the test when there is none', () => {
+    setUser({}, null);
+    renderWithProviders(<ProfilePage />);
+
+    expect(screen.getByRole('link', { name: 'ابدأ تقييم اللغة' })).toHaveAttribute(
+      'href',
+      '/english-assessment',
+    );
+  });
+
+  it('offers no control to change it', () => {
+    /* The card is a record, not a setting: a form here would imply the level can
+       be edited, which is the opposite of what D-123 guarantees. */
+    setUser({}, 'C1');
+    renderWithProviders(<ProfilePage />);
+
+    const card = screen.getByText('مستوى اللغة الإنجليزية').closest('div');
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).queryByRole('button')).toBeNull();
+    expect(within(card as HTMLElement).queryByRole('textbox')).toBeNull();
   });
 });

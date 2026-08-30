@@ -45,6 +45,9 @@ import type {
   CertificateVerificationView,
   AssessmentSubmission,
   AssessmentView,
+  EnglishAssessmentResultView,
+  EnglishAssessmentSubmission,
+  EnglishAssessmentView,
   CourseDetail,
   CourseLaunchView,
   CourseOutlineView,
@@ -321,6 +324,17 @@ export const assessmentApi = {
   result: () => api.get<AssessmentResultView | null>('/api/assessment/result'),
   submit: (submission: AssessmentSubmission) =>
     api.post<AssessmentResultView>('/api/assessment/submit', submission),
+};
+
+/**
+ * §4.13 — the English placement test. A sibling of `assessmentApi`, on the
+ * sibling endpoints; the two share no request or response type.
+ */
+export const englishAssessmentApi = {
+  get: () => api.get<EnglishAssessmentView>('/api/english-assessment'),
+  result: () => api.get<EnglishAssessmentResultView | null>('/api/english-assessment/result'),
+  submit: (submission: EnglishAssessmentSubmission) =>
+    api.post<EnglishAssessmentResultView>('/api/english-assessment/submit', submission),
 };
 
 export const pathsApi = {
