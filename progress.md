@@ -5,6 +5,29 @@
 
 ---
 
+### 2026-08-30 — The English assessment run for real: migration, seed and the whole loop against live Postgres — branch `english-assessment`
+
+At the user's request the stack was brought up and the feature exercised end to end. **This closes E.4's stated limitation** ("not run against a real database") and covers part of E.5 by hand; the automated integration and browser specs E.5 owns are still outstanding.
+
+**Environment.** Docker Desktop was not running and had to be started; `npm run db:up` then found the existing `tamkeen-postgres` / `redis` / `mailpit` containers and started them. The database already held prior development data — 206 Holland results among it — so this was a migration onto a **populated** database, not a fresh one, which is the more useful test.
+
+**`prisma migrate deploy` applied `20260830120000_english_assessment` cleanly** — six tables, two enums, the partial unique indexes — with no effect on any existing row. `npm run db:seed` then reported *"30 questions (150 options), 30 English placement questions, 48 courses, 12 paths, 133 memberships"*.
+
+**What the database actually holds, read back directly:**
+- `english-cefr` v1 ACTIVE · 30 questions · 6 bands · 0 results
+- bands `A1 0-14 | A2 15-24 | B1 25-34 | B2 35-44 | C1 45-53 | C2 54-60`
+- per level `A1 5q/5m | A2 5q/5m | B1 5q/10m | B2 5q/10m | C1 5q/15m | C2 5q/15m`, attainable total **60**
+- **30/30 questions carry exactly one correct option**
+- correct-answer positions `{1:8, 2:8, 3:7, 4:7}` — E.4's rotation fix working on real rows rather than in a constant
+
+**The loop, over HTTP against the running API:** sign in → `GET /api/english-assessment` returns 30 questions and **no `isCorrect`, no `marks`, no level** (grepped over the whole response body) → submit 20 correct answers → **30/60 → B1**, `canRetake: false` → **second submit refused 409 `ENGLISH_ASSESSMENT_ALREADY_TAKEN`**. The answer key had to be read out of the database to build that submission, which is the property being demonstrated: a client cannot know the answers from the API alone.
+
+**Holland, live and side by side:** `GET /api/assessment` still returns `تقييم الميول المهنية`, 30 Arabic RIASEC items, version 1, with no weight, dimension or points anywhere in the payload — **with a second ACTIVE instrument now present in the system**. That is the precise failure D-124 was written to prevent (`getActive` and `createDraft` both call `findFirst({ status: 'ACTIVE' })` with no key filter), and it is now demonstrated not to occur rather than only argued. `riasec-core` v1 remains ACTIVE with its **206 results untouched**.
+
+**Operational note, not a code change:** the three seeded demo accounts already existed, so `seedSuperAdmin` / `seedDemoEntity` / `seedDemoStudent` correctly declined to touch their passwords (D-080's discipline — a seed must not reset a credential somebody is using), leaving their generated passwords unrecoverable. A known password was set on those three plus four throwaway learners (`en1`–`en4`) **directly in the development database**. Four learners rather than one because the test is taken once per account (D-123), so a single demo learner allows exactly one trial run. No application code was involved and nothing in the repository changed.
+
+**Worth chasing in Phase 6, unconfirmed:** during the hand-over the user reported "email or password is wrong" while the credentials verified correctly at the API. Sign-in is throttled at 5 attempts/minute/IP, and if the page renders a **429** as `INVALID_CREDENTIALS` then a rate-limited person is told their password is wrong and sent off changing a password that was fine. Not reproduced, so not recorded as a defect — but the auth error mapping is worth an explicit look.
+
 ### 2026-08-30 — E.4: the thirty seeded English questions — branch `english-assessment`
 
 The content: thirty MCQs across grammar, vocabulary, reading and practical English, five per CEFR level from A1 to C2, seeded as editable data in `seed-data/english-assessment.ts` and written by `seedEnglishAssessment` in the same pass as the band table.
