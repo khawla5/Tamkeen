@@ -73,6 +73,7 @@ export function AppShell({
       */}
       <a
         href="#main-content"
+        data-print="chrome"
         className="sr-only-focusable absolute top-3 start-3 z-50 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
       >
         {tA11y('skipToContent')}
@@ -89,7 +90,10 @@ export function AppShell({
         </span>
 
         {user ? (
-          <span className="flex items-center gap-3">
+          /* Marked as chrome for print (TAM-149): a printed sheet keeps the
+             owner's lockup and the classification, but the signed-in identity
+             and the way out of the app are not part of the record. */
+          <span data-print="chrome" className="flex items-center gap-3">
             {user.department && user.employeeId ? (
               /* The identity line, in the chrome rather than on a page (D-096). */
               <p className="hidden text-sm text-muted-foreground md:block">
@@ -110,7 +114,10 @@ export function AppShell({
         {/* Light navigation rail (TAM-117): Platforms Code applications use a
             light nav with the primary as the active indicator — the dark
             neutral-900 rail was the last of the old brand. */}
-        <aside className="flex flex-col border-b border-border bg-card md:w-64 md:shrink-0 md:border-b-0 md:border-e">
+        <aside
+          data-print="chrome"
+          className="flex flex-col border-b border-border bg-card md:w-64 md:shrink-0 md:border-b-0 md:border-e"
+        >
           <nav aria-label={tA11y('primaryNav')} className="p-3">
             <div className="hidden md:block">
               <SidebarNav items={items} indicators={indicators} />

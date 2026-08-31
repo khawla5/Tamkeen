@@ -6,13 +6,13 @@ import { useState } from 'react';
 import {
   AUDIT_ACTION_CATEGORIES,
   AUDIT_ACTION_CATEGORY,
-  CSV_CONTENT_TYPE,
   toCsv,
   type AdminAuditRow,
   type AdminReports,
   type AuditActionCode,
 } from '@tamkeen/types';
 
+import { ImpactTab } from '@/components/admin/impact-tab';
 import { AdminPage } from '@/components/layout/admin-page';
 import { DataView } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
@@ -21,8 +21,10 @@ import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Tabs } from '@/components/ui/tabs';
 import { useFormat } from '@/i18n/format-provider';
 import { adminApi } from '@/lib/api-client';
+import { downloadFile } from '@/lib/download';
 import { useApiQuery } from '@/lib/use-api';
 
 /**
@@ -39,22 +41,37 @@ import { useApiQuery } from '@/lib/use-api';
  */
 export default function AdminAuditPage() {
   const t = useTranslations('admin');
-  const [tab, setTab] = useState<'reports' | 'audit'>('reports');
+  const [tab, setTab] = useState<'impact' | 'reports' | 'audit'>('impact');
 
+  /*
+   * Three views of §4C.8, on the shared tablist (TAM-118) rather than the pair
+   * of buttons this page hand-rolled: real `tab`/`tabpanel` semantics, arrow
+   * keys that move the right way in an RTL page, and one implementation to fix
+   * when any of that is wrong.
+   *
+   * «الأثر» leads because it answers the question the ministry opens this page
+   * with — how many of our people took part, and is it growing. The reports are
+   * unchanged behind it, and the trail last: it is evidence, consulted when
+   * something needs explaining rather than read as a report.
+   */
   return (
     <AdminPage title={t('auditTitle')}>
-      <div className="space-y-6">
-        <nav aria-label={t('auditTitle')} className="flex gap-1 border-b border-border">
-          <TabButton active={tab === 'reports'} onClick={() => setTab('reports')}>
-            {t('auditTabReports')}
-          </TabButton>
-          <TabButton active={tab === 'audit'} onClick={() => setTab('audit')}>
-            {t('auditTabTrail')}
-          </TabButton>
-        </nav>
-
-        {tab === 'reports' ? <ReportsTab /> : <TrailTab />}
-      </div>
+      <Tabs
+        label={t('auditTitle')}
+        value={tab}
+        onValueChange={(value) => setTab(value as 'impact' | 'reports' | 'audit')}
+        items={[
+          { value: 'impact', label: t('auditTabImpact') },
+          { value: 'reports', label: t('auditTabReports') },
+          { value: 'audit', label: t('auditTabTrail') },
+        ]}
+        /* The tablist is chrome; on paper the sheet carries the tab's own
+           heading and its period instead. */
+        className="print:contents"
+        panelClassName="pt-6"
+      >
+        {tab === 'impact' ? <ImpactTab /> : tab === 'reports' ? <ReportsTab /> : <TrailTab />}
+      </Tabs>
     </AdminPage>
   );
 }
@@ -645,7 +662,7 @@ function useAuditCsvExport(filters: AuditFilters): {
         ]),
       );
 
-      download('tamkeen-audit.csv', csv);
+      downloadFile('tamkeen-audit.csv', csv);
     } catch {
       setError(true);
     } finally {
@@ -654,18 +671,6 @@ function useAuditCsvExport(filters: AuditFilters): {
   };
 
   return { run: () => void run(), isRunning, error };
-}
-
-/** A string as a file, without a round trip. */
-function download(filename: string, content: string): void {
-  const url = URL.createObjectURL(new Blob([content], { type: CSV_CONTENT_TYPE }));
-  const anchor = document.createElement('a');
-
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-
-  URL.revokeObjectURL(url);
 }
 
 function Heading({ id, children }: { id: string; children: string }) {
@@ -682,30 +687,5 @@ function Stat({ label, value }: { label: string; value: string }) {
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
     </Card>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? 'page' : undefined}
-      className={
-        active
-          ? 'border-b-2 border-primary px-4 py-2 text-sm font-semibold text-foreground'
-          : 'border-b-2 border-transparent px-4 py-2 text-sm text-muted-foreground hover:text-foreground'
-      }
-    >
-      {children}
-    </button>
   );
 }

@@ -5,6 +5,26 @@
 
 ---
 
+### 2026-08-31 — TAM-149: «الأثر», §4C.8's first tab — participation and learning by period and department (D-123)
+
+The reports tab answers "how is the system doing" with no time axis and no department axis, so it could not answer what management asks. Built as the first of three views on the shared tablist (TAM-118); the reports and the trail are unchanged behind it, and the admin nav stays at eight items.
+
+**API.** `GET /api/admin/impact?from&to&department` → `AdminImpactView` (period, previousPeriod, participation, byDepartment[], learning, trend[12], topCourses, topPaths, letterDistribution, cefr). One service, `admin-impact.service.ts`, plus a pure `impact-period.ts` for the date arithmetic. Aggregation only — every column already existed. On the audit controller, so `admin-rbac.e2e-spec.ts` covers it the moment it is routable (confirmed: `get /api/admin/impact` appears in that suite's 182 cases).
+
+**The four rulings** are in D-123: the comparison is an **equal-length** window (a calendar quarter against a calendar quarter reports a per cent of growth that is only the length of the months); the participation rate is **cumulative** and names its denominator as accounts, not ministry headcount; a pass with **no LMS timestamp** is dated by when we recorded it rather than vanishing from every period (D-038); counts are **people, de-duplicated, employees only**. Two more things are said rather than inferred: passes whose course has no `duration_minutes` are counted and stated beside the hours (D-035), and the CEFR block renders «لم يُفعَّل اختبار المستوى بعد» because `cefr: null` until TAM-148 — "not enabled" is not "nobody took it".
+
+**Web.** `components/admin/impact-tab.tsx`: period preset + the two dates + department filter, five participation tiles each carrying its delta (a fall reads as a fall, no change reads as «بلا تغيير»), a sortable department table on the shared `Table` with real `aria-sort`, four learning tiles, a twelve-month trend as token bars (`bg-primary-600` / `bg-primary-800` on `bg-neutral-200`, each row printing both numbers so it survives a printer that drops backgrounds), top courses / top paths / the six career types, CSV export and print. The audit page moved from its hand-rolled tab buttons onto the shared `Tabs`; `download()` was extracted to `lib/download.ts` and both exports now share it; `useFormat` gained `monthYear`.
+
+**Print** is a stylesheet, not a second renderer: `@page` A4, `data-print="chrome"` on the shell's nav, user menu and skip link, the owner's lockup and classification kept.
+
+**Two defects the live run caught, both fixed.** The participation-rate tile carried no comparison at all — the contract had `previousParticipationRate` and the screen ignored it; it now shows the delta in percentage **points** (calling five points "five" beside a percentage reads as five per cent) and shows nothing when the previous period had no accounts, because there is no rate to compare against. And the CSV filename was sliced off the response's ISO instant, so a year selected in Riyadh downloaded as `tamkeen-impact-2025-12-31_2026-12-31` — a different period from the one inside the file; it is named from the two days the screen is showing.
+
+**Proven in the running app** as `admin@ministry.gov.example` against the dev database (451 verified accounts, 205 assessed, 68 committed, 5 active; 6 departments; 5 passes / 15 hours / 26 course certificates in August): the tab opens first, the tiles carry their deltas, the department table sorts, narrowing to «المديرية العامة للأمن العام» re-queries the API (138 / 84 / 39, rate 28%), the year preset re-anchors the period line, the CEFR block states it is not enabled, the export downloads 39 readable rows, and «التقارير» and «سجل العمليات» still work. No console errors. Dev account passwords were reset for that run (the value was handed over in-session, not committed).
+
+**Verified:** API unit 696 across 44 suites (32 new: 17 service, 15 period arithmetic) · 21 admin-audit integration against real PostgreSQL (5 new: default month, the shifted window, the department narrowing, a bad date, an unknown parameter) · 182 admin-rbac integration · web 832 across 60 files (22 new) · typecheck, lint, prettier clean across both apps. The Playwright admin spec gained three cases (the impact tab opens first, the export filename carries the period, the reports tab now reached by its tab) — **not run this session**; it needs the built apps, and the dev servers are holding 3000/4000.
+
+**Next:** the user's test → branch + PR. Owed by the ticket and deliberately not built: `MINISTRY_HEADCOUNT` as the rate's denominator, and the CEFR block's real content once TAM-148 ships.
+
 ### 2026-08-27 — TAM-133: per-course resync on the frame's own edit signal — branch `feature/tam-133-per-course-resync`
 
 Closes the gap where a rename made in the frame's Settings tab took up to `COMPLETION_SYNC_INTERVAL_MINUTES` (5 min) to appear anywhere in the portal, while a content edit already refreshed within seconds via the existing `tamkeen:content-changed` message.
