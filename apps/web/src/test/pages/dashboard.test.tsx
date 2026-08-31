@@ -61,9 +61,16 @@ const EMPTY = {
   /* The English card renders in every state, so every fixture needs a value —
      null is "not taken", which is what the states below are otherwise about. */
   englishLevel: null,
+  /* The instrument tracker's data (TAM-147); empty unless a test is exercising it. */
+  assessments: [] as DashboardView['assessments'],
 } satisfies Pick<
   DashboardView,
-  'recommendedPaths' | 'upcomingCourses' | 'latestCertificate' | 'recentActivity' | 'englishLevel'
+  | 'recommendedPaths'
+  | 'upcomingCourses'
+  | 'latestCertificate'
+  | 'recentActivity'
+  | 'englishLevel'
+  | 'assessments'
 >;
 
 function setDashboard(dashboard: DashboardView) {
@@ -466,5 +473,85 @@ describe('dashboard — the English placement card', () => {
       'upcoming',
       'upcoming',
     ]);
+  });
+});
+
+describe('dashboard — the instrument tracker (TAM-147, D-095)', () => {
+  it('stays off the page with only the baseline instrument assigned', () => {
+    /* `EMPTY.assessments` is `[]` by default — the seeded state before an
+       admin assigns anything beyond RIASEC. A one-item stepper would just
+       duplicate the journey tracker's first stage. */
+    setDashboard({ state: 'PRE_ASSESSMENT', codeString: null, path: null, ...EMPTY });
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.queryByRole('list', { name: 'التقييمات المطلوبة منك' })).not.toBeInTheDocument();
+  });
+
+  it('shows one stage per required instrument once there are two or more', () => {
+    setDashboard({
+      state: 'PRE_ASSESSMENT',
+      codeString: null,
+      path: null,
+      ...EMPTY,
+      assessments: [
+        {
+          key: 'riasec-core',
+          kind: 'RIASEC',
+          title: 'التقييم المهني',
+          required: true,
+          takenAt: null,
+          summary: null,
+        },
+        {
+          key: 'english-cefr',
+          kind: 'CEFR',
+          title: 'تقييم اللغة الإنجليزية',
+          required: true,
+          takenAt: '2026-08-20T09:00:00Z',
+          summary: 'B2',
+        },
+      ],
+    });
+    renderWithProviders(<DashboardPage />);
+
+    const tracker = screen.getByRole('list', { name: 'التقييمات المطلوبة منك' });
+    const steps = within(tracker).getAllByRole('listitem');
+
+    expect(steps).toHaveLength(2);
+    expect(steps.map((li) => li.getAttribute('data-stage'))).toEqual(['upcoming', 'done']);
+  });
+
+  it('leaves out an instrument the employee was assigned but is not required to take', () => {
+    setDashboard({
+      state: 'PRE_ASSESSMENT',
+      codeString: null,
+      path: null,
+      ...EMPTY,
+      assessments: [
+        {
+          key: 'riasec-core',
+          kind: 'RIASEC',
+          title: 'التقييم المهني',
+          required: true,
+          takenAt: null,
+          summary: null,
+        },
+        {
+          key: 'english-cefr',
+          kind: 'CEFR',
+          title: 'تقييم اللغة الإنجليزية',
+          required: false,
+          takenAt: null,
+          summary: null,
+        },
+      ],
+    });
+    renderWithProviders(<DashboardPage />);
+
+    /* One required instrument is still fewer than two — the gate that hides
+       the tracker when it would only echo the journey tracker's first stage
+       applies just as much to "required after filtering" as to the raw
+       count. */
+    expect(screen.queryByRole('list', { name: 'التقييمات المطلوبة منك' })).not.toBeInTheDocument();
   });
 });

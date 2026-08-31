@@ -156,7 +156,10 @@ export class AdminAuditService {
   }
 
   private async codeDistribution(): Promise<AdminReports['codeDistribution']> {
+    /* `kind: 'RIASEC'` (TAM-147): a Holland Code distribution has nothing to
+       say about a CEFR row, which carries no `code`. */
     const newest = await this.prisma.assessmentResult.findMany({
+      where: { kind: 'RIASEC' },
       distinct: ['userId'],
       orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
       select: { code: true },
@@ -164,7 +167,9 @@ export class AdminAuditService {
 
     const counts = new Map<string, number>();
     for (const row of newest) {
-      counts.set(row.code, (counts.get(row.code) ?? 0) + 1);
+      /* Non-null: filtered to `kind: 'RIASEC'` above. */
+      const code = row.code!;
+      counts.set(code, (counts.get(code) ?? 0) + 1);
     }
 
     return [...counts.entries()]

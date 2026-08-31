@@ -159,9 +159,12 @@ export class CvService {
    */
   private async careerProfileFor(userId: string): Promise<CvCareerProfile | null> {
     const [result, userPath] = await Promise.all([
-      /* Retakes append (D-033), so the newest row is "their result". */
+      /* Retakes append (D-033), so the newest row is "their result".
+         `kind: 'RIASEC'` (TAM-147): the career profile is a Holland Code —
+         without this filter a CEFR attempt taken more recently would be
+         picked up here and `result.code` would be null. */
       this.prisma.assessmentResult.findFirst({
-        where: { userId },
+        where: { userId, kind: 'RIASEC' },
         select: { code: true },
         orderBy: { completedAt: 'desc' },
       }),
@@ -182,7 +185,8 @@ export class CvService {
     return {
       pathName: committed ? (userPath?.path.name ?? null) : null,
       pathCompleted: userPath?.status === 'COMPLETED',
-      hollandCode: [...result.code] as RiasecLetter[],
+      /* Non-null: filtered to `kind: 'RIASEC'` above. */
+      hollandCode: [...result.code!] as RiasecLetter[],
     };
   }
 }

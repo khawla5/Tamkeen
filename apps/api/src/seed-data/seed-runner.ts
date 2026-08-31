@@ -193,8 +193,8 @@ export async function seedAssessment(
 export async function seedEnglishAssessment(
   prisma: PrismaClient,
 ): Promise<Pick<SeedCounts, 'englishQuestions'>> {
-  const existing = await prisma.englishAssessment.findMany({
-    where: { key: ENGLISH_ASSESSMENT_SEED.key },
+  const existing = await prisma.assessment.findMany({
+    where: { key: ENGLISH_ASSESSMENT_SEED.key, kind: 'CEFR' },
     select: { id: true, version: true, status: true, effectiveFrom: true },
   });
 
@@ -220,7 +220,7 @@ export async function seedEnglishAssessment(
   const first = existing.find((row) => row.version === ENGLISH_ASSESSMENT_SEED.version);
 
   const assessment = first
-    ? await prisma.englishAssessment.update({
+    ? await prisma.assessment.update({
         where: { id: first.id },
         data: {
           title: ENGLISH_ASSESSMENT_SEED.title,
@@ -232,9 +232,10 @@ export async function seedEnglishAssessment(
         },
         select: { id: true },
       })
-    : await prisma.englishAssessment.create({
+    : await prisma.assessment.create({
         data: {
           key: ENGLISH_ASSESSMENT_SEED.key,
+          kind: 'CEFR',
           version: ENGLISH_ASSESSMENT_SEED.version,
           title: ENGLISH_ASSESSMENT_SEED.title,
           description: ENGLISH_ASSESSMENT_SEED.description,

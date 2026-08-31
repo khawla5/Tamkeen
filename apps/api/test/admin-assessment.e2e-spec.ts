@@ -278,6 +278,7 @@ describe('Admin assessment management (e2e)', () => {
         userId,
         assessmentId: active.id,
         assessmentVersion: active.version,
+        kind: 'RIASEC',
         scoreR: 11,
         scoreI: 12,
         scoreA: 13,

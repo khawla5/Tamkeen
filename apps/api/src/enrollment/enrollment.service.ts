@@ -18,6 +18,7 @@ import {
   type UserPathCourseStatus,
 } from '@tamkeen/types';
 
+import { AssessmentAssignmentResolutionService } from '../assessment-assignment/assessment-assignment-resolution.service';
 import { AuditAction, AuditReason, type AuditTargetType } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { JourneyStateService, type JourneyState } from '../journey/journey-state.service';
@@ -48,6 +49,7 @@ export class EnrollmentService {
     private readonly prisma: PrismaService,
     private readonly journey: JourneyStateService,
     private readonly audit: AuditService,
+    private readonly assignments: AssessmentAssignmentResolutionService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
 
@@ -369,23 +371,65 @@ export class EnrollmentService {
     const state = await this.journey.getState(userId);
 
     /*
-     * Read in every state, including PRE_ASSESSMENT (D-123). The English test is
-     * independent of the Holland journey, so its card is on the dashboard from
-     * the first sign-in and its level is reported the moment there is one — it
-     * does not wait for an assessment it has nothing to do with.
+     * Read in every state, including PRE_ASSESSMENT. Every instrument the
+     * employee has ever taken, newest per instrument key — one query answers
+     * both the legacy `englishLevel` field and the generalised `assessments`
+     * array below (TAM-147), where it used to take a dedicated
+     * `englishAssessmentResult` read of its own.
      *
      * Read here rather than through `JourneyStateService`, deliberately: the
-     * journey service exists so the rules that depend on *both* the result and
-     * the path live in one place, and nothing about the English level depends on
-     * either. Putting it there would imply a relationship that does not exist.
+     * journey service exists so the rules that depend on *both* the Holland
+     * result and the path live in one place, and most instruments (CEFR
+     * included) depend on neither. Putting this there would imply a
+     * relationship that does not exist.
      */
-    const english = await this.prisma.englishAssessmentResult.findUnique({
-      where: { userId },
-      select: { level: true },
+    const [resolvedAssignments, results] = await Promise.all([
+      this.assignments.resolveForUser(userId),
+      this.prisma.assessmentResult.findMany({
+        where: { userId },
+        orderBy: { completedAt: 'desc' },
+        select: {
+          kind: true,
+          code: true,
+          cefrLevel: true,
+          completedAt: true,
+          assessment: { select: { key: true } },
+        },
+      }),
+    ]);
+
+    /* Newest attempt per instrument key — retakes append (D-033), so the first
+       one seen in `completedAt desc` order is "the" result for that key. */
+    const newestByKey = new Map<string, (typeof results)[number]>();
+    for (const result of results) {
+      if (!newestByKey.has(result.assessment.key)) {
+        newestByKey.set(result.assessment.key, result);
+      }
+    }
+
+    const assessments: DashboardView['assessments'] = resolvedAssignments.map((assignment) => {
+      const result = newestByKey.get(assignment.key);
+
+      return {
+        key: assignment.key,
+        kind: assignment.kind,
+        title: assignment.title,
+        required: assignment.required,
+        takenAt: result ? result.completedAt.toISOString() : null,
+        /* The one summary line a tracker stage shows — the Holland chips for
+           a RIASEC row, the CEFR level for a CEFR one. Never the six scores
+           or the raw total; this is a stage label, not a results page. */
+        summary: result ? (result.kind === 'RIASEC' ? result.code : result.cefrLevel) : null,
+      };
     });
 
     const empty = {
-      englishLevel: english?.level ?? null,
+      assessments,
+      /* Independent of the Holland journey and of assignment (D-123): reported
+         the moment a CEFR result exists at all, whether or not §4C.3 assigned
+         it — a required instrument someone took before it was ever assigned
+         still has an answer here. */
+      englishLevel: results.find((result) => result.kind === 'CEFR')?.cefrLevel ?? null,
       recommendedPaths: [],
       upcomingCourses: [],
       latestCertificate: null,
@@ -435,6 +479,7 @@ export class EnrollmentService {
     return {
       state: 'ACTIVE_PATH',
       codeString,
+      assessments: empty.assessments,
       englishLevel: empty.englishLevel,
       recommendedPaths: [],
       /* Current first, then what follows, in path order — the "what's after

@@ -42,6 +42,8 @@ export const AUDIT_TARGET_TYPES = [
   'course',
   'assessment',
   'assessment_result',
+  'assessment_assignment',
+  'assessment_group',
   'certificate',
   'setting',
 ] as const;
@@ -251,6 +253,24 @@ export const AuditAction = {
   ADMIN_PATH_COURSE_ATTACHED: 'ADMIN_PATH_COURSE_ATTACHED',
   ADMIN_PATH_COURSE_DETACHED: 'ADMIN_PATH_COURSE_DETACHED',
   /**
+   * An instrument or group was assigned to everyone, a department or a person
+   * (§4C.3's Assignments tab, TAM-147) — or an existing assignment was removed.
+   *
+   * `assessment_assignment` rather than `assessment`, because the row named is
+   * the rule itself: `assessmentKey` may resolve to a group, which has no
+   * single `Assessment` row to point the entry at.
+   */
+  ADMIN_ASSESSMENT_ASSIGNED: 'ADMIN_ASSESSMENT_ASSIGNED',
+  ADMIN_ASSESSMENT_UNASSIGNED: 'ADMIN_ASSESSMENT_UNASSIGNED',
+  /**
+   * A named group's membership changed — created, or its `memberKeys` edited.
+   *
+   * Distinct from the assignment actions above because this changes what every
+   * *existing* assignment naming the group resolves to, on every learner's next
+   * dashboard load, without a single assignment row having been touched.
+   */
+  ADMIN_ASSESSMENT_GROUP_CHANGED: 'ADMIN_ASSESSMENT_GROUP_CHANGED',
+  /**
    * An administrator intervened on a course (§4C.5) — hid it, restored it, or
    * placed it with an organisation.
    *
@@ -459,6 +479,9 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ADMIN_PATH_DELETED: 'content',
   ADMIN_PATH_COURSE_ATTACHED: 'content',
   ADMIN_PATH_COURSE_DETACHED: 'content',
+  ADMIN_ASSESSMENT_ASSIGNED: 'content',
+  ADMIN_ASSESSMENT_UNASSIGNED: 'content',
+  ADMIN_ASSESSMENT_GROUP_CHANGED: 'content',
   ADMIN_COURSE_INTERVENED: 'content',
   ADMIN_COURSE_DELETED: 'content',
 

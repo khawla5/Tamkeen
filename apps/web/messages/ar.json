@@ -271,6 +271,7 @@
       "courses": "الدورات",
       "certificate": "الشهادة"
     },
+    "instrumentsLabel": "التقييمات المطلوبة منك",
     "personalHeading": "بياناتك",
     "employeeIdLabel": "الرقم الوظيفي",
     "recommendedHeading": "مسارات موصى بها لك",
@@ -1256,6 +1257,9 @@
       "ADMIN_PATH_DELETED": "حذف مسار",
       "ADMIN_PATH_COURSE_ATTACHED": "إضافة دورة إلى مسار",
       "ADMIN_PATH_COURSE_DETACHED": "إزالة دورة من مسار",
+      "ADMIN_ASSESSMENT_ASSIGNED": "تعيين تقييم",
+      "ADMIN_ASSESSMENT_UNASSIGNED": "إلغاء تعيين تقييم",
+      "ADMIN_ASSESSMENT_GROUP_CHANGED": "تعديل مجموعة تقييمات",
       "ADMIN_COURSE_INTERVENED": "تدخّل في دورة",
       "ADMIN_SETTING_CHANGED": "تغيير إعداد",
       "ADMIN_SETTING_RESET": "إرجاع إعداد إلى الافتراضي",
@@ -1309,6 +1313,8 @@
       "course": "دورة",
       "assessment": "التقييم",
       "assessment_result": "نتيجة تقييم",
+      "assessment_assignment": "تعيين تقييم",
+      "assessment_group": "مجموعة تقييمات",
       "certificate": "شهادة",
       "setting": "إعداد"
     },

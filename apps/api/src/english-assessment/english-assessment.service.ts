@@ -15,6 +15,15 @@ import type { SubmitEnglishAssessmentDto } from './english-assessment.dto';
 /**
  * The English placement test (§4.13, D-123).
  *
+ * `assessments`/`assessment_results` are shared with the Holland instrument
+ * now (TAM-147, folding in TAM-148's sibling tables) — every query here is
+ * filtered to `kind: 'CEFR'`, not because Prisma requires it but because
+ * without it "the active assessment" or "the user's result" could resolve to
+ * the *other* instrument's row, exactly the risk D-124 built separate tables
+ * to avoid in the first place. The bank tables (`EnglishAssessmentQuestion` /
+ * `Option` / `Band`) stayed their own shape; only the registry and the result
+ * unified.
+ *
  * Three rules are enforced here rather than in the controller, so a later caller
  * — an admin screen, a job — cannot bypass them:
  *
@@ -23,9 +32,11 @@ import type { SubmitEnglishAssessmentDto } from './english-assessment.dto';
  *     level either. The first is the scoring key outright; the other two let a
  *     taker triage, and a placement test is only useful if it measures what
  *     somebody can do unaided.
- *  2. **The test is taken once** (D-123). The database says so as well —
- *     `english_assessment_results.user_id` is unique — so the check below is the
- *     courteous refusal and the constraint is the guarantee.
+ *  2. **The test is taken once** (D-123). The database says so as well — a
+ *     partial unique index on `assessment_results (user_id) WHERE kind =
+ *     'CEFR'` (TAM-147's replacement for `english_assessment_results.user_id
+ *     @unique`) — so the check below is the courteous refusal and the
+ *     constraint is the guarantee.
  *  3. **Nothing here writes to a published version.** Editing is §4C.9's job and
  *     is copy-on-write; this service reads the ACTIVE row and appends a result.
  */
@@ -38,21 +49,20 @@ export class EnglishAssessmentService {
 
   /** The active version, in presentation order, with no answer key attached. */
   async getActive(): Promise<EnglishAssessmentView> {
-    const assessment = await this.prisma.englishAssessment.findFirst({
+    const assessment = await this.prisma.assessment.findFirst({
       /*
-       * Scoped to this instrument's key as well as its status. Holland's
-       * equivalent query does not need to be — its table holds one instrument —
-       * but writing the filter here costs nothing and means a second English
-       * instrument, if the ministry ever wants one, is a data decision rather
-       * than a bug that surfaces as the wrong test being served.
+       * Scoped to this instrument's key as well as its status and kind.
+       * Holland's equivalent query only needs `kind` now (TAM-147) — the
+       * `key` filter here is belt-and-braces should a second CEFR instrument
+       * ever exist.
        */
-      where: { key: ENGLISH_ASSESSMENT_KEY, status: 'ACTIVE' },
+      where: { key: ENGLISH_ASSESSMENT_KEY, kind: 'CEFR', status: 'ACTIVE' },
       select: {
         id: true,
         version: true,
         title: true,
         description: true,
-        questions: {
+        englishQuestions: {
           orderBy: { displayOrder: 'asc' },
           select: {
             id: true,
@@ -78,7 +88,7 @@ export class EnglishAssessmentService {
       version: assessment.version,
       title: assessment.title,
       description: assessment.description,
-      questions: assessment.questions.map((question) => ({
+      questions: assessment.englishQuestions.map((question) => ({
         id: question.id,
         order: question.displayOrder,
         text: question.text,
@@ -93,8 +103,13 @@ export class EnglishAssessmentService {
 
   /** The user's result, or null if they have not taken the test. */
   async getResult(userId: string): Promise<EnglishAssessmentResultView | null> {
-    const result = await this.prisma.englishAssessmentResult.findUnique({
-      where: { userId },
+    /* `findFirst`, not `findUnique`: the "one CEFR result ever" rule is a
+       partial unique index (`WHERE kind = 'CEFR'`), and Prisma can only
+       generate a `findUnique` shortcut for a constraint declared in full in
+       the schema — the same limitation the DRAFT/ACTIVE partial indexes on
+       `assessments` already live with. */
+    const result = await this.prisma.assessmentResult.findFirst({
+      where: { userId, kind: 'CEFR' },
       select: RESULT_SELECT,
     });
 
@@ -113,8 +128,8 @@ export class EnglishAssessmentService {
     dto: SubmitEnglishAssessmentDto,
     ipAddress: string | null,
   ): Promise<EnglishAssessmentResultView> {
-    const existing = await this.prisma.englishAssessmentResult.findUnique({
-      where: { userId },
+    const existing = await this.prisma.assessmentResult.findFirst({
+      where: { userId, kind: 'CEFR' },
       select: { id: true },
     });
 
@@ -134,19 +149,19 @@ export class EnglishAssessmentService {
       throw new ConflictException('ENGLISH_ASSESSMENT_ALREADY_TAKEN');
     }
 
-    const assessment = await this.prisma.englishAssessment.findFirst({
+    const assessment = await this.prisma.assessment.findFirst({
       /*
        * Pinned to the ACTIVE version *and* to the id the client was served. A
        * submission arriving mid-publish therefore scores against the version it
        * was given, or is refused — never against a bank the taker never saw,
        * which is the one way a copy-on-write publish could corrupt a result.
        */
-      where: { id: dto.assessmentId, status: 'ACTIVE' },
+      where: { id: dto.assessmentId, kind: 'CEFR', status: 'ACTIVE' },
       select: {
         id: true,
         version: true,
-        bands: { select: { level: true, minScore: true, maxScore: true } },
-        questions: {
+        englishBands: { select: { level: true, minScore: true, maxScore: true } },
+        englishQuestions: {
           select: {
             id: true,
             marks: true,
@@ -160,13 +175,13 @@ export class EnglishAssessmentService {
       throw new NotFoundException('ENGLISH_ASSESSMENT_NOT_FOUND');
     }
 
-    const bank: ScorableEnglishQuestion[] = assessment.questions.map((question) => ({
+    const bank: ScorableEnglishQuestion[] = assessment.englishQuestions.map((question) => ({
       id: question.id,
       marks: question.marks,
       options: question.options.map((option) => ({ id: option.id, isCorrect: option.isCorrect })),
     }));
 
-    const bands: CefrBand[] = assessment.bands.map((band) => ({
+    const bands: CefrBand[] = assessment.englishBands.map((band) => ({
       level: band.level,
       minScore: band.minScore,
       maxScore: band.maxScore,
@@ -195,14 +210,15 @@ export class EnglishAssessmentService {
     let result;
     try {
       result = await this.prisma.$transaction(async (tx) => {
-        const created = await tx.englishAssessmentResult.create({
+        const created = await tx.assessmentResult.create({
           data: {
             userId,
             assessmentId: assessment.id,
             assessmentVersion: assessment.version,
-            totalScore: score.totalScore,
-            maxScore: score.maxScore,
-            level: score.level,
+            kind: 'CEFR',
+            cefrScore: score.totalScore,
+            cefrMax: score.maxScore,
+            cefrLevel: score.level,
           },
           select: RESULT_SELECT,
         });
@@ -254,9 +270,9 @@ const RESULT_SELECT = {
   id: true,
   assessmentId: true,
   assessmentVersion: true,
-  totalScore: true,
-  maxScore: true,
-  level: true,
+  cefrScore: true,
+  cefrMax: true,
+  cefrLevel: true,
   completedAt: true,
 } as const;
 
@@ -264,23 +280,30 @@ function toResultView(result: {
   id: string;
   assessmentId: string;
   assessmentVersion: number;
-  totalScore: number;
-  maxScore: number;
-  level: EnglishAssessmentResultView['level'];
+  cefrScore: number | null;
+  cefrMax: number | null;
+  cefrLevel: EnglishAssessmentResultView['level'] | null;
   completedAt: Date;
 }): EnglishAssessmentResultView {
+  /* Non-null: every row this function is called on was either just created
+     with `kind: 'CEFR'` or read back filtered to it (TAM-147) — the CEFR
+     payload is populated by construction. */
+  const totalScore = result.cefrScore!;
+  const maxScore = result.cefrMax!;
+  const level = result.cefrLevel!;
+
   return {
     id: result.id,
     assessmentId: result.assessmentId,
     assessmentVersion: result.assessmentVersion,
     completedAt: result.completedAt.toISOString(),
-    totalScore: result.totalScore,
-    maxScore: result.maxScore,
-    percent: result.maxScore > 0 ? (result.totalScore / result.maxScore) * 100 : 0,
+    totalScore,
+    maxScore,
+    percent: maxScore > 0 ? (totalScore / maxScore) * 100 : 0,
     /* Always false (D-123). Sent rather than assumed by the client, so the rule
        has one implementation and the screen renders what it is told. */
     canRetake: false,
-    level: result.level,
+    level,
   };
 }
 

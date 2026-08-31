@@ -109,7 +109,11 @@ export class AdminUsersService {
         ...USER_ROW_SELECT,
         createdAt: true,
         moodleUserId: true,
+        /* `kind: 'RIASEC'` (TAM-147): the singular `assessment` field below is
+           the Holland result specifically — a CEFR attempt has no `code` and
+           belongs to a separate part of this screen, not this one. */
         assessmentResults: {
+          where: { kind: 'RIASEC' },
           orderBy: { completedAt: 'desc' },
           select: { code: true, completedAt: true },
         },
@@ -146,7 +150,9 @@ export class AdminUsersService {
       hasLmsAccount: user.moodleUserId !== null,
       assessment: newest
         ? {
-            code: newest.code,
+            /* Non-null: filtered to `kind: 'RIASEC'` above, and every row of
+               that kind has `code` set (TAM-147). */
+            code: newest.code!,
             completedAt: newest.completedAt.toISOString(),
             /* Retakes append (D-033). Showing the count makes a retake visible
                without exposing the superseded codes, which are the person's
