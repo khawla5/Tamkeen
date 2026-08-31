@@ -99,6 +99,7 @@ function detail(overrides: Partial<AdminPathDetail> = {}): AdminPathDetail {
   return {
     ...row(),
     description: 'وصف المسار الكامل الذي يقرأه الموظف قبل اختياره.',
+    skillOutcomes: ['إدارة موقع ميداني', 'تقدير المخاطر التشغيلية'],
     typicalDurationMinutes: 600,
     courses: [course(1), course(2), course(3), course(4), course(5)],
     learners: { building: 3, active: 9, completed: 3 },
@@ -288,6 +289,49 @@ describe('Admin paths (§4C.4)', () => {
       await user.type(dialog().getByLabelText('اسم المسار'), 'ـ');
 
       expect(await dialog().findByRole('button', { name: 'حفظ التعديلات' })).toBeInTheDocument();
+    });
+
+    it('edits the skill outcomes beside the description, one per line', async () => {
+      const user = userEvent.setup();
+      api.updatePath.mockResolvedValue(detail());
+      renderWithProviders(<AdminPathsPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      const field = await dialog().findByLabelText('مخرجات المسار المهارية');
+      /* The stored list, shown as lines — the array is the storage, the line
+         break is only how it is typed (TAM-150). */
+      expect(field).toHaveValue('إدارة موقع ميداني\nتقدير المخاطر التشغيلية');
+
+      await user.clear(field);
+      await user.type(field, 'إدارة موقع ميداني{Enter}الاستجابة للحوادث');
+      await user.click(await dialog().findByRole('button', { name: 'حفظ التعديلات' }));
+
+      expect(api.updatePath).toHaveBeenCalledWith(
+        'p1',
+        expect.objectContaining({
+          skillOutcomes: ['إدارة موقع ميداني', 'الاستجابة للحوادث'],
+        }),
+      );
+    });
+
+    it('drops blank lines rather than saving an empty outcome', async () => {
+      const user = userEvent.setup();
+      api.updatePath.mockResolvedValue(detail());
+      renderWithProviders(<AdminPathsPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      const field = await dialog().findByLabelText('مخرجات المسار المهارية');
+      await user.clear(field);
+      /* A trailing newline is what a list typed by a person actually looks
+         like, and an empty string on the ministry's front page is a bullet
+         with nothing in it. */
+      await user.type(field, 'إدارة موقع ميداني{Enter}{Enter}');
+      await user.click(await dialog().findByRole('button', { name: 'حفظ التعديلات' }));
+
+      expect(api.updatePath).toHaveBeenCalledWith(
+        'p1',
+        expect.objectContaining({ skillOutcomes: ['إدارة موقع ميداني'] }),
+      );
     });
 
     it('disables moving the first course up and the last one down', async () => {

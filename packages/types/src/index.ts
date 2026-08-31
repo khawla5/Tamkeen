@@ -10,6 +10,10 @@ export * from './roles';
 export * from './locale';
 export * from './format';
 
+/* The public front page's one contract (TAM-150) — kept in a file of its own
+   so "what an unauthenticated reader may see" stays greppable. */
+export * from './public';
+
 /* Phase 1 — the RIASEC domain and the product contracts built on it. */
 export * from './riasec';
 export * from './assessment';

@@ -343,6 +343,24 @@ export class CreatePathDto {
   @MaxLength(2000)
   description!: string;
 
+  /**
+   * What the path produces, as three to five capability nouns (TAM-150).
+   *
+   * Bounded here rather than left to the screen because the public explorer
+   * renders the list as-is: two hundred outcomes would be a wall of text on the
+   * ministry's front page, and a sentence with a full stop in it is prose that
+   * belongs in the description. The lower bound is *not* enforced — a path may
+   * legitimately have none yet, and refusing to save a partly-written list is
+   * how an editor loses work.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  @MinLength(2, { each: true })
+  @MaxLength(60, { each: true })
+  skillOutcomes?: string[];
+
   @IsIn(RIASEC_LETTERS)
   riasecLetter!: RiasecLetter;
 
@@ -378,6 +396,24 @@ export class UpdatePathDto {
   @MinLength(10)
   @MaxLength(2000)
   description?: string;
+
+  /**
+   * What the path produces, as three to five capability nouns (TAM-150).
+   *
+   * Bounded here rather than left to the screen because the public explorer
+   * renders the list as-is: two hundred outcomes would be a wall of text on the
+   * ministry's front page, and a sentence with a full stop in it is prose that
+   * belongs in the description. The lower bound is *not* enforced — a path may
+   * legitimately have none yet, and refusing to save a partly-written list is
+   * how an editor loses work.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  @MinLength(2, { each: true })
+  @MaxLength(60, { each: true })
+  skillOutcomes?: string[];
 
   @IsOptional()
   @IsIn(RIASEC_LETTERS)

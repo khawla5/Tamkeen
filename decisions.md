@@ -5,7 +5,28 @@
 
 ---
 
-## D-127 — «الأثر» is the first tab of §4C.8, and every figure on it carries the period it is about
+## D-129 — The front page is about what the ministry's paths produce, and it reads them from a public endpoint
+
+**Decision (TAM-150):** §4.0's explorer stops explaining the product's four stages and shows **one tab per active training path**, each panel answering the question a manager actually arrives with — what will my people be able to do. The four stages survive as four lines beneath the tabs («كيف يُطابَق الموظف بمساره»), which is the weight process deserves on a page whose subject is capability. The hero, FAQ and footer keep their structure and change angle only: skills vocabulary, and a FAQ set re-chosen for a manager (how an employee is matched · what the path certificate attests · can a path be changed · who may register · where courses are studied · how a certificate is verified).
+
+**Content is data, not copy.** A path now carries `skill_outcomes` (`text[]`, empty by default) beside its description, edited in §4C.4 next to the description because the two are written together and read together. Three to five capability nouns, bounded in the DTO — the public page renders the list as-is, so a hundred outcomes would be a wall of text on the ministry's front door, and a sentence with a full stop in it is prose that belongs in the description. **The lower bound is deliberately not enforced on save:** a path may legitimately have none yet, and refusing to save a half-written list is how an editor loses work. The seed carries placeholder descriptions and outcomes for all twelve paths, written from each path's real course list; **TAM-150 is not closed until الإدارة العامة للتدريب has signed them off**, the same rule the landing copy already lives under.
+
+**`text[]` rather than a child table.** The list is short, always read whole with its path, and never queried across paths. A join table would buy ordering guarantees the array already gives and cost a second read on the public explorer's one query.
+
+**A public endpoint, and it is treated as an exposure.** `GET /api/public/paths` is the second unauthenticated read in the product after certificate verification, and it carries the same disciplines: `@Public()` as the single greppable line, a throttle well below the default, and — new here — a **five-minute in-process cache with concurrent misses coalesced**, so that however many visitors arrive the database is asked at most once per window. It `select`s its columns rather than filtering a loaded row, because a `select` cannot leak a field added to the model later. It lives in a module of its own rather than on `PathsModule`, which is `@Roles('EMPLOYEE')` at class level: a public route among guarded ones is one refactor away from inheriting a guard it should not have, or losing one it should. What is deliberately absent and must stay absent: anything about people, the course titles themselves, and the path keys.
+
+**Two deviations from the ticket, both deliberate:**
+
+1. **The fetch is client-side, not server-side.** The ticket calls the landing page a server component; it is not — `LandingView` is `'use client'`, and it is mounted in two places: `/landing`, a server route, and `/`, where `PortalProvider` renders it from the client after a 401. A server fetch would serve one of those and not the other, and one page behaving two ways is worse than one honest fetch. What the instruction was protecting — "a static page must not hit the database per visit" — is solved where it actually belongs, in the endpoint's cache.
+2. **Ordering is career type, then `displayOrder`.** `displayOrder` is curated *within* a letter (six paths share the value 1), so ordering by it alone interleaves the types and puts the two paths of one kind at opposite ends of a twelve-tab strip. The enum's declaration order is the canonical R-I-A-S-E-C (D-031), so this is the sequence the product already uses rather than a second opinion about it.
+
+**The fallback is the rule, not a nicety.** A failed or empty read renders the matching strip alone above one Arabic line saying the paths will appear shortly — never a `DataView` error card. This is the ministry's front door: a visitor must still learn what the platform does and still be able to register when the API is down.
+
+**Known and bounded:** an administrator's edit to a path takes up to five minutes to reach the front page, and the cache is per process, so invalidating it from §4C.4 would be best-effort in a multi-instance deployment and is deliberately not wired — the bound governs either way.
+
+**Rejected:** keeping the stage explorer and adding paths beside it (two explorers on one page, and the stages were never the subject); a card grid of twelve paths (twelve descriptions at once is a wall, and the tablist is already the page's one interaction); showing the RIASEC letter (D-126 — «R» names nothing to a visitor); a `MINISTRY_HEADCOUNT`-style count of enrolled employees on the page (people are not public information); enforcing a minimum of three outcomes on save (loses an editor's half-written work).
+
+## D-128 — «الأثر» is the first tab of §4C.8, and every figure on it carries the period it is about
 
 **Decision (TAM-149):** §4C.8 becomes three views on the shared tablist (TAM-118) — «الأثر» · «التقارير» · «سجل العمليات» — and opens on the first. The reports beside it are unchanged; what they could not answer is the question management actually asks, because they have no time axis and no department axis: how many of our people took part this quarter, in which directorates, what did they complete, and is it growing. One endpoint, `GET /api/admin/impact?from&to&department`, one service, `admin-impact.service.ts`; every column it reads exists already, so it adds aggregation and nothing else.
 

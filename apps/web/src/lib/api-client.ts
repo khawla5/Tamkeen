@@ -76,6 +76,7 @@ import type {
   NumberFormat,
   PathDetail,
   PathRecommendations,
+  PublicPathSummary,
   UnreadNotificationsView,
 } from '@tamkeen/types';
 
@@ -539,6 +540,18 @@ export const entityApi = {
  * guards, and merging them would make it hard to see, from the client alone,
  * which calls require which role.
  */
+/**
+ * The one call made without a session (§4.0, TAM-150).
+ *
+ * Its own object rather than a method on `pathsApi`, whose every other route is
+ * `@Roles('EMPLOYEE')` — the same separation the API keeps, for the same
+ * reason: a public call sitting among guarded ones is one refactor away from
+ * being treated as either.
+ */
+export const publicApi = {
+  paths: () => api.get<PublicPathSummary[]>('/api/public/paths'),
+};
+
 export const adminApi = {
   dashboard: () => api.get<AdminDashboardView>('/api/admin/dashboard'),
 
@@ -720,6 +733,7 @@ export const adminApi = {
     name: string;
     description: string;
     riasecLetter: RiasecLetter;
+    skillOutcomes?: string[];
     typicalDurationMinutes?: number;
   }) => api.post<AdminPathDetail>('/api/admin/paths', input),
 
@@ -728,6 +742,8 @@ export const adminApi = {
     patch: {
       name?: string;
       description?: string;
+      /** Replaced wholesale — the editor sends the list it is showing. */
+      skillOutcomes?: string[];
       riasecLetter?: RiasecLetter;
       typicalDurationMinutes?: number;
       displayOrder?: number;

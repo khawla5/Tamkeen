@@ -1,6 +1,6 @@
 # TAM-149 — «الأثر»: what employees enrolled in, completed and learnt, by period and department
 
-**Branch:** `feature/tam-149-admin-impact` → `main` · Decision **D-123** · §4C.8
+**Branch:** `feature/tam-149-admin-impact` → `main` · Decision **D-128** · §4C.8
 
 ## What was built
 
@@ -10,7 +10,7 @@
 
 One service (`admin-impact.service.ts`) plus a pure `impact-period.ts` for the date arithmetic. **Aggregation only** — every column it reads exists today (`users.created_at` / `email_verified_at` / `department`, `assessment_results.completed_at`, `user_paths.confirmed_at`, `completions.completed_at` / `passed` / `grade_percent`, `certificates.issued_at`, `courses.duration_minutes`). Nothing is stored, cached or materialised: a report is a question about the present, which is the reasoning the reports tab is already built on. It sits on the audit controller, so `admin-rbac.e2e-spec.ts` covers it the moment it is routable. Read-only, so nothing is audited beyond the `AUTHZ_DENIED` the guard already writes.
 
-**2. Four rulings, each of which a plausible implementation gets quietly wrong** (D-123)
+**2. Four rulings, each of which a plausible implementation gets quietly wrong** (D-128)
 
 - **The comparison is a window of equal length, not the previous calendar period.** Q2 has ninety-one days and Q3 ninety-two — a calendar-to-calendar delta reports about a per cent of "growth" that is nothing but the length of the months. Equal-length shifting also keeps the contract at `from`/`to`: which preset the screen was showing never becomes a vocabulary the API has to branch on. For the default period — a calendar month — the shift lands exactly on the previous month.
 - **The participation rate is cumulative, and the tile names its denominator.** "Confirmed this quarter ÷ registered this quarter" can exceed one hundred per cent (someone who registered last year and committed this one is in the numerator and not the denominator), so it is not a rate. Both halves count to the period's end. The denominator is **accounts, not the ministry's headcount**, which the platform has no way of knowing — the screen says so rather than letting a figure be quoted upward as workforce participation. A `MINISTRY_HEADCOUNT` setting could replace it later; noted, not built.
@@ -49,7 +49,7 @@ TAM-149's five acceptance points in `tickets.md`. Product rules: §4C.8's read-o
 
 ## Docs
 
-`decisions.md` **D-123**. `progress.md` 2026-08-31 entry. `tickets.md` TAM-149 marked done, with what is deliberately owed: `MINISTRY_HEADCOUNT` as the rate's denominator, and the CEFR block's content once TAM-148 ships.
+`decisions.md` **D-128**. `progress.md` 2026-08-31 entry. `tickets.md` TAM-149 marked done, with what is deliberately owed: `MINISTRY_HEADCOUNT` as the rate's denominator, and the CEFR block's content once TAM-148 ships.
 
 ## Entity authoring guide
 

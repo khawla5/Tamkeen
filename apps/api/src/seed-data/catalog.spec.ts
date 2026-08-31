@@ -38,6 +38,47 @@ describe('seeded paths', () => {
     expect(SEED_PATHS).toHaveLength(12);
   });
 
+  /*
+   * The explorer on the public front page shows a path by what it produces
+   * (TAM-150), so an empty or one-item list is not a cosmetic gap — it is a tab
+   * with nothing in it on the ministry's front door. Three to five because that
+   * is what a reader takes in at a glance; the same bounds the admin editor
+   * enforces.
+   */
+  it('gives every path three to five skill outcomes', () => {
+    const wrong = SEED_PATHS.filter(
+      (path) => path.skillOutcomes.length < 3 || path.skillOutcomes.length > 5,
+    );
+
+    expect(wrong.map((path) => `${path.key}: ${path.skillOutcomes.length}`)).toEqual([]);
+  });
+
+  it('states outcomes as capabilities, not as sentences', () => {
+    /* A noun phrase, which is what a list of outcomes is read as. A full stop
+       is the signature of prose that belongs in the description instead. */
+    const sentences = SEED_PATHS.flatMap((path) =>
+      path.skillOutcomes.filter((outcome) => outcome.includes('.') || outcome.length > 60),
+    );
+
+    expect(sentences).toEqual([]);
+  });
+
+  it('repeats no outcome within one path', () => {
+    const duplicated = SEED_PATHS.filter(
+      (path) => new Set(path.skillOutcomes).size !== path.skillOutcomes.length,
+    );
+
+    expect(duplicated.map((path) => path.key)).toEqual([]);
+  });
+
+  it('describes what each path develops, in more than one sentence', () => {
+    /* §4.0's vocabulary rule, mechanically: the explorer's panel is a claim
+       about capability, and a single clause is a label rather than a claim. */
+    const thin = SEED_PATHS.filter((path) => path.description.split('.').length < 2);
+
+    expect(thin.map((path) => path.key)).toEqual([]);
+  });
+
   it('uses unique path keys', () => {
     const keys = SEED_PATHS.map((path) => path.key);
 

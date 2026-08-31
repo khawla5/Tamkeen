@@ -788,6 +788,14 @@ model Path {
 
   typicalDurationMinutes Int? @map("typical_duration_minutes")
 
+  /// What this path produces, as three to five capability nouns (TAM-150).
+  ///
+  /// A list rather than prose because it is read as a list — on the public
+  /// explorer, and by the directorate authoring it. Empty by default: a path
+  /// created before its outcomes are written is honest about having none, and
+  /// the explorer simply shows its description until they are.
+  skillOutcomes String[] @map("skill_outcomes")
+
   /// Curated ordering *within* a recommendation group. Recommendation rank
   /// always outranks it.
   displayOrder Int     @map("display_order")

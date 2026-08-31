@@ -18,6 +18,7 @@ import { CoursesModule } from './courses/courses.module';
 import { EnrollmentModule } from './enrollment/enrollment.module';
 import { JourneyModule } from './journey/journey.module';
 import { PathsModule } from './paths/paths.module';
+import { PublicModule } from './public/public.module';
 import { ProfileModule } from './profile/profile.module';
 import { CsrfGuard } from './auth/csrf.guard';
 import { RolesGuard } from './auth/roles.guard';
@@ -74,6 +75,8 @@ import { SettingsModule } from './settings/settings.module';
     AssessmentModule,
     EnglishAssessmentModule,
     PathsModule,
+    /* §4.0 — the front page's read of the training paths (TAM-150). */
+    PublicModule,
     CoursesModule,
     EnrollmentModule,
     ProfileModule,

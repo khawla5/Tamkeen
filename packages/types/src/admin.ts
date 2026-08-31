@@ -400,6 +400,15 @@ export interface AdminPathCourseRow {
 
 export interface AdminPathDetail extends AdminPathRow {
   description: string;
+  /**
+   * What the path produces, as three to five capability nouns (§4C.4,
+   * TAM-150).
+   *
+   * Edited here and read by the public explorer, which is the reason it is a
+   * list and not more prose: the front page renders it as one, and a paragraph
+   * the directorate wrote as bullets would arrive as a wall of text.
+   */
+  skillOutcomes: string[];
   typicalDurationMinutes: number | null;
   courses: AdminPathCourseRow[];
   learners: AdminPathLearners;

@@ -115,6 +115,11 @@ function Body({
 
   const [name, setName] = useState(path.name);
   const [description, setDescription] = useState(path.description);
+  /* One outcome per line. A textarea rather than a row of inputs with add and
+     remove buttons: the list is three to five short nouns, the directorate
+     writes it in one sitting, and a line break is a control everybody already
+     knows. The array is the storage; lines are only how it is typed. */
+  const [outcomes, setOutcomes] = useState(path.skillOutcomes.join('\n'));
   const [letter, setLetter] = useState<RiasecLetter>(path.riasecLetter);
 
   const [busy, setBusy] = useState(false);
@@ -147,8 +152,16 @@ function Body({
     return run(() => adminApi.reorderPathCourses(path.id, ids), t('pathOrderSaved'));
   }
 
+  const parsedOutcomes = outcomes
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
   const dirty =
-    name !== path.name || description !== path.description || letter !== path.riasecLetter;
+    name !== path.name ||
+    description !== path.description ||
+    letter !== path.riasecLetter ||
+    parsedOutcomes.join('\n') !== path.skillOutcomes.join('\n');
 
   return (
     <div className="flex flex-col gap-5">
@@ -190,13 +203,32 @@ function Body({
         </Field>
 
         <div className="sm:col-span-2">
-          <Field id="path-description" label={t('pathDescription')}>
+          <Field id="path-description" label={t('pathDescription')} hint={t('pathDescriptionHint')}>
             {(field) => (
               <Textarea
                 {...field}
                 rows={3}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
+              />
+            )}
+          </Field>
+        </div>
+
+        {/*
+          What the path produces (TAM-150). Beside the description because they
+          are written together and read together — on the ministry's public
+          front page, which is the one screen in the product where this text
+          reaches somebody who has not signed in.
+        */}
+        <div className="sm:col-span-2">
+          <Field id="path-outcomes" label={t('pathOutcomes')} hint={t('pathOutcomesHint')}>
+            {(field) => (
+              <Textarea
+                {...field}
+                rows={5}
+                value={outcomes}
+                onChange={(event) => setOutcomes(event.target.value)}
               />
             )}
           </Field>
@@ -214,6 +246,7 @@ function Body({
                   adminApi.updatePath(path.id, {
                     name,
                     description,
+                    skillOutcomes: parsedOutcomes,
                     riasecLetter: letter,
                   }),
                 t('pathSaved'),

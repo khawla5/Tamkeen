@@ -1,9 +1,52 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import LandingPage from '@/app/landing/page';
+import type { PublicPathSummary } from '@tamkeen/types';
+
 import { renderWithProviders } from '@/test/render';
+
+/**
+ * The explorer reads the ministry's real paths (TAM-150), so the page has a
+ * dependency now — one public, unauthenticated GET. Mocked here rather than
+ * stubbed at `fetch`, so a change to the client's shape fails these tests
+ * rather than passing them against a response nobody serves.
+ */
+const api = vi.hoisted(() => ({ paths: vi.fn() }));
+
+vi.mock('@/lib/api-client', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api-client')>('@/lib/api-client');
+
+  return { ...actual, publicApi: api };
+});
+
+const { default: LandingPage } = await import('@/app/landing/page');
+
+function path(overrides: Partial<PublicPathSummary> = {}): PublicPathSummary {
+  return {
+    id: 'p-1',
+    name: 'العمليات الميدانية والسلامة',
+    riasecLetter: 'R',
+    description: 'يطوّر هذا المسار القدرة على إدارة العمل خارج المكتب.',
+    skillOutcomes: ['إدارة موقع ميداني', 'تقدير المخاطر التشغيلية'],
+    courseCount: 11,
+    typicalDurationMinutes: 1290,
+    ...overrides,
+  };
+}
+
+const PATHS: PublicPathSummary[] = [
+  path(),
+  path({
+    id: 'p-2',
+    name: 'تحليل البيانات ودعم القرار',
+    riasecLetter: 'I',
+    description: 'يطوّر هذا المسار القدرة على تحويل البيانات إلى قرار.',
+    skillOutcomes: ['تجهيز البيانات وتنظيفها'],
+    courseCount: 9,
+    typicalDurationMinutes: 1590,
+  }),
+];
 
 /**
  * Public landing page — reachable signed out (§ landing brief, "out of
@@ -12,6 +55,11 @@ import { renderWithProviders } from '@/test/render';
  * none here.
  */
 describe('LandingPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.paths.mockResolvedValue(PATHS);
+  });
+
   it('renders one h1 and the required landmarks', () => {
     renderWithProviders(<LandingPage />);
 
@@ -49,19 +97,20 @@ describe('LandingPage', () => {
     }
   });
 
-  it('renders exactly one h3 — the selected item in the explorer; no card grids', () => {
+  it('renders two h3s — the selected path and the matching strip; no card grids', async () => {
     renderWithProviders(<LandingPage />);
 
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1);
+    await screen.findByRole('tab', { name: 'العمليات الميدانية والسلامة' });
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(2);
   });
 
-  it('mentions the assessment length and, on the path stage, the 5–10 range using real numerals', async () => {
-    const user = userEvent.setup();
+  it('explains how an employee is matched, with the real numbers interpolated', async () => {
     renderWithProviders(<LandingPage />);
 
-    expect(screen.getByText(/نحو 30 عبارة/)).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'المسار التدريبي' }));
-    await user.click(screen.getByRole('button', { name: 'بناء المسار' }));
+    /* The four stages that used to be the explorer are four lines now, and they
+       keep the interpolated figures — the assessment's length and the 5-10 rule
+       come from the shared constants, never typed into copy. */
+    expect(await screen.findByText(/من 30 عبارة/)).toBeInTheDocument();
     expect(screen.getByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
   });
 
@@ -74,39 +123,91 @@ describe('LandingPage', () => {
     expect(screen.getByText(/التسجيل مقصور على منسوبي الوزارة/)).toBeInTheDocument();
   });
 
-  it('explorer: four stage tabs, the first selected, its first item shown in the detail pane', () => {
+  it('explorer: one tab per path, the first selected, its panel showing what it develops', async () => {
     renderWithProviders(<LandingPage />);
 
-    const tabs = screen.getAllByRole('tab');
+    const tabs = await screen.findAllByRole('tab');
     expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'التقييم المهني',
-      'المسار التدريبي',
-      'الدورات',
-      'الشهادات والسيرة الذاتية',
+      'العمليات الميدانية والسلامة',
+      'تحليل البيانات ودعم القرار',
     ]);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('تقييم الميول المهنية');
-  });
 
-  it('explorer: choosing an item updates the detail pane and marks it current', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<LandingPage />);
-
-    const item = screen.getByRole('button', { name: 'إعادة التقييم' });
-    await user.click(item);
-    expect(item).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('إعادة التقييم');
-    expect(screen.getByText(/لم يؤكّد مساره/)).toBeInTheDocument();
-  });
-
-  it("explorer: switching stage resets to that stage's first item, and the action always leads to registration", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<LandingPage />);
-
-    await user.click(screen.getByRole('tab', { name: 'الشهادات والسيرة الذاتية' }));
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('شهادة الدورة');
     const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'العمليات الميدانية والسلامة',
+    );
+    expect(within(panel).getByText(/يطوّر هذا المسار/)).toBeInTheDocument();
+  });
+
+  it('explorer: names the career type in Arabic, never as a letter', async () => {
+    renderWithProviders(<LandingPage />);
+
+    const panel = await screen.findByRole('tabpanel');
+
+    /* D-126: the RIASEC letter is an internal code, and «R» on the ministry's
+       front page would name nothing. */
+    expect(within(panel).getByText('النمط المهني: الواقعي')).toBeInTheDocument();
+  });
+
+  it('explorer: lists the skill outcomes the path produces', async () => {
+    renderWithProviders(<LandingPage />);
+
+    const panel = await screen.findByRole('tabpanel');
+    const outcomes = within(panel)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+
+    expect(outcomes).toContain('إدارة موقع ميداني');
+    expect(outcomes).toContain('تقدير المخاطر التشغيلية');
+  });
+
+  it('explorer: interpolates the course count and duration from the API, never typed', async () => {
+    renderWithProviders(<LandingPage />);
+
+    /* Eleven courses, and 1,290 minutes read as hours. A number typed into copy
+       is a promise nobody keeps once the catalogue changes. */
+    expect(await screen.findByText(/يعرض 11 دورة للاختيار منها/)).toBeInTheDocument();
+    expect(screen.getByText(/نحو 22 ساعة تدريبية/)).toBeInTheDocument();
+  });
+
+  it('explorer: switching path replaces the panel, and the action always leads to registration', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LandingPage />);
+
+    await user.click(await screen.findByRole('tab', { name: 'تحليل البيانات ودعم القرار' }));
+
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'تحليل البيانات ودعم القرار',
+    );
+    expect(within(panel).getByText(/يعرض 9 دورة/)).toBeInTheDocument();
     expect(panel.querySelector('a[href="/register"]')).not.toBeNull();
+  });
+
+  it('never renders an error on the ministry front door when the paths cannot be read', async () => {
+    api.paths.mockRejectedValue(new Error('down'));
+    renderWithProviders(<LandingPage />);
+
+    /* The one place in the product where a failed read must not produce an
+       error card: a visitor still learns how the platform works and can still
+       register. */
+    await waitFor(() =>
+      expect(screen.getByText('ستظهر المسارات التدريبية هنا قريبًا.')).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: /إعادة/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /إنشاء حساب/ }).length).toBeGreaterThan(0);
+  });
+
+  it('says nothing about outcomes for a path whose outcomes are not written yet', async () => {
+    api.paths.mockResolvedValue([path({ skillOutcomes: [] })]);
+    renderWithProviders(<LandingPage />);
+
+    const panel = await screen.findByRole('tabpanel');
+
+    expect(within(panel).queryByText('ما يكتسبه الموظف')).not.toBeInTheDocument();
+    expect(within(panel).getByText(/يطوّر هذا المسار/)).toBeInTheDocument();
   });
 
   it('hero: no feature pills — the paragraph carries the message', () => {
@@ -116,15 +217,20 @@ describe('LandingPage', () => {
   });
 
   it('faq: six questions as native disclosures, closed by default, each answered from a product rule', () => {
-    const { container } = renderWithProviders(<LandingPage />);
+    renderWithProviders(<LandingPage />);
 
     const faq = screen.getByRole('region', { name: 'الأسئلة الشائعة' });
     const items = faq.querySelectorAll('details');
     expect(items).toHaveLength(6);
     for (const item of items) expect(item.open).toBe(false);
+    /* The two a manager arrives with, first (TAM-150). */
+    expect(within(faq).getByText('كيف يُطابَق الموظف بمسار تدريبي؟')).toBeInTheDocument();
+    expect(within(faq).getByText('ماذا تثبت شهادة المسار؟')).toBeInTheDocument();
     expect(within(faq).getByText('هل يمكن تغيير المسار بعد تأكيده؟')).toBeInTheDocument();
     expect(within(faq).getByText(/مسار واحد لكل موظف/)).toBeInTheDocument();
-    expect(container.querySelectorAll('h3')).toHaveLength(1);
+    /* Questions, not headings: the section is a list, and an h3 per question
+       would put six more entries in the document outline for no gain. */
+    expect(faq.querySelectorAll('h3')).toHaveLength(0);
   });
 
   it('footer: identity, real quick links only, and policy names as text until their pages exist', () => {

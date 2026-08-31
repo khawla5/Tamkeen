@@ -821,13 +821,29 @@
 
 > **Epic label: `admin-polish`** — a pass over the super-admin portal at the ministry's direction (2026-08-25), one ticket per page, worked in that order on `feature/tam-130-admin-polish`. Everything below is **DONE** and shipped in **PR #24** (five commits, merged 2026-08-26); the acceptance notes record what was actually asserted. Decisions: D-098 (two removals for a path), D-099 (the dashboard's distribution), D-100 (the dialog).
 
-## TAM-149 — «الأثر»: the ministry's view of what employees enrolled in, completed and learnt, by period and department — **DONE** (D-123)
+## TAM-150 — The front page speaks about paths and the skills they produce — **DONE, copy sign-off owed** (D-129)
+
+- **Labels:** `landing`, `content`, `backend`, `frontend`
+- **Priority:** High
+- **What shipped:**
+  1. **The message.** One idea at every level: the ministry has training paths, each builds a nameable skill set, and an employee is matched to the one that fits. Vocabulary is skills and capabilities, not screens and steps; management is addressed first, the employee second.
+  2. **Content is data.** `paths.skill_outcomes` (`text[]`, empty by default) with a migration, edited in §4C.4 beside the description — one outcome per line, bounded at five, with no minimum enforced on save so a half-written list is not lost. The seed carries **placeholder** two-to-three-sentence descriptions and 3–5 outcomes for all twelve paths, written from each path's real course list.
+  3. **The explorer shows paths, not stages.** One tab per active path; each panel carries the name, the career type in Arabic (never the letter, D-126), the skill outcomes, the description, and the course count and duration **interpolated from the API**. The four stages became a compact «كيف يُطابَق الموظف بمساره» strip beneath, keeping the interpolated `{count}` / `{min}` / `{max}`.
+  4. **A public read-only endpoint.** `GET /api/public/paths` — `@Public()`, throttled, five-minute cache with coalesced misses, `Cache-Control: public`. Seven fields, asserted as an exact key set in two suites. Its own module, away from the `@Roles('EMPLOYEE')` paths controller.
+  5. **Hero, FAQ, footer — angle only.** No new sections; the FAQ set re-chosen for a manager's questions.
+  6. **The fallback is the rule.** A failed or empty read renders the matching strip alone above an Arabic "paths will appear shortly" line — never an error state on the ministry's front door.
+- **Deviations, recorded in D-129:** the fetch is client-side (the landing page is not a server component, and `/` mounts it from the client); ordering is career type then `displayOrder` (six paths share `displayOrder: 1`).
+- **Acceptance met:** 4 new seed-content tests, 8 new API unit tests (the public service and its cache), 7 new integration tests against real PostgreSQL, 10 new/rewritten landing tests, 2 new admin-path tests. Suites run: API unit 794 / 49 suites · 268 integration across admin-paths, admin-rbac and public-paths · web 893 · typecheck / lint / format clean. Verified live at `/landing` and `/`, desktop and 390px.
+- **Not closed until:** الإدارة العامة للتدريب signs off the twelve descriptions and outcome lists — the ticket's own condition, and the same rule the rest of the landing copy lives under.
+- **Also fixed here (came off the merge of `main`):** `ar.json` was invalid JSON — a comma dropped after `impactRatePoints` — and two decisions were both numbered `D-127`; «الأثر» became **D-128**.
+
+## TAM-149 — «الأثر»: the ministry's view of what employees enrolled in, completed and learnt, by period and department — **DONE** (D-128)
 
 - **Labels:** `impact`, `admin`, `backend`, `frontend`
 - **Priority:** High — a management ask
 - **What shipped:**
   1. **A tab, not a page.** §4C.8 is three views on the shared tablist (TAM-118) — «الأثر» · «التقارير» · «سجل العمليات» — opening on the first. The reports are unchanged behind it and the admin nav stays at eight items.
-  2. **The period and the slice.** This month / this quarter / this year / a chosen range, plus the `DEPARTMENTS` filter and «كل الإدارات». Every figure is for the period, with the previous window of **equal length** beside it as a delta — a calendar quarter against a calendar quarter would report a per cent of growth that is only the length of the months (D-123).
+  2. **The period and the slice.** This month / this quarter / this year / a chosen range, plus the `DEPARTMENTS` filter and «كل الإدارات». Every figure is for the period, with the previous window of **equal length** beside it as a delta — a calendar quarter against a calendar quarter would report a per cent of growth that is only the length of the months (D-128).
   3. **Participation.** Verified registrations, assessed, committed, active — people, de-duplicated, employees only — plus the participation rate, which is **cumulative** and says its denominator is accounts and not the ministry's headcount, which the platform does not know. The same four counts per department as a sortable table, tallied from the rows the tiles are counted from so the columns cannot disagree with them.
   4. **Learning delivered.** Courses passed, hours from `duration_minutes` (with the count of passes that carry none stated beside it — D-035), course certificates, paths completed (read from the path certificate, the only durable record of _when_). A twelve-month trend as token bars, each row printing both numbers.
   5. **What they learnt.** Top courses with their average grade, top paths, the six career types of the people assessed in the period — and the language-level block rendering «لم يُفعَّل اختبار المستوى بعد» rather than an empty card, because `cefr` is null until TAM-148.

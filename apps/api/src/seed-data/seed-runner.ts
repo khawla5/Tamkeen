@@ -424,6 +424,7 @@ async function seedCatalog(
         description: seedPath.description,
         riasecLetter: seedPath.riasecLetter,
         typicalDurationMinutes: seedPath.typicalDurationMinutes,
+        skillOutcomes: seedPath.skillOutcomes,
         displayOrder: seedPath.displayOrder,
       },
       update: {
@@ -431,6 +432,11 @@ async function seedCatalog(
         description: seedPath.description,
         riasecLetter: seedPath.riasecLetter,
         typicalDurationMinutes: seedPath.typicalDurationMinutes,
+        /* Declarative like the description beside it: the seed is the source of
+           this copy until the directorate signs off its own, and a re-seed that
+           left last month's outcomes in place would make the file a lie about
+           what the platform is showing (TAM-150). */
+        skillOutcomes: seedPath.skillOutcomes,
         displayOrder: seedPath.displayOrder,
         isActive: true,
       },
