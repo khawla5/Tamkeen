@@ -1,10 +1,14 @@
 'use client';
 
 import { Check } from 'lucide-react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState, type FormEvent } from 'react';
 
+import type { DashboardView } from '@tamkeen/types';
+
 import { useErrorMessage } from '@/components/auth/use-error-message';
+import { CefrLevelBadge } from '@/components/english/cefr-level-badge';
 import { PortalPage } from '@/components/layout/portal-page';
 import { DigitsCard } from '@/components/profile/digits-card';
 import { PasswordCard } from '@/components/profile/password-card';
@@ -57,7 +61,7 @@ function validate(form: { fullName: string; department: string }): FieldErrors {
 export default function ProfilePage() {
   const t = useTranslations('profile');
   const tErrors = useTranslations('errors');
-  const { user, refreshSession } = usePortal();
+  const { user, dashboard, refreshSession } = usePortal();
 
   const [fullName, setFullName] = useState(user.fullName);
   const [department, setDepartment] = useState(user.department);
@@ -243,6 +247,12 @@ export default function ProfilePage() {
           </Card>
 
           <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
+          {/* §4.13: the placement level belongs on the profile because that is
+              where a person's own record of themselves lives, and because the CV
+              builder draws on the same facts. Read-only — there is nothing to
+              edit and no retake (D-123) — so it is a card with a link, not a
+              control. */}
+          <EnglishLevelCard level={dashboard.englishLevel} />
         </div>
 
         <div className="flex flex-col gap-6">
@@ -275,6 +285,48 @@ export default function ProfilePage() {
  * only more so. Whoever can move the address can then use "forgot password" and
  * own the account outright, with the real employee locked out and unnotified.
  */
+/**
+ * The English placement level (§4.13), or the way to earn one.
+ *
+ * Reads `dashboard.englishLevel` rather than fetching the result: the value is
+ * already loaded for every authenticated page, and a second request for one
+ * badge would be a network round trip to say what the portal already knows.
+ */
+function EnglishLevelCard({ level }: { level: DashboardView['englishLevel'] }) {
+  const t = useTranslations('english');
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('cardTitle')}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-4">
+        {level ? (
+          <>
+            <CefrLevelBadge level={level} />
+            <Link
+              href="/english-assessment/result"
+              className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
+            >
+              {t('viewResult')}
+            </Link>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">{t('cardBody')}</p>
+            <Link
+              href="/english-assessment"
+              className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
+            >
+              {t('start')}
+            </Link>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function EmailCard({ current }: { current: string }) {
   const t = useTranslations('profile');
   const translateError = useErrorMessage();

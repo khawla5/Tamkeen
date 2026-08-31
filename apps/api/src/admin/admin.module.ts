@@ -9,6 +9,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { SyncSchedulerModule } from '../sync-scheduler/sync-scheduler.module';
 import { AdminAssessmentService } from './admin-assessment.service';
 import { AdminAuditService } from './admin-audit.service';
+import { AdminEnglishService } from './admin-english.service';
 import { AdminCoursesService } from './admin-courses.service';
 import { AdminSettingsService } from './admin-settings.service';
 import { AdminTemplatesService } from './admin-templates.service';
@@ -45,6 +46,7 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
     AdminUsersService,
     AdminEntitiesService,
     AdminAssessmentService,
+    AdminEnglishService,
     AdminPathsService,
     AdminCoursesService,
     AdminSettingsService,
