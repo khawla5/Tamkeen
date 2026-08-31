@@ -15,6 +15,7 @@ import { AdminSettingsService } from './admin-settings.service';
 import { AdminTemplatesService } from './admin-templates.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminEntitiesService } from './admin-entities.service';
+import { AdminImpactService } from './admin-impact.service';
 import { AdminPathsService } from './admin-paths.service';
 import { AdminUsersService } from './admin-users.service';
 import { ADMIN_CONTROLLERS } from './admin.controllers';
@@ -51,6 +52,7 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
     AdminSettingsService,
     AdminTemplatesService,
     AdminAuditService,
+    AdminImpactService,
   ],
 })
 export class AdminModule {}

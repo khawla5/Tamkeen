@@ -1,10 +1,11 @@
 import { Controller, Get, Header, Query } from '@nestjs/common';
 
-import type { AdminAuditPage, AdminReports } from '@tamkeen/types';
+import type { AdminAuditPage, AdminImpactView, AdminReports } from '@tamkeen/types';
 
 import { Roles } from '../auth/auth.decorators';
 import { AdminAuditService } from './admin-audit.service';
-import { AdminAuditQueryDto } from './admin.dto';
+import { AdminImpactService } from './admin-impact.service';
+import { AdminAuditQueryDto, AdminImpactQueryDto } from './admin.dto';
 import { CSV_CONTENT_TYPE, toCsv } from './csv';
 
 /**
@@ -18,11 +19,28 @@ import { CSV_CONTENT_TYPE, toCsv } from './csv';
 @Controller('admin')
 @Roles('SUPER_ADMIN')
 export class AdminAuditController {
-  constructor(private readonly audit: AdminAuditService) {}
+  constructor(
+    private readonly audit: AdminAuditService,
+    private readonly impact: AdminImpactService,
+  ) {}
 
   @Get('audit')
   list(@Query() query: AdminAuditQueryDto): Promise<AdminAuditPage> {
     return this.audit.list(query);
+  }
+
+  /**
+   * §4C.8's first tab — «الأثر» (TAM-149).
+   *
+   * It lives on this controller because it is the same page: the reports beside
+   * it answer "how is the system doing", this answers "how many of our people
+   * took part this quarter, and is it growing". Read-only like everything else
+   * here, so nothing is audited beyond the `AUTHZ_DENIED` the guard already
+   * writes for a caller who should not be asking.
+   */
+  @Get('impact')
+  impactView(@Query() query: AdminImpactQueryDto): Promise<AdminImpactView> {
+    return this.impact.view(query);
   }
 
   @Get('reports')

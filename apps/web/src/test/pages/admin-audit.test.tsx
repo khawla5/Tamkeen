@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AdminAuditPage, AdminReports } from '@tamkeen/types';
+import type { AdminAuditPage, AdminImpactView, AdminReports } from '@tamkeen/types';
 
 import { renderWithProviders } from '@/test/render';
 
@@ -21,6 +21,7 @@ import { renderWithProviders } from '@/test/render';
 const api = vi.hoisted(() => ({
   reports: vi.fn(),
   auditLog: vi.fn(),
+  impact: vi.fn(),
   reportsCsvUrl: vi.fn(() => 'http://api/api/admin/reports.csv'),
 }));
 
@@ -96,29 +97,83 @@ function read(blob: Blob): Promise<string> {
   });
 }
 
+/**
+ * «الأثر» is the first tab now (TAM-149), so every assertion below has to say
+ * which view it is about. Its own behaviour is covered in
+ * `admin-impact.test.tsx`; here it only needs to render without reaching the
+ * network.
+ */
+const EMPTY_COUNT = { value: 0, previous: 0, delta: 0 };
+
+const IMPACT: AdminImpactView = {
+  period: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-31T20:59:59.999Z' },
+  previousPeriod: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-31T20:59:59.999Z' },
+  department: null,
+  participation: {
+    registered: EMPTY_COUNT,
+    assessed: EMPTY_COUNT,
+    committed: EMPTY_COUNT,
+    active: EMPTY_COUNT,
+    participationRate: null,
+    previousParticipationRate: null,
+    accountsToDate: 0,
+  },
+  byDepartment: [],
+  learning: {
+    coursesPassed: EMPTY_COUNT,
+    learningMinutes: EMPTY_COUNT,
+    passesWithoutDuration: 0,
+    certificatesCourse: EMPTY_COUNT,
+    certificatesPath: EMPTY_COUNT,
+  },
+  trend: [],
+  topCourses: [],
+  topPaths: [],
+  letterDistribution: [],
+  cefr: null,
+};
+
+/** Renders the page and moves to the reports tab, which no longer opens first. */
+async function openReports() {
+  const user = userEvent.setup();
+  renderWithProviders(<AdminAuditPage />);
+  await user.click(await screen.findByRole('tab', { name: 'التقارير' }));
+
+  return user;
+}
+
 describe('Admin audit and reports (§4C.8)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.reports.mockResolvedValue(REPORTS);
+    api.impact.mockResolvedValue(IMPACT);
     api.auditLog.mockResolvedValue(log());
   });
 
-  it('shows the loading state before the reports arrive', () => {
-    api.reports.mockReturnValue(new Promise(() => {}));
+  it('opens on the impact tab, which is the question the page is opened with', async () => {
     renderWithProviders(<AdminAuditPage />);
+
+    /* TAM-149: «كم من موظفينا شارك هذا الربع» comes before «كيف حال النظام». */
+    expect(await screen.findByRole('tab', { name: 'الأثر', selected: true })).toBeInTheDocument();
+    expect(api.impact).toHaveBeenCalled();
+  });
+
+  it('shows the loading state before the reports arrive', async () => {
+    api.reports.mockReturnValue(new Promise(() => {}));
+    await openReports();
 
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
   it('offers a retry when the reports fail', async () => {
     api.reports.mockRejectedValue(new Error('down'));
-    renderWithProviders(<AdminAuditPage />);
+    await openReports();
 
     expect(await screen.findByRole('button', { name: /إعادة/ })).toBeInTheDocument();
   });
 
   it('lists the worst-performing courses first, and says that is the order', async () => {
-    renderWithProviders(<AdminAuditPage />);
+    await openReports();
 
     /* Otherwise the ordering reads as arbitrary and the list stops being a
        to-do. */
@@ -133,7 +188,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       ...REPORTS,
       journey: { ...REPORTS.journey, pathCompletionRate: null },
     });
-    renderWithProviders(<AdminAuditPage />);
+    await openReports();
 
     await screen.findByText('نسبة إكمال المسارات');
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
@@ -141,13 +196,13 @@ describe('Admin audit and reports (§4C.8)', () => {
 
   it('explains an empty report rather than showing an empty card', async () => {
     api.reports.mockResolvedValue({ ...REPORTS, pathPopularity: [], courseOutcomes: [] });
-    renderWithProviders(<AdminAuditPage />);
+    await openReports();
 
     expect(await screen.findAllByText('لا توجد بيانات كافية بعد.')).toHaveLength(2);
   });
 
   it('shows the Holland-code distribution in Arabic type names', async () => {
-    renderWithProviders(<AdminAuditPage />);
+    await openReports();
 
     /* §4C.8 asks for it, the API has always computed it and the export has
        always carried it — the page never showed it (TAM-138). And spelled out,
@@ -157,7 +212,7 @@ describe('Admin audit and reports (§4C.8)', () => {
   });
 
   it('counts every stage the export reports, not four of the six', async () => {
-    renderWithProviders(<AdminAuditPage />);
+    await openReports();
 
     /* The file and the page it came from used to disagree about how the
        programme was doing. */
@@ -166,7 +221,7 @@ describe('Admin audit and reports (§4C.8)', () => {
   });
 
   it('offers the reports export as an ordinary link, so the session cookie carries it', async () => {
-    renderWithProviders(<AdminAuditPage />);
+    await openReports();
 
     const link = await screen.findByRole('link', { name: 'تصدير البيانات' });
     expect(link).toHaveAttribute('href', 'http://api/api/admin/reports.csv');
@@ -177,7 +232,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminAuditPage />);
 
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       /* The label appears twice by design: once as a filter option and once on
          the entry. Scoped to the paragraph so the assertion is about the row. */
@@ -188,7 +243,7 @@ describe('Admin audit and reports (§4C.8)', () => {
     it('shows the reason a refusal happened', async () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       /* Half the value of a refused entry, and in Arabic — the page used to
          print the raw  left-to-right in the
@@ -200,7 +255,7 @@ describe('Admin audit and reports (§4C.8)', () => {
     it('names what the entry was about, and never shows its id', async () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       /* «حساب: سارة العتيبي» — the kind, then the name. An administrator
          reading a trail needs to know *which* account, and a uuid answers that
@@ -212,7 +267,7 @@ describe('Admin audit and reports (§4C.8)', () => {
     it('marks a failed outcome as a failure, not as an ordinary tag', async () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       /* The word carries the meaning; the colour only reinforces it. */
       const badge = (await screen.findAllByText('أخفق')).find((node) =>
@@ -243,7 +298,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       );
 
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       expect(await screen.findByText(/مسار موظف: خدمة المتعاملين/)).toBeInTheDocument();
       /* Labels in Arabic, values through the shared formatter (D-018). */
@@ -274,7 +329,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       );
 
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       expect(await screen.findByText(/إعداد: اسم الموقِّع على الشهادات/)).toBeInTheDocument();
       expect(document.body.textContent).not.toContain('CERT_SIGNATORY_NAME');
@@ -302,7 +357,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       );
 
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       /* The route rendered as `api/admin/settings/` — its leading slash thrown
          to the end by the surrounding RTL run, which makes it read as a
@@ -314,7 +369,7 @@ describe('Admin audit and reports (§4C.8)', () => {
     it('filters on the shared Select rather than a raw control', async () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       const action = await screen.findByLabelText('الإجراء');
       /* The pre-token classes the row used to carry (`border-input`,
@@ -346,7 +401,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       );
 
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       expect(await screen.findByText('SOMETHING_PHASE_9_ADDED')).toBeInTheDocument();
     });
@@ -354,7 +409,7 @@ describe('Admin audit and reports (§4C.8)', () => {
     it('offers older entries only when there are some', async () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       await screen.findAllByText(/تغيير حالة حساب/);
       expect(screen.queryByRole('button', { name: 'عمليات أقدم' })).not.toBeInTheDocument();
@@ -365,7 +420,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       api.auditLog.mockResolvedValue(log({ nextBefore: '900' }));
 
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
       await user.click(await screen.findByRole('button', { name: 'عمليات أقدم' }));
 
       expect(api.auditLog).toHaveBeenLastCalledWith(expect.objectContaining({ before: '900' }));
@@ -397,7 +452,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       );
 
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       /* The keys were translated and the values were not: the row read «الحالة:
          HIDDEN_BUT_COMPLETABLE» — an Arabic label followed by the codebase's own
@@ -413,7 +468,7 @@ describe('Admin audit and reports (§4C.8)', () => {
     it('groups the action filter by the area each action belongs to', async () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
 
       const action = await screen.findByLabelText('الإجراء');
       const groups = [...action.querySelectorAll('optgroup')].map((node) => node.label);
@@ -429,7 +484,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       api.auditLog.mockResolvedValue(log({ nextBefore: '900' }));
 
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
       await user.click(await screen.findByRole('button', { name: 'عمليات أقدم' }));
 
       await user.type(screen.getByLabelText('من تاريخ'), '2026-08-01');
@@ -455,7 +510,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
       await user.click(await screen.findByRole('button', { name: 'تصدير البيانات' }));
 
       /* The export used to be a link to `/api/admin/audit.csv`, which wrote the
@@ -479,7 +534,7 @@ describe('Admin audit and reports (§4C.8)', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
       await screen.findAllByText(/تغيير حالة حساب/);
 
       api.auditLog.mockRejectedValueOnce(new Error('down'));
@@ -491,7 +546,7 @@ describe('Admin audit and reports (§4C.8)', () => {
     it('offers nothing that changes an entry', async () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminAuditPage />);
-      await user.click(await screen.findByRole('button', { name: 'سجل العمليات' }));
+      await user.click(await screen.findByRole('tab', { name: 'سجل العمليات' }));
       await screen.findAllByText(/تغيير حالة حساب/);
 
       /*
@@ -501,7 +556,9 @@ describe('Admin audit and reports (§4C.8)', () => {
        * in.
        */
       const buttons = screen.getAllByRole('button').map((node) => node.textContent);
-      expect(buttons).toEqual(expect.arrayContaining(['التقارير', 'سجل العمليات']));
+      /* The three views are a real tablist now (TAM-149), so what is left as a
+         button on this tab is the export and nothing else. */
+      expect(buttons).toEqual(expect.arrayContaining(['تصدير البيانات']));
       expect(buttons.some((label) => /حذف|تعديل|حفظ/.test(label ?? ''))).toBe(false);
     });
   });

@@ -23,6 +23,7 @@ import type {
   AdminPathBounds,
   AdminAuditPage,
   AdminCertificateTemplateView,
+  AdminImpactView,
   AdminReports,
   AdminSettingsView,
   AdminPathDetail,
@@ -843,6 +844,26 @@ export const adminApi = {
   },
 
   reports: () => api.get<AdminReports>('/api/admin/reports'),
+
+  /**
+   * §4C.8's «الأثر» — participation and learning by period and department
+   * (TAM-149).
+   *
+   * The two ends are sent the way the trail's filter sends them: a day, not an
+   * instant, so `to=2026-08-31` covers the whole of the day the administrator
+   * asked for rather than stopping at its first millisecond.
+   */
+  impact: (filters: { from?: string; to?: string; department?: string } = {}) => {
+    const query = new URLSearchParams();
+
+    if (filters.from) query.set('from', `${filters.from}T00:00:00.000`);
+    if (filters.to) query.set('to', `${filters.to}T23:59:59.999`);
+    if (filters.department) query.set('department', filters.department);
+
+    const suffix = query.toString();
+
+    return api.get<AdminImpactView>(`/api/admin/impact${suffix ? `?${suffix}` : ''}`);
+  },
 
   /**
    * Where the reports export lives.
