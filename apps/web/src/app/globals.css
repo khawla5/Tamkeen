@@ -238,7 +238,7 @@
     /* Fill lives on the group so the drift keyframe (which animates the
        group's fill) actually reaches the path — a fill class on the path
        itself would override it. Labels set their own fill explicitly. */
-    fill: var(--color-primary-200);
+    fill: color-mix(in srgb, var(--color-primary-600), var(--color-primary-200) 45%);
     opacity: 0;
     transform-box: fill-box;
     transform-origin: center;
@@ -296,7 +296,7 @@
     0%,
     18%,
     100% {
-      fill: var(--color-primary-200);
+      fill: color-mix(in srgb, var(--color-primary-600), var(--color-primary-200) 45%);
     }
     8% {
       fill: var(--color-surface);
@@ -316,5 +316,52 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border-width: 0;
+  }
+}
+
+/*
+ * ── Print ───────────────────────────────────────────────────────────────────
+ * §4C.8's «الأثر» is printed to PDF through the browser (TAM-149): the
+ * ministry's one-page summary of a quarter. A print stylesheet rather than a
+ * second renderer — the Puppeteer path stays where the typography has to be
+ * exact, on certificates and the CV.
+ *
+ * Only the frame's chrome is dropped. The owner's lockup and the classification
+ * strip stay: a printed sheet that leaves a government office has to say whose
+ * it is and how it is classified.
+ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  /* Bars carry meaning here, and browsers drop backgrounds by default. Every
+     bar is paired with its number in words, so a printer that ignores this
+     still produces a readable sheet (WCAG 1.4.1). */
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  /* Navigation, the user menu and the skip link are ways to go somewhere,
+     which paper is not. */
+  [data-print='chrome'] {
+    display: none !important;
+  }
+
+  /* A card's frame reads as a box on screen and as clutter on paper. */
+  main {
+    padding: 0 !important;
+  }
+
+  /* Nothing may be pushed off the sheet by a scroll container the reader
+     cannot scroll. */
+  [class*='overflow-x-auto'] {
+    overflow: visible !important;
   }
 }

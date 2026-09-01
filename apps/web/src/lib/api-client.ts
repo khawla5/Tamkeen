@@ -23,6 +23,7 @@ import type {
   AdminPathBounds,
   AdminAuditPage,
   AdminCertificateTemplateView,
+  AdminImpactView,
   AdminReports,
   AdminSettingsView,
   AdminPathDetail,
@@ -75,6 +76,7 @@ import type {
   NumberFormat,
   PathDetail,
   PathRecommendations,
+  PublicPathSummary,
   UnreadNotificationsView,
 } from '@tamkeen/types';
 
@@ -346,6 +348,12 @@ export const englishAssessmentApi = {
 export const pathsApi = {
   list: () => api.get<PathRecommendations>('/api/paths'),
   detail: (pathId: string) => api.get<PathDetail>(`/api/paths/${pathId}`),
+};
+
+/** The landing explorer's one unauthenticated read (TAM-150) — no session, no
+ *  CSRF, so it is deliberately not folded into `pathsApi`. */
+export const publicApi = {
+  paths: () => api.get<PublicPathSummary[]>('/api/public/paths'),
 };
 
 export interface CourseFilters {
@@ -727,6 +735,7 @@ export const adminApi = {
     patch: {
       name?: string;
       description?: string;
+      skillOutcomes?: string[];
       riasecLetter?: RiasecLetter;
       typicalDurationMinutes?: number;
       displayOrder?: number;
@@ -843,6 +852,26 @@ export const adminApi = {
   },
 
   reports: () => api.get<AdminReports>('/api/admin/reports'),
+
+  /**
+   * §4C.8's «الأثر» — participation and learning by period and department
+   * (TAM-149).
+   *
+   * The two ends are sent the way the trail's filter sends them: a day, not an
+   * instant, so `to=2026-08-31` covers the whole of the day the administrator
+   * asked for rather than stopping at its first millisecond.
+   */
+  impact: (filters: { from?: string; to?: string; department?: string } = {}) => {
+    const query = new URLSearchParams();
+
+    if (filters.from) query.set('from', `${filters.from}T00:00:00.000`);
+    if (filters.to) query.set('to', `${filters.to}T23:59:59.999`);
+    if (filters.department) query.set('department', filters.department);
+
+    const suffix = query.toString();
+
+    return api.get<AdminImpactView>(`/api/admin/impact${suffix ? `?${suffix}` : ''}`);
+  },
 
   /**
    * Where the reports export lives.

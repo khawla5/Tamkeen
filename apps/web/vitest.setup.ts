@@ -31,3 +31,27 @@ if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.sho
     this.dispatchEvent(new Event('close'));
   };
 }
+
+/**
+ * jsdom does not implement `window.matchMedia`.
+ *
+ * The landing hero (TAM-150) checks `(prefers-reduced-motion: reduce)` before
+ * starting its background-photo rotation (WCAG 2.3.3), so any test that
+ * mounts it crashes in a `useEffect` without this. Reports `matches: false`
+ * unconditionally — no test here asserts the reduced-motion branch itself,
+ * which would need a real value to flip, not a constant stub.
+ */
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  window.matchMedia = function matchMedia(query: string): MediaQueryList {
+    return {
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    } as MediaQueryList;
+  };
+}

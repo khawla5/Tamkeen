@@ -1,6 +1,13 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-import { DEPARTMENT, PASSWORD, RUN_ID, accountFor, signedInEmployee, numericEmployeeId } from './account';
+import {
+  DEPARTMENT,
+  PASSWORD,
+  RUN_ID,
+  accountFor,
+  signedInEmployee,
+  numericEmployeeId,
+} from './account';
 import { completeAssessment } from './journey';
 import { assertMailpitReachable, tokenFromEmail } from './mailpit';
 

@@ -345,6 +345,16 @@ export class CreatePathDto {
   @MaxLength(2000)
   description!: string;
 
+  /* Short noun phrases, not sentences — "three to five" is editorial guidance
+     (TAM-150), not a bound the form enforces; the cap here is generous
+     headroom, not the target count. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  skillOutcomes?: string[];
+
   @IsIn(RIASEC_LETTERS)
   riasecLetter!: RiasecLetter;
 
@@ -380,6 +390,13 @@ export class UpdatePathDto {
   @MinLength(10)
   @MaxLength(2000)
   description?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  skillOutcomes?: string[];
 
   @IsOptional()
   @IsIn(RIASEC_LETTERS)
@@ -668,4 +685,37 @@ export class AdminAuditQueryDto {
   @Min(1)
   @Max(5000)
   pageSize?: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.8 — «الأثر» (TAM-149)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The period and the slice.
+ *
+ * The same `from`/`to` the trail already accepts, sent as the screen's own two
+ * ends (midnight to the last millisecond of the day) — so which preset the
+ * administrator clicked stays a question about presentation and never becomes a
+ * vocabulary the API has to grow a branch for. Both are optional; the service
+ * answers for the current month when neither is given.
+ *
+ * `department` is matched exactly against `users.department`. It is not
+ * validated against the ministry's list: the column accepts any non-empty
+ * string today (see the web's `DEPARTMENTS`), so a whitelist here would fail
+ * closed on a department that legitimately exists in the data.
+ */
+export class AdminImpactQueryDto {
+  @IsOptional()
+  @IsISO8601()
+  from?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  to?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  department?: string;
 }

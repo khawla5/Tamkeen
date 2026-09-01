@@ -400,6 +400,10 @@ export interface AdminPathCourseRow {
 
 export interface AdminPathDetail extends AdminPathRow {
   description: string;
+  /** Three to five short noun phrases naming what the path produces —
+   *  directorate-authored, alongside `description` (TAM-150). Empty until it
+   *  is; the landing explorer reads this same list. */
+  skillOutcomes: string[];
   typicalDurationMinutes: number | null;
   courses: AdminPathCourseRow[];
   learners: AdminPathLearners;
@@ -726,4 +730,186 @@ export interface AdminReports {
     passed: number;
     passRate: number | null;
   }>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.8 — «الأثر»: participation and learning, by period and department
+// (TAM-149)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A figure and the same figure over the previous period of equal length.
+ *
+ * **Growth is the impact question, so every count carries its comparison.**
+ * A quarter's participation with nothing beside it is a number nobody can act
+ * on: "four hundred employees assessed" is either the programme working or the
+ * programme stalling depending entirely on what the previous quarter was.
+ * Putting the delta in the contract rather than leaving the screen to subtract
+ * two responses is what keeps the CSV, the printed sheet and the tiles agreeing.
+ *
+ * `delta` is `value - previous` — a real zero, never null: "no change" is an
+ * answer, and the screen says it in words rather than as «٠».
+ */
+export interface AdminImpactCount {
+  value: number;
+  previous: number;
+  delta: number;
+}
+
+/** The half-open range a figure was counted over, as ISO instants. */
+export interface AdminImpactRange {
+  from: string;
+  to: string;
+}
+
+/**
+ * Who took part (§4C.8's «المشاركة»).
+ *
+ * Every count is **people, de-duplicated** — one row per employee per figure,
+ * whatever they did more than once. A retake is a correction, not a second
+ * participant (D-033), and someone who passed six courses is one active learner.
+ */
+export interface AdminImpactParticipation {
+  /** Accounts created *and verified*: an unverified account cannot sign in, so
+   *  counting it as participation would overstate the programme's reach. */
+  registered: AdminImpactCount;
+  /** Employees who completed the assessment in the period. */
+  assessed: AdminImpactCount;
+  /** Employees who confirmed a path in the period (the commitment gate, §2). */
+  committed: AdminImpactCount;
+  /** Employees with a completion or any course progress written in the period. */
+  active: AdminImpactCount;
+  /**
+   * Committed ÷ registered, as a percentage, **cumulative to the end of the
+   * period** rather than over the period's own counts.
+   *
+   * A rate of "confirmed this quarter" over "registered this quarter" can
+   * exceed 100% — someone who registered last year and committed this one is in
+   * the numerator and not the denominator — which makes it not a rate at all.
+   * The honest question is what share of the accounts that exist have committed
+   * to a path, so both halves are counted to the same instant.
+   *
+   * Null over an empty denominator, as everywhere else: 0% of nobody reads as
+   * failure rather than as "nobody has registered yet".
+   *
+   * **The denominator is accounts, not headcount.** The platform does not know
+   * the ministry's workforce size; the screen says so on the tile. A
+   * `MINISTRY_HEADCOUNT` setting could replace it later.
+   */
+  participationRate: number | null;
+  /** The same rate at the end of the previous period, for the comparison. */
+  previousParticipationRate: number | null;
+  /** The rate's denominator — verified accounts to the end of the period. */
+  accountsToDate: number;
+}
+
+/** One department's four participation counts, for the period. */
+export interface AdminImpactDepartmentRow {
+  department: string;
+  registered: number;
+  assessed: number;
+  committed: number;
+  active: number;
+}
+
+/**
+ * What was actually completed (§4C.8's «التعلّم المُنجز»).
+ *
+ * Certificates are counted from `certificates.issued_at` rather than inferred:
+ * issuance is idempotent (§2), so the row *is* the durable record that a course
+ * or a whole path was finished, and a path certificate is one completed path.
+ */
+export interface AdminImpactLearning {
+  coursesPassed: AdminImpactCount;
+  /**
+   * Minutes summed over the passed courses' `duration_minutes` (D-035).
+   *
+   * The duration is a product field an entity may leave unset, in which case
+   * that pass contributes nothing — which would silently understate the total,
+   * so the count of such passes travels beside it and the screen states it.
+   */
+  learningMinutes: AdminImpactCount;
+  /** Passes in the period whose course carries no duration. */
+  passesWithoutDuration: number;
+  certificatesCourse: AdminImpactCount;
+  /** Path certificates — one per completed path, so also "paths completed". */
+  certificatesPath: AdminImpactCount;
+}
+
+/** One month of the trailing-twelve trend. `month` is `YYYY-MM`. */
+export interface AdminImpactTrendPoint {
+  month: string;
+  coursesPassed: number;
+  certificates: number;
+}
+
+/** A course by how many passed it in the period. */
+export interface AdminImpactCourseRow {
+  courseId: string;
+  title: string;
+  passes: number;
+  /** Mean stored grade over those passes; null when none carried a grade. */
+  averageGrade: number | null;
+}
+
+/** A path by how many finished it in the period. */
+export interface AdminImpactPathRow {
+  pathId: string;
+  name: string;
+  riasecLetter: RiasecLetter;
+  completions: number;
+}
+
+/**
+ * The career types of the people assessed *in the period*.
+ *
+ * The dominant letter, as §4C.1 reads it — six values each with an Arabic name
+ * — and not the thirty-odd Holland codes §4C.8's other tab keeps for the
+ * analyst. The catalogue half of `AdminLetterShare` is deliberately absent:
+ * paths offered is a fact about now, and every other figure on this tab is a
+ * fact about the period.
+ */
+export interface AdminImpactLetterShare {
+  letter: RiasecLetter;
+  employees: number;
+}
+
+/**
+ * The language-level picture (TAM-148).
+ *
+ * Null until the level test ships — and null rather than an empty object so the
+ * screen can tell "not enabled yet" from "enabled, nobody took it", which are
+ * different findings and would otherwise render the same.
+ */
+export interface AdminImpactCefr {
+  levels: Array<{ level: string; employees: number }>;
+  /** Of employees who retook in the period: whose level rose, held, fell. */
+  movement: { rose: number; held: number; fell: number };
+}
+
+/**
+ * §4C.8's first tab — the ministry's view of what its employees enrolled in,
+ * completed and learnt (TAM-149).
+ *
+ * The reports beside it answer "how is the system doing" with no time and no
+ * department axis. This answers the question management actually asks: how many
+ * of our people took part this quarter, in which directorates, what did they
+ * complete, and is it growing.
+ */
+export interface AdminImpactView {
+  period: AdminImpactRange;
+  previousPeriod: AdminImpactRange;
+  /** The department every figure is narrowed to, or null for all of them. */
+  department: string | null;
+  participation: AdminImpactParticipation;
+  /** Every department with an account, whatever they did — a directorate that
+   *  took no part is the finding, and a row that vanishes cannot be read. */
+  byDepartment: AdminImpactDepartmentRow[];
+  learning: AdminImpactLearning;
+  /** The twelve months ending with the period's last month, oldest first. */
+  trend: AdminImpactTrendPoint[];
+  topCourses: AdminImpactCourseRow[];
+  topPaths: AdminImpactPathRow[];
+  letterDistribution: AdminImpactLetterShare[];
+  cefr: AdminImpactCefr | null;
 }

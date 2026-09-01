@@ -33,7 +33,14 @@ await page.goto(launch.url, { waitUntil: 'domcontentloaded' });
 console.log('landed on:', page.url());
 await page.screenshot({ path: 'landed.tmp.png' });
 console.log('title:', await page.title());
-console.log('links:', await page.locator('a').evaluateAll((as) => as.map((a) => a.textContent.trim() + ' -> ' + a.href).filter((t) => /quiz|اختبار/.test(t))));
+console.log(
+  'links:',
+  await page
+    .locator('a')
+    .evaluateAll((as) =>
+      as.map((a) => a.textContent.trim() + ' -> ' + a.href).filter((t) => /quiz|اختبار/.test(t)),
+    ),
+);
 
 // Into the quiz. Arabic UI with English fallbacks at every step.
 const quizHref = await page.locator('a[href*="mod/quiz/view.php"]').first().getAttribute('href');
@@ -72,7 +79,10 @@ await page
 const dialogButton = page
   .locator('.modal, [role="dialog"]')
   .getByRole('button', { name: /سلّم الكل|تسليم الكل|Submit all/i });
-await dialogButton.first().click({ timeout: 10_000 }).catch(() => {});
+await dialogButton
+  .first()
+  .click({ timeout: 10_000 })
+  .catch(() => {});
 await page.waitForLoadState('domcontentloaded');
 
 // The review page shows the grade.

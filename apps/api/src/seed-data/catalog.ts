@@ -22,6 +22,15 @@ export interface SeedPath {
   key: string;
   name: string;
   description: string;
+  /**
+   * PLACEHOLDER pending directorate sign-off (TAM-150) — plausible for each
+   * path's actual subject matter, so §4C.4 has something concrete to edit
+   * rather than a templated blank, but not authored by the directorate and
+   * not to be treated as final. The ticket is not done until these are
+   * replaced with signed-off content, the same rule the landing copy already
+   * lives under.
+   */
+  skillOutcomes: string[];
   /** Exactly one primary letter (§3A) — this is what drives gold. */
   riasecLetter: RiasecLetter;
   /** Nominal effort for a typical selection, shown on the §4.4 card. */
@@ -50,6 +59,11 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'العمليات الميدانية والسلامة',
     description:
       'مسار عملي لمن يعمل خارج المكتب: إدارة المواقع، والتعامل مع المخاطر والحوادث، وتطبيق إجراءات السلامة.',
+    skillOutcomes: [
+      'إدارة مواقع العمل الميدانية',
+      'الاستجابة للحوادث والمخاطر',
+      'تطبيق إجراءات السلامة المهنية',
+    ],
     riasecLetter: 'R',
     typicalDurationMinutes: 1290,
     displayOrder: 1,
@@ -60,6 +74,11 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'المرافق والخدمات اللوجستية',
     description:
       'مسار لتشغيل المرافق وصيانتها وإدارة المستودعات والعهد، مع الجانب المالي والتنظيمي المرتبط بها.',
+    skillOutcomes: [
+      'تشغيل المرافق وصيانتها',
+      'إدارة المستودعات والعهد',
+      'المتابعة المالية للمرافق',
+    ],
     riasecLetter: 'R',
     typicalDurationMinutes: 1305,
     displayOrder: 2,
@@ -72,6 +91,7 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'تحليل البيانات ودعم القرار',
     description:
       'مسار لتحويل البيانات إلى مؤشرات ولوحات تدعم اتخاذ القرار، من الأساسيات إلى العرض البصري.',
+    skillOutcomes: ['تحليل البيانات الميدانية', 'بناء لوحات المؤشرات', 'دعم القرار بالأدلة'],
     riasecLetter: 'I',
     typicalDurationMinutes: 1590,
     displayOrder: 1,
@@ -82,6 +102,11 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'البحوث وتقييم السياسات',
     description:
       'مسار لتصميم الدراسات وجمع الأدلة وقياس أثر السياسات العامة وعرض النتائج على صانع القرار.',
+    skillOutcomes: [
+      'تصميم الدراسات البحثية',
+      'قياس أثر السياسات العامة',
+      'كتابة التقارير المؤسسية',
+    ],
     riasecLetter: 'I',
     typicalDurationMinutes: 1620,
     displayOrder: 2,
@@ -94,6 +119,11 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'المحتوى الرقمي والتصميم',
     description:
       'مسار لإنتاج المواد البصرية والرقمية: الهوية، والعروض، والفيديو، وتصميم الخدمة حول المتعامل.',
+    skillOutcomes: [
+      'تصميم الهوية والمواد البصرية',
+      'إنتاج المحتوى المرئي',
+      'تصميم الخدمة حول المتعامل',
+    ],
     riasecLetter: 'A',
     typicalDurationMinutes: 1380,
     displayOrder: 1,
@@ -104,6 +134,11 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'الاتصال المؤسسي والتوعية',
     description:
       'مسار لبناء الرسائل التوعوية والحملات، وإدارة الاتصال مع الجمهور والشركاء والإعلام.',
+    skillOutcomes: [
+      'صياغة الرسائل التوعوية',
+      'إدارة الحملات المؤسسية',
+      'التواصل مع الإعلام والشركاء',
+    ],
     riasecLetter: 'A',
     typicalDurationMinutes: 1275,
     displayOrder: 2,
@@ -116,6 +151,7 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'خدمة المتعاملين',
     description:
       'مسار للتعامل المباشر مع الجمهور: استقبال الطلبات، ومعالجة الشكاوى، وخدمة أصحاب الهمم.',
+    skillOutcomes: ['استقبال طلبات المتعاملين', 'معالجة الشكاوى بمهنية', 'خدمة أصحاب الهمم'],
     riasecLetter: 'S',
     typicalDurationMinutes: 1215,
     displayOrder: 1,
@@ -126,6 +162,7 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'التدريب وتنمية القدرات',
     description:
       'مسار لمن يدرّب زملاءه ويطوّر قدراتهم: إعداد الحقائب، والإلقاء، وقياس أثر التدريب.',
+    skillOutcomes: ['إعداد الحقائب التدريبية', 'الإلقاء وتيسير الجلسات', 'قياس أثر التدريب'],
     riasecLetter: 'S',
     typicalDurationMinutes: 1425,
     displayOrder: 2,
@@ -138,6 +175,7 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'القيادة وإدارة الفرق',
     description:
       'مسار لشاغلي المواقع الإشرافية والمرشحين لها: قيادة الفريق، والتفاوض، وإدارة التغيير.',
+    skillOutcomes: ['قيادة الفريق وتوجيهه', 'التفاوض وحل الخلافات', 'إدارة التغيير المؤسسي'],
     riasecLetter: 'E',
     typicalDurationMinutes: 1470,
     displayOrder: 1,
@@ -147,6 +185,11 @@ export const SEED_PATHS: readonly SeedPath[] = [
     key: 'project-management',
     name: 'إدارة المشاريع والمبادرات',
     description: 'مسار لتحويل المبادرات إلى مشاريع لها نطاق وموارد ومؤشرات، ومتابعتها حتى الإغلاق.',
+    skillOutcomes: [
+      'تحديد نطاق المشروع وموارده',
+      'متابعة مؤشرات الأداء',
+      'إغلاق المشاريع وتوثيقها',
+    ],
     riasecLetter: 'E',
     typicalDurationMinutes: 1500,
     displayOrder: 2,
@@ -159,6 +202,11 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'الحوكمة والامتثال',
     description:
       'مسار للأطر التنظيمية والرقابة الداخلية وإدارة المخاطر وحماية البيانات والالتزام بالسياسات.',
+    skillOutcomes: [
+      'تطبيق الأطر التنظيمية',
+      'إدارة المخاطر المؤسسية',
+      'حماية البيانات والالتزام بالسياسات',
+    ],
     riasecLetter: 'C',
     typicalDurationMinutes: 1515,
     displayOrder: 1,
@@ -169,6 +217,11 @@ export const SEED_PATHS: readonly SeedPath[] = [
     name: 'الإدارة المكتبية والسجلات',
     description:
       'مسار لتنظيم العمل المكتبي: الأرشفة الإلكترونية، والمراسلات، والعهد، والمتابعة المالية.',
+    skillOutcomes: [
+      'الأرشفة الإلكترونية للمستندات',
+      'إدارة المراسلات الرسمية',
+      'المتابعة المالية للعهد',
+    ],
     riasecLetter: 'C',
     typicalDurationMinutes: 1290,
     displayOrder: 2,

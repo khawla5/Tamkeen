@@ -2,14 +2,16 @@ import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 /**
- * Six questions an employee actually asks, each answered by a locked product
- * rule (BR-101/102, BR-305/306, BR-207, §4.8, BR-605, BR-505) — nothing here
- * is a promise the product has not already made.
+ * Six questions re-chosen for a manager reading this page first (TAM-150) —
+ * how the match works and what the certificate attests, before the employee
+ * questions of registration, where courses live and how a certificate is
+ * checked. Every answer is still a locked product rule, never a promise the
+ * product has not already made.
  *
  * Native `<details>`: keyboard and screen-reader behaviour for free, closed by
  * default so the section reads as a list of questions, and no script.
  */
-const FAQ_KEYS = ['who', 'switch', 'retake', 'fail', 'verify', 'where'] as const;
+const FAQ_KEYS = ['matched', 'certificate', 'switch', 'who', 'where', 'verify'] as const;
 
 export function FaqSection() {
   const t = useTranslations('landing');

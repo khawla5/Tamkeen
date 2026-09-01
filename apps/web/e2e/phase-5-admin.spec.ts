@@ -371,8 +371,43 @@ test.describe('Phase 5 — the administered surface', () => {
     await expect(page.frameLocator('iframe[title="معاينة"]').locator('.emblem svg')).toBeVisible();
   });
 
-  test('§4C.8 — the reports answer §4C.8 questions, worst-first where it matters', async () => {
+  test('§4C.8 — «الأثر» opens first and answers by period and department', async () => {
     await page.getByRole('link', { name: 'السجل والتقارير' }).click();
+
+    /*
+     * TAM-149. The page now opens on the question the ministry arrives with —
+     * how many of our people took part, and is it growing — rather than on the
+     * system-health reports. Every tile carries its comparison, and the one
+     * rate on the tab says what its denominator is, because it is accounts and
+     * not the ministry's headcount.
+     */
+    await expect(page.getByRole('heading', { name: 'المشاركة' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('كل رقم مقارن بالفترة السابقة المماثلة في الطول.')).toBeVisible();
+    await expect(page.getByText(/لا من عدد موظفي الوزارة/)).toBeVisible();
+    await expect(page.getByRole('table', { name: 'المشاركة حسب الإدارة' })).toBeVisible();
+
+    /* The level test has not shipped (TAM-148), and the block says so rather
+       than rendering as an empty card. */
+    await expect(page.getByText('لم يُفعَّل اختبار المستوى بعد.')).toBeVisible();
+
+    /* Narrowing to one directorate reaches the API rather than filtering a
+       page's worth of rows in the browser. */
+    await page.getByLabel('الإدارة').selectOption('المديرية العامة للجوازات');
+    await expect(page.getByRole('heading', { name: 'المشاركة' })).toBeVisible();
+  });
+
+  test('§4C.8 — the impact export carries every table on the tab', async () => {
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'تصدير البيانات' }).click();
+    const download = await downloading;
+
+    /* The period is in the name: two exports of the same tab are different
+       reports (D-112's pattern). */
+    expect(download.suggestedFilename()).toMatch(/^tamkeen-impact-\d{4}-\d{2}-\d{2}_/);
+  });
+
+  test('§4C.8 — the reports answer §4C.8 questions, worst-first where it matters', async () => {
+    await page.getByRole('tab', { name: 'التقارير' }).click();
 
     await expect(page.getByRole('heading', { name: 'مسار الموظفين' })).toBeVisible({
       timeout: 15_000,
@@ -387,7 +422,7 @@ test.describe('Phase 5 — the administered surface', () => {
   });
 
   test('§4C.8 — the trail lists this run’s own actions, and filters', async () => {
-    await page.getByRole('button', { name: 'سجل العمليات' }).click();
+    await page.getByRole('tab', { name: 'سجل العمليات' }).click();
 
     /* Scoped to the trail's own list. `getByRole('listitem')` unscoped also
        matches the navigation rail, which would make every assertion below pass
@@ -450,7 +485,7 @@ test.describe('Phase 5 — the administered surface', () => {
   });
 
   test('§4C.8 — the trail exports in the words the screen shows', async () => {
-    await page.getByRole('button', { name: 'سجل العمليات' }).click();
+    await page.getByRole('tab', { name: 'سجل العمليات' }).click();
 
     /* Built in the browser, because every column of it is Arabic copy and that
        copy lives in the message catalogue (TAM-138). The file used to come from

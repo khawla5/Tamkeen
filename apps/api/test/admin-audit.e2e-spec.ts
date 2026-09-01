@@ -6,7 +6,12 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import { AUDIT_TARGET_TYPES, type AdminAuditPage, type AdminReports } from '@tamkeen/types';
+import {
+  AUDIT_TARGET_TYPES,
+  type AdminAuditPage,
+  type AdminImpactView,
+  type AdminReports,
+} from '@tamkeen/types';
 
 import { AppModule } from '../src/app.module';
 import { hashPassword } from '../src/common/password';
@@ -301,6 +306,60 @@ describe('Admin audit and reports (e2e)', () => {
 
       const chosen = reports.pathPopularity.map((row) => row.chosen);
       expect([...chosen].sort((a, b) => b - a)).toEqual(chosen);
+    });
+  });
+
+  describe('impact (§4C.8 — the impact tab)', () => {
+    const impact = async (query = '') =>
+      (await get(`/api/admin/impact${query}`, sessionAdmin).expect(200)).body as AdminImpactView;
+
+    it('answers for the current month when no period is asked for', async () => {
+      const view = await impact();
+
+      expect(new Date(view.period.from).getDate()).toBe(1);
+      /* Every block of the contract, so a section that silently stops being
+         computed fails here rather than rendering as an empty card. */
+      expect(view).toHaveProperty('participation');
+      expect(view).toHaveProperty('byDepartment');
+      expect(view).toHaveProperty('learning');
+      expect(view).toHaveProperty('topCourses');
+      expect(view).toHaveProperty('topPaths');
+      expect(view.trend).toHaveLength(12);
+      expect(view.letterDistribution).toHaveLength(6);
+      /* Null until TAM-148 ships: "not enabled" is not "nobody took it". */
+      expect(view.cefr).toBeNull();
+    });
+
+    it('compares against the same window shifted, ending just before it', async () => {
+      const view = await impact('?from=2026-08-01T00:00:00.000&to=2026-08-31T23:59:59.999');
+
+      const period = { from: Date.parse(view.period.from), to: Date.parse(view.period.to) };
+      const previous = {
+        from: Date.parse(view.previousPeriod.from),
+        to: Date.parse(view.previousPeriod.to),
+      };
+
+      expect(previous.to).toBe(period.from - 1);
+      expect(previous.to - previous.from).toBe(period.to - period.from);
+    });
+
+    it('narrows to a department and says which one it narrowed to', async () => {
+      const view = await impact('?department=' + encodeURIComponent('قسم'));
+
+      expect(view.department).toBe('قسم');
+      /* The suite's own administrators are in this department, and they are not
+         employees — the population every figure is about is (§4C.8). */
+      expect(view.byDepartment.every((row) => row.department === 'قسم')).toBe(true);
+    });
+
+    it('refuses a period that is not a date', async () => {
+      await get('/api/admin/impact?from=last-tuesday', sessionAdmin).expect(400);
+    });
+
+    it('refuses a parameter it does not know', async () => {
+      /* `forbidNonWhitelisted` is what keeps a typo'd filter from silently
+         widening a report to the whole ministry. */
+      await get('/api/admin/impact?region=riyadh', sessionAdmin).expect(400);
     });
   });
 
