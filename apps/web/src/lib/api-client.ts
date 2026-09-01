@@ -17,6 +17,8 @@
 
 import type {
   AdminAssessmentDraft,
+  AdminAssignInput,
+  AdminAssignResult,
   AdminAttachableCourse,
   AdminCoursePage,
   AdminCourseRow,
@@ -882,4 +884,8 @@ export const adminApi = {
    * its every column is Arabic copy, and that lives in the message catalogue.
    */
   reportsCsvUrl: () => `${API_URL}/api/admin/reports.csv`,
+
+  // §4C.2 — assessment assignment (D-130/D-132/D-133); read side on getUser
+  assign: (input: AdminAssignInput) => api.post<AdminAssignResult>('/api/admin/assignments', input),
+  revokeAssignment: (id: string) => api.delete<null>(`/api/admin/assignments/${id}`),
 };

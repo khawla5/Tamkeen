@@ -107,8 +107,7 @@
     "adminCourses": "الدورات",
     "adminSettings": "الإعدادات",
     "adminTemplates": "الشهادات",
-    "adminAudit": "السجل والتقارير",
-    "adminEnglish": "تقييم اللغة الإنجليزية"
+    "adminAudit": "السجل والتقارير"
   },
   "actions": {
     "retry": "إعادة المحاولة",
@@ -203,6 +202,8 @@
     "preAssessmentTitle": "ابدأ بتقييم ميولك المهنية",
     "preAssessmentBody": "تقييم قصير من ثلاثين عبارة يستغرق بضع دقائق، ويحدّد ميولك المهنية ليقترح عليك المسارات الأقرب إليك.",
     "startAssessment": "ابدأ التقييم",
+    "awaitingAssignmentTitle": "بانتظار إسناد التقييم",
+    "awaitingAssignmentBody": "تُسند الوزارة التقييمات لكل موظف وفق احتياجاتها. ستظهر خطوتك التالية هنا فور الإسناد.",
     "assessedTitle": "اختر مسارك",
     "assessedBody": "ميولك المهنية، مرتّبة من الأقوى. اطّلع على المسارات المقترحة واختر واحدًا لتبدأ.",
     "choosePath": "اختر مسارك",
@@ -513,6 +514,8 @@
     "ASSESSMENT_ANSWER_INVALID": "تعذّر إرسال إجاباتك. أعد تحميل الصفحة وحاول مجددًا.",
     "ASSESSMENT_TOO_MANY_ANSWERS": "تعذّر إرسال إجاباتك. أعد تحميل الصفحة وحاول مجددًا.",
     "ASSESSMENT_LOCKED": "لا يمكن إعادة التقييم بعد تأكيد المسار.",
+    "ASSESSMENT_NOT_ASSIGNED": "هذا التقييم غير مسند إليك.",
+    "ASSIGNMENT_ALREADY_TAKEN": "التقييم مؤدًّى ولا يمكن إلغاء إسناده.",
     "PATH_NOT_FOUND": "المسار غير موجود.",
     "PATH_LIMIT_EXCEEDED": "لا يمكن إضافة الدورة إلى أكثر من {max} مسارات.",
     "PATH_MIX_INCOHERENT": "لا يمكن الجمع بين أكثر من نمطين مهنيين في مسارات الدورة الواحدة.",
@@ -959,6 +962,24 @@
     "reactivateEntity": "إعادة تفعيل الجهة",
     "assessmentTitle": "إدارة التقييم",
     "assessmentMissing": "لا يوجد تقييم مفعّل. شغّل بذرة البيانات لإنشاء الإصدار الأول.",
+    "assignments": {
+      "instrument": {
+        "RIASEC": "تقييم الميول المهنية",
+        "ENGLISH_CEFR": "تقييم اللغة الإنجليزية"
+      },
+      "heading": "التقييمات المسندة",
+      "none": "لم يُسند لهذا الموظف أي تقييم بعد.",
+      "assignLabel": "إسناد تقييم",
+      "assignAction": "إسناد",
+      "assigned": "أُسند التقييم.",
+      "revoke": "إلغاء الإسناد",
+      "revoked": "أُلغي الإسناد.",
+      "statusTaken": "مكتمل",
+      "statusPending": "لم يبدأ"
+    },
+    "instrumentActiveSummary": "الإصدار {version} · {questions} سؤالًا",
+    "instrumentNoActive": "لا يوجد إصدار مفعّل بعد.",
+    "instrumentDraftBadge": "مسودة قيد التعديل",
     "riasec": {
       "R": "الواقعي",
       "I": "البحثي",
@@ -1223,7 +1244,9 @@
       "ENGLISH_ASSESSMENT_SUBMITTED": "إرسال تقييم اللغة الإنجليزية",
       "ADMIN_ENGLISH_DRAFT_OPENED": "بدء تعديل تقييم اللغة الإنجليزية",
       "ADMIN_ENGLISH_DRAFT_DISCARDED": "حذف مسودة تقييم اللغة الإنجليزية",
-      "ADMIN_ENGLISH_PUBLISHED": "نشر إصدار من تقييم اللغة الإنجليزية"
+      "ADMIN_ENGLISH_PUBLISHED": "نشر إصدار من تقييم اللغة الإنجليزية",
+      "ADMIN_ASSESSMENT_ASSIGNED": "إسناد تقييم لموظف",
+      "ADMIN_ASSESSMENT_UNASSIGNED": "إلغاء إسناد تقييم"
     },
     "courseVisibility": {
       "AVAILABLE": "متاحة",
@@ -1296,6 +1319,8 @@
       "LMS_COURSE_RESYNC_FAILED": "تعذّر تحديث الدورة من منصة التعلم",
       "SELF_MODIFICATION_REFUSED": "لا يجوز للمسؤول تعديل حسابه بنفسه",
       "LAST_ACTIVE_ADMIN": "لا يمكن إبقاء النظام بلا مسؤول فعّال",
+      "ASSESSMENT_NOT_ASSIGNED": "التقييم غير مسند إلى الموظف",
+      "ASSIGNMENT_ALREADY_TAKEN": "التقييم مؤدًّى ولا يمكن إلغاء إسناده",
       "ENTITY_REQUIRED": "حساب الجهة يحتاج جهة يتبع لها",
       "ENTITY_NOT_ALLOWED": "هذا الدور لا يتبع جهة",
       "JOURNEY_WOULD_BE_ORPHANED": "التغيير يقطع الموظف عن مساره أو شهاداته",

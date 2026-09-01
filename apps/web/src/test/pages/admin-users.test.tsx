@@ -21,6 +21,8 @@ import { renderWithProviders } from '@/test/render';
 const api = vi.hoisted(() => ({
   listUsers: vi.fn(),
   getUser: vi.fn(),
+  assign: vi.fn(),
+  revokeAssignment: vi.fn(),
   createUser: vi.fn(),
   reinvite: vi.fn(),
   setUserStatus: vi.fn(),
@@ -111,6 +113,17 @@ const DETAIL: AdminUserDetail = {
   },
   certificateCount: 2,
   activeSessions: 1,
+  /* D-132/D-133: RIASEC assigned and taken (the SIA code above), English
+     assigned and untaken — the panel shows both states at once. */
+  assignments: [
+    { id: 'as-1', instrument: 'RIASEC', assignedAt: '2026-08-01T00:00:00.000Z', taken: true },
+    {
+      id: 'as-2',
+      instrument: 'ENGLISH_CEFR',
+      assignedAt: '2026-08-02T00:00:00.000Z',
+      taken: false,
+    },
+  ],
 };
 
 describe('Admin users (§4C.2)', () => {
@@ -265,6 +278,69 @@ describe('Admin users (§4C.2)', () => {
       expect(screen.getByText(/مسار الموارد البشرية/)).toBeInTheDocument();
       /* A count, not the certificates themselves. */
       expect(screen.getByText('الشهادات')).toBeInTheDocument();
+    });
+
+    it('assignments (D-133): lists each instrument with status, revoke only while untaken', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByText('التقييمات المسندة');
+
+      /* RIASEC taken, English untaken (the fixture) — one revoke, not two. */
+      expect(screen.getByText('تقييم الميول المهنية')).toBeInTheDocument();
+      expect(screen.getByText('تقييم اللغة الإنجليزية')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'إلغاء الإسناد' })).toHaveLength(1);
+      /* Both instruments assigned — nothing left to offer. */
+      expect(screen.queryByText('إسناد تقييم')).not.toBeInTheDocument();
+    });
+
+    it('assignments (D-133): multi-selection offers only unassigned instruments, one grant per tick', async () => {
+      api.getUser.mockResolvedValue({ ...DETAIL, assessment: null, assignments: [] });
+      api.assign.mockResolvedValue({ created: 1, alreadyAssigned: 0 });
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      const group = await screen.findByRole('group', { name: 'إسناد تقييم' });
+      const boxes = within(group).getAllByRole('checkbox');
+      expect(boxes).toHaveLength(2);
+
+      /* Nothing ticked, nothing to send. */
+      const assign = within(group).getByRole('button', { name: 'إسناد' });
+      expect(assign).toBeDisabled();
+
+      await user.click(within(group).getByLabelText('تقييم الميول المهنية'));
+      await user.click(within(group).getByLabelText('تقييم اللغة الإنجليزية'));
+      await user.click(assign);
+
+      /* One decision per instrument on the wire — each grant its own event. */
+      await waitFor(() => expect(api.assign).toHaveBeenCalledTimes(2));
+      expect(api.assign).toHaveBeenCalledWith({ instrument: 'RIASEC', userIds: ['u1'] });
+      expect(api.assign).toHaveBeenCalledWith({ instrument: 'ENGLISH_CEFR', userIds: ['u1'] });
+      expect(await screen.findByText('أُسند التقييم.')).toBeInTheDocument();
+    });
+
+    it('assignments (D-133): an already-assigned instrument is not offered again', async () => {
+      api.getUser.mockResolvedValue({
+        ...DETAIL,
+        assessment: null,
+        assignments: [
+          {
+            id: 'as-2',
+            instrument: 'ENGLISH_CEFR',
+            assignedAt: '2026-08-02T00:00:00.000Z',
+            taken: false,
+          },
+        ],
+      });
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      const group = await screen.findByRole('group', { name: 'إسناد تقييم' });
+      const boxes = within(group).getAllByRole('checkbox');
+      expect(boxes).toHaveLength(1);
+      expect(within(group).getByLabelText('تقييم الميول المهنية')).toBeInTheDocument();
     });
 
     it('offers suspend for an active account and reactivate for a suspended one', async () => {

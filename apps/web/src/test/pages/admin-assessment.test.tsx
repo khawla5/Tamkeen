@@ -56,7 +56,7 @@ vi.mock('@/components/layout/admin-page', () => ({
   ),
 }));
 
-const { default: AdminAssessmentPage } = await import('@/app/(admin)/admin/assessment/page');
+const { default: AdminAssessmentPage } = await import('@/app/(admin)/admin/assessment/riasec/page');
 
 function question(letter: RiasecLetter, index: number): AdminAssessmentQuestion {
   return {

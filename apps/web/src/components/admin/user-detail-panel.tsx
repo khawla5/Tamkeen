@@ -3,11 +3,17 @@
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import type { AdminUserDetail, UserRole } from '@tamkeen/types';
+import {
+  ASSESSMENT_INSTRUMENTS,
+  type AdminUserDetail,
+  type AssessmentInstrument,
+  type UserRole,
+} from '@tamkeen/types';
 
 import { AdminDialog } from '@/components/admin/admin-dialog';
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { DataView } from '@/components/states';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { useFormat } from '@/i18n/format-provider';
@@ -141,6 +147,8 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
         </dl>
       </section>
 
+      {user.role === 'EMPLOYEE' ? <AssignmentsSection user={user} busy={busy} run={run} /> : null}
+
       <section className="flex flex-col gap-3 rounded-md border border-border p-4">
         <h3 className="text-sm font-semibold text-foreground">{t('roleHeading')}</h3>
 
@@ -246,6 +254,133 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
         ) : null}
       </section>
     </div>
+  );
+}
+
+/**
+ * D-132/D-133 — which instruments this employee may take, managed here:
+ * current assignments with their status (revoke only while untaken — absence,
+ * not a disabled control), and the not-yet-assigned instruments as a
+ * multi-selection (checkboxes — the honest multi-select control; a
+ * ctrl-click `<select multiple>` hides its own mechanics) with one assign
+ * action for everything ticked. When every instrument is assigned the
+ * control is gone — there is nothing left to decide.
+ */
+function AssignmentsSection({
+  user,
+  busy,
+  run,
+}: {
+  user: AdminUserDetail;
+  busy: boolean;
+  run: (action: () => Promise<unknown>, message: string) => Promise<void>;
+}) {
+  const t = useTranslations('admin');
+  const [chosen, setChosen] = useState<ReadonlySet<AssessmentInstrument>>(new Set());
+
+  const unassigned = ASSESSMENT_INSTRUMENTS.filter(
+    (instrument) => !user.assignments.some((assignment) => assignment.instrument === instrument),
+  );
+  /* The selection survives refetches only while it is still assignable. */
+  const selected = unassigned.filter((instrument) => chosen.has(instrument));
+
+  function toggle(instrument: AssessmentInstrument) {
+    setChosen((current) => {
+      const next = new Set(current);
+      if (next.has(instrument)) {
+        next.delete(instrument);
+      } else {
+        next.add(instrument);
+      }
+      return next;
+    });
+  }
+
+  return (
+    <section className="flex flex-col gap-3 rounded-md border border-border p-4">
+      <h3 className="text-sm font-semibold text-foreground">{t('assignments.heading')}</h3>
+
+      {user.assignments.length > 0 ? (
+        <ul className="flex flex-col gap-2">
+          {user.assignments.map((assignment) => (
+            <li
+              key={assignment.id}
+              className="flex flex-wrap items-center justify-between gap-2 text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <span className="font-medium text-foreground">
+                  {t(`assignments.instrument.${assignment.instrument}`)}
+                </span>
+                {assignment.taken ? (
+                  <Badge variant="success">{t('assignments.statusTaken')}</Badge>
+                ) : (
+                  <Badge variant="neutral">{t('assignments.statusPending')}</Badge>
+                )}
+              </span>
+              {assignment.taken ? null : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() =>
+                    run(() => adminApi.revokeAssignment(assignment.id), t('assignments.revoked'))
+                  }
+                >
+                  {t('assignments.revoke')}
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t('assignments.none')}</p>
+      )}
+
+      {unassigned.length > 0 ? (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-sm font-medium text-foreground">
+            {t('assignments.assignLabel')}
+          </legend>
+          {unassigned.map((instrument) => (
+            <label
+              key={instrument}
+              className="flex w-fit cursor-pointer items-center gap-2.5 text-sm text-foreground"
+            >
+              <input
+                type="checkbox"
+                className="size-4 accent-primary-600"
+                checked={chosen.has(instrument)}
+                disabled={busy}
+                onChange={() => toggle(instrument)}
+              />
+              {t(`assignments.instrument.${instrument}`)}
+            </label>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-1 self-start"
+            disabled={busy || selected.length === 0}
+            onClick={() =>
+              run(
+                /* One decision per instrument on the wire too — each grant is
+                   its own auditable event, exactly as the API records it. */
+                () =>
+                  Promise.all(
+                    selected.map((instrument) =>
+                      adminApi.assign({ instrument, userIds: [user.id] }),
+                    ),
+                  ),
+                t('assignments.assigned'),
+              )
+            }
+          >
+            {t('assignments.assignAction')}
+          </Button>
+        </fieldset>
+      ) : null}
+    </section>
   );
 }
 

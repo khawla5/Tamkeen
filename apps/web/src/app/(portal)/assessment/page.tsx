@@ -12,7 +12,7 @@ import { useErrorMessage } from '@/components/auth/use-error-message';
 import { DataView } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { assessmentApi } from '@/lib/api-client';
+import { ApiError, assessmentApi } from '@/lib/api-client';
 import { useApiMutation, useApiQuery } from '@/lib/use-api';
 import { useFormat } from '@/i18n/format-provider';
 import { cardVariants } from '@/components/ui/card';
@@ -90,13 +90,24 @@ function clearDraft() {
 }
 export default function AssessmentPage() {
   const t = useTranslations('assessment');
+  const router = useAppRouter();
   const assessment = useApiQuery(() => assessmentApi.get(), []);
+
+  /* D-132: an unassigned visitor is sent home, where the dashboard explains
+     the wait — a retryable error screen would suggest something is broken. The
+     server's 403 is the control; this is the courtesy. */
+  const unassigned =
+    assessment.error instanceof ApiError && assessment.error.code === 'ASSESSMENT_NOT_ASSIGNED';
+
+  useEffect(() => {
+    if (unassigned) router.replace('/');
+  }, [unassigned, router]);
 
   return (
     <PortalPage title={t('title')} width="narrow">
       <DataView
-        isLoading={assessment.isLoading}
-        error={assessment.error}
+        isLoading={assessment.isLoading || unassigned}
+        error={unassigned ? undefined : assessment.error}
         isEmpty={assessment.data?.questions.length === 0}
         onRetry={assessment.refetch}
         emptyProps={{ title: t('emptyTitle'), body: t('emptyBody') }}

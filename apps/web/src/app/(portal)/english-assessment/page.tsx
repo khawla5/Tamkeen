@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { cardVariants } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useFormat } from '@/i18n/format-provider';
-import { englishAssessmentApi } from '@/lib/api-client';
+import { ApiError, englishAssessmentApi } from '@/lib/api-client';
 import { useApiQuery, useApiMutation } from '@/lib/use-api';
 import { useAppRouter } from '@/lib/use-app-router';
 import { cn } from '@/lib/utils';
@@ -104,17 +104,25 @@ export default function EnglishAssessmentPage() {
 
   const alreadyTaken = existing.data != null;
 
+  /* D-132: an unassigned visitor is sent home, where the dashboard explains
+     the wait. An earned result still redirects to the result page first —
+     seeing what was earned never requires an assignment. */
+  const unassigned =
+    assessment.error instanceof ApiError && assessment.error.code === 'ASSESSMENT_NOT_ASSIGNED';
+
   useEffect(() => {
     if (alreadyTaken) {
       router.replace('/english-assessment/result');
+    } else if (unassigned) {
+      router.replace('/');
     }
-  }, [alreadyTaken, router]);
+  }, [alreadyTaken, unassigned, router]);
 
   return (
     <PortalPage title={t('title')} width="narrow">
       <DataView
-        isLoading={existing.isInitialLoad || assessment.isLoading}
-        error={assessment.error}
+        isLoading={existing.isInitialLoad || assessment.isLoading || (unassigned && !alreadyTaken)}
+        error={unassigned ? undefined : assessment.error}
         isEmpty={assessment.data?.questions.length === 0}
         onRetry={() => {
           assessment.refetch();

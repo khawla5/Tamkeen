@@ -61,9 +61,17 @@ const EMPTY = {
   /* The English card renders in every state, so every fixture needs a value —
      null is "not taken", which is what the states below are otherwise about. */
   englishLevel: null,
+  /* Both instruments assigned (D-132) unless a test says otherwise — the
+     pre-D-132 behaviour these cases were written against. */
+  assignedInstruments: ['RIASEC', 'ENGLISH_CEFR'] as DashboardView['assignedInstruments'],
 } satisfies Pick<
   DashboardView,
-  'recommendedPaths' | 'upcomingCourses' | 'latestCertificate' | 'recentActivity' | 'englishLevel'
+  | 'recommendedPaths'
+  | 'upcomingCourses'
+  | 'latestCertificate'
+  | 'recentActivity'
+  | 'englishLevel'
+  | 'assignedInstruments'
 >;
 
 function setDashboard(dashboard: DashboardView) {
@@ -466,5 +474,52 @@ describe('dashboard — the English placement card', () => {
       'upcoming',
       'upcoming',
     ]);
+  });
+});
+
+describe('dashboard — assignment gating (D-132)', () => {
+  it('with nothing assigned: the waiting card, no start action, no English card', () => {
+    setDashboard({
+      state: 'PRE_ASSESSMENT',
+      codeString: null,
+      path: null,
+      ...EMPTY,
+      assignedInstruments: [],
+    });
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.getByText('بانتظار إسناد التقييم')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'ابدأ التقييم' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'ابدأ تقييم اللغة' })).not.toBeInTheDocument();
+  });
+
+  it('with only the English test assigned: the waiting card plus the English card', () => {
+    setDashboard({
+      state: 'PRE_ASSESSMENT',
+      codeString: null,
+      path: null,
+      ...EMPTY,
+      assignedInstruments: ['ENGLISH_CEFR'],
+    });
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.getByText('بانتظار إسناد التقييم')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'ابدأ التقييم' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'ابدأ تقييم اللغة' })).toBeInTheDocument();
+  });
+
+  it('an earned English level outlives the assignment: the card shows the result unassigned', () => {
+    setDashboard({
+      state: 'PRE_ASSESSMENT',
+      codeString: null,
+      path: null,
+      ...EMPTY,
+      assignedInstruments: ['RIASEC'],
+      englishLevel: 'B2',
+    });
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.getByRole('link', { name: 'عرض النتيجة' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'ابدأ تقييم اللغة' })).not.toBeInTheDocument();
   });
 });

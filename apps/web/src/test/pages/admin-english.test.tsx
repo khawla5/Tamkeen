@@ -61,7 +61,7 @@ vi.mock('@/components/layout/admin-page', () => ({
   ),
 }));
 
-const { default: AdminEnglishPage } = await import('@/app/(admin)/admin/english/page');
+const { default: AdminEnglishPage } = await import('@/app/(admin)/admin/assessment/english/page');
 
 function question(index: number, level: CefrLevel = 'B1'): AdminEnglishQuestion {
   return {

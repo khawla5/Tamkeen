@@ -50,7 +50,15 @@ export default function DashboardPage() {
         </Card>
 
         {dashboard.state === 'PRE_ASSESSMENT' ? (
-          <PreAssessment />
+          /* D-132: the career assessment is offered only once the ministry has
+             assigned it. Until then the state's card is a quiet wait — the
+             server refuses an unassigned taker anyway; this keeps the nav from
+             lying about it. */
+          dashboard.assignedInstruments.includes('RIASEC') ? (
+            <PreAssessment />
+          ) : (
+            <AwaitingAssignment />
+          )
         ) : dashboard.state === 'ASSESSED_NO_PATH' ? (
           <AssessedNoPath dashboard={dashboard} />
         ) : (
@@ -66,8 +74,14 @@ export default function DashboardPage() {
          * gives each state one primary action; this card's action is secondary
          * (an outline button, beneath), so a new employee's single primary
          * action is still «ابدأ التقييم» for the career assessment.
+         *
+         * D-132: rendered only when the instrument is assigned — or already
+         * taken, because an earned level outlives assignment changes.
          */}
-        <EnglishCard level={dashboard.englishLevel} />
+        {dashboard.englishLevel !== null ||
+        dashboard.assignedInstruments.includes('ENGLISH_CEFR') ? (
+          <EnglishCard level={dashboard.englishLevel} />
+        ) : null}
 
         {dashboard.recentActivity.length > 0 ? (
           <ActivityFeed activity={dashboard.recentActivity} />
@@ -89,6 +103,24 @@ function PersonalHeader({ user }: { user: CurrentUser }) {
     <p className="text-lg font-semibold text-foreground">
       {t('greeting', { name: user.fullName })}
     </p>
+  );
+}
+
+/**
+ * PRE_ASSESSMENT with no career assessment assigned (D-132): information, not
+ * a dead button. The ministry assigns; the employee's next step appears here
+ * the moment it does.
+ */
+function AwaitingAssignment() {
+  const t = useTranslations('dashboard');
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('awaitingAssignmentTitle')}</CardTitle>
+        <CardDescription>{t('awaitingAssignmentBody')}</CardDescription>
+      </CardHeader>
+    </Card>
   );
 }
 
