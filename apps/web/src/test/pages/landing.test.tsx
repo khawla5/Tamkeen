@@ -199,18 +199,18 @@ describe('LandingPage', () => {
     expect(container.querySelector('section dl')).toBeNull();
   });
 
-  it('hero: carries the ministry emblem as its visual, decoratively (the header already names it)', () => {
+  it('hero: no longer carries its own emblem — the Kingdom map is the whole visual', () => {
+    /* The emblem used to sit above the map inside the hero's own box. It
+       moved out to `BrandCorner`, fixed at the page's true top-right corner
+       and shared by every page of the site, not just this one — so the hero
+       box should have no `/brand/MOI.svg` image of its own left behind. */
     const { container } = renderWithProviders(<LandingPage />);
 
     const hero = container.querySelector('section');
-    /* Two decorative images share the hero now — the background photo behind
-       everything, and the emblem in its own circle — both correctly `alt=""`,
-       so the emblem is found by its own source rather than by being first. */
-    const images = Array.from(hero?.querySelectorAll('img[alt=""]') ?? []);
-    const emblem = images.find((img) =>
+    const emblem = Array.from(hero?.querySelectorAll('img') ?? []).find((img) =>
       decodeURIComponent(img.getAttribute('src') ?? '').includes('/brand/MOI.svg'),
     );
-    expect(emblem).not.toBeUndefined();
+    expect(emblem).toBeUndefined();
   });
 
   it('hero: the emblem sits over the Kingdom map, all thirteen regions present', () => {
