@@ -1,8 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import type { PublicPathSummary } from '@tamkeen/types';
+import { describe, expect, it } from 'vitest';
 
 import LandingPage from '@/app/landing/page';
 import { renderWithProviders } from '@/test/render';
@@ -13,39 +11,10 @@ import { renderWithProviders } from '@/test/render';
  * marketing content and its structure, not product logic, since there is
  * none here.
  *
- * The explorer is now real-paths data (TAM-150), so `publicApi.paths` is
- * mocked rather than left to hit a real endpoint.
+ * "عن المنصة" is the platform's concept in four static tabs (D-129) — no
+ * data fetch, so nothing is mocked and the page renders synchronously.
  */
-const api = vi.hoisted(() => ({ paths: vi.fn() }));
-
-vi.mock('@/lib/api-client', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api-client')>('@/lib/api-client');
-
-  return { ...actual, publicApi: { paths: api.paths } };
-});
-
-function path(overrides: Partial<PublicPathSummary> = {}): PublicPathSummary {
-  return {
-    id: 'path-1',
-    name: 'خدمة المتعاملين',
-    riasecLetter: 'S',
-    description: 'مسار للتعامل المباشر مع الجمهور.',
-    skillOutcomes: ['استقبال طلبات المتعاملين', 'معالجة الشكاوى بمهنية'],
-    courseCount: 11,
-    typicalDurationMinutes: 1215,
-    ...overrides,
-  };
-}
-
 describe('LandingPage', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    api.paths.mockResolvedValue([
-      path(),
-      path({ id: 'path-2', name: 'الحوكمة والامتثال', riasecLetter: 'C' }),
-    ]);
-  });
-
   it('renders one h1 and the required landmarks', () => {
     renderWithProviders(<LandingPage />);
 
@@ -83,16 +52,43 @@ describe('LandingPage', () => {
     }
   });
 
-  it('renders exactly one h3 — the selected path in the explorer; no card grids', async () => {
+  it('about: the four journey stages as tabs, the assessment first and selected', () => {
     renderWithProviders(<LandingPage />);
 
-    expect(await screen.findAllByRole('heading', { level: 3 })).toHaveLength(1);
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'التقييم',
+      'إسناد المسار',
+      'دورات المسار',
+      'الشهادات',
+    ]);
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+    /* Skill-level assessment (D-130) — never interest/matching language. */
+    const panel = screen.getByRole('tabpanel');
+    expect(panel).toHaveTextContent(/يقيس مستواه/);
+    /* Each stage: the paragraph plus exactly three concrete points. */
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(3);
   });
 
-  it('the matching strip mentions the 5–10 course range using real numerals', async () => {
+  it('about: choosing a stage tab swaps the panel to that stage', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<LandingPage />);
 
-    expect(await screen.findByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
+    const tab = screen.getByRole('tab', { name: 'الشهادات' });
+    await user.click(tab);
+
+    expect(tab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toHaveTextContent(/رقم تحقق/);
+  });
+
+  it('about: the assignment panel states the ministry assigns the path — no recommendation language (D-130)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LandingPage />);
+
+    await user.click(screen.getByRole('tab', { name: 'إسناد المسار' }));
+
+    expect(screen.getByRole('tabpanel')).toHaveTextContent(/تُسند الوزارة/);
+    expect(screen.getByRole('tabpanel')).not.toHaveTextContent(/موصى به|توصية/);
   });
 
   it('hero: states who the platform is for (BR-101)', () => {
@@ -103,83 +99,27 @@ describe('LandingPage', () => {
     );
   });
 
-  it('explorer: a dropdown of real paths, the first selected, its name shown in the panel', async () => {
-    renderWithProviders(<LandingPage />);
-
-    const picker = await screen.findByRole('combobox', { name: 'المسارات التدريبية' });
-    const options = within(picker).getAllByRole('option');
-    expect(options.map((option) => option.textContent)).toEqual([
-      'خدمة المتعاملين',
-      'الحوكمة والامتثال',
-    ]);
-    expect(picker).toHaveValue('path-1');
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('خدمة المتعاملين');
-  });
-
-  it('explorer: choosing a path from the dropdown updates the panel to that path', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<LandingPage />);
-
-    const picker = await screen.findByRole('combobox', { name: 'المسارات التدريبية' });
-    await user.selectOptions(picker, 'الحوكمة والامتثال');
-
-    expect(picker).toHaveValue('path-2');
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('الحوكمة والامتثال');
-  });
-
-  it('explorer: the panel shows career type, skill outcomes, description, course count and duration — from the API, never typed', async () => {
-    renderWithProviders(<LandingPage />);
-
-    /* The panel is a two-column grid — the heading's immediate wrapper is only
-       the start column, so its parent is what actually holds both the
-       description column and the skill-outcomes column beside it. */
-    const panel = (await screen.findByRole('heading', { level: 3 })).closest('div')!.parentElement!;
-    /* Career type in Arabic (D-099), never the raw letter. */
-    expect(within(panel).getByText('الاجتماعي')).toBeInTheDocument();
-    expect(within(panel).queryByText(/^S$/)).not.toBeInTheDocument();
-    expect(within(panel).getByText('استقبال طلبات المتعاملين')).toBeInTheDocument();
-    expect(within(panel).getByText('معالجة الشكاوى بمهنية')).toBeInTheDocument();
-    expect(within(panel).getByText('مسار للتعامل المباشر مع الجمهور.')).toBeInTheDocument();
-    expect(within(panel).getByText(/11 دورة متاحة/)).toBeInTheDocument();
-    expect(within(panel).getByText(/20 ساعة تدريبية/)).toBeInTheDocument();
-    expect(panel.querySelector('a[href="/register"]')).not.toBeNull();
-  });
-
-  it('explorer: on an API failure, shows the fallback line and the matching strip — never an error page', async () => {
-    api.paths.mockRejectedValue(new Error('down'));
-    renderWithProviders(<LandingPage />);
-
-    expect(await screen.findByText('ستظهر المسارات هنا قريبًا.')).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'المسارات التدريبية' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    /* The strip beneath still renders — it is static copy, not API data. */
-    expect(screen.getByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
-  });
-
   it('hero: no feature pills — the paragraph carries the message', () => {
     const { container } = renderWithProviders(<LandingPage />);
 
     expect(container.querySelector('section')?.querySelector('ul')).toBeNull();
   });
 
-  it('faq: six questions as native disclosures, closed by default, each answered from a product rule', async () => {
+  it('faq: six questions as native disclosures, closed by default, each answered from a product rule', () => {
     const { container } = renderWithProviders(<LandingPage />);
-
-    /* The explorer's own h3 arrives asynchronously (its data is fetched);
-       waiting for it here is what makes "exactly one h3 on the page" a fair
-       check rather than a race against that fetch. */
-    await screen.findByRole('heading', { level: 3 });
 
     const faq = screen.getByRole('region', { name: 'الأسئلة الشائعة' });
     const items = faq.querySelectorAll('details');
     expect(items).toHaveLength(6);
     for (const item of items) expect(item.open).toBe(false);
-    expect(within(faq).getByText('هل يمكن تغيير المسار بعد تأكيده؟')).toBeInTheDocument();
-    expect(within(faq).getByText(/مسار واحد لكل موظف/)).toBeInTheDocument();
+    /* The assigned-path model (D-130): the path is the ministry's decision. */
+    expect(within(faq).getByText('هل يمكن تغيير المسار بعد إسناده؟')).toBeInTheDocument();
+    expect(within(faq).getByText(/لا يبدّل الموظف مساره بنفسه/)).toBeInTheDocument();
     /* Who may register (BR-101) — moved here from the hero, which repeated it
        alongside the header and the explorer's own "إنشاء حساب" action. */
     expect(within(faq).getByText('من يستطيع التسجيل في المنصة؟')).toBeInTheDocument();
-    expect(container.querySelectorAll('h3')).toHaveLength(1);
+    /* No h3 anywhere: the about tabs are buttons, their panel is prose. */
+    expect(container.querySelectorAll('h3')).toHaveLength(0);
   });
 
   it('footer: identity, real quick links only, and policy names as text until their pages exist', () => {
