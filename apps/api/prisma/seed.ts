@@ -319,6 +319,7 @@ async function main(): Promise<void> {
 
   console.log(
     `Seeded ${counts.questions} questions (${counts.options} options), ` +
+      `${counts.englishQuestions} English placement questions, ` +
       `${counts.courses} courses, ${counts.paths} paths, ${counts.pathCourses} memberships.`,
   );
 

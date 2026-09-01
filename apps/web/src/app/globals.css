@@ -318,3 +318,50 @@
     border-width: 0;
   }
 }
+
+/*
+ * ── Print ───────────────────────────────────────────────────────────────────
+ * §4C.8's «الأثر» is printed to PDF through the browser (TAM-149): the
+ * ministry's one-page summary of a quarter. A print stylesheet rather than a
+ * second renderer — the Puppeteer path stays where the typography has to be
+ * exact, on certificates and the CV.
+ *
+ * Only the frame's chrome is dropped. The owner's lockup and the classification
+ * strip stay: a printed sheet that leaves a government office has to say whose
+ * it is and how it is classified.
+ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  /* Bars carry meaning here, and browsers drop backgrounds by default. Every
+     bar is paired with its number in words, so a printer that ignores this
+     still produces a readable sheet (WCAG 1.4.1). */
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  /* Navigation, the user menu and the skip link are ways to go somewhere,
+     which paper is not. */
+  [data-print='chrome'] {
+    display: none !important;
+  }
+
+  /* A card's frame reads as a box on screen and as clutter on paper. */
+  main {
+    padding: 0 !important;
+  }
+
+  /* Nothing may be pushed off the sheet by a scroll container the reader
+     cannot scroll. */
+  [class*='overflow-x-auto'] {
+    overflow: visible !important;
+  }
+}

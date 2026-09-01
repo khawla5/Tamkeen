@@ -101,6 +101,10 @@ model User {
   assessmentResults AssessmentResult[]
   /// At most one — the relation is singular because `UserPath.userId` is unique.
   userPath          UserPath?
+  /// At most one, and singular for the same reason: the English placement test
+  /// is taken once and never retaken (D-123), which `userId @unique` on that
+  /// model makes a database fact rather than a service-layer convention.
+  englishResult     EnglishAssessmentResult?
 
   @@index([role])
   @@index([entityId])
@@ -549,6 +553,225 @@ model AssessmentResponse {
   /// scoring engine also enforces.
   @@unique([resultId, questionId])
   @@map("assessment_responses")
+}
+
+/// The six levels of the Common European Framework, **ascending** (§4.13).
+///
+/// The order is a domain fact, not a presentation choice: a band table is
+/// validated as a partition of the score range in this order, and a result is
+/// rendered against it. `CEFR_LEVELS` in `@tamkeen/types` is the same list, and
+/// the two must not drift.
+enum CefrLevel {
+  A1
+  A2
+  B1
+  B2
+  C1
+  C2
+}
+
+/// What an English item is testing (§4.13). Authoring metadata: it groups the
+/// bank for whoever is revising it, and nothing in scoring reads it.
+enum EnglishSkill {
+  GRAMMAR
+  VOCABULARY
+  READING
+  PRACTICAL
+}
+
+/// One version of the English placement test (§4.13, §4C.9, D-123).
+///
+/// **A sibling of `Assessment`, deliberately not a mode of it.** The two
+/// instruments share a *shape* — versioned bank, questions, options, copy-on-
+/// write publishing — and share nothing else. Holland tallies six dimensions
+/// into a ranked code and has no notion of a right answer; English sums marks
+/// for correct answers into a single ascending score and has no notion of a
+/// dimension. Folding them into one table would mean either a nullable column
+/// for every difference or a discriminator every query must remember.
+///
+/// The decisive reason is narrower and is about **not breaking what works**:
+/// `AssessmentService.getActive` and `AdminAssessmentService.createDraft` both
+/// ask for `findFirst({ where: { status: 'ACTIVE' } })` with no filter on `key`.
+/// A second instrument in that table would make the learner's Holland
+/// assessment whichever row Postgres happened to return first. Separate tables
+/// mean not one line of the Holland path changes.
+///
+/// **Copy-on-write, exactly as D-072 specifies it**, because D-049 applies here
+/// unchanged: publishing an edit inserts a new row at `version + 1` with its own
+/// questions, options *and bands*, and retires the previous one. Results keep
+/// pointing at the version that scored them, `Restrict` keeps that version
+/// alive, and the bands travel with it — so "38 out of 60 meant B2" stays true
+/// even after the ministry moves the B2 boundary.
+model EnglishAssessment {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Stable identifier for the *instrument*, shared by all its versions.
+  key         String
+  version     Int    @default(1)
+  title       String
+  description String
+
+  /// The same three-state lifecycle as the Holland bank. The enum is reused
+  /// because it is a lifecycle, not a RIASEC fact — DRAFT/ACTIVE/RETIRED means
+  /// the same thing for any versioned instrument.
+  status AssessmentStatus @default(DRAFT)
+
+  effectiveFrom DateTime? @map("effective_from")
+  retiredAt     DateTime? @map("retired_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  questions EnglishAssessmentQuestion[]
+  bands     EnglishAssessmentBand[]
+  results   EnglishAssessmentResult[]
+
+  @@unique([key, version])
+  @@index([key, status])
+  @@map("english_assessments")
+}
+
+model EnglishAssessmentQuestion {
+  id String @id @default(uuid()) @db.Uuid
+
+  assessmentId String            @map("assessment_id") @db.Uuid
+  assessment   EnglishAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  /// Stable across wording edits, so revising an item does not orphan the
+  /// responses that reference it (the D-032 rule, applied here).
+  key          String
+  displayOrder Int    @map("display_order")
+  text         String
+
+  /// **What a correct answer is worth — the concept Holland's model has no need
+  /// for.** Holland's points live on the option because every option scores;
+  /// here exactly one option scores and the rest score nothing, so the value
+  /// belongs to the question. Putting it on the option instead would invite a
+  /// bank where two options are worth different amounts of "correct".
+  marks Int @default(1)
+
+  /// The CEFR level this item targets and the skill it tests. Authoring
+  /// metadata only: scoring never reads either. They exist so a thirty-item
+  /// bank spanning A1-C2 can be reviewed and rebalanced by a human without
+  /// re-reading every question.
+  level CefrLevel
+  skill EnglishSkill
+
+  options   EnglishAssessmentOption[]
+  responses EnglishAssessmentResponse[]
+
+  @@unique([assessmentId, key])
+  @@index([assessmentId, displayOrder])
+  @@map("english_assessment_questions")
+}
+
+model EnglishAssessmentOption {
+  id String @id @default(uuid()) @db.Uuid
+
+  questionId String                    @map("question_id") @db.Uuid
+  question   EnglishAssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  key          String
+  displayOrder Int    @map("display_order")
+  label        String
+
+  /// The correct-answer concept. Exactly one option per question carries it —
+  /// enforced at publish by `assessEnglishBank`, not by the schema, because a
+  /// draft must be allowed to sit in an invalid state while it is being edited
+  /// (the D-073 reasoning: a guard on every save makes the legal destination
+  /// unreachable).
+  isCorrect Boolean @default(false) @map("is_correct")
+
+  responses EnglishAssessmentResponse[]
+
+  @@unique([questionId, key])
+  @@index([questionId, displayOrder])
+  @@map("english_assessment_options")
+}
+
+/// One CEFR band of the version that owns it — the configurable scoring rule
+/// (§4C.9).
+///
+/// **On the version, not in `settings`.** A band table is part of the
+/// instrument: it is what turns a raw score into the level a person is told
+/// they are. Held globally in `settings`, moving the B2 boundary would silently
+/// re-interpret every result ever issued — the exact gap copy-on-write exists to
+/// close (D-072). Held here, it is copied with the version and frozen with it.
+///
+/// Bounds are **inclusive at both ends**, and the set must partition `0 …
+/// maxTotal` with no gap and no overlap (`assessEnglishBank`). Inclusive rather
+/// than half-open because these are read and typed by a human: "45 to 56" is
+/// what an administrator means, and a half-open editor would put an off-by-one
+/// between what they typed and what a learner was told.
+model EnglishAssessmentBand {
+  id String @id @default(uuid()) @db.Uuid
+
+  assessmentId String            @map("assessment_id") @db.Uuid
+  assessment   EnglishAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  level    CefrLevel
+  minScore Int       @map("min_score")
+  maxScore Int       @map("max_score")
+
+  @@unique([assessmentId, level])
+  @@index([assessmentId, minScore])
+  @@map("english_assessment_bands")
+}
+
+/// A completed attempt: the total, what was attainable, and the band it fell in.
+///
+/// **`userId` is unique, and that is the no-retake rule (D-123).** §4.13 says
+/// the placement test is taken once; expressing it as a constraint rather than
+/// as a check in the service is the D-035 reasoning applied again — an
+/// application-level guard loses the race between two concurrent submissions,
+/// a unique index does not.
+///
+/// `level` is stored rather than recomputed on read. The bands that produced it
+/// are frozen on the version, so recomputing would give the same answer today —
+/// but storing it means the answer survives even a band table read through a
+/// different code path, and it is what the dashboard and the CV read.
+model EnglishAssessmentResult {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  assessmentId      String            @map("assessment_id") @db.Uuid
+  /// Restrict: the instrument behind a result must still exist, which is what
+  /// makes "frozen as taken" a statement about the test and not only about the
+  /// number (D-049, D-072).
+  assessment        EnglishAssessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  assessmentVersion Int               @map("assessment_version")
+
+  totalScore Int       @map("total_score")
+  /// The marks attainable in the version scored, so a historical result can
+  /// still be shown as a percentage after the bank changes size.
+  maxScore   Int       @map("max_score")
+  level      CefrLevel
+
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  responses EnglishAssessmentResponse[]
+
+  @@map("english_assessment_results")
+}
+
+model EnglishAssessmentResponse {
+  id String @id @default(uuid()) @db.Uuid
+
+  resultId String                  @map("result_id") @db.Uuid
+  result   EnglishAssessmentResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  questionId String                    @map("question_id") @db.Uuid
+  /// Restrict on both, for the D-035 reason: editing the bank must not silently
+  /// delete the answers people already gave and change a historical result.
+  question   EnglishAssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  optionId String                  @map("option_id") @db.Uuid
+  option   EnglishAssessmentOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@unique([resultId, questionId])
+  @@map("english_assessment_responses")
 }
 
 /// A career path, tagged with exactly one primary RIASEC letter (§3A).

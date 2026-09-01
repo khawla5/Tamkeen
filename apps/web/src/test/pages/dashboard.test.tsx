@@ -58,9 +58,12 @@ const EMPTY = {
   upcomingCourses: [] as DashboardView['upcomingCourses'],
   latestCertificate: null,
   recentActivity: [] as DashboardView['recentActivity'],
+  /* The English card renders in every state, so every fixture needs a value —
+     null is "not taken", which is what the states below are otherwise about. */
+  englishLevel: null,
 } satisfies Pick<
   DashboardView,
-  'recommendedPaths' | 'upcomingCourses' | 'latestCertificate' | 'recentActivity'
+  'recommendedPaths' | 'upcomingCourses' | 'latestCertificate' | 'recentActivity' | 'englishLevel'
 >;
 
 function setDashboard(dashboard: DashboardView) {
@@ -77,12 +80,28 @@ describe('dashboard — PRE_ASSESSMENT', () => {
   });
 
   it('offers the assessment as the single primary action', () => {
+    /*
+     * This asserted a raw count of one link until §4.13 added the English
+     * placement card (D-123), which is reachable in every state and so puts a
+     * second link on this page. The count was never the rule — §4.2's rule is
+     * *one primary action* — so the assertion now says that directly: exactly
+     * one filled button, and it is the career assessment. The English card's is
+     * an outline link beneath it, named explicitly so a future change that
+     * promoted it to primary fails here rather than quietly doubling the call
+     * to action a new employee is given.
+     */
     renderWithProviders(<DashboardPage />);
 
     const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(1);
-    expect(links[0]).toHaveTextContent('ابدأ التقييم');
-    expect(links[0]).toHaveAttribute('href', '/assessment');
+    const primary = links.filter((link) => link.className.includes('bg-primary-600'));
+
+    expect(primary).toHaveLength(1);
+    expect(primary[0]).toHaveTextContent('ابدأ التقييم');
+    expect(primary[0]).toHaveAttribute('href', '/assessment');
+
+    expect(links.filter((link) => link !== primary[0]).map((link) => link.textContent)).toEqual([
+      'ابدأ تقييم اللغة',
+    ]);
   });
 
   it('shows the journey tracker with the assessment current and nothing done yet', () => {
@@ -340,6 +359,111 @@ describe('dashboard — ACTIVE_PATH', () => {
       'done',
       'done',
       'current',
+      'upcoming',
+    ]);
+  });
+});
+
+/**
+ * The English card (§4.13, D-123).
+ *
+ * The property under test is that it is *the same card everywhere* and that it
+ * never competes with the state's own action — the two ways this feature could
+ * quietly damage a screen §4.2 says has one primary call.
+ */
+describe('dashboard — the English placement card', () => {
+  const STATES: Array<[string, DashboardView]> = [
+    ['PRE_ASSESSMENT', { state: 'PRE_ASSESSMENT', codeString: null, path: null, ...EMPTY }],
+    ['ASSESSED_NO_PATH', { state: 'ASSESSED_NO_PATH', codeString: 'SIA', path: null, ...EMPTY }],
+    [
+      'ACTIVE_PATH',
+      {
+        state: 'ACTIVE_PATH',
+        codeString: 'SIA',
+        ...EMPTY,
+        path: {
+          id: 'path-1',
+          name: 'خدمة المتعاملين',
+          riasecLetter: 'S',
+          completedCount: 2,
+          inProgressCount: 1,
+          totalCount: 7,
+          nextCourse: null,
+        },
+      } satisfies DashboardView,
+    ],
+  ];
+
+  it.each(STATES)('appears in %s', (_name, dashboard) => {
+    setDashboard(dashboard);
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.getByText('مستوى اللغة الإنجليزية')).toBeInTheDocument();
+  });
+
+  it('offers the test when no level has been earned', () => {
+    setDashboard({ state: 'PRE_ASSESSMENT', codeString: null, path: null, ...EMPTY });
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.getByRole('link', { name: 'ابدأ تقييم اللغة' })).toHaveAttribute(
+      'href',
+      '/english-assessment',
+    );
+    expect(screen.queryByRole('link', { name: 'عرض النتيجة' })).not.toBeInTheDocument();
+  });
+
+  it('shows the level and drops the invitation once it has been taken', () => {
+    /* §3's context-dependent action: one of the two, never both. */
+    setDashboard({
+      state: 'PRE_ASSESSMENT',
+      codeString: null,
+      path: null,
+      ...EMPTY,
+      englishLevel: 'B2',
+    });
+    renderWithProviders(<DashboardPage />);
+
+    expect(screen.getByText('B2')).toBeInTheDocument();
+    expect(screen.getByText('فوق المتوسط')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'عرض النتيجة' })).toHaveAttribute(
+      'href',
+      '/english-assessment/result',
+    );
+    expect(screen.queryByRole('link', { name: 'ابدأ تقييم اللغة' })).not.toBeInTheDocument();
+  });
+
+  it('does not compete with the primary action of the state it sits under', () => {
+    /* A new employee's one primary action is still the career assessment. The
+       English card's is an outline button beneath it — asserted through the
+       accessible name rather than the class, so a restyle that promoted it to
+       primary would still have to change this test deliberately. */
+    setDashboard({ state: 'PRE_ASSESSMENT', codeString: null, path: null, ...EMPTY });
+    renderWithProviders(<DashboardPage />);
+
+    const primary = screen.getByRole('link', { name: 'ابدأ التقييم' });
+    const secondary = screen.getByRole('link', { name: 'ابدأ تقييم اللغة' });
+
+    expect(primary.className).toContain('bg-primary-600');
+    expect(secondary.className).not.toContain('bg-primary-600');
+  });
+
+  it('does not change the dashboard state machine', () => {
+    /* D-123: the journey tracker is the Holland journey's, and an English level
+       must not move it. */
+    setDashboard({
+      state: 'PRE_ASSESSMENT',
+      codeString: null,
+      path: null,
+      ...EMPTY,
+      englishLevel: 'C1',
+    });
+    renderWithProviders(<DashboardPage />);
+
+    const steps = screen.getAllByRole('listitem', { name: /التقييم|المسار|الدورات|الشهادة/ });
+    expect(steps.map((li) => li.getAttribute('data-stage'))).toEqual([
+      'current',
+      'upcoming',
+      'upcoming',
       'upcoming',
     ]);
   });

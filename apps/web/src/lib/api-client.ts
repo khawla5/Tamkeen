@@ -23,6 +23,7 @@ import type {
   AdminPathBounds,
   AdminAuditPage,
   AdminCertificateTemplateView,
+  AdminImpactView,
   AdminReports,
   AdminSettingsView,
   AdminPathDetail,
@@ -45,6 +46,15 @@ import type {
   CertificateVerificationView,
   AssessmentSubmission,
   AssessmentView,
+  EnglishAssessmentResultView,
+  EnglishAssessmentSubmission,
+  EnglishAssessmentView,
+  AdminEnglishDraft,
+  AdminEnglishOverview,
+  AdminEnglishVersion,
+  CefrBand,
+  CefrLevel,
+  EnglishSkill,
   CourseDetail,
   CourseLaunchView,
   CourseOutlineView,
@@ -324,6 +334,17 @@ export const assessmentApi = {
     api.post<AssessmentResultView>('/api/assessment/submit', submission),
 };
 
+/**
+ * §4.13 — the English placement test. A sibling of `assessmentApi`, on the
+ * sibling endpoints; the two share no request or response type.
+ */
+export const englishAssessmentApi = {
+  get: () => api.get<EnglishAssessmentView>('/api/english-assessment'),
+  result: () => api.get<EnglishAssessmentResultView | null>('/api/english-assessment/result'),
+  submit: (submission: EnglishAssessmentSubmission) =>
+    api.post<EnglishAssessmentResultView>('/api/english-assessment/submit', submission),
+};
+
 export const pathsApi = {
   list: () => api.get<PathRecommendations>('/api/paths'),
   detail: (pathId: string) => api.get<PathDetail>(`/api/paths/${pathId}`),
@@ -598,6 +619,52 @@ export const adminApi = {
     },
   ) => api.patch<AdminEntityRow>(`/api/admin/entities/${entityId}`, patch),
 
+  /* §4C.9 — the English placement test. Its own endpoints, its own types; the
+     RIASEC calls above are untouched by it (D-124). This is the one group in
+     this client that receives the English answer key. */
+  englishOverview: () => api.get<AdminEnglishOverview>('/api/admin/english'),
+
+  englishDraft: () => api.get<AdminEnglishDraft>('/api/admin/english/draft'),
+
+  createEnglishDraft: () => api.post<AdminEnglishDraft>('/api/admin/english/draft', {}),
+
+  discardEnglishDraft: () => api.delete<void>('/api/admin/english/draft'),
+
+  updateEnglishDraft: (patch: { title?: string; description?: string }) =>
+    api.patch<AdminEnglishDraft>('/api/admin/english/draft', patch),
+
+  addEnglishQuestion: (input: {
+    text: string;
+    marks: number;
+    level: CefrLevel;
+    skill: EnglishSkill;
+    options: string[];
+    correctIndex: number;
+  }) => api.post<AdminEnglishDraft>('/api/admin/english/draft/questions', input),
+
+  updateEnglishQuestion: (
+    questionId: string,
+    patch: { text?: string; marks?: number; level?: CefrLevel; skill?: EnglishSkill },
+  ) => api.patch<AdminEnglishDraft>(`/api/admin/english/draft/questions/${questionId}`, patch),
+
+  removeEnglishQuestion: (questionId: string) =>
+    api.delete<AdminEnglishDraft>(`/api/admin/english/draft/questions/${questionId}`),
+
+  reorderEnglishDraft: (questionIds: string[]) =>
+    api.patch<AdminEnglishDraft>('/api/admin/english/draft/order', { questionIds }),
+
+  updateEnglishOption: (optionId: string, patch: { label?: string; isCorrect?: boolean }) =>
+    api.patch<AdminEnglishDraft>(`/api/admin/english/draft/options/${optionId}`, patch),
+
+  /** The whole band table, never one band — see the endpoint's own note. */
+  setEnglishBands: (bands: CefrBand[]) =>
+    api.put<AdminEnglishDraft>('/api/admin/english/draft/bands', { bands }),
+
+  publishEnglish: () => api.post<AdminEnglishVersion>('/api/admin/english/draft/publish', {}),
+
+  englishVersion: (assessmentId: string) =>
+    api.get<AdminEnglishDraft>(`/api/admin/english/versions/${assessmentId}`),
+
   // §4C.3 — the assessment
   assessmentOverview: () => api.get<AdminAssessmentOverview>('/api/admin/assessment'),
 
@@ -785,6 +852,26 @@ export const adminApi = {
   },
 
   reports: () => api.get<AdminReports>('/api/admin/reports'),
+
+  /**
+   * §4C.8's «الأثر» — participation and learning by period and department
+   * (TAM-149).
+   *
+   * The two ends are sent the way the trail's filter sends them: a day, not an
+   * instant, so `to=2026-08-31` covers the whole of the day the administrator
+   * asked for rather than stopping at its first millisecond.
+   */
+  impact: (filters: { from?: string; to?: string; department?: string } = {}) => {
+    const query = new URLSearchParams();
+
+    if (filters.from) query.set('from', `${filters.from}T00:00:00.000`);
+    if (filters.to) query.set('to', `${filters.to}T23:59:59.999`);
+    if (filters.department) query.set('department', filters.department);
+
+    const suffix = query.toString();
+
+    return api.get<AdminImpactView>(`/api/admin/impact${suffix ? `?${suffix}` : ''}`);
+  },
 
   /**
    * Where the reports export lives.

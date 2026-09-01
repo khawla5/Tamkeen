@@ -4,6 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AdminModule } from './admin/admin.module';
 import { AssessmentModule } from './assessment/assessment.module';
+import { EnglishAssessmentModule } from './english-assessment/english-assessment.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogSyncModule } from './catalog-sync/catalog-sync.module';
@@ -71,6 +72,7 @@ import { SettingsModule } from './settings/settings.module';
        assessment ↔ dashboard from becoming a cycle. */
     JourneyModule,
     AssessmentModule,
+    EnglishAssessmentModule,
     PathsModule,
     CoursesModule,
     EnrollmentModule,

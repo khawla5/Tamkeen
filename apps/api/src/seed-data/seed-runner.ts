@@ -1,6 +1,7 @@
 import type { LmsPort } from '../moodle/lms.port';
 import type { PrismaClient } from '../../generated/prisma';
 import { ASSESSMENT_QUESTIONS, ASSESSMENT_SEED, LIKERT_LEVELS } from './assessment';
+import { ENGLISH_ASSESSMENT_SEED, ENGLISH_BANDS, ENGLISH_QUESTIONS } from './english-assessment';
 import { effectiveCourseStatus, fieldsForPublishedCourse } from '../catalog-sync/catalog-mapping';
 import { COURSE_METADATA, SEED_PATHS } from './catalog';
 
@@ -25,6 +26,8 @@ import { COURSE_METADATA, SEED_PATHS } from './catalog';
 export interface SeedCounts {
   questions: number;
   options: number;
+  /** §4.13's placement bank, counted separately: two instruments, two numbers. */
+  englishQuestions: number;
   courses: number;
   paths: number;
   pathCourses: number;
@@ -166,6 +169,160 @@ export async function seedAssessment(
   });
 
   return { questions: ASSESSMENT_QUESTIONS.length, options: optionCount };
+}
+
+/**
+ * Seeds version 1 of the English placement test: its questions, options, the
+ * correct answers, and the band table (§4.13, D-123, D-125).
+ *
+ * **It bootstraps; it does not maintain** — the D-083 rule, applied to the
+ * second instrument for the same reason. Rows are matched by their stable `key`
+ * so revising the wording here updates version 1 in place, but only while
+ * version 1 is still the only version there is. The moment an administrator
+ * publishes an edit through §4C.9 the content is the ministry's, and re-running
+ * the seed must not overwrite their bank with whatever shipped in the
+ * repository. In a government system that is data loss dressed as a
+ * convenience, and here the loss would include the band boundaries that decide
+ * what every future placement *means*.
+ *
+ * **The bands are written with the questions, in the same pass**, because they
+ * are only meaningful together: a table covering 0-60 is correct for this bank
+ * and wrong for a bank of twenty items. Seeding them apart would leave a window
+ * in which the instrument existed and could not score anybody.
+ */
+export async function seedEnglishAssessment(
+  prisma: PrismaClient,
+): Promise<Pick<SeedCounts, 'englishQuestions'>> {
+  const existing = await prisma.englishAssessment.findMany({
+    where: { key: ENGLISH_ASSESSMENT_SEED.key },
+    select: { id: true, version: true, status: true, effectiveFrom: true },
+  });
+
+  const ministryOwned = existing.some((row) => row.version > ENGLISH_ASSESSMENT_SEED.version);
+
+  if (ministryOwned) {
+    /* Reported rather than silently skipped: a seed that appears to run and
+       changes nothing is how somebody spends an afternoon wondering why their
+       edit did not take. */
+    console.log(
+      `English assessment "${ENGLISH_ASSESSMENT_SEED.key}" has published versions beyond ` +
+        `${ENGLISH_ASSESSMENT_SEED.version}; leaving it alone. Edit it from the admin portal (§4C.9).`,
+    );
+
+    const active = existing.find((row) => row.status === 'ACTIVE');
+    const count = active
+      ? await prisma.englishAssessmentQuestion.count({ where: { assessmentId: active.id } })
+      : 0;
+
+    return { englishQuestions: count };
+  }
+
+  const first = existing.find((row) => row.version === ENGLISH_ASSESSMENT_SEED.version);
+
+  const assessment = first
+    ? await prisma.englishAssessment.update({
+        where: { id: first.id },
+        data: {
+          title: ENGLISH_ASSESSMENT_SEED.title,
+          description: ENGLISH_ASSESSMENT_SEED.description,
+          status: 'ACTIVE',
+          /* Kept if it has one. Re-seeding is not a new effective date — the
+             instrument has been in force since it was first published. */
+          effectiveFrom: first.effectiveFrom ?? new Date(),
+        },
+        select: { id: true },
+      })
+    : await prisma.englishAssessment.create({
+        data: {
+          key: ENGLISH_ASSESSMENT_SEED.key,
+          version: ENGLISH_ASSESSMENT_SEED.version,
+          title: ENGLISH_ASSESSMENT_SEED.title,
+          description: ENGLISH_ASSESSMENT_SEED.description,
+          status: 'ACTIVE',
+          effectiveFrom: new Date(),
+        },
+        select: { id: true },
+      });
+
+  for (const [index, question] of ENGLISH_QUESTIONS.entries()) {
+    const row = await prisma.englishAssessmentQuestion.upsert({
+      where: { assessmentId_key: { assessmentId: assessment.id, key: question.key } },
+      create: {
+        assessmentId: assessment.id,
+        key: question.key,
+        displayOrder: index + 1,
+        text: question.text,
+        marks: question.marks,
+        level: question.level,
+        skill: question.skill,
+      },
+      update: {
+        displayOrder: index + 1,
+        text: question.text,
+        marks: question.marks,
+        level: question.level,
+        skill: question.skill,
+      },
+      select: { id: true },
+    });
+
+    for (const [optionIndex, label] of question.options.entries()) {
+      /* `isCorrect` is upserted with the label, not set once on create: a
+         corrected answer key in this file has to reach an existing row, or a
+         wrong answer would survive every re-seed. */
+      await prisma.englishAssessmentOption.upsert({
+        where: { questionId_key: { questionId: row.id, key: `o${optionIndex + 1}` } },
+        create: {
+          questionId: row.id,
+          key: `o${optionIndex + 1}`,
+          displayOrder: optionIndex + 1,
+          label,
+          isCorrect: optionIndex === question.correctIndex,
+        },
+        update: {
+          displayOrder: optionIndex + 1,
+          label,
+          isCorrect: optionIndex === question.correctIndex,
+        },
+      });
+    }
+
+    /* Options dropped from an item — but only where nobody has answered them.
+       Deleting an answered option would take its responses with it and silently
+       change a historical placement; the foreign key is Restrict precisely so
+       that cannot happen by accident. */
+    await prisma.englishAssessmentOption.deleteMany({
+      where: {
+        questionId: row.id,
+        key: { notIn: question.options.map((_unused, i) => `o${i + 1}`) },
+        responses: { none: {} },
+      },
+    });
+  }
+
+  for (const band of ENGLISH_BANDS) {
+    await prisma.englishAssessmentBand.upsert({
+      where: { assessmentId_level: { assessmentId: assessment.id, level: band.level } },
+      create: {
+        assessmentId: assessment.id,
+        level: band.level,
+        minScore: band.minScore,
+        maxScore: band.maxScore,
+      },
+      update: { minScore: band.minScore, maxScore: band.maxScore },
+    });
+  }
+
+  /* Questions dropped from the bank, on the same "only if unanswered" rule. */
+  await prisma.englishAssessmentQuestion.deleteMany({
+    where: {
+      assessmentId: assessment.id,
+      key: { notIn: ENGLISH_QUESTIONS.map((question) => question.key) },
+      responses: { none: {} },
+    },
+  });
+
+  return { englishQuestions: ENGLISH_QUESTIONS.length };
 }
 
 /**
@@ -319,7 +476,10 @@ async function seedCatalog(
 /** Seeds everything Phase 1 needs. Safe to re-run. */
 export async function seedProductData(prisma: PrismaClient, lms: LmsPort): Promise<SeedCounts> {
   const assessment = await seedAssessment(prisma);
+  /* Independent of the RIASEC bank and of the catalogue (D-123): nothing it
+     writes is referenced by either, so the order here is presentational. */
+  const english = await seedEnglishAssessment(prisma);
   const catalog = await seedCatalog(prisma, lms);
 
-  return { ...assessment, ...catalog };
+  return { ...assessment, ...english, ...catalog };
 }

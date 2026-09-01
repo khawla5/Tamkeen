@@ -69,6 +69,16 @@ export const AuditAction = {
 
   // Assessment and path (Phase 1)
   ASSESSMENT_SUBMITTED: 'ASSESSMENT_SUBMITTED',
+  /**
+   * The English placement test was taken (§4.13, D-123).
+   *
+   * Its own action rather than a variant of `ASSESSMENT_SUBMITTED`, because the
+   * two instruments are separate: a trail filtered to "who took the career
+   * assessment" must not also return English takers, and the target id points at
+   * a row in a different table. Recorded on refusal too — the test is taken once,
+   * so a second attempt is a fact worth being able to see.
+   */
+  ENGLISH_ASSESSMENT_SUBMITTED: 'ENGLISH_ASSESSMENT_SUBMITTED',
   /** A path entered the BUILDING state, or the user switched which one. */
   PATH_SELECTED: 'PATH_SELECTED',
   PATH_COURSES_UPDATED: 'PATH_COURSES_UPDATED',
@@ -198,6 +208,21 @@ export const AuditAction = {
    * explicable months later without reconstructing the bank as it stood.
    */
   ADMIN_ASSESSMENT_PUBLISHED: 'ADMIN_ASSESSMENT_PUBLISHED',
+  /* §4C.9 — the English placement test's own editing trail (D-123, D-124).
+     Separate actions rather than shared ones, because a trail filtered to "who
+     changed the career assessment" must not also return English edits: the two
+     are different instruments and the target ids point at different tables. */
+  ADMIN_ENGLISH_DRAFT_OPENED: 'ADMIN_ENGLISH_DRAFT_OPENED',
+  ADMIN_ENGLISH_DRAFT_DISCARDED: 'ADMIN_ENGLISH_DRAFT_DISCARDED',
+  /**
+   * A new English version became the one new takers receive.
+   *
+   * Consequential in the way §4C.3's publish is: every CEFR level produced from
+   * this moment comes from a different instrument, and — because the bands
+   * travel with the version (D-125) — potentially from a different scale.
+   * Recorded on refusal too, with the blockers.
+   */
+  ADMIN_ENGLISH_PUBLISHED: 'ADMIN_ENGLISH_PUBLISHED',
   /** A study path was created (§4C.4). Always inactive to begin with. */
   ADMIN_PATH_CREATED: 'ADMIN_PATH_CREATED',
   /** A path's content changed — name, description, duration, letter, order. */
@@ -280,6 +305,21 @@ export const AuditReason = {
   ASSESSMENT_UNKNOWN_QUESTION: 'ASSESSMENT_UNKNOWN_QUESTION',
   ASSESSMENT_UNKNOWN_OPTION: 'ASSESSMENT_UNKNOWN_OPTION',
   ASSESSMENT_DUPLICATE_ANSWER: 'ASSESSMENT_DUPLICATE_ANSWER',
+
+  /* §4.13 — rejected English submissions. These match ENGLISH_SCORING_ERROR
+     exactly, for the same reason the four above match SCORING_ERROR: `reason:
+     error.code` typechecks without a cast. Named separately rather than reused,
+     so a change to one instrument's refusals cannot silently alter the other's. */
+  ENGLISH_ASSESSMENT_INCOMPLETE: 'ENGLISH_ASSESSMENT_INCOMPLETE',
+  ENGLISH_ASSESSMENT_UNKNOWN_QUESTION: 'ENGLISH_ASSESSMENT_UNKNOWN_QUESTION',
+  ENGLISH_ASSESSMENT_UNKNOWN_OPTION: 'ENGLISH_ASSESSMENT_UNKNOWN_OPTION',
+  ENGLISH_ASSESSMENT_DUPLICATE_ANSWER: 'ENGLISH_ASSESSMENT_DUPLICATE_ANSWER',
+  /** The bands did not cover the score. Unreachable past the publish gate. */
+  ENGLISH_ASSESSMENT_NO_BAND: 'ENGLISH_ASSESSMENT_NO_BAND',
+  /** A second attempt at a test that is taken once (D-123). */
+  ENGLISH_ASSESSMENT_ALREADY_TAKEN: 'ENGLISH_ASSESSMENT_ALREADY_TAKEN',
+  /** §4C.9 refused a publish. The specific blockers travel in `detail`. */
+  ENGLISH_BANK_NOT_PUBLISHABLE: 'ENGLISH_BANK_NOT_PUBLISHABLE',
 
   // Phase 1 — path building and commitment
   PATH_ALREADY_CONFIRMED: 'PATH_ALREADY_CONFIRMED',
@@ -388,6 +428,7 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   AUTHZ_DENIED: 'auth',
 
   ASSESSMENT_SUBMITTED: 'learner',
+  ENGLISH_ASSESSMENT_SUBMITTED: 'learner',
   PATH_SELECTED: 'learner',
   PATH_COURSES_UPDATED: 'learner',
   PATH_CONFIRMED: 'learner',
@@ -408,6 +449,9 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ADMIN_ASSESSMENT_DRAFT_OPENED: 'content',
   ADMIN_ASSESSMENT_DRAFT_DISCARDED: 'content',
   ADMIN_ASSESSMENT_PUBLISHED: 'content',
+  ADMIN_ENGLISH_DRAFT_OPENED: 'content',
+  ADMIN_ENGLISH_DRAFT_DISCARDED: 'content',
+  ADMIN_ENGLISH_PUBLISHED: 'content',
   ADMIN_PATH_CREATED: 'content',
   ADMIN_PATH_UPDATED: 'content',
   ADMIN_PATH_ACTIVATED: 'content',

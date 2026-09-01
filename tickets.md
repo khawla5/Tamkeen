@@ -821,6 +821,21 @@
 
 > **Epic label: `admin-polish`** — a pass over the super-admin portal at the ministry's direction (2026-08-25), one ticket per page, worked in that order on `feature/tam-130-admin-polish`. Everything below is **DONE** and shipped in **PR #24** (five commits, merged 2026-08-26); the acceptance notes record what was actually asserted. Decisions: D-098 (two removals for a path), D-099 (the dashboard's distribution), D-100 (the dialog).
 
+## TAM-149 — «الأثر»: the ministry's view of what employees enrolled in, completed and learnt, by period and department — **DONE** (D-123)
+
+- **Labels:** `impact`, `admin`, `backend`, `frontend`
+- **Priority:** High — a management ask
+- **What shipped:**
+  1. **A tab, not a page.** §4C.8 is three views on the shared tablist (TAM-118) — «الأثر» · «التقارير» · «سجل العمليات» — opening on the first. The reports are unchanged behind it and the admin nav stays at eight items.
+  2. **The period and the slice.** This month / this quarter / this year / a chosen range, plus the `DEPARTMENTS` filter and «كل الإدارات». Every figure is for the period, with the previous window of **equal length** beside it as a delta — a calendar quarter against a calendar quarter would report a per cent of growth that is only the length of the months (D-123).
+  3. **Participation.** Verified registrations, assessed, committed, active — people, de-duplicated, employees only — plus the participation rate, which is **cumulative** and says its denominator is accounts and not the ministry's headcount, which the platform does not know. The same four counts per department as a sortable table, tallied from the rows the tiles are counted from so the columns cannot disagree with them.
+  4. **Learning delivered.** Courses passed, hours from `duration_minutes` (with the count of passes that carry none stated beside it — D-035), course certificates, paths completed (read from the path certificate, the only durable record of _when_). A twelve-month trend as token bars, each row printing both numbers.
+  5. **What they learnt.** Top courses with their average grade, top paths, the six career types of the people assessed in the period — and the language-level block rendering «لم يُفعَّل اختبار المستوى بعد» rather than an empty card, because `cefr` is null until TAM-148.
+  6. **Export and print.** One CSV of every table on the tab, rendered in the browser over the shared `toCsv` (D-112's reason: the columns are Arabic copy), the period in its filename; printing is a stylesheet — A4, the frame's chrome dropped, the owner's lockup and classification kept — not a second renderer.
+- **API:** `GET /api/admin/impact?from&to&department` → `AdminImpactView`; `admin-impact.service.ts` + the pure `impact-period.ts`; aggregation only, every column already existed. SUPER_ADMIN by the class-level guard; read-only, so nothing audited beyond the existing `AUTHZ_DENIED`.
+- **Acceptance met:** 32 new API unit tests (17 service, 15 period arithmetic), 5 new integration tests against real PostgreSQL, 22 new web tests, 3 new browser cases. Suites run: API unit 696 / 44 suites · 21 admin-audit + 182 admin-rbac integration · web 832 / 60 files · typecheck / lint / format clean. The Playwright suite was **not** run this session (it needs the built apps; the dev servers hold the ports).
+- **Owed, deliberately:** `MINISTRY_HEADCOUNT` as the rate's denominator; the CEFR block's content once TAM-148 ships.
+
 ## TAM-130 — Admin home: a distribution that means something, and nothing on it that cannot be acted on — **DONE**
 
 - **Labels:** `admin-polish`, `frontend`, `backend`

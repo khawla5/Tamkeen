@@ -36,7 +36,7 @@ const employee = { id: 'u1', email: 'e@ministry.gov.example', fullName: 'أحم�
 function renderAt(pathname: string, state: 'PRE_ASSESSMENT' | 'ASSESSED_NO_PATH' | 'ACTIVE_PATH') {
   nav.pathname = pathname;
   api.me.mockResolvedValue(employee);
-  api.dashboard.mockResolvedValue({ state, codeString: null, path: null });
+  api.dashboard.mockResolvedValue({ state, codeString: null, englishLevel: null, path: null });
   api.unread.mockResolvedValue({ count: 0 });
   return render(
     <NextIntlClientProvider locale="ar-u-nu-latn-ca-gregory" messages={messages}>
