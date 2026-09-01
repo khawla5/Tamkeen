@@ -13,6 +13,7 @@ export * from './format';
 /* Phase 1 — the RIASEC domain and the product contracts built on it. */
 export * from './riasec';
 export * from './assessment';
+export * from './instruments';
 export * from './catalog';
 export * from './journey';
 

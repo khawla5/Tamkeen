@@ -18,6 +18,7 @@ import {
   type UserPathCourseStatus,
 } from '@tamkeen/types';
 
+import { AssignmentsService } from '../assignments/assignments.service';
 import { AuditAction, AuditReason, type AuditTargetType } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { JourneyStateService, type JourneyState } from '../journey/journey-state.service';
@@ -47,6 +48,7 @@ export class EnrollmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly journey: JourneyStateService,
+    private readonly assignments: AssignmentsService,
     private readonly audit: AuditService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
@@ -386,6 +388,10 @@ export class EnrollmentService {
 
     const empty = {
       englishLevel: english?.level ?? null,
+      /* What the dashboard may offer (D-132): each instrument card renders
+         only when its instrument is here. The take endpoints enforce the same
+         gate — this is the navigation courtesy, not the control. */
+      assignedInstruments: await this.assignments.listInstruments(userId),
       recommendedPaths: [],
       upcomingCourses: [],
       latestCertificate: null,
@@ -436,6 +442,7 @@ export class EnrollmentService {
       state: 'ACTIVE_PATH',
       codeString,
       englishLevel: empty.englishLevel,
+      assignedInstruments: empty.assignedInstruments,
       recommendedPaths: [],
       /* Current first, then what follows, in path order — the "what's after
          this one" a learner actually wants. Three is a glance, not a list. */

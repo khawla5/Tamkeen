@@ -1,4 +1,5 @@
 import { AdminAssessmentController } from './admin-assessment.controller';
+import { AdminAssignmentsController } from './admin-assignments.controller';
 import { AdminAuditController } from './admin-audit.controller';
 import { AdminEnglishController } from './admin-english.controller';
 import { AdminCoursesController } from './admin-courses.controller';
@@ -34,6 +35,8 @@ export const ADMIN_CONTROLLERS = [
   /* §4C.9 — the English placement test's own editor (D-124). A separate
      controller, so the RBAC suite covers it the moment it is routable. */
   AdminEnglishController,
+  /* D-132 — who may take which instrument. */
+  AdminAssignmentsController,
   AdminPathsController,
   AdminCoursesController,
   AdminSettingsController,

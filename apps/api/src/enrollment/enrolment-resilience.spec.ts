@@ -1,3 +1,4 @@
+import type { AssignmentsService } from '../assignments/assignments.service';
 import { AuditAction } from '../audit/audit.actions';
 import type { AuditEntry, AuditService } from '../audit/audit.service';
 import type { JourneyStateService } from '../journey/journey-state.service';
@@ -110,8 +111,13 @@ function harness(options: {
 
   const journey = {} as unknown as JourneyStateService;
 
+  /* Not exercised by these cases — the dashboard, not enrolment, reads it. */
+  const assignments = {
+    listInstruments: () => Promise.resolve([]),
+  } as unknown as AssignmentsService;
+
   return {
-    service: new EnrollmentService(prisma, journey, audit, lms),
+    service: new EnrollmentService(prisma, journey, assignments, audit, lms),
     rows,
     audits,
     attempted,

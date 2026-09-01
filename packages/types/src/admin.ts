@@ -1,5 +1,6 @@
 import type { AuditTargetType } from './audit';
 import type { CourseLanguage, CoursePublication, CourseStatus } from './catalog';
+import type { AssessmentInstrument } from './instruments';
 import type { RiasecLetter } from './riasec';
 import type { UserRole } from './roles';
 
@@ -225,6 +226,18 @@ export interface AdminUserDetail extends AdminUserRow {
   certificateCount: number;
   /** Live sessions right now — the answer to "is this suspension effective?" */
   activeSessions: number;
+  /**
+   * D-132: the instruments assigned to this employee, oldest first, each with
+   * whether it has been taken (a taken assignment cannot be revoked). Always
+   * empty for non-employee accounts. The manage-account panel is where the
+   * ministry assigns — a dropdown, not a separate screen.
+   */
+  assignments: Array<{
+    id: string;
+    instrument: AssessmentInstrument;
+    assignedAt: string;
+    taken: boolean;
+  }>;
 }
 
 /** An organisation and the two counts that say whether it can be removed. */
@@ -912,4 +925,17 @@ export interface AdminImpactView {
   topPaths: AdminImpactPathRow[];
   letterDistribution: AdminImpactLetterShare[];
   cefr: AdminImpactCefr | null;
+}
+
+/* ── §4C — assessment assignment (D-130/D-132) ─────────────────────────── */
+
+export interface AdminAssignInput {
+  instrument: AssessmentInstrument;
+  userIds: string[];
+}
+
+/** Assignment is idempotent per (user, instrument); the split says what happened. */
+export interface AdminAssignResult {
+  created: number;
+  alreadyAssigned: number;
 }

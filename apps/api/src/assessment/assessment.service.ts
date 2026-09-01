@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 
 import type { AssessmentResultView, AssessmentView } from '@tamkeen/types';
 
+import { AssignmentsService } from '../assignments/assignments.service';
 import { AuditAction, AuditReason } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { JourneyStateService } from '../journey/journey-state.service';
@@ -22,17 +23,23 @@ import type { SubmitAssessmentDto } from './assessment.dto';
  *     downstream meaningless.
  *  2. **Retakes stop at commitment** (D-015). Once a path is confirmed, a new
  *     Holland Code would contradict a decision that cannot be revisited.
+ *  3. **Taking requires assignment** (D-130/D-132). The bank and the submit
+ *     endpoint refuse an employee the ministry has not assigned RIASEC to;
+ *     the result read stays open — earned results outlive assignment changes.
  */
 @Injectable()
 export class AssessmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly journey: JourneyStateService,
+    private readonly assignments: AssignmentsService,
     private readonly audit: AuditService,
   ) {}
 
   /** The active assessment, in presentation order, with no weights attached. */
-  async getActive(): Promise<AssessmentView> {
+  async getActive(userId: string): Promise<AssessmentView> {
+    await this.assignments.assertAssigned(userId, 'RIASEC');
+
     const assessment = await this.prisma.assessment.findFirst({
       /* The one version new takers receive (D-069). A draft is never served: an
          edit in progress must not reach anybody, and a partial unique index
@@ -99,6 +106,11 @@ export class AssessmentService {
    * submission the user can retry.
    */
   async submit(userId: string, dto: SubmitAssessmentDto, ipAddress: string | null) {
+    await this.assignments.assertAssigned(userId, 'RIASEC', {
+      action: AuditAction.ASSESSMENT_SUBMITTED,
+      ipAddress,
+    });
+
     const state = await this.journey.getState(userId);
 
     if (JourneyStateService.isCommitted(state)) {

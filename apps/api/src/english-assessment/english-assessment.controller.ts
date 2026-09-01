@@ -25,8 +25,8 @@ export class EnglishAssessmentController {
   constructor(private readonly english: EnglishAssessmentService) {}
 
   @Get()
-  getActive(): Promise<EnglishAssessmentView> {
-    return this.english.getActive();
+  getActive(@CurrentUser() user: AuthenticatedUser): Promise<EnglishAssessmentView> {
+    return this.english.getActive(user.id);
   }
 
   /** Null rather than 404: "not taken yet" is a normal state the dashboard

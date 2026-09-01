@@ -106,6 +106,11 @@ model User {
   /// model makes a database fact rather than a service-layer convention.
   englishResult     EnglishAssessmentResult?
 
+  /// Which instruments this employee may take (D-130/D-132). Gates taking,
+  /// never seeing an already-earned result.
+  assessmentAssignments AssessmentAssignment[]
+  assignedAssessments   AssessmentAssignment[] @relation("AssessmentAssigner")
+
   @@index([role])
   @@index([entityId])
   @@map("users")
@@ -772,6 +777,41 @@ model EnglishAssessmentResponse {
 
   @@unique([resultId, questionId])
   @@map("english_assessment_responses")
+}
+
+/// The two assessment instruments an admin can assign (D-132). An enum rather
+/// than a generic instruments table: there are exactly two, and a third is an
+/// enum value away — the generic table is machinery nobody has asked for.
+enum AssessmentInstrument {
+  RIASEC
+  ENGLISH_CEFR
+}
+
+/// Who may take which assessment (D-130/D-132): an employee can only TAKE an
+/// instrument the ministry has assigned to them. Assignment gates taking, not
+/// seeing — results already earned stay readable without a row here.
+///
+/// Revoking DELETES the row (the audit log is the history, as everywhere
+/// else), so `@@unique([userId, instrument])` both prevents double assignment
+/// and allows re-assignment after a revoke. Revoke is refused once the
+/// instrument has been taken — a result must never point at a gate that
+/// claims it could not have happened.
+model AssessmentAssignment {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  instrument AssessmentInstrument
+
+  /// The admin who assigned it — who/what/when, like PathCourse.decidedById.
+  assignedById String?  @map("assigned_by_id") @db.Uuid
+  assignedBy   User?    @relation("AssessmentAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+
+  @@unique([userId, instrument])
+  @@index([instrument])
+  @@map("assessment_assignments")
 }
 
 /// A career path, tagged with exactly one primary RIASEC letter (§3A).

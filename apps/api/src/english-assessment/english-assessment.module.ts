@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AssignmentsModule } from '../assignments/assignments.module';
 import { AuditModule } from '../audit/audit.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EnglishAssessmentController } from './english-assessment.controller';
@@ -14,7 +15,7 @@ import { EnglishAssessmentService } from './english-assessment.service';
  * it is what keeps that true as both grow.
  */
 @Module({
-  imports: [PrismaModule, AuditModule],
+  imports: [PrismaModule, AuditModule, AssignmentsModule],
   controllers: [EnglishAssessmentController],
   providers: [EnglishAssessmentService],
   exports: [EnglishAssessmentService],

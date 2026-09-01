@@ -243,6 +243,14 @@ describe('Admin assessment management (e2e)', () => {
       select: { id: true },
     });
 
+    if (role === 'EMPLOYEE') {
+      /* D-132: taking is gated on assignment; every taker in this suite is
+         exercising the Holland instrument, so assign it at creation. */
+      await prisma.assessmentAssignment.create({
+        data: { userId: user.id, instrument: 'RIASEC' },
+      });
+    }
+
     return user.id;
   }
 

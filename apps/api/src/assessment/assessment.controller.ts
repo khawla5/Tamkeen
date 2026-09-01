@@ -18,8 +18,8 @@ export class AssessmentController {
   constructor(private readonly assessment: AssessmentService) {}
 
   @Get()
-  getActive(): Promise<AssessmentView> {
-    return this.assessment.getActive();
+  getActive(@CurrentUser() user: AuthenticatedUser): Promise<AssessmentView> {
+    return this.assessment.getActive(user.id);
   }
 
   /** Null rather than 404: "not assessed yet" is a normal state the dashboard

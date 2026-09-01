@@ -262,6 +262,15 @@ export const AuditAction = {
   ADMIN_COURSE_INTERVENED: 'ADMIN_COURSE_INTERVENED',
   /** §4C.5's permanent deletion (TAM-134) — recorded whichever way it goes. */
   ADMIN_COURSE_DELETED: 'ADMIN_COURSE_DELETED',
+  /* D-132 — assessment assignment. Who may take which instrument is an
+     administrative decision, and both directions of it are recorded: the grant
+     and the revocation. The instrument travels in `detail`; the target is the
+     employee, because "what could this person take, and since when" is the
+     question an incident review asks. */
+  /** An instrument was assigned to an employee. */
+  ADMIN_ASSESSMENT_ASSIGNED: 'ADMIN_ASSESSMENT_ASSIGNED',
+  /** An untaken assignment was revoked. Refusals (already taken) audit too. */
+  ADMIN_ASSESSMENT_UNASSIGNED: 'ADMIN_ASSESSMENT_UNASSIGNED',
   /**
    * A product knob changed (§4C.6).
    *
@@ -343,6 +352,11 @@ export const AuditReason = {
      security review most wants to be able to find. */
   /** An administrator tried to change their own status or role. */
   SELF_MODIFICATION_REFUSED: 'SELF_MODIFICATION_REFUSED',
+  /* D-132 — assessment assignment. */
+  /** Taking (or starting) an instrument the employee was never assigned. */
+  ASSESSMENT_NOT_ASSIGNED: 'ASSESSMENT_NOT_ASSIGNED',
+  /** Revoking an assignment whose instrument has already been taken. */
+  ASSIGNMENT_ALREADY_TAKEN: 'ASSIGNMENT_ALREADY_TAKEN',
   /** The change would have left the system with no active administrator. */
   LAST_ACTIVE_ADMIN: 'LAST_ACTIVE_ADMIN',
   /** An ENTITY account was asked for without an organisation to act for. */
@@ -466,6 +480,8 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ADMIN_USER_INVITED: 'administration',
   ADMIN_USER_STATUS_CHANGED: 'administration',
   ADMIN_USER_ROLE_CHANGED: 'administration',
+  ADMIN_ASSESSMENT_ASSIGNED: 'administration',
+  ADMIN_ASSESSMENT_UNASSIGNED: 'administration',
   ADMIN_ENTITY_CREATED: 'administration',
   ADMIN_ENTITY_UPDATED: 'administration',
   /* The entity editing its own §4B.6 record — the same subject as the two

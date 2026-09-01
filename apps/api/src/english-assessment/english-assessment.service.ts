@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 
 import type { CefrBand, EnglishAssessmentResultView, EnglishAssessmentView } from '@tamkeen/types';
 
+import { AssignmentsService } from '../assignments/assignments.service';
 import { AuditAction, AuditReason } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -28,16 +29,23 @@ import type { SubmitEnglishAssessmentDto } from './english-assessment.dto';
  *     courteous refusal and the constraint is the guarantee.
  *  3. **Nothing here writes to a published version.** Editing is §4C.9's job and
  *     is copy-on-write; this service reads the ACTIVE row and appends a result.
+ *  4. **Taking requires assignment** (D-130/D-132). The bank and the submit
+ *     endpoint refuse an employee the ministry has not assigned ENGLISH_CEFR
+ *     to; the result read stays open — an earned level outlives assignment
+ *     changes.
  */
 @Injectable()
 export class EnglishAssessmentService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly assignments: AssignmentsService,
     private readonly audit: AuditService,
   ) {}
 
   /** The active version, in presentation order, with no answer key attached. */
-  async getActive(): Promise<EnglishAssessmentView> {
+  async getActive(userId: string): Promise<EnglishAssessmentView> {
+    await this.assignments.assertAssigned(userId, 'ENGLISH_CEFR');
+
     const assessment = await this.prisma.englishAssessment.findFirst({
       /*
        * Scoped to this instrument's key as well as its status. Holland's
@@ -113,6 +121,11 @@ export class EnglishAssessmentService {
     dto: SubmitEnglishAssessmentDto,
     ipAddress: string | null,
   ): Promise<EnglishAssessmentResultView> {
+    await this.assignments.assertAssigned(userId, 'ENGLISH_CEFR', {
+      action: AuditAction.ENGLISH_ASSESSMENT_SUBMITTED,
+      ipAddress,
+    });
+
     const existing = await this.prisma.englishAssessmentResult.findUnique({
       where: { userId },
       select: { id: true },

@@ -121,6 +121,12 @@ export class AdminUsersService {
             courses: { select: { status: true } },
           },
         },
+        /* D-132: what this person may take, managed from this same panel. */
+        assessmentAssignments: {
+          orderBy: { assignedAt: 'asc' },
+          select: { id: true, instrument: true, assignedAt: true },
+        },
+        englishResult: { select: { id: true } },
         _count: { select: { certificates: true } },
       },
     });
@@ -165,6 +171,15 @@ export class AdminUsersService {
         : null,
       certificateCount: user._count.certificates,
       activeSessions,
+      assignments: user.assessmentAssignments.map((assignment) => ({
+        id: assignment.id,
+        instrument: assignment.instrument,
+        assignedAt: assignment.assignedAt.toISOString(),
+        taken:
+          assignment.instrument === 'RIASEC'
+            ? user.assessmentResults.length > 0
+            : user.englishResult !== null,
+      })),
     };
   }
 

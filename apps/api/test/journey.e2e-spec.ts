@@ -209,6 +209,16 @@ describe('Phase 1 journey (e2e)', () => {
 
     await post('/api/auth/verify-email', { token: emails.verifications.get(email) }).expect(200);
 
+    /* D-132: taking is gated on assignment, so every journey employee gets the
+       Holland instrument the way the ministry would grant it. */
+    const registered = await prisma.user.findUniqueOrThrow({
+      where: { email },
+      select: { id: true },
+    });
+    await prisma.assessmentAssignment.create({
+      data: { userId: registered.id, instrument: 'RIASEC' },
+    });
+
     const response = await post('/api/auth/login', { email, password: PASSWORD }).expect(200);
     const cookies = response.headers['set-cookie'] as unknown as string[];
 

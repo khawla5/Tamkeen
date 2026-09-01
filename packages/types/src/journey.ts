@@ -1,4 +1,5 @@
 import type { CefrLevel } from './english-assessment';
+import type { AssessmentInstrument } from './instruments';
 import type { RiasecLetter } from './riasec';
 
 /**
@@ -104,6 +105,14 @@ export interface DashboardView {
    * a fourth branch for a card that is the same card in all three.
    */
   englishLevel: CefrLevel | null;
+  /**
+   * The instruments assigned to this employee (D-130/D-132), in every state.
+   * What the dashboard may OFFER: the pre-assessment card renders only when
+   * RIASEC is here, the English card only when ENGLISH_CEFR is here or the
+   * test is already taken. The server enforces the same gate on the take
+   * endpoints — this field is the navigation courtesy, not the control.
+   */
+  assignedInstruments: AssessmentInstrument[];
   /**
    * ASSESSED_NO_PATH only: the recommended paths in rank order, at most three,
    * so the dashboard can put the decision in front of the user (TAM-123).
