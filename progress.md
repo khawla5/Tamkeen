@@ -5,6 +5,26 @@
 
 ---
 
+### 2026-09-01 — Landing polish under the user's live direction: standard widths, map hover unblocked, motion slowed, «عن المنصة» as concept tabs (D-129) — branch `feature/landing-page-edits`
+
+A live session on the running site (`npm run dev` against the dev DB; getting the API up first required `prisma generate`, `prisma migrate deploy` — two pending migrations from the TAM-150/English merges — and a `build:types`).
+
+**Widths.** Every landing section now shares the standard content column (`max-w-6xl px-4 sm:px-6`): the hero's text overlay aligns to it (the copy keeps its `max-w-2xl` measure; the map alone stays pinned to the section's true edge), and the FAQ wrapper widened to it with only the `<details>` list held at `max-w-3xl` for reading measure.
+
+**The map.** Its hover treatment (in `globals.css` since TAM-150) had never fired: the hero wrapper carried `pointer-events-none`, and the newly full-width text overlay would have sat over it too. The wrapper's block is removed and the overlay is `lg:pointer-events-none` with the text itself restored to `pointer-events-auto`; the hover rules are now gated behind `(hover: hover) and (pointer: fine)`. Reveal slowed at the user's direction: 1s per region (was 0.7s), 150ms stagger (was 70ms), drift start 1.6s. Hero photos hold 8s (was 2s).
+
+**«عن المنصة» (D-129).** Rewritten from the path explorer to four concept tabs — the journey's stages, each panel locked-rule copy with {min}–{max} interpolated, one «إنشاء حساب» action. No fetch; `GET /api/public/paths` stays but is unconsumed. The interim dropdown picker (`ecb89c8`) and the matching strip are gone. `landing.test.tsx` rewritten accordingly (16 cases, all sync). `db:seed` was run (with `MOODLE_MODE=mock` inline) to fill the TAM-150 `skill_outcomes` placeholders — still pending directorate sign-off, and currently unread by any page.
+
+**Then the pivot (D-130).** Later in the same session the user redefined the product model: the assessment measures **skill level per ministry needs** (not Holland interests), there are **no recommendations — the ministry assigns each employee their paths** (possibly more than one, per the same-session amendment in D-130), and **each path carries its fixed course set** (no 5–10 self-build); certificates stay. Confirmed as a product change, not landing copy. The «عن المنصة» tabs were rewritten to that model (التقييم · إسناد المسار · دورات المسار · الشهادات) with placeholder copy — the user will provide the authored content. **Everything else still implements the old model** (hero body, FAQ, the whole Holland flow, path build, CLAUDE.md's locked rules) — see D-130 for the divergence list and the open ministry questions. The reshaping is to be ticketed, not absorbed piecemeal.
+
+**The panels enriched** (user-directed, "looks empty"): each stage panel is now an icon tile (Gauge/Route/BookOpen/Award, decorative, `primary-50` ground), the paragraph, and three concrete points with a tick glyph — every point a fact of the product, no slogans; a test pins the three-points shape.
+
+**The rest of the page followed** (user-directed): the hero body now tells the assigned-path model; the FAQ's «كيف يُطابَق الموظف مع مساره؟» became «كيف يُحدَّد مسار الموظف؟» (assignment, no recommendations) and «بعد تأكيده» became «بعد إسناده» (the path is the ministry's decision, not the employee's commitment); the footer line rewritten to match; the dead `heroCta`/`heroSecondaryCta`/`heroEligibility` keys removed. The certificate/who/where/verify FAQ answers were already model-neutral and stand.
+
+**Verified:** web unit suite green (landing 16/16 after the pivot rewrite), typecheck and lint clean, confirmed live in the browser by the user through the session.
+
+**Next:** the user's authored tab content → swap the placeholders; ticket the D-130 reshaping with the team; user review of the live page → PR. All landing copy remains placeholder until الإدارة العامة للتدريب signs it off.
+
 ### 2026-08-31 — TAM-149: «الأثر», §4C.8's first tab — participation and learning by period and department (D-127)
 
 The reports tab answers "how is the system doing" with no time axis and no department axis, so it could not answer what management asks. Built as the first of three views on the shared tablist (TAM-118); the reports and the trail are unchanged behind it, and the admin nav stays at eight items.

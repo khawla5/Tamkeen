@@ -18,12 +18,15 @@ export function FaqSection() {
 
   return (
     <section aria-labelledby="faq-title" className="bg-background py-16 sm:py-20">
-      <div className="mx-auto max-w-3xl px-4 sm:px-6">
+      {/* The standard content column, so the heading's start edge lines up
+          with the sections above; only the list itself is narrowed to keep
+          the answers at a readable measure. */}
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <h2 id="faq-title" className="text-3xl font-bold text-foreground">
           {t('faqTitle')}
         </h2>
 
-        <div className="mt-8 divide-y divide-border border-y border-border">
+        <div className="mt-8 max-w-3xl divide-y divide-border border-y border-border">
           {FAQ_KEYS.map((key) => (
             <details key={key} className="group">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-base font-semibold text-foreground [&::-webkit-details-marker]:hidden">

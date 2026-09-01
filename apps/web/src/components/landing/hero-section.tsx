@@ -14,19 +14,21 @@ const BACKGROUND_PHOTOS = [
   '/landing/moi-headquarters-day-2.jpg',
 ];
 
-const ROTATION_MS = 2000;
+const ROTATION_MS = 8000;
 
 /**
  * The hero of a government front page: who this is for and what it does —
- * one sentence from the BRD's executive summary (§1), in the ministry's own
- * register. No feature pills, no stat row: the paragraph carries the message.
+ * one sentence in the ministry's own register, telling the assigned-path
+ * model (D-130): the assessment measures level, the ministry assigns the
+ * path, the path's courses end in a certificate. No feature pills, no stat
+ * row: the paragraph carries the message.
  *
  * **No CTA row, no eligibility line, no sign-in link here.** `SiteHeader`
  * immediately above already offers both "تسجيل الدخول" and "إنشاء حساب" on
- * every scroll position, the explorer just below repeats "إنشاء حساب" per
- * path, and the eligibility line is answered again in the FAQ — stating the
- * same three things a fourth time here read as clutter rather than emphasis,
- * flagged directly against the live page.
+ * every scroll position, the about tabs below carry their own "إنشاء حساب",
+ * and the eligibility line is answered in the FAQ — stating the same three
+ * things a fourth time here read as clutter rather than emphasis, flagged
+ * directly against the live page.
  *
  * Two columns from `lg`: the text block on the start edge; on the end edge the
  * ministry emblem over the Kingdom's map, the map revealing region by region. The emblem is decorative here (`alt=""`) —
@@ -83,28 +85,33 @@ export function HeroSection() {
           Positioned against the section's own left edge rather than inside
           the centred, padded content column below — sitting in-grid there
           only ever placed it as far left as that column's own boundary,
-          which was never close to the page edge itself. */}
-      <div className="pointer-events-none absolute inset-y-0 end-0 hidden w-[32rem] items-center justify-end lg:flex">
+          which was never close to the page edge itself. Pointer events stay
+          ON so the regions' hover treatment (globals.css `.map-region`)
+          actually fires; the text overlay above is made click-through
+          instead. */}
+      <div className="absolute inset-y-0 end-0 hidden w-[32rem] items-center justify-end lg:flex">
         <div className="flex w-full max-w-md flex-col items-center rounded-2xl p-6">
           <SaudiMap />
         </div>
       </div>
 
-      {/* A direct child of `<section>`, not of any padded/centred wrapper:
-          `lg:start-0` has to resolve against the section's own true right
-          edge, not against a `max-w-6xl` column's edge — nesting it inside
-          one (an earlier version of this) only ever put it as far right as
-          that column's own boundary, well short of the page edge on a wide
-          screen, the exact mistake already fixed once for the map on the
-          other side. Below `lg` it is a normal centred, padded block; the
-          `lg:` pairs switch it to an edge-pinned overlay, matching the
-          section's own `lg:min-h` floor above instead of contributing to it. */}
-      <div className="relative z-10 mx-auto flex max-w-2xl flex-col items-start px-4 py-16 text-start sm:px-6 sm:py-20 lg:absolute lg:inset-y-0 lg:start-0 lg:mx-0 lg:max-w-2xl lg:justify-center lg:px-0 lg:py-0 lg:ps-6">
-        <h1 className="text-5xl font-extrabold leading-tight text-surface sm:text-6xl">
+      {/* Below `lg` a normal centred, padded block; from `lg` an overlay
+          (`lg:inset-0`) so it matches the section's `lg:min-h` floor instead
+          of contributing to it. Either way it is the standard content column
+          (`max-w-6xl px-4 sm:px-6`, as in the about section and footer), so
+          the title's start edge lines up with every section below; the inner
+          `max-w-2xl` keeps the measure the copy was written for. Only the
+          map opposite stays pinned to the section's true edge. As an overlay
+          it spans the map too, so it goes `lg:pointer-events-none` (the map's
+          hover lives beneath it) while the text itself stays selectable. */}
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start px-4 py-16 text-start sm:px-6 sm:py-20 lg:pointer-events-none lg:absolute lg:inset-0 lg:justify-center lg:py-0">
+        <h1 className="pointer-events-auto max-w-2xl text-5xl font-extrabold leading-tight text-surface sm:text-6xl">
           {t('heroTitle')}
         </h1>
 
-        <p className="mt-6 max-w-2xl text-xl leading-relaxed text-primary-50">{t('heroBody')}</p>
+        <p className="pointer-events-auto mt-6 max-w-2xl text-xl leading-relaxed text-primary-50">
+          {t('heroBody')}
+        </p>
       </div>
     </section>
   );
