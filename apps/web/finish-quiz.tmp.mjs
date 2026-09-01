@@ -26,10 +26,17 @@ await page.goto('http://localhost:8080/mod/quiz/summary.php?attempt=1&cmid=8', {
 console.log('on:', page.url());
 
 console.log('forms:', await page.locator('form').evaluateAll((fs) => fs.map((f) => f.action)));
-console.log('buttons:', await page.locator('button, input[type=submit]').evaluateAll((bs) => bs.map((b) => b.textContent?.trim() || b.value)));
+console.log(
+  'buttons:',
+  await page
+    .locator('button, input[type=submit]')
+    .evaluateAll((bs) => bs.map((b) => b.textContent?.trim() || b.value)),
+);
 // Submit the processattempt form directly — the confirm modal is UI, not contract.
 await page.evaluate(() => {
-  const form = [...document.querySelectorAll('form')].find((f) => f.action.includes('processattempt'));
+  const form = [...document.querySelectorAll('form')].find((f) =>
+    f.action.includes('processattempt'),
+  );
   if (!form) throw new Error('no processattempt form');
   form.submit();
 });
