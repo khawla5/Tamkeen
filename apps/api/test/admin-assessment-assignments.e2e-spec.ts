@@ -400,6 +400,21 @@ describe('Admin assessment assignments (e2e)', () => {
     });
   });
 
+  describe('the key picker', () => {
+    it('lists a real instrument for the create-assignment and group-editor pickers', async () => {
+      const rows = (await get('/api/admin/assessment-keys', sessionAdmin).expect(200))
+        .body as { key: string; title: string; kind: 'INSTRUMENT' | 'GROUP' }[];
+
+      const riasec = rows.find((row) => row.key === 'riasec-core');
+      expect(riasec).toMatchObject({ kind: 'INSTRUMENT' });
+      expect(riasec?.title).toBeTruthy();
+    });
+
+    it('is closed to anyone who is not a super admin', async () => {
+      await get('/api/admin/assessment-keys', '').expect(401);
+    });
+  });
+
   it('is closed to anyone who is not a super admin', async () => {
     await get('/api/admin/assessment-assignments', '').expect(401);
   });

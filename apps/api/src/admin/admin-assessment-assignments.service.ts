@@ -1,6 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 
-import type { AdminAssessmentAssignmentRow, AdminAssessmentGroupRow } from '@tamkeen/types';
+import type {
+  AdminAssessmentAssignmentRow,
+  AdminAssessmentGroupRow,
+  AdminAssessmentKeyOption,
+} from '@tamkeen/types';
 
 import { AuditAction } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
@@ -258,6 +262,15 @@ export class AdminAssessmentAssignmentsService {
   }
 
   // ── Shared resolution ──────────────────────────────────────────────────
+
+  /** Every key the create-assignment and group-editor pickers may offer. */
+  async listResolvable(): Promise<AdminAssessmentKeyOption[]> {
+    const resolvable = await this.resolvableTitles();
+
+    return [...resolvable.entries()]
+      .map(([key, { title, kind }]) => ({ key, title, kind }))
+      .sort((a, b) => a.title.localeCompare(b.title, 'ar'));
+  }
 
   private async requireResolvableKey(assessmentKey: string): Promise<void> {
     const resolvable = await this.resolvableTitles();

@@ -73,6 +73,15 @@ export interface SaveAssessmentGroupInput {
   memberKeys: string[];
 }
 
+/** One key an assignment or a group member could name, for the picker on
+ *  §4C.3's Assignments tab — the same map `AdminAssessmentAssignmentsService`
+ *  resolves `assessmentKey`/`memberKeys` against, offered back as options. */
+export interface AdminAssessmentKeyOption {
+  key: string;
+  title: string;
+  kind: 'INSTRUMENT' | 'GROUP';
+}
+
 /**
  * The instrument or group one `AssessmentAssignment` resolves to, and what an
  * employee has done about it — the piece `DashboardView.assessments` and the

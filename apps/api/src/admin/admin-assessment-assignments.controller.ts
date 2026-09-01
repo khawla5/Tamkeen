@@ -14,7 +14,11 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 
-import type { AdminAssessmentAssignmentRow, AdminAssessmentGroupRow } from '@tamkeen/types';
+import type {
+  AdminAssessmentAssignmentRow,
+  AdminAssessmentGroupRow,
+  AdminAssessmentKeyOption,
+} from '@tamkeen/types';
 
 import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
@@ -37,6 +41,13 @@ import {
 @Roles('SUPER_ADMIN')
 export class AdminAssessmentAssignmentsController {
   constructor(private readonly assignments: AdminAssessmentAssignmentsService) {}
+
+  /** Every instrument/group key the create-assignment and group-editor
+   *  pickers may offer, resolved server-side (§4C.3). */
+  @Get('assessment-keys')
+  listKeys(): Promise<AdminAssessmentKeyOption[]> {
+    return this.assignments.listResolvable();
+  }
 
   @Get('assessment-assignments')
   list(): Promise<AdminAssessmentAssignmentRow[]> {

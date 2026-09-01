@@ -489,6 +489,9 @@ describe('Admin user management (e2e)', () => {
       /* A count of attempts, never the superseded codes: a retake is the
          person's own history, not an administrator's business (D-033). */
       expect(detail.assessment).toBeNull();
+      /* The generalised, per-instrument counterpart (TAM-147) agrees: nothing
+         taken is an empty list, not a null crash. */
+      expect(detail.assessments).toEqual([]);
     });
 
     it('answers 404 for an unknown id and 400 for a malformed one', async () => {

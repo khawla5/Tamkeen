@@ -109,8 +109,16 @@ export class AdminAuditService {
 
   private async journey(): Promise<AdminReports['journey']> {
     const [assessed, byStatus, coursesPassed, certificatesIssued] = await Promise.all([
-      /* Distinct people, not results: retakes append (D-033). */
-      this.prisma.assessmentResult.findMany({ distinct: ['userId'], select: { userId: true } }),
+      /* Distinct people, not results: retakes append (D-033). `kind: 'RIASEC'`
+         (TAM-147): this funnel step means the Holland assessment specifically,
+         the same reading `admin-dashboard.service.ts`'s "assessed" count
+         already gives it — someone who has only taken the CEFR placement test
+         has not passed this step. */
+      this.prisma.assessmentResult.findMany({
+        where: { kind: 'RIASEC' },
+        distinct: ['userId'],
+        select: { userId: true },
+      }),
       this.prisma.userPath.groupBy({ by: ['status'], _count: { _all: true } }),
       this.prisma.completion.count({ where: { passed: true } }),
       this.prisma.certificate.count(),
