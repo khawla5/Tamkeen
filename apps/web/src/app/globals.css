@@ -243,8 +243,8 @@
     transform-box: fill-box;
     transform-origin: center;
     animation:
-      map-reveal 0.7s ease-out both,
-      map-drift 8s ease-in-out 1.2s infinite;
+      map-reveal 1s ease-out both,
+      map-drift 8s ease-in-out 1.6s infinite;
   }
 
   /*
@@ -270,15 +270,19 @@
     pointer-events: none;
   }
 
-  .map-region:hover path {
-    stroke: var(--color-surface);
-    stroke-width: 4;
-    transform: scale(1.03);
-    filter: brightness(1.12);
-  }
+  /* Hover-capable pointers only — a tap on a touch screen would otherwise
+     stick a false hover on a region until the next tap. */
+  @media (hover: hover) and (pointer: fine) {
+    .map-region:hover path {
+      stroke: var(--color-surface);
+      stroke-width: 4;
+      transform: scale(1.03);
+      filter: brightness(1.12);
+    }
 
-  .map-region:hover text {
-    fill: var(--color-primary-deep);
+    .map-region:hover text {
+      fill: var(--color-primary-deep);
+    }
   }
 
   @keyframes map-reveal {

@@ -12,7 +12,7 @@ import { SAUDI_MAP_VIEWBOX, SAUDI_REGIONS } from './saudi-map-paths';
  * silences them: the regions reveal in sequence on load, then a slow highlight
  * drifts across them — ambient, not attention-seeking.
  */
-const REVEAL_STEP_MS = 70;
+const REVEAL_STEP_MS = 150;
 const DRIFT_STEP_MS = 600;
 const LABEL_SIZE = 24;
 
