@@ -179,7 +179,7 @@ describe('Profile (e2e)', () => {
       expect(response.body).toMatchObject({
         fullName: 'موظف الملف الشخصي',
         department: 'قسم',
-        employeeId: expect.stringContaining(`P-${RUN_ID}`) as string,
+        employeeId: numericEmployeeId(RUN_ID, 'me-fields'),
         role: 'EMPLOYEE',
       });
     });

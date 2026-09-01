@@ -139,7 +139,10 @@ test.describe('Phase 1 journey', () => {
     // ── Into a course, through the player (§4.8, Phase 2) ─────────────────────
     /* The Phase 2 user-visible flow: My Path no longer links at the LMS
        directly, because that deep link carries no session. Entry goes through
-       the player, which mints a signed single-use handoff on click (D-044). */
+       the player, which mints a signed single-use handoff on mount (D-044) —
+       there is no separate "start" click; `MoodleEmbed` launches the frame as
+       soon as the page loads, and the handoff URL is rendered only as the
+       frame's own `src`, never as visible text elsewhere on the page. */
     await page.getByRole('link', { name: 'ابدأ الدورة' }).first().click();
     await expect(page).toHaveURL(/\/courses\/[0-9a-f-]+\/player$/, { timeout: 15_000 });
 
@@ -150,10 +153,11 @@ test.describe('Phase 1 journey', () => {
     await expect(page.getByText('اجتزت هذه الدورة')).toHaveCount(0);
     await expect(page.getByText('لم تجتز هذه الدورة بعد')).toHaveCount(0);
 
-    /* One action, and the handoff URL is NOT in the page — it is minted when
-       the learner clicks, so a credential never sits in the rendered markup. */
-    await expect(page.getByRole('button', { name: 'ابدأ الدورة' })).toBeVisible();
-    expect(await page.content()).not.toContain('tamkeensso');
+    /* The frame itself is the one action — it mounts on its own once the
+       mock LMS answers the launch request. */
+    const frame = page.locator('iframe').first();
+    await expect(frame).toBeVisible({ timeout: 15_000 });
+    await expect(frame).toHaveAttribute('src', /tamkeensso/);
 
     await page.getByRole('link', { name: 'العودة إلى مساري' }).click();
     await expect(page).toHaveURL(/\/my-path$/, { timeout: 15_000 });
@@ -161,7 +165,10 @@ test.describe('Phase 1 journey', () => {
     // ── Into a course, through the player (§4.8, Phase 2) ─────────────────────
     /* The Phase 2 user-visible flow: My Path no longer links at the LMS
        directly, because that deep link carries no session. Entry goes through
-       the player, which mints a signed single-use handoff on click (D-044). */
+       the player, which mints a signed single-use handoff on mount (D-044) —
+       there is no separate "start" click; `MoodleEmbed` launches the frame as
+       soon as the page loads, and the handoff URL is rendered only as the
+       frame's own `src`, never as visible text elsewhere on the page. */
     await page.getByRole('link', { name: 'ابدأ الدورة' }).first().click();
     await expect(page).toHaveURL(/\/courses\/[0-9a-f-]+\/player$/, { timeout: 15_000 });
 
@@ -172,10 +179,11 @@ test.describe('Phase 1 journey', () => {
     await expect(page.getByText('اجتزت هذه الدورة')).toHaveCount(0);
     await expect(page.getByText('لم تجتز هذه الدورة بعد')).toHaveCount(0);
 
-    /* One action, and the handoff URL is NOT in the page — it is minted when
-       the learner clicks, so a credential never sits in the rendered markup. */
-    await expect(page.getByRole('button', { name: 'ابدأ الدورة' })).toBeVisible();
-    expect(await page.content()).not.toContain('tamkeensso');
+    /* The frame itself is the one action — it mounts on its own once the
+       mock LMS answers the launch request. */
+    const secondFrame = page.locator('iframe').first();
+    await expect(secondFrame).toBeVisible({ timeout: 15_000 });
+    await expect(secondFrame).toHaveAttribute('src', /tamkeensso/);
 
     await page.getByRole('link', { name: 'العودة إلى مساري' }).click();
     await expect(page).toHaveURL(/\/my-path$/, { timeout: 15_000 });

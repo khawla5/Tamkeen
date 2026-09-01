@@ -191,7 +191,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 ### 4.0 Public landing page (الصفحة الرئيسية العامة) — `/landing`, and `/` for signed-out visitors
 - The only page an unauthenticated visitor sees besides auth. **Structure (LOCKED with the 2026-08-23 rebuild): Hero → "عن المنصة" explorer → FAQ → Footer.** No marketing sections (problem/trust/CTA strips were removed as such), no stats, no feature pills.
 - **Hero:** ministry eyebrow, one-line title, one sentence, "إنشاء حساب" + "كيف تعمل المنصة" (jumps to the explorer), the BR-101 eligibility line; on the deep-green ground (`primary-deep`) with the ministry emblem above the Kingdom's map (13 named regions, decorative, animated, hover never touches `fill`).
-- **Explorer:** Absher-style — four stage tabs (التقييم المهني / المسار التدريبي / الدورات / الشهادات والسيرة الذاتية), each stage's steps as a list, the selected step explained from the BRD's functional requirements with the single action "إنشاء حساب". A real `tablist`; steps are `aria-current` buttons.
+- **Explorer (TAM-150, D-123):** one tab per active path — real data from `GET /api/public/paths`, never typed — each panel showing the path's career type (D-099 Arabic name), its skill outcomes, description, course count and typical duration, with the single action "إنشاء حساب". A real `tablist`, horizontal-scrolling at twelve paths. Beneath it, a four-line "how a path is reached" strip (assessment → recommended → build within {min}–{max} → certificate).
 - **FAQ:** six native `<details>`, answers are locked product rules only. **Footer:** identity (emblem + logo, الوزارة، الإدارة العامة للتدريب), the three real links (#about, /register, /login), policy names as plain text until their pages exist, © + classification.
 - **Copy rules:** formal institutional register, specific nouns, no slogans, no symmetrical triplets; every number interpolated from config/constants. All copy is placeholder until الإدارة العامة للتدريب signs it off.
 
@@ -319,7 +319,7 @@ Edit the Holland/RIASEC assessment: questions, options, and each option's RIASEC
 - Full loading/empty/error states; changes audited.
 
 ### 4C.4 Path Management
-Create/edit study paths: name, description, duration, RIASEC letter (§3A). Manage `path_courses` membership, ordering, and — if ever made configurable — the 5–10 bounds. **Approve or reject entities' path-membership proposals** (`path_courses.status`, D-119) per path, with a reason returned to the entity; every decision audited. Retiring a path respects course-edit protection and doesn't strand learners on a confirmed path (D-002).
+Create/edit study paths: name, description, **skill outcomes** (`skill_outcomes`, three to five short directorate-authored noun phrases — what the path produces, feeds the landing explorer, TAM-150/D-123), duration, RIASEC letter (§3A). Manage `path_courses` membership, ordering, and — if ever made configurable — the 5–10 bounds. **Approve or reject entities' path-membership proposals** (`path_courses.status`, D-119) per path, with a reason returned to the entity; every decision audited. Retiring a path respects course-edit protection and doesn't strand learners on a confirmed path (D-002).
 
 ### 4C.5 Course Oversight
 Global view across ALL entities' courses (admin sees everything; entities see only their own). Intervene (hide/retire a problematic course, correct metadata) — respecting course-edit protection (D-040). Mark a course **«عامة»** (`isGeneral`, D-119) so it reaches every path without memberships.

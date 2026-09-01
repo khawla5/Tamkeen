@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
 
-import { Logo } from '@/components/brand/logo';
-import { MinistryEmblem } from '@/components/brand/ministry-emblem';
+import { BrandCorner } from '@/components/brand/brand-corner';
 
 /*
  * The frame every authentication page sits in, shaped the way a government
@@ -54,22 +53,25 @@ export function AuthLayout({
       <Lattice />
 
       <header className="relative border-b border-border bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex h-20 max-w-6xl items-center gap-4 px-4 sm:px-6">
-          <MinistryEmblem height={56} priority />
-          <span aria-hidden="true" className="h-10 w-px bg-border" />
-          <Link href="/landing" className="flex items-center">
-            <Logo height={42} priority />
-          </Link>
+        {/* Owner lockup, pinned to the page's true top-right corner rather
+            than laid out in this row — the same fixed corner every page of
+            the site shares now. Nested inside `<header>` rather than beside
+            it: `position: fixed` places it the same either way, and this
+            keeps the ministry's name inside the page's one banner landmark,
+            where assistive tech expects to find it. */}
+        <BrandCorner />
 
-          {/* The visible exit. The logo links home too, but a convention is
-              not a signpost. The arrow points toward the end edge — where the
-              link sits and where the page leads away to. */}
+        <div className="mx-auto flex h-20 max-w-6xl items-center px-4 sm:px-6">
+          {/* The visible exit. The wordmark in the corner links home too,
+              but a convention is not a signpost. The arrow points toward the
+              end edge — where the link sits and where the page leads away
+              to. */}
           <Link
             href="/landing"
             aria-label={tAuth('backToLanding')}
             className="ms-auto flex items-center gap-1.5 text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
           >
-            {/* On a phone the label would wrap into the logos; the arrow
+            {/* On a phone the label would wrap into the logo. The arrow
                 carries the link, the aria-label carries the name. */}
             <span className="hidden sm:inline">{tAuth('backToLanding')}</span>
             <ArrowLeft aria-hidden="true" className="size-5 sm:size-4" />

@@ -115,6 +115,10 @@ function Body({
 
   const [name, setName] = useState(path.name);
   const [description, setDescription] = useState(path.description);
+  /* One outcome per line, the same convention the entity's objectives editor
+     uses (§4B.3) — a repeating-row editor for three to five short phrases is
+     more UI than the data deserves. */
+  const [skillOutcomes, setSkillOutcomes] = useState(path.skillOutcomes.join('\n'));
   const [letter, setLetter] = useState<RiasecLetter>(path.riasecLetter);
 
   const [busy, setBusy] = useState(false);
@@ -148,7 +152,10 @@ function Body({
   }
 
   const dirty =
-    name !== path.name || description !== path.description || letter !== path.riasecLetter;
+    name !== path.name ||
+    description !== path.description ||
+    skillOutcomes !== path.skillOutcomes.join('\n') ||
+    letter !== path.riasecLetter;
 
   return (
     <div className="flex flex-col gap-5">
@@ -201,6 +208,23 @@ function Body({
             )}
           </Field>
         </div>
+
+        <div className="sm:col-span-2">
+          <Field
+            id="path-skill-outcomes"
+            label={t('pathSkillOutcomes')}
+            hint={t('pathSkillOutcomesHint')}
+          >
+            {(field) => (
+              <Textarea
+                {...field}
+                rows={3}
+                value={skillOutcomes}
+                onChange={(event) => setSkillOutcomes(event.target.value)}
+              />
+            )}
+          </Field>
+        </div>
       </section>
 
       {/* Save appears only when there is something to save (§3). */}
@@ -214,6 +238,10 @@ function Body({
                   adminApi.updatePath(path.id, {
                     name,
                     description,
+                    skillOutcomes: skillOutcomes
+                      .split('\n')
+                      .map((line) => line.trim())
+                      .filter(Boolean),
                     riasecLetter: letter,
                   }),
                 t('pathSaved'),

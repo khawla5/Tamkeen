@@ -168,6 +168,25 @@ export interface PathRecommendations {
 }
 
 /**
+ * §1's landing explorer — every active path, unauthenticated (TAM-150).
+ *
+ * Deliberately narrower than `PathSummary`: no `recommended` /
+ * `recommendationRank` (there is no user to recommend anything to yet), and
+ * nothing from `courses` beyond a count. `skillOutcomes` is the whole reason
+ * this type exists — the explorer's one job is showing what a path *produces*.
+ */
+export interface PublicPathSummary {
+  id: string;
+  name: string;
+  riasecLetter: RiasecLetter;
+  description: string;
+  /** Three to five short noun phrases, directorate-authored (§4C.4). */
+  skillOutcomes: string[];
+  courseCount: number;
+  typicalDurationMinutes: number | null;
+}
+
+/**
  * The course view / player (§4.8).
  *
  * Deliberately thin. Moodle owns the content, the quiz and the grading; this

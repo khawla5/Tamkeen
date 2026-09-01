@@ -1,7 +1,6 @@
 import { useTranslations } from 'next-intl';
 
-import { Logo } from '@/components/brand/logo';
-import { MinistryEmblem } from '@/components/brand/ministry-emblem';
+import { BrandCorner } from '@/components/brand/brand-corner';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
@@ -80,14 +79,16 @@ export function AppShell({
       </a>
 
       {/* The owner's bar: lockup on the start edge, the signed-in identity on
-          the end — the same frame the landing and auth pages establish. */}
-      <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
-        <span className="inline-flex items-center gap-2">
-          <MinistryEmblem height={36} />
-          <span aria-hidden="true" className="h-7 w-px bg-border" />
-          <Logo height={30} />
-          <span className="sr-only">{t('name')}</span>
-        </span>
+          the end — the same frame the landing and auth pages establish.
+          `justify-end`, not `justify-between`: the lockup itself is
+          `BrandCorner` below, fixed to the page's true top-right corner
+          rather than laid out in this row, so without an explicit `end`
+          the identity group — now this row's only child — would default to
+          the start edge instead of staying where it always was. */}
+      <header className="flex items-center justify-end gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
+        {/* The portal has no public landing to send a signed-in visitor
+            back to, so the wordmark leads to the dashboard instead. */}
+        <BrandCorner size="sm" homeHref="/" />
 
         {user ? (
           /* Marked as chrome for print (TAM-149): a printed sheet keeps the
