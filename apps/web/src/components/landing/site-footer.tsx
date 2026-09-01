@@ -21,42 +21,39 @@ export function SiteFooter() {
   const tApp = useTranslations('app');
 
   return (
-    <footer className="border-t border-border bg-neutral-50">
+    /* The hero's deep-green ground (user direction, replacing the light
+       neutral): light text throughout, and the brand lockup on a white plate —
+       the logo is dark blue on transparent and unreadable on the green. */
+    <footer className="bg-primary-deep text-primary-50">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex flex-col items-start gap-4">
-          <div className="flex items-center gap-6">
+          <div className="inline-flex items-center gap-6 rounded-2xl bg-surface px-5 py-4">
             <MinistryEmblem height={96} />
             <span aria-hidden="true" className="h-16 w-px bg-border" />
             <Logo height={72} />
           </div>
-          <div className="text-sm leading-relaxed text-neutral-700">
-            <p className="font-semibold text-foreground">{tApp('ministry')}</p>
+          <div className="text-sm leading-relaxed">
+            <p className="font-semibold text-surface">{tApp('ministry')}</p>
             <p>{t('footerDirectorate')}</p>
-            <p className="mt-2 text-muted-foreground">{t('footerAbout')}</p>
+            <p className="mt-2 text-primary-100">{t('footerAbout')}</p>
           </div>
         </div>
 
         <nav aria-label={t('footerLinksTitle')} className="text-sm">
-          <p className="font-semibold text-foreground">{t('footerLinksTitle')}</p>
+          <p className="font-semibold text-surface">{t('footerLinksTitle')}</p>
           <ul className="mt-3 flex flex-col gap-2">
             <li>
-              <a href="#about" className="text-neutral-700 hover:text-primary-700 hover:underline">
+              <a href="#about" className="hover:text-surface hover:underline">
                 {t('footerLinkAbout')}
               </a>
             </li>
             <li>
-              <Link
-                href="/register"
-                className="text-neutral-700 hover:text-primary-700 hover:underline"
-              >
+              <Link href="/register" className="hover:text-surface hover:underline">
                 {t('footerLinkRegister')}
               </Link>
             </li>
             <li>
-              <Link
-                href="/login"
-                className="text-neutral-700 hover:text-primary-700 hover:underline"
-              >
+              <Link href="/login" className="hover:text-surface hover:underline">
                 {t('footerLinkSignIn')}
               </Link>
             </li>
@@ -64,8 +61,8 @@ export function SiteFooter() {
         </nav>
 
         <div className="text-sm">
-          <p className="font-semibold text-foreground">{t('footerPoliciesTitle')}</p>
-          <ul className="mt-3 flex flex-col gap-2 text-muted-foreground">
+          <p className="font-semibold text-surface">{t('footerPoliciesTitle')}</p>
+          <ul className="mt-3 flex flex-col gap-2 text-primary-100">
             {POLICY_KEYS.map((key) => (
               <li key={key}>{t(key)}</li>
             ))}
@@ -73,8 +70,8 @@ export function SiteFooter() {
         </div>
       </div>
 
-      <div className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="border-t border-surface/20">
+        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 text-xs text-primary-100 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <span>{t('footerOwner')}</span>
           <span>{t('footerClassification')}</span>
         </div>

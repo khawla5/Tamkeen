@@ -5,6 +5,10 @@
 
 ---
 
+## D-131 — The landing footer sits on the hero's deep green (user-directed)
+
+**Decision (2026-09-01):** the landing footer's ground is `primary-deep` — the hero's own green — with the hero's light-on-green text scheme, the brand lockup on a white plate (the Tamkeen logo is dark blue on transparent and unreadable on green), and a light hairline before the © strip. This is a deliberate deviation from §3's "never green as a large surface / dark neutral for the landing footer": the user directed it after seeing the light footer live. The page now opens and closes on the same surface. Scope is the landing footer only — the rule stands everywhere else.
+
 ## D-130 — PRODUCT PIVOT (user-directed, 2026-09-01): skill-level assessment, ministry-assigned paths, fixed course sets
 
 **Decision:** the ministry's model changes in three connected ways, per the user's direction in-session: (1) the assessment measures the employee's **level in a specific skill according to the ministry's needs** — no longer a Holland/RIASEC interest assessment; (2) there are **no recommendations** — the **ministry assigns paths to each employee** (no free choice), and **an employee may be assigned more than one path** (amended same session — this also retires the old one-path-per-user ceiling, not just the free choice); (3) **each path carries its fixed course set** — the employee completes all of it, no 5–10 self-selection. Certificates (course + path, with verification) remain the outcome. Confirmed as a change to the product itself, not merely landing copy.
