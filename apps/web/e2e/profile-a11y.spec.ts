@@ -98,6 +98,13 @@ test.describe('profile — accessibility and layout', () => {
     await page.keyboard.press('Tab');
     await expect(page.getByLabel('الأرقام المعروضة')).toBeFocused();
 
+    /* §4.13's read-only English level card sits below DigitsCard, in the
+       same start-column group — its one link ("ابدأ تقييم اللغة" for a
+       fresh account with no result yet) is a genuine tab stop the credential
+       cards come after. */
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('link', { name: 'ابدأ تقييم اللغة' })).toBeFocused();
+
     await page.keyboard.press('Tab');
     await expect(page.getByLabel('البريد الإلكتروني الجديد')).toBeFocused();
   });
