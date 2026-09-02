@@ -63,6 +63,10 @@ export class AdminAssessmentService {
   /** §4C.3's landing state. */
   async overview(): Promise<AdminAssessmentOverview> {
     const rows = await this.prisma.assessment.findMany({
+      /* `kind: 'RIASEC'` (TAM-147): `assessments` now also holds CEFR rows,
+         and without this filter their ACTIVE/DRAFT/RETIRED rows would mix
+         into this instrument's own landing state. */
+      where: { kind: 'RIASEC' },
       orderBy: { version: 'desc' },
       select: VERSION_SELECT,
     });
@@ -105,8 +109,12 @@ export class AdminAssessmentService {
    * that has nothing to do with anything the administrator did.
    */
   async createDraft(actorId: string, ipAddress: string | null): Promise<AdminAssessmentDraft> {
+    /* `kind: 'RIASEC'` on both queries below (TAM-147): without it, a CEFR
+       draft or CEFR's own ACTIVE row could be picked up here — refusing this
+       instrument's own draft over an unrelated one being edited, or seeding
+       a "Holland" draft from the English bank. */
     const existing = await this.prisma.assessment.findFirst({
-      where: { status: 'DRAFT' },
+      where: { status: 'DRAFT', kind: 'RIASEC' },
       select: { id: true },
     });
 
@@ -117,7 +125,7 @@ export class AdminAssessmentService {
     }
 
     const active = await this.prisma.assessment.findFirst({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', kind: 'RIASEC' },
       select: {
         id: true,
         key: true,
@@ -533,7 +541,8 @@ export class AdminAssessmentService {
 
   private async requireDraft() {
     const draft = await this.prisma.assessment.findFirst({
-      where: { status: 'DRAFT' },
+      /* `kind: 'RIASEC'` (TAM-147) — see `createDraft`'s comment. */
+      where: { status: 'DRAFT', kind: 'RIASEC' },
       select: { id: true, key: true, version: true, title: true, description: true },
     });
 
