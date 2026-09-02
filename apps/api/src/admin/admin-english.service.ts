@@ -70,8 +70,8 @@ export class AdminEnglishService {
 
   /** §4C.9's landing state. */
   async overview(): Promise<AdminEnglishOverview> {
-    const rows = await this.prisma.englishAssessment.findMany({
-      where: { key: ENGLISH_ASSESSMENT_KEY },
+    const rows = await this.prisma.assessment.findMany({
+      where: { key: ENGLISH_ASSESSMENT_KEY, kind: 'CEFR' },
       orderBy: { version: 'desc' },
       select: VERSION_SELECT,
     });
@@ -91,8 +91,8 @@ export class AdminEnglishService {
       this.loadBands(draft.id),
     ]);
 
-    const previous = await this.prisma.englishAssessment.findFirst({
-      where: { key: draft.key, version: { lt: draft.version } },
+    const previous = await this.prisma.assessment.findFirst({
+      where: { key: draft.key, kind: 'CEFR', version: { lt: draft.version } },
       orderBy: { version: 'desc' },
       select: { version: true },
     });
@@ -125,8 +125,8 @@ export class AdminEnglishService {
    * to do with anything the administrator did.
    */
   async createDraft(actorId: string, ipAddress: string | null): Promise<AdminEnglishDraft> {
-    const existing = await this.prisma.englishAssessment.findFirst({
-      where: { key: ENGLISH_ASSESSMENT_KEY, status: 'DRAFT' },
+    const existing = await this.prisma.assessment.findFirst({
+      where: { key: ENGLISH_ASSESSMENT_KEY, kind: 'CEFR', status: 'DRAFT' },
       select: { id: true },
     });
 
@@ -136,14 +136,14 @@ export class AdminEnglishService {
       throw new ConflictException('ENGLISH_DRAFT_EXISTS');
     }
 
-    const active = await this.prisma.englishAssessment.findFirst({
-      where: { key: ENGLISH_ASSESSMENT_KEY, status: 'ACTIVE' },
+    const active = await this.prisma.assessment.findFirst({
+      where: { key: ENGLISH_ASSESSMENT_KEY, kind: 'CEFR', status: 'ACTIVE' },
       select: {
         version: true,
         title: true,
         description: true,
-        bands: { select: { level: true, minScore: true, maxScore: true } },
-        questions: {
+        englishBands: { select: { level: true, minScore: true, maxScore: true } },
+        englishQuestions: {
           orderBy: { displayOrder: 'asc' },
           select: {
             key: true,
@@ -163,9 +163,10 @@ export class AdminEnglishService {
 
     const draftId = await this.prisma.$transaction(
       async (tx) => {
-        const draft = await tx.englishAssessment.create({
+        const draft = await tx.assessment.create({
           data: {
             key: ENGLISH_ASSESSMENT_KEY,
+            kind: 'CEFR',
             version: (active?.version ?? 0) + 1,
             title: active?.title ?? DEFAULT_TITLE,
             description: active?.description ?? DEFAULT_DESCRIPTION,
@@ -173,9 +174,9 @@ export class AdminEnglishService {
             /* Copied with the version, which is the whole of D-125: a past
                result stays explicable because the table that produced it
                travelled with the instrument rather than being global. */
-            bands: active
+            englishBands: active
               ? {
-                  create: active.bands.map((band) => ({
+                  create: active.englishBands.map((band) => ({
                     level: band.level,
                     minScore: band.minScore,
                     maxScore: band.maxScore,
@@ -193,7 +194,7 @@ export class AdminEnglishService {
          * interactive-transaction budget, which surfaced as an intermittent
          * failure with nothing wrong in it.
          */
-        for (const question of active?.questions ?? []) {
+        for (const question of active?.englishQuestions ?? []) {
           await tx.englishAssessmentQuestion.create({
             data: {
               assessmentId: draft.id,
@@ -248,7 +249,7 @@ export class AdminEnglishService {
     /* Safe by construction rather than by check: a DRAFT is never served by
        `getActive`, so no response row can point at its questions, so the
        `Restrict` that protects published banks has nothing to refuse. */
-    await this.prisma.englishAssessment.delete({ where: { id: draft.id } });
+    await this.prisma.assessment.delete({ where: { id: draft.id } });
 
     await this.audit.record({
       action: AuditAction.ADMIN_ENGLISH_DRAFT_DISCARDED,
@@ -263,7 +264,7 @@ export class AdminEnglishService {
   async updateDraft(dto: UpdateEnglishDraftDto): Promise<AdminEnglishDraft> {
     const draft = await this.requireDraft();
 
-    await this.prisma.englishAssessment.update({
+    await this.prisma.assessment.update({
       where: { id: draft.id },
       data: {
         ...(dto.title === undefined ? {} : { title: dto.title }),
@@ -533,12 +534,12 @@ export class AdminEnglishService {
     const effectiveFrom = new Date();
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.englishAssessment.updateMany({
-        where: { key: draft.key, status: 'ACTIVE' },
+      await tx.assessment.updateMany({
+        where: { key: draft.key, kind: 'CEFR', status: 'ACTIVE' },
         data: { status: 'RETIRED', retiredAt: effectiveFrom },
       });
 
-      await tx.englishAssessment.update({
+      await tx.assessment.update({
         where: { id: draft.id },
         data: { status: 'ACTIVE', effectiveFrom },
       });
@@ -561,7 +562,7 @@ export class AdminEnglishService {
       },
     });
 
-    const published = await this.prisma.englishAssessment.findUniqueOrThrow({
+    const published = await this.prisma.assessment.findUniqueOrThrow({
       where: { id: draft.id },
       select: VERSION_SELECT,
     });
@@ -571,7 +572,7 @@ export class AdminEnglishService {
 
   /** A published version, read-only, exactly as it was taken. */
   async getVersion(assessmentId: string): Promise<AdminEnglishDraft> {
-    const version = await this.prisma.englishAssessment.findUnique({
+    const version = await this.prisma.assessment.findUnique({
       where: { id: assessmentId },
       select: { id: true, key: true, version: true, title: true, description: true },
     });
@@ -597,8 +598,8 @@ export class AdminEnglishService {
   // ── internals ───────────────────────────────────────────────────────────────
 
   private async requireDraft() {
-    const draft = await this.prisma.englishAssessment.findFirst({
-      where: { key: ENGLISH_ASSESSMENT_KEY, status: 'DRAFT' },
+    const draft = await this.prisma.assessment.findFirst({
+      where: { key: ENGLISH_ASSESSMENT_KEY, kind: 'CEFR', status: 'DRAFT' },
       select: { id: true, key: true, version: true, title: true, description: true },
     });
 
@@ -680,7 +681,11 @@ const VERSION_SELECT = {
   title: true,
   effectiveFrom: true,
   retiredAt: true,
-  _count: { select: { questions: true, results: true } },
+  /* `englishQuestions`, not `questions` — the latter is the Holland relation
+     on the shared `Assessment` model and is always empty for a `kind: CEFR`
+     row (TAM-147). `results` needs no such distinction: it is already scoped
+     to this specific version's `assessmentId`, RIASEC or CEFR alike. */
+  _count: { select: { englishQuestions: true, results: true } },
 } as const;
 
 function toVersion(row: {
@@ -690,7 +695,7 @@ function toVersion(row: {
   title: string;
   effectiveFrom: Date | null;
   retiredAt: Date | null;
-  _count: { questions: number; results: number };
+  _count: { englishQuestions: number; results: number };
 }): AdminEnglishVersion {
   return {
     id: row.id,
@@ -699,7 +704,7 @@ function toVersion(row: {
     title: row.title,
     effectiveFrom: row.effectiveFrom?.toISOString() ?? null,
     retiredAt: row.retiredAt?.toISOString() ?? null,
-    questionCount: row._count.questions,
+    questionCount: row._count.englishQuestions,
     /* How many people this version placed. Shown because it is what makes D-049
        concrete on the screen: these results exist, and editing does not touch
        them. */

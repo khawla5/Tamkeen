@@ -36,8 +36,10 @@ export class AssessmentService {
     const assessment = await this.prisma.assessment.findFirst({
       /* The one version new takers receive (D-069). A draft is never served: an
          edit in progress must not reach anybody, and a partial unique index
-         guarantees there is at most one ACTIVE row to find. */
-      where: { status: 'ACTIVE' },
+         guarantees there is at most one ACTIVE row to find *of this kind*
+         (TAM-147) — `assessments` now also holds CEFR rows, so `kind` is not
+         optional here the way it looked before a second instrument existed. */
+      where: { status: 'ACTIVE', kind: 'RIASEC' },
       select: {
         id: true,
         version: true,
@@ -122,7 +124,7 @@ export class AssessmentService {
        * taker never saw, which is the one way a copy-on-write publish could
        * corrupt a result.
        */
-      where: { id: dto.assessmentId, status: 'ACTIVE' },
+      where: { id: dto.assessmentId, status: 'ACTIVE', kind: 'RIASEC' },
       select: {
         id: true,
         version: true,
@@ -179,6 +181,7 @@ export class AssessmentService {
           userId,
           assessmentId: assessment.id,
           assessmentVersion: assessment.version,
+          kind: 'RIASEC',
           scoreR: profile.scores.R,
           scoreI: profile.scores.I,
           scoreA: profile.scores.A,

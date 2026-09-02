@@ -1,3 +1,4 @@
+import type { AssessmentKind } from './assessment-assignment';
 import type { AuditTargetType } from './audit';
 import type { CourseLanguage, CoursePublication, CourseStatus } from './catalog';
 import type { RiasecLetter } from './riasec';
@@ -192,6 +193,21 @@ export interface AdminUserRow {
   entity: { id: string; name: string } | null;
 }
 
+/** One instrument a person has taken, for the admin user detail (§4C.2 part
+ *  5, TAM-147). */
+export interface AdminUserAssessmentSummary {
+  key: string;
+  kind: AssessmentKind;
+  title: string;
+  /** The Holland code ("SIA") or the CEFR level ("B2") — never the six scores
+   *  or the raw total. */
+  result: string;
+  version: number;
+  completedAt: string;
+  /** Retakes append for RIASEC (D-033); CEFR allows exactly one (D-123). */
+  attempts: number;
+}
+
 /** A page of users, with the total so the UI can say how many matched. */
 export interface AdminUserPage {
   rows: AdminUserRow[];
@@ -214,7 +230,14 @@ export interface AdminUserDetail extends AdminUserRow {
   createdAt: string;
   /** Whether an LMS account has been provisioned yet (lazy, per D-036). */
   hasLmsAccount: boolean;
+  /** @deprecated Kept for callers reading the Holland result directly; see
+   *  `assessments` for every instrument this person has taken (TAM-147). */
   assessment: { code: string; completedAt: string; attempts: number } | null;
+  /** Every instrument this person has taken, newest attempt per instrument,
+   *  in no particular order (§4C.2 part 5, TAM-147). Read-only, and never the
+   *  per-question answers — those exist only so a result can be re-explained
+   *  (§3A), not for an administrator's review. */
+  assessments: AdminUserAssessmentSummary[];
   path: {
     name: string;
     status: 'BUILDING' | 'ACTIVE' | 'COMPLETED';

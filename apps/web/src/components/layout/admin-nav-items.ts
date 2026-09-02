@@ -29,6 +29,11 @@ export const ADMIN_NAV: readonly NavItem[] = [
      now; §3's six-item rule governs the *learner's* nav, and §4C's own note
      already explains why an administrator's surface is the whole product. */
   { key: 'adminEnglish', href: '/admin/english', icon: 'assessment' },
+  /* §4C.3's Assignments tab (TAM-147) — who is handed which instrument or
+     named group, and whether it is required. Its own destination rather than
+     a tab inside Assessment or English: it assigns across both instruments,
+     so nesting it in either page would misname what it does. */
+  { key: 'adminAssignments', href: '/admin/assignments', icon: 'assessment' },
   { key: 'adminPaths', href: '/admin/paths', icon: 'myPath' },
   { key: 'adminCourses', href: '/admin/courses', icon: 'courses' },
   { key: 'adminTemplates', href: '/admin/templates', icon: 'templates' },

@@ -420,7 +420,12 @@ export class AdminImpactService {
     department: string | null,
   ): Promise<AdminImpactLetterShare[]> {
     const newest = await this.prisma.assessmentResult.findMany({
-      where: { completedAt: between(range), user: this.employeeWhere(department) },
+      /* `kind: 'RIASEC'` (TAM-147): this table now also carries CEFR rows,
+         whose `code` is null. Without the filter, a person's *newest* result
+         within the period could be a CEFR attempt and `code` would be null
+         here — the letter distribution is a Holland reading specifically, so
+         it reads Holland rows specifically. */
+      where: { kind: 'RIASEC', completedAt: between(range), user: this.employeeWhere(department) },
       distinct: ['userId'],
       orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
       select: { code: true },
@@ -431,7 +436,7 @@ export class AdminImpactService {
       /* The code's first letter IS the dominant dimension: it is derived by
          ranking with ties already broken canonically (D-031), so reading it
          here cannot disagree with the profile the employee was shown. */
-      const letter = row.code.charAt(0);
+      const letter = row.code!.charAt(0);
       employees.set(letter, (employees.get(letter) ?? 0) + 1);
     }
 

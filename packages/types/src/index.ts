@@ -20,6 +20,10 @@ export * from './journey';
    with the RIASEC one (§4.13, D-123). */
 export * from './english-assessment';
 
+/* Typed instruments and assignment — the framework RIASEC and CEFR both sit
+   in now (TAM-147). */
+export * from './assessment-assignment';
+
 /* Phase 3 — certificates and the CV. */
 export * from './certificates';
 export * from './notifications';

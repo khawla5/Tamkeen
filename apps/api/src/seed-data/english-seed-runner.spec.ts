@@ -50,7 +50,7 @@ function stub(existing: Array<{ id: string; version: number; status: string }>):
   };
 
   const client = {
-    englishAssessment: {
+    assessment: {
       findMany: jest
         .fn()
         .mockResolvedValue(existing.map((row) => ({ ...row, effectiveFrom: null }))),

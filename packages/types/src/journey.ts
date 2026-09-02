@@ -1,3 +1,4 @@
+import type { AssessmentKind } from './assessment-assignment';
 import type { CefrLevel } from './english-assessment';
 import type { RiasecLetter } from './riasec';
 
@@ -89,8 +90,36 @@ export interface DashboardActivity {
   at: string;
 }
 
+/**
+ * One instrument the employee's effective assignment list resolves to, and
+ * what they have done about it (§4.2 part 3, TAM-147) — what the tracker
+ * shows one stage per, in `displayOrder`.
+ */
+export interface DashboardAssessmentSummary {
+  key: string;
+  kind: AssessmentKind;
+  title: string;
+  required: boolean;
+  /** ISO 8601, or null if not yet taken. */
+  takenAt: string | null;
+  /** The Holland chips ("SIA") for a RIASEC row, the CEFR level ("B2") for a
+   *  CEFR one — null until taken. Never the six scores or the raw total: this
+   *  is a tracker line, not a results page. */
+  summary: string | null;
+}
+
 export interface DashboardView {
   state: DashboardState;
+  /**
+   * Every instrument the employee's assignments resolve to, in
+   * `displayOrder` — what the §4.2 tracker (D-095) shows one stage per, and
+   * what makes `PRE_ASSESSMENT` "a required instrument is untaken" rather
+   * than "the Holland test specifically" (TAM-147). `state` itself is still
+   * decided from the Holland journey alone — see its own field below — so a
+   * required CEFR instrument left untaken narrows this list without ever
+   * moving `state` off `ACTIVE_PATH`.
+   */
+  assessments: DashboardAssessmentSummary[];
   /** Present from ASSESSED_NO_PATH onward. */
   codeString: string | null;
   /**

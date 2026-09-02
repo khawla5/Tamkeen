@@ -20,9 +20,11 @@ import {
 } from 'class-validator';
 
 import {
+  ASSIGNMENT_SCOPES,
   COURSE_VISIBILITIES,
   RIASEC_LETTERS,
   USER_ROLES,
+  type AssignmentScope,
   type CourseVisibility,
   type RiasecLetter,
   type UserRole,
@@ -431,6 +433,72 @@ export class ReorderPathCoursesDto {
   @ArrayMaxSize(500)
   @IsUUID(undefined, { each: true })
   courseIds!: string[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.3 — typed instruments and their assignment (TAM-147)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class CreateAssessmentAssignmentDto {
+  /** An `Assessment.key` or an `AssessmentGroup.key` — the service resolves
+   *  which. */
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  assessmentKey!: string;
+
+  @IsIn(ASSIGNMENT_SCOPES)
+  scope!: AssignmentScope;
+
+  /** A department name for DEPARTMENT, a user id for USER. Required for both,
+   *  refused for ALL — the service enforces the pairing. */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  target?: string;
+
+  @IsBoolean()
+  required!: boolean;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  displayOrder!: number;
+}
+
+export class UpdateAssessmentAssignmentDto {
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  displayOrder?: number;
+}
+
+export class SaveAssessmentGroupDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(64)
+  @Matches(/^[a-z0-9][a-z0-9-]*$/i, { message: 'ASSESSMENT_GROUP_KEY_INVALID' })
+  key!: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  name!: string;
+
+  /** Instrument keys, in the order they should be assigned. A group with none
+   *  is a bundle with nothing to hand out — the service refuses it. */
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  memberKeys!: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

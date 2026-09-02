@@ -102,6 +102,17 @@ const DETAIL: AdminUserDetail = {
   createdAt: '2026-07-01T00:00:00.000Z',
   hasLmsAccount: true,
   assessment: { code: 'SIA', completedAt: '2026-08-05T00:00:00.000Z', attempts: 2 },
+  assessments: [
+    {
+      key: 'riasec-core',
+      kind: 'RIASEC',
+      title: 'تقييم الميول المهنية',
+      result: 'SIA',
+      version: 3,
+      completedAt: '2026-08-05T00:00:00.000Z',
+      attempts: 2,
+    },
+  ],
   path: {
     name: 'مسار الموارد البشرية',
     status: 'ACTIVE',

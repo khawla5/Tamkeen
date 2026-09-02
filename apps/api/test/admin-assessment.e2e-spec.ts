@@ -258,7 +258,10 @@ describe('Admin assessment management (e2e)', () => {
     const userId = await account('taker', 'EMPLOYEE');
 
     const active = await prisma.assessment.findFirstOrThrow({
-      where: { status: 'ACTIVE' },
+      /* `kind: 'RIASEC'` (TAM-147): `assessments` also holds the CEFR row now,
+         and without this the query could non-deterministically match it
+         instead. */
+      where: { status: 'ACTIVE', kind: 'RIASEC' },
       select: {
         id: true,
         version: true,
@@ -278,6 +281,7 @@ describe('Admin assessment management (e2e)', () => {
         userId,
         assessmentId: active.id,
         assessmentVersion: active.version,
+        kind: 'RIASEC',
         scoreR: 11,
         scoreI: 12,
         scoreA: 13,
@@ -427,7 +431,7 @@ describe('Admin assessment management (e2e)', () => {
 
     it('left the live assessment untouched while the publish was refused', async () => {
       const active = await prisma.assessment.findFirstOrThrow({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', kind: 'RIASEC' },
         select: { version: true },
       });
 
@@ -718,7 +722,7 @@ describe('Admin assessment management (e2e)', () => {
       expect(await prisma.assessmentQuestion.count({ where: { assessmentId: draft.id } })).toBe(0);
 
       const active = await prisma.assessment.findFirstOrThrow({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', kind: 'RIASEC' },
         select: { version: true },
       });
       expect(active.version).toBe(2);

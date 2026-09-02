@@ -97,14 +97,13 @@ model User {
   auditEvents    AuditLog[]     @relation("AuditActor")
   settingsEdited Setting[]      @relation("SettingEditor")
 
-  /// Every attempt, newest wins. Retakes append rather than overwrite (D-033).
+  /// Every attempt at every instrument, newest wins per `kind` (TAM-147).
+  /// RIASEC retakes append (D-033); CEFR allows exactly one ever (D-123), a
+  /// database fact via the partial unique index on `assessment_results`
+  /// (`WHERE kind = 'CEFR'`) rather than a service-layer convention.
   assessmentResults AssessmentResult[]
   /// At most one — the relation is singular because `UserPath.userId` is unique.
   userPath          UserPath?
-  /// At most one, and singular for the same reason: the English placement test
-  /// is taken once and never retaken (D-123), which `userId @unique` on that
-  /// model makes a database fact rather than a service-layer convention.
-  englishResult     EnglishAssessmentResult?
 
   @@index([role])
   @@index([entityId])
@@ -376,6 +375,24 @@ model Setting {
   @@map("settings")
 }
 
+/// Which instrument an `Assessment` row is (TAM-147).
+///
+/// A discriminator, not a second table per instrument — `english-assessment`
+/// (TAM-148) proved the opposite call first, splitting Holland and CEFR into
+/// sibling tables specifically so `findFirst({ status: 'ACTIVE' })` could not
+/// return the wrong instrument's row (D-124). That reasoning holds only while
+/// there are two instruments and every "active assessment" query is written by
+/// hand; a *framework* — several instruments, assignable by an admin to
+/// everyone, a department or a person — needs one registry that can be
+/// enumerated, or "which instruments exist" becomes a query over N tables that
+/// grows with every instrument added. `kind` is what keeps `findFirst`-style
+/// queries correct here: every one of them now filters on it, never on
+/// `status` alone.
+enum AssessmentKind {
+  RIASEC
+  CEFR
+}
+
 /// Where a version of the assessment sits in its life (D-070).
 ///
 /// Exactly one DRAFT and one ACTIVE may exist per `key`, enforced by two partial
@@ -417,6 +434,12 @@ model Assessment {
   title       String
   description String
 
+  /// Which scorer, which bank tables, which result payload — the whole reason
+  /// this table can hold more than the Holland assessment now (TAM-147).
+  /// `RIASEC` for every row that predates this column (the seeded
+  /// `riasec-core`); `english-cefr` (TAM-148) is the first `CEFR` row.
+  kind AssessmentKind @default(RIASEC)
+
   status AssessmentStatus @default(DRAFT)
 
   /// When this version became the one new takers receive. Null while DRAFT —
@@ -429,11 +452,30 @@ model Assessment {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  /// The Holland bank — populated only for `kind: RIASEC` rows.
   questions AssessmentQuestion[]
-  results   AssessmentResult[]
+  /// Every result taken against this version, of whichever `kind` it is —
+  /// this relation, and this table, is what makes "what has this person
+  /// taken" answerable without a union across instrument-specific tables.
+  results AssessmentResult[]
+
+  /// The CEFR item bank and its scoring bands — populated only for
+  /// `kind: CEFR` rows (TAM-148's tables, repointed here by TAM-147). Kept
+  /// separate from `questions` rather than folded into one shape: a Holland
+  /// option's weight-per-dimension and a CEFR option's marks/correctness
+  /// answer different questions, and a column that means one thing for one
+  /// `kind` and something else for another is the exact confusion a
+  /// discriminator on the *registry* is meant to avoid re-introducing further
+  /// down.
+  englishQuestions EnglishAssessmentQuestion[]
+  englishBands     EnglishAssessmentBand[]
 
   @@unique([key, version])
   @@index([key, status])
+  /// Every "the active assessment" read now filters on `kind` first — the
+  /// query D-124 flagged as the reason a second instrument could not safely
+  /// share this table without one.
+  @@index([kind, status])
   @@map("assessments")
 }
 
@@ -496,10 +538,19 @@ model AssessmentOptionWeight {
   @@map("assessment_option_weights")
 }
 
-/// One completed attempt: all six scores plus the derived code (§3A, §6).
+/// One completed attempt, of whichever instrument it was (TAM-147).
 ///
-/// Storing only the top three would lose the ranking that orders gold
-/// recommendations and the profile needed to re-explain the result later.
+/// **One table answers "what has this person taken"**, for every kind — a
+/// second results table per instrument would split the journey in two and
+/// leave nothing able to answer that question without a union. So the payload
+/// is a nullable column group per `kind`, beside a `kind` column that says
+/// which group is populated: the six Holland columns for a `RIASEC` row (all
+/// six, not just the top three, so the ranking that orders gold
+/// recommendations and the profile needed to re-explain the result later both
+/// survive), `cefr_level`/`cefr_score`/`cefr_max` for a `CEFR` row. Exactly one
+/// group is ever non-null on a given row — the scorer for that `kind` is what
+/// populates it, and nothing here validates that at the schema level, the same
+/// way `assessment_option_weights` trusts its own scorer.
 model AssessmentResult {
   id String @id @default(uuid()) @db.Uuid
 
@@ -510,28 +561,53 @@ model AssessmentResult {
   assessment        Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
   assessmentVersion Int        @map("assessment_version")
 
-  /// All six, as columns rather than JSON so they stay typed and queryable for
-  /// the Phase 5 oversight dashboards.
-  scoreR Int @map("score_r")
-  scoreI Int @map("score_i")
-  scoreA Int @map("score_a")
-  scoreS Int @map("score_s")
-  scoreE Int @map("score_e")
-  scoreC Int @map("score_c")
+  /// Which payload group below is populated. Stored redundantly with
+  /// `assessment.kind` (rather than read through the join) so "every
+  /// instrument this person has taken" is one query over this table alone.
+  kind AssessmentKind
+
+  /// The Holland payload — populated only when `kind: RIASEC`. All six, as
+  /// columns rather than JSON so they stay typed and queryable for the Phase 5
+  /// oversight dashboards.
+  scoreR Int? @map("score_r")
+  scoreI Int? @map("score_i")
+  scoreA Int? @map("score_a")
+  scoreS Int? @map("score_s")
+  scoreE Int? @map("score_e")
+  scoreC Int? @map("score_c")
 
   /// The maximum a single dimension could attain in the version scored. Stored
   /// so a historical result can still be shown as a percentage after the bank
   /// changes size.
-  maxScore Int    @map("max_score")
+  maxScore Int?    @map("max_score")
   /// The derived Holland Code, e.g. "SIA".
-  code     String @db.VarChar(3)
+  code     String? @db.VarChar(3)
+
+  /// The CEFR payload (TAM-148's `EnglishAssessmentResult`, folded in by
+  /// TAM-147) — populated only when `kind: CEFR`. `cefrMax` is the marks
+  /// attainable in the version scored — the CEFR analogue of `maxScore` above,
+  /// kept as its own column rather than reusing `maxScore` because the two
+  /// numbers answer different questions (attainable *per dimension* vs.
+  /// attainable *in total*) and a column that changes meaning by `kind` is
+  /// exactly the ambiguity a discriminated table is meant to avoid.
+  cefrLevel CefrLevel? @map("cefr_level")
+  cefrScore Int?       @map("cefr_score")
+  cefrMax   Int?       @map("cefr_max")
 
   completedAt DateTime @default(now()) @map("completed_at")
 
-  responses AssessmentResponse[]
+  responses        AssessmentResponse[]
+  englishResponses EnglishAssessmentResponse[]
 
-  /// Retakes append (D-033), so "the user's result" is the newest row.
+  /// Retakes append for `RIASEC` (D-033), so "the user's result" is the
+  /// newest row of that kind. `CEFR` allows exactly one ever (D-123) — a
+  /// database constraint, not an application check, because a unique index is
+  /// what wins the race between two concurrent submissions and a service-level
+  /// guard is not; see the hand-written partial index in the migration
+  /// (`WHERE kind = 'CEFR'` — `@@unique` cannot express the `WHERE`, the same
+  /// limitation `AssessmentStatus`'s DRAFT/ACTIVE index already works around).
   @@index([userId, completedAt])
+  @@index([userId, kind, completedAt])
   @@map("assessment_results")
 }
 
@@ -579,63 +655,32 @@ enum EnglishSkill {
   PRACTICAL
 }
 
-/// One version of the English placement test (§4.13, §4C.9, D-123).
+/// The CEFR item bank for one version of `Assessment` where `kind: CEFR`
+/// (§4.13, §4C.9, D-123) — TAM-148's `EnglishAssessment` before TAM-147 folded
+/// its registry row into `Assessment` itself.
 ///
-/// **A sibling of `Assessment`, deliberately not a mode of it.** The two
-/// instruments share a *shape* — versioned bank, questions, options, copy-on-
-/// write publishing — and share nothing else. Holland tallies six dimensions
-/// into a ranked code and has no notion of a right answer; English sums marks
-/// for correct answers into a single ascending score and has no notion of a
-/// dimension. Folding them into one table would mean either a nullable column
-/// for every difference or a discriminator every query must remember.
-///
-/// The decisive reason is narrower and is about **not breaking what works**:
-/// `AssessmentService.getActive` and `AdminAssessmentService.createDraft` both
-/// ask for `findFirst({ where: { status: 'ACTIVE' } })` with no filter on `key`.
-/// A second instrument in that table would make the learner's Holland
-/// assessment whichever row Postgres happened to return first. Separate tables
-/// mean not one line of the Holland path changes.
+/// **The bank stays its own shape; only the registry unified.** Holland tallies
+/// six dimensions into a ranked code and has no notion of a right answer;
+/// English sums marks for correct answers into a single ascending score and has
+/// no notion of a dimension. Folding the *banks* into one shape would mean a
+/// nullable column for every difference; `Assessment.kind` is what unified
+/// instead — "which instruments exist" and "what did this person take" now
+/// have one answer each, while a Holland option's weight-per-dimension and a
+/// CEFR option's marks/correctness keep answering different questions in their
+/// own tables, same as before.
 ///
 /// **Copy-on-write, exactly as D-072 specifies it**, because D-049 applies here
-/// unchanged: publishing an edit inserts a new row at `version + 1` with its own
-/// questions, options *and bands*, and retires the previous one. Results keep
-/// pointing at the version that scored them, `Restrict` keeps that version
-/// alive, and the bands travel with it — so "38 out of 60 meant B2" stays true
-/// even after the ministry moves the B2 boundary.
-model EnglishAssessment {
-  id String @id @default(uuid()) @db.Uuid
-
-  /// Stable identifier for the *instrument*, shared by all its versions.
-  key         String
-  version     Int    @default(1)
-  title       String
-  description String
-
-  /// The same three-state lifecycle as the Holland bank. The enum is reused
-  /// because it is a lifecycle, not a RIASEC fact — DRAFT/ACTIVE/RETIRED means
-  /// the same thing for any versioned instrument.
-  status AssessmentStatus @default(DRAFT)
-
-  effectiveFrom DateTime? @map("effective_from")
-  retiredAt     DateTime? @map("retired_at")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  questions EnglishAssessmentQuestion[]
-  bands     EnglishAssessmentBand[]
-  results   EnglishAssessmentResult[]
-
-  @@unique([key, version])
-  @@index([key, status])
-  @@map("english_assessments")
-}
-
+/// unchanged: publishing an edit inserts a new `Assessment` row at
+/// `version + 1` with its own questions, options *and bands*, and retires the
+/// previous one. Results keep pointing at the version that scored them,
+/// `Restrict` keeps that version alive, and the bands travel with it — so "38
+/// out of 60 meant B2" stays true even after the ministry moves the B2
+/// boundary.
 model EnglishAssessmentQuestion {
   id String @id @default(uuid()) @db.Uuid
 
-  assessmentId String            @map("assessment_id") @db.Uuid
-  assessment   EnglishAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessmentId String     @map("assessment_id") @db.Uuid
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
   /// Stable across wording edits, so revising an item does not orphan the
   /// responses that reference it (the D-032 rule, applied here).
@@ -706,8 +751,8 @@ model EnglishAssessmentOption {
 model EnglishAssessmentBand {
   id String @id @default(uuid()) @db.Uuid
 
-  assessmentId String            @map("assessment_id") @db.Uuid
-  assessment   EnglishAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessmentId String     @map("assessment_id") @db.Uuid
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
   level    CefrLevel
   minScore Int       @map("min_score")
@@ -718,53 +763,21 @@ model EnglishAssessmentBand {
   @@map("english_assessment_bands")
 }
 
-/// A completed attempt: the total, what was attainable, and the band it fell in.
-///
-/// **`userId` is unique, and that is the no-retake rule (D-123).** §4.13 says
-/// the placement test is taken once; expressing it as a constraint rather than
-/// as a check in the service is the D-035 reasoning applied again — an
-/// application-level guard loses the race between two concurrent submissions,
-/// a unique index does not.
-///
-/// `level` is stored rather than recomputed on read. The bands that produced it
-/// are frozen on the version, so recomputing would give the same answer today —
-/// but storing it means the answer survives even a band table read through a
-/// different code path, and it is what the dashboard and the CV read.
-model EnglishAssessmentResult {
-  id String @id @default(uuid()) @db.Uuid
-
-  userId String @unique @map("user_id") @db.Uuid
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  assessmentId      String            @map("assessment_id") @db.Uuid
-  /// Restrict: the instrument behind a result must still exist, which is what
-  /// makes "frozen as taken" a statement about the test and not only about the
-  /// number (D-049, D-072).
-  assessment        EnglishAssessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
-  assessmentVersion Int               @map("assessment_version")
-
-  totalScore Int       @map("total_score")
-  /// The marks attainable in the version scored, so a historical result can
-  /// still be shown as a percentage after the bank changes size.
-  maxScore   Int       @map("max_score")
-  level      CefrLevel
-
-  completedAt DateTime @default(now()) @map("completed_at")
-
-  responses EnglishAssessmentResponse[]
-
-  @@map("english_assessment_results")
-}
-
+/// One CEFR attempt's answers. The result itself is a `kind: CEFR` row of the
+/// unified `AssessmentResult` (TAM-147) — the total, what was attainable and
+/// the band it fell in are `cefrScore`/`cefrMax`/`cefrLevel` there, not
+/// repeated here. What stays here, unchanged from TAM-148, is the per-question
+/// answer trail: stored only so a result can be re-explained (§3A), and
+/// `Restrict` on both FKs for the D-035 reason — editing the bank must not
+/// silently delete the answers people already gave and change a historical
+/// result.
 model EnglishAssessmentResponse {
   id String @id @default(uuid()) @db.Uuid
 
-  resultId String                  @map("result_id") @db.Uuid
-  result   EnglishAssessmentResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  resultId String           @map("result_id") @db.Uuid
+  result   AssessmentResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
 
   questionId String                    @map("question_id") @db.Uuid
-  /// Restrict on both, for the D-035 reason: editing the bank must not silently
-  /// delete the answers people already gave and change a historical result.
   question   EnglishAssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
 
   optionId String                  @map("option_id") @db.Uuid
@@ -772,6 +785,107 @@ model EnglishAssessmentResponse {
 
   @@unique([resultId, questionId])
   @@map("english_assessment_responses")
+}
+
+/// Who an `AssessmentAssignment` or `AssessmentGroup` reaches (§4C.3, TAM-147).
+enum AssignmentScope {
+  /// Every employee. `target` is null.
+  ALL
+  /// Everyone in one department. `target` is the department name — the closed
+  /// list the register form uses (`DEPARTMENTS`), not free text.
+  DEPARTMENT
+  /// One account. `target` is the user id.
+  USER
+}
+
+/// A named, ordered bundle of instruments — "«الحزمة الأساسية» = Holland +
+/// CEFR" as one assignable thing instead of two separate admin actions
+/// (§4C.3, TAM-147).
+///
+/// **`memberKeys` is read live, never copied.** An assignment references a
+/// group by `key`; resolving it walks `memberKeys` at read time, so editing a
+/// group's membership changes what everyone assigned to it must take from
+/// then on — the same "no snapshot" reasoning `path_courses` was built with.
+/// A group holding no members, or a stale key nothing resolves, is a legal
+/// state (an admin mid-edit); resolution simply drops what does not resolve
+/// rather than erroring the whole assignment.
+model AssessmentGroup {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Stable reference, the same role `Assessment.key` plays for one instrument
+  /// — what an `AssessmentAssignment.assessmentKey` actually stores when it
+  /// names a group rather than a single instrument.
+  key  String @unique
+  /// What an administrator sees — Arabic prose like "الحزمة الأساسية", never
+  /// used as a reference so renaming it cannot break an assignment.
+  name String
+
+  /// Instrument keys, in the order §4C.3's tracker should show them once
+  /// expanded. Not a join table: membership is authored as one ordered list,
+  /// the same choice `paths.skill_outcomes` (TAM-150) made for a short,
+  /// admin-edited list that never needs its own metadata per entry.
+  memberKeys String[] @map("member_keys")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("assessment_groups")
+}
+
+/// One instrument or group, assigned to everyone / a department / a person
+/// (§4C.3, TAM-147).
+///
+/// **An employee's effective list is a resolution, not a stored one**: the
+/// union of every `ALL` row, every row targeting their department, and every
+/// row targeting their account, ordered by `displayOrder` and de-duplicated by
+/// the instrument key it resolves to (a group expands to its members first).
+/// This table holds the rules an admin wrote, not the answer for any one
+/// employee — the same relationship `path_courses` has to "which courses can
+/// this learner pick," resolved fresh on every read rather than materialised
+/// per user.
+///
+/// **`assessmentKey` names either an instrument or a group**, tried in that
+/// order by whatever resolves it: `Assessment.key` (an ACTIVE instrument)
+/// first, `AssessmentGroup.key` second. The two key spaces do not collide in
+/// practice — instrument keys are the short English slugs `riasec-core` /
+/// `english-cefr` are examples of, seeded once and never chosen by an admin
+/// day-to-day, while a group is named at assignment time — but resolution
+/// asserts the match is unambiguous rather than assuming it silently. A
+/// dedicated `groupId` foreign key was considered and rejected: it would
+/// still need `assessmentKey` beside it for the instrument case, so the
+/// assignment would carry two "what" fields where at most one is ever set,
+/// and a nullable FK is not a foreign key a `Restrict`/`Cascade` policy can
+/// usefully name (an assignment outliving the instrument it names is exactly
+/// as fine as one outliving the group it names — both simply resolve to
+/// nothing and are skipped, never an error a learner would see).
+model AssessmentAssignment {
+  id String @id @default(uuid()) @db.Uuid
+
+  assessmentKey String          @map("assessment_key")
+  scope         AssignmentScope
+  /// Null for ALL; a `DEPARTMENTS` entry for DEPARTMENT; a user id for USER.
+  target        String?
+
+  /// Whether §4.2's dashboard tracker must show this instrument before the
+  /// journey can be called started, or it is offered without blocking
+  /// anything (TAM-147 part 3's "a required instrument is untaken").
+  required     Boolean @default(true)
+  /// Where this instrument sits in the tracker, among every other assignment
+  /// that resolves to the same employee.
+  displayOrder Int     @map("display_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// Not a hard uniqueness guarantee — `target` is null for every `ALL` row,
+  /// and Postgres treats NULL as distinct from NULL in a unique index, so two
+  /// `ALL` rows for the same key would not collide here. The admin service
+  /// checks for that duplicate before creating one; this index is what makes
+  /// that check, and every resolution read, an index scan rather than a
+  /// table scan.
+  @@index([assessmentKey, scope, target])
+  @@index([scope, target])
+  @@map("assessment_assignments")
 }
 
 /// A career path, tagged with exactly one primary RIASEC letter (§3A).

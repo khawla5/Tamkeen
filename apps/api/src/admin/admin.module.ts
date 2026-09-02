@@ -7,6 +7,7 @@ import { EmailModule } from '../email/email.module';
 import { MoodleModule } from '../moodle/moodle.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SyncSchedulerModule } from '../sync-scheduler/sync-scheduler.module';
+import { AdminAssessmentAssignmentsService } from './admin-assessment-assignments.service';
 import { AdminAssessmentService } from './admin-assessment.service';
 import { AdminAuditService } from './admin-audit.service';
 import { AdminEnglishService } from './admin-english.service';
@@ -46,6 +47,7 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
     AdminUsersService,
     AdminEntitiesService,
     AdminAssessmentService,
+    AdminAssessmentAssignmentsService,
     AdminEnglishService,
     AdminPathsService,
     AdminCoursesService,

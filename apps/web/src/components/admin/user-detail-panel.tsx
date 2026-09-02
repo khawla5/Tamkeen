@@ -116,16 +116,6 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
         <h3 className="mb-2 text-sm font-semibold text-foreground">{t('journeyHeading')}</h3>
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <Detail
-            label={t('journeyAssessment')}
-            value={
-              user.assessment
-                ? /* Latin letters in an RTL page. */
-                  `${user.assessment.code} · ${format.date(new Date(user.assessment.completedAt))}`
-                : t('journeyNotAssessed')
-            }
-            ltr={Boolean(user.assessment)}
-          />
-          <Detail
             label={t('journeyPath')}
             value={
               user.path
@@ -139,6 +129,38 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
             value={user.hasLmsAccount ? t('lmsProvisioned') : t('lmsNotProvisioned')}
           />
         </dl>
+      </section>
+
+      {/*
+       * Every instrument this person has taken (§4C.2 part 5, TAM-147) — the
+       * Holland code or the CEFR level, the version, the date, and the retake
+       * count where one exists. Never the per-question answers: those are kept
+       * only so a result can be re-explained (§3A), not for review here.
+       */}
+      <section className="rounded-md border border-border p-4">
+        <h3 className="mb-2 text-sm font-semibold text-foreground">{t('assessmentsHeading')}</h3>
+        {user.assessments.length > 0 ? (
+          <ul className="flex flex-col divide-y divide-border">
+            {user.assessments.map((assessment) => (
+              <li
+                key={assessment.key}
+                className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm"
+              >
+                <span className="font-medium text-foreground">{assessment.title}</span>
+                <span dir="ltr" className="text-muted-foreground">
+                  {assessment.result} ·{' '}
+                  {t('versionLabel', { version: format.number(assessment.version) })} ·{' '}
+                  {format.date(new Date(assessment.completedAt))}
+                  {assessment.attempts > 1
+                    ? ` · ${t('journeyAttempts', { count: format.number(assessment.attempts) })}`
+                    : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t('journeyNotAssessed')}</p>
+        )}
       </section>
 
       <section className="flex flex-col gap-3 rounded-md border border-border p-4">

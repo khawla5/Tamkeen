@@ -5,6 +5,7 @@ import { Award, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
+import { InstrumentTracker } from '@/components/dashboard/instrument-tracker';
 import { JourneyTracker } from '@/components/dashboard/journey-tracker';
 import { CefrLevelBadge } from '@/components/english/cefr-level-badge';
 import { PortalPage } from '@/components/layout/portal-page';
@@ -48,6 +49,13 @@ export default function DashboardPage() {
             <JourneyTracker dashboard={dashboard} />
           </CardContent>
         </Card>
+
+        {/*
+         * One stage per required instrument (§4.2 part 3, D-095, TAM-147).
+         * Renders nothing once there is only the baseline RIASEC assignment
+         * — see the component for why.
+         */}
+        <InstrumentTracker dashboard={dashboard} />
 
         {dashboard.state === 'PRE_ASSESSMENT' ? (
           <PreAssessment />

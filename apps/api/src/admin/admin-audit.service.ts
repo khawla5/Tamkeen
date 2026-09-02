@@ -109,8 +109,16 @@ export class AdminAuditService {
 
   private async journey(): Promise<AdminReports['journey']> {
     const [assessed, byStatus, coursesPassed, certificatesIssued] = await Promise.all([
-      /* Distinct people, not results: retakes append (D-033). */
-      this.prisma.assessmentResult.findMany({ distinct: ['userId'], select: { userId: true } }),
+      /* Distinct people, not results: retakes append (D-033). `kind: 'RIASEC'`
+         (TAM-147): this funnel step means the Holland assessment specifically,
+         the same reading `admin-dashboard.service.ts`'s "assessed" count
+         already gives it — someone who has only taken the CEFR placement test
+         has not passed this step. */
+      this.prisma.assessmentResult.findMany({
+        where: { kind: 'RIASEC' },
+        distinct: ['userId'],
+        select: { userId: true },
+      }),
       this.prisma.userPath.groupBy({ by: ['status'], _count: { _all: true } }),
       this.prisma.completion.count({ where: { passed: true } }),
       this.prisma.certificate.count(),
@@ -156,7 +164,10 @@ export class AdminAuditService {
   }
 
   private async codeDistribution(): Promise<AdminReports['codeDistribution']> {
+    /* `kind: 'RIASEC'` (TAM-147): a Holland Code distribution has nothing to
+       say about a CEFR row, which carries no `code`. */
     const newest = await this.prisma.assessmentResult.findMany({
+      where: { kind: 'RIASEC' },
       distinct: ['userId'],
       orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
       select: { code: true },
@@ -164,7 +175,9 @@ export class AdminAuditService {
 
     const counts = new Map<string, number>();
     for (const row of newest) {
-      counts.set(row.code, (counts.get(row.code) ?? 0) + 1);
+      /* Non-null: filtered to `kind: 'RIASEC'` above. */
+      const code = row.code!;
+      counts.set(code, (counts.get(code) ?? 0) + 1);
     }
 
     return [...counts.entries()]

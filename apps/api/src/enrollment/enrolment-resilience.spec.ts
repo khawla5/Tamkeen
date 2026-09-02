@@ -1,3 +1,4 @@
+import type { AssessmentAssignmentResolutionService } from '../assessment-assignment/assessment-assignment-resolution.service';
 import { AuditAction } from '../audit/audit.actions';
 import type { AuditEntry, AuditService } from '../audit/audit.service';
 import type { JourneyStateService } from '../journey/journey-state.service';
@@ -109,9 +110,10 @@ function harness(options: {
   } as unknown as LmsPort;
 
   const journey = {} as unknown as JourneyStateService;
+  const assignments = {} as unknown as AssessmentAssignmentResolutionService;
 
   return {
-    service: new EnrollmentService(prisma, journey, audit, lms),
+    service: new EnrollmentService(prisma, journey, audit, assignments, lms),
     rows,
     audits,
     attempted,
