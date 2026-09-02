@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import type {
   AdminAssessmentAssignmentRow,
@@ -66,7 +71,8 @@ export class AdminAssessmentAssignmentsService {
         resolvedKind: resolved?.kind ?? 'INSTRUMENT',
         scope: row.scope,
         target: row.target,
-        targetLabel: row.scope === 'USER' && row.target ? (userNameById.get(row.target) ?? null) : null,
+        targetLabel:
+          row.scope === 'USER' && row.target ? (userNameById.get(row.target) ?? null) : null,
         required: row.required,
         displayOrder: row.displayOrder,
       };
@@ -152,7 +158,11 @@ export class AdminAssessmentAssignmentsService {
     return this.list();
   }
 
-  async remove(id: string, actorId: string, ipAddress: string | null): Promise<AdminAssessmentAssignmentRow[]> {
+  async remove(
+    id: string,
+    actorId: string,
+    ipAddress: string | null,
+  ): Promise<AdminAssessmentAssignmentRow[]> {
     const existing = await this.prisma.assessmentAssignment.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('ASSESSMENT_ASSIGNMENT_NOT_FOUND');
@@ -232,7 +242,11 @@ export class AdminAssessmentAssignmentsService {
     return this.listGroups();
   }
 
-  async removeGroup(id: string, actorId: string, ipAddress: string | null): Promise<AdminAssessmentGroupRow[]> {
+  async removeGroup(
+    id: string,
+    actorId: string,
+    ipAddress: string | null,
+  ): Promise<AdminAssessmentGroupRow[]> {
     const existing = await this.prisma.assessmentGroup.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('ASSESSMENT_GROUP_NOT_FOUND');
@@ -288,7 +302,9 @@ export class AdminAssessmentAssignmentsService {
    * group), so a collision here is an authoring mistake, not a case to design
    * resolution order around.
    */
-  private async resolvableTitles(): Promise<Map<string, { title: string; kind: 'INSTRUMENT' | 'GROUP' }>> {
+  private async resolvableTitles(): Promise<
+    Map<string, { title: string; kind: 'INSTRUMENT' | 'GROUP' }>
+  > {
     const [assessments, groups] = await Promise.all([
       this.prisma.assessment.findMany({ select: { key: true, status: true, title: true } }),
       this.prisma.assessmentGroup.findMany({ select: { key: true, name: true } }),

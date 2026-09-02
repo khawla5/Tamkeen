@@ -732,8 +732,7 @@ export const adminApi = {
   removeAssignment: (id: string) =>
     api.delete<AdminAssessmentAssignmentRow[]>(`/api/admin/assessment-assignments/${id}`),
 
-  listAssessmentGroups: () =>
-    api.get<AdminAssessmentGroupRow[]>('/api/admin/assessment-groups'),
+  listAssessmentGroups: () => api.get<AdminAssessmentGroupRow[]>('/api/admin/assessment-groups'),
 
   saveAssessmentGroup: (input: { key: string; name: string; memberKeys: string[] }) =>
     api.put<AdminAssessmentGroupRow[]>('/api/admin/assessment-groups', input),

@@ -232,9 +232,14 @@ describe('Admin assessment assignments (e2e)', () => {
       ).body as AdminAssessmentAssignmentRow[];
 
       const row = rows.find(
-        (candidate) => candidate.assessmentKey === 'english-cefr' && candidate.target === departmentTarget(),
+        (candidate) =>
+          candidate.assessmentKey === 'english-cefr' && candidate.target === departmentTarget(),
       );
-      expect(row).toMatchObject({ resolvedKind: 'INSTRUMENT', scope: 'DEPARTMENT', required: false });
+      expect(row).toMatchObject({
+        resolvedKind: 'INSTRUMENT',
+        scope: 'DEPARTMENT',
+        required: false,
+      });
       expect(row?.resolvedTitle).toBeTruthy();
     });
 
@@ -291,9 +296,12 @@ describe('Admin assessment assignments (e2e)', () => {
       const row = rows.find((candidate) => candidate.target === targetUserId)!;
 
       const remaining = (
-        await send('delete', `/api/admin/assessment-assignments/${row.id}`, {}, sessionAdmin).expect(
-          200,
-        )
+        await send(
+          'delete',
+          `/api/admin/assessment-assignments/${row.id}`,
+          {},
+          sessionAdmin,
+        ).expect(200)
       ).body as AdminAssessmentAssignmentRow[];
 
       expect(remaining.find((candidate) => candidate.id === row.id)).toBeUndefined();
@@ -376,7 +384,9 @@ describe('Admin assessment assignments (e2e)', () => {
         sessionAdmin,
       ).expect(201);
 
-      await send('delete', `/api/admin/assessment-groups/${group.id}`, {}, sessionAdmin).expect(409);
+      await send('delete', `/api/admin/assessment-groups/${group.id}`, {}, sessionAdmin).expect(
+        409,
+      );
     });
 
     it('deletes a group nothing assigns any more', async () => {
@@ -393,7 +403,9 @@ describe('Admin assessment assignments (e2e)', () => {
       const group = groups.find((candidate) => candidate.key === groupKey())!;
 
       const remaining = (
-        await send('delete', `/api/admin/assessment-groups/${group.id}`, {}, sessionAdmin).expect(200)
+        await send('delete', `/api/admin/assessment-groups/${group.id}`, {}, sessionAdmin).expect(
+          200,
+        )
       ).body as AdminAssessmentGroupRow[];
 
       expect(remaining.find((candidate) => candidate.id === group.id)).toBeUndefined();
@@ -402,8 +414,11 @@ describe('Admin assessment assignments (e2e)', () => {
 
   describe('the key picker', () => {
     it('lists a real instrument for the create-assignment and group-editor pickers', async () => {
-      const rows = (await get('/api/admin/assessment-keys', sessionAdmin).expect(200))
-        .body as { key: string; title: string; kind: 'INSTRUMENT' | 'GROUP' }[];
+      const rows = (await get('/api/admin/assessment-keys', sessionAdmin).expect(200)).body as {
+        key: string;
+        title: string;
+        kind: 'INSTRUMENT' | 'GROUP';
+      }[];
 
       const riasec = rows.find((row) => row.key === 'riasec-core');
       expect(riasec).toMatchObject({ kind: 'INSTRUMENT' });

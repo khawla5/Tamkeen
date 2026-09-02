@@ -181,7 +181,9 @@ function AssignmentCard({
         <p className="flex flex-wrap items-center gap-2 font-medium text-foreground">
           {row.resolvedTitle}
           <Badge variant="soft">
-            {row.resolvedKind === 'GROUP' ? t('assignmentKindGroup') : t('assignmentKindInstrument')}
+            {row.resolvedKind === 'GROUP'
+              ? t('assignmentKindGroup')
+              : t('assignmentKindInstrument')}
           </Badge>
           {row.required ? <Badge variant="primary">{t('assignmentRequired')}</Badge> : null}
         </p>
@@ -276,7 +278,12 @@ function CreateAssignmentDialog({
       await adminApi.createAssignment({
         assessmentKey,
         scope,
-        target: scope === 'DEPARTMENT' ? department : scope === 'USER' ? (userId ?? undefined) : undefined,
+        target:
+          scope === 'DEPARTMENT'
+            ? department
+            : scope === 'USER'
+              ? (userId ?? undefined)
+              : undefined,
         required,
         displayOrder,
       });
