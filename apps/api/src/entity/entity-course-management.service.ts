@@ -187,26 +187,38 @@ export class EntityCourseManagementService {
         status: true,
         objectives: true,
         prerequisites: true,
-        isGeneral: true,
         pathCourses: {
           orderBy: { path: { displayOrder: 'asc' } },
-          select: { status: true, path: { select: { id: true, name: true, riasecLetter: true } } },
+          select: {
+            levelId: true,
+            path: { select: { id: true, name: true } },
+            level: { select: { id: true, name: true, position: true } },
+          },
         },
-        _count: { select: { userPathCourses: true } },
+        _count: { select: { enrollments: true } },
       },
     });
 
     const content = await this.readContent(course.moodleCourseId);
-    const paths = course.pathCourses.map((entry) => ({ ...entry.path, status: entry.status }));
-    /* Only what the admin has accepted counts for learners — letters and the
-       publish gate alike (TAM-141). */
-    const approved = paths.filter((path) => path.status === 'APPROVED');
+
+    /* What an entity sees of its own membership (D-134): which paths it put the
+       course in, and where the administrator has since placed it. `placement` is
+       derived from the level being set or not, never stored. */
+    const paths = course.pathCourses.map((entry) => ({
+      id: entry.path.id,
+      name: entry.path.name,
+      placement: entry.levelId === null ? ('UNASSIGNED' as const) : ('PLACED' as const),
+      level: entry.level,
+    }));
+    /* Only a placed membership gives a learner a route to the course, so only a
+       placed one satisfies the publish gate. */
+    const placed = paths.filter((path) => path.placement === 'PLACED');
     const limits = await this.membershipLimits();
 
     const availablePaths = await this.prisma.path.findMany({
-      where: { isActive: true },
+      where: { status: 'PUBLISHED' },
       orderBy: { displayOrder: 'asc' },
-      select: { id: true, name: true, riasecLetter: true },
+      select: { id: true, name: true },
     });
 
     const stats = await this.enrolmentStats(course.id, course.moodleCourseId);
@@ -223,32 +235,24 @@ export class EntityCourseManagementService {
       paths,
       objectives: course.objectives,
       prerequisites: course.prerequisites,
-      /*
-       * Derived from path membership, never authored separately (D-066). Asking
-       * an entity to set a letter *and* pick paths would create two sources for
-       * one fact, and §3A makes the path the owner of it — so a course tagged
-       * "S" sitting in an "E" path would be a contradiction the product has no
-       * rule for resolving.
-       */
-      riasecLetters: course.isGeneral
-        ? []
-        : [...new Set(approved.map((path) => path.riasecLetter))],
       content,
-      isGeneral: course.isGeneral,
       pathRules: {
         ...limits,
-        frozen: !course.isGeneral && exceedsLimits(paths, limits),
-        approvalRequired: (await this.settings.get('PATH_MEMBERSHIP_APPROVAL')) === 'on',
+        frozen: exceedsLimits(paths, limits),
       },
       publishBlockers: publishBlockers({
-        /* A general course needs no memberships to be reachable (§4C.5). */
-        pathCount: course.isGeneral ? 1 : approved.length,
+        /* Membership alone is not a route to a learner any more: until an
+           administrator places the course on a rung, nobody can see it. So the
+           gate counts *placed* memberships, and a course sitting unassigned in
+           three paths still says «لم يُسنَد بعد» rather than reporting itself
+           ready (D-134). */
+        pathCount: placed.length,
         language: course.language,
         objectives: course.objectives,
         durationMinutes: course.durationMinutes,
         content,
       }),
-      learnersHolding: course._count.userPathCourses,
+      learnersHolding: course._count.enrollments,
       availablePaths,
       enrolledCount: stats.enrolled,
       completionRate:
@@ -365,7 +369,7 @@ export class EntityCourseManagementService {
     await this.scope.requireOwnedCourse(scope, courseId);
 
     if (patch.pathIds) {
-      await this.replacePathMembership(courseId, patch.pathIds);
+      await this.replacePathMembership(scope, courseId, patch.pathIds);
     }
 
     await this.prisma.course.update({
@@ -405,67 +409,81 @@ export class EntityCourseManagementService {
     return this.get(scope, courseId);
   }
 
-  private async membershipLimits(): Promise<{ maxPaths: number; maxLetters: number }> {
-    return {
-      maxPaths: await this.settings.get('COURSE_MAX_PATHS'),
-      maxLetters: await this.settings.get('COURSE_MAX_RIASEC_LETTERS'),
-    };
+  private async membershipLimits(): Promise<{ maxPaths: number }> {
+    return { maxPaths: await this.settings.get('COURSE_MAX_PATHS') };
   }
 
-  private async replacePathMembership(courseId: string, pathIds: string[]): Promise<void> {
+  /**
+   * The entity's half of membership (D-134): which paths it offers this course
+   * to.
+   *
+   * **It never writes a level or a position.** Where a course sits in a path is
+   * the administrator's decision and this method has no vocabulary for it — the
+   * DTO refuses the two field names outright, and the writes below name neither.
+   *
+   * **An entity may withdraw only what nobody has placed.** Once a course is on
+   * a rung it is part of a curriculum somebody may be working through, so
+   * removing it is an administrative act (§4C.4), refused here with its own code
+   * rather than silently ignored.
+   */
+  private async replacePathMembership(
+    scope: EntityScope,
+    courseId: string,
+    pathIds: string[],
+  ): Promise<void> {
     const unique = [...new Set(pathIds)];
 
     const known = await this.prisma.path.findMany({
-      where: { id: { in: unique }, isActive: true },
-      select: { id: true, displayOrder: true, riasecLetter: true },
+      where: { id: { in: unique }, status: 'PUBLISHED' },
+      select: { id: true },
     });
 
     if (known.length !== unique.length) {
-      /* An unknown or retired path id is a client error, not something to
+      /* An unknown or unpublished path id is a client error, not something to
          silently drop — dropping it would leave the entity believing the course
          is in a path it is not, and the publish gate would then pass or fail for
          a reason they cannot see. */
       throw new NotFoundException('PATH_NOT_FOUND');
     }
 
-    /* The rules (TAM-141): cap, coherence, grandfathering, the general
-       exemption — decided by the pure module, on the rows as they are now. */
-    const [course, current, limits, approval] = await Promise.all([
-      this.prisma.course.findUniqueOrThrow({
-        where: { id: courseId },
-        select: { isGeneral: true },
-      }),
+    /* The rules (TAM-141, D-134): the cap, and grandfathering for a course
+       already over it — decided by the pure module, on the rows as they are. */
+    const [current, limits] = await Promise.all([
       this.prisma.pathCourse.findMany({
         where: { courseId },
-        select: { pathId: true, path: { select: { riasecLetter: true } } },
+        select: { pathId: true, levelId: true },
       }),
       this.membershipLimits(),
-      this.settings.get('PATH_MEMBERSHIP_APPROVAL'),
     ]);
 
     const verdict = checkPathMembership({
-      current: current.map((row) => ({ id: row.pathId, riasecLetter: row.path.riasecLetter })),
-      next: known.map((path) => ({ id: path.id, riasecLetter: path.riasecLetter })),
+      current: current.map((row) => ({ id: row.pathId })),
+      next: known.map((path) => ({ id: path.id })),
       limits,
-      isGeneral: course.isGeneral,
     });
 
     if (!verdict.ok) {
       throw new BadRequestException(verdict.error);
     }
 
-    /* New memberships are proposals when approval is on; existing rows keep
-       whatever the admin already decided. */
-    const status = approval === 'on' ? 'PENDING' : 'APPROVED';
+    const removing = current.filter((row) => !unique.includes(row.pathId));
+
+    if (removing.some((row) => row.levelId !== null)) {
+      throw new BadRequestException(AuditReason.MEMBERSHIP_ALREADY_PLACED);
+    }
 
     await this.prisma.$transaction([
-      this.prisma.pathCourse.deleteMany({ where: { courseId, pathId: { notIn: unique } } }),
+      this.prisma.pathCourse.deleteMany({
+        where: { courseId, pathId: { notIn: unique }, levelId: null },
+      }),
       ...known.map((path) =>
         this.prisma.pathCourse.upsert({
           where: { pathId_courseId: { pathId: path.id, courseId } },
-          create: { pathId: path.id, courseId, displayOrder: path.displayOrder, status },
-          /* Ordering *within* a path is not this form's business, so an existing
-             membership keeps the position — and the decision — it already had. */
+          /* Unassigned, always: a new membership is an offer, and where it goes
+             is the administrator's to decide (D-134). */
+          create: { pathId: path.id, courseId, assignedByEntityId: scope.entityId },
+          /* Placement is not this form's business, so an existing membership
+             keeps the rung — and the position — it already had. */
           update: {},
         }),
       ),
@@ -731,11 +749,11 @@ export class EntityCourseManagementService {
         lmsVisible: true,
         availableFrom: true,
         availableUntil: true,
-        _count: { select: { userPathCourses: true } },
+        _count: { select: { enrollments: true } },
       },
     });
 
-    const learnersHolding = course._count.userPathCourses;
+    const learnersHolding = course._count.enrollments;
 
     const status = effectiveCourseStatus({
       publication: course.publication,
@@ -763,9 +781,9 @@ export class EntityCourseManagementService {
     courseId: string,
     moodleCourseId: number,
   ): Promise<{ enrolled: number; passed: number }> {
-    const holders = await this.prisma.userPathCourse.findMany({
+    const holders = await this.prisma.enrollment.findMany({
       where: { courseId },
-      select: { userPath: { select: { userId: true } } },
+      select: { userId: true },
     });
 
     if (holders.length === 0) {
@@ -776,7 +794,7 @@ export class EntityCourseManagementService {
       where: {
         moodleCourseId,
         passed: true,
-        userId: { in: holders.map((row) => row.userPath.userId) },
+        userId: { in: holders.map((row) => row.userId) },
       },
     });
 

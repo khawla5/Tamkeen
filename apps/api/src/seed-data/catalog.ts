@@ -1,14 +1,15 @@
-import type { RiasecLetter } from '@tamkeen/types';
+import type { PathStatus } from '@tamkeen/types';
 
 /**
- * Paths, path membership, and the course metadata the LMS does not model.
+ * Paths, their levels, what is placed on them, and the course metadata the LMS
+ * does not model.
  *
  * The split here is the §6 source-of-truth rule made concrete:
  *
  *  - **The LMS owns** a course's existence, title, summary and duration. Those
  *    arrive through `LmsPort.listCourses()` and are cached in `courses`.
- *  - **We own** which paths a course belongs to, its ordering, its RIASEC tag
- *    (via the path), and the objectives/prerequisites §4.7 requires.
+ *  - **We own** the ladder: which paths a course belongs to, which rung it sits
+ *    on, in what order, and the objectives/prerequisites §4.7 requires.
  *
  * Objectives and prerequisites are ours rather than the LMS's on purpose.
  * Moodle has no first-class field for either, so adding them to `LmsPort` would
@@ -16,6 +17,13 @@ import type { RiasecLetter } from '@tamkeen/types';
  * would have to parse them out of a summary and would get it wrong. Phase 4
  * gives entities a screen to edit them; until then they are seeded.
  */
+
+/** One rung, and what an administrator has placed on it. */
+export interface SeedLevel {
+  name: string;
+  /** LMS course ids, in the order they are worked through. */
+  courses: number[];
+}
 
 export interface SeedPath {
   /** Stable identifier for idempotent re-seeding. */
@@ -31,201 +39,114 @@ export interface SeedPath {
    * lives under.
    */
   skillOutcomes: string[];
-  /** Exactly one primary letter (§3A) — this is what drives gold. */
-  riasecLetter: RiasecLetter;
-  /** Nominal effort for a typical selection, shown on the §4.4 card. */
+  /** Nominal effort for the whole path, shown on the §4.4 card. */
   typicalDurationMinutes: number;
-  /** Curated order *within* a recommendation group. */
+  /** The ministry's own ordering of the catalogue. */
   displayOrder: number;
-  /** LMS course ids, in the order they are offered on the build page. */
-  courses: number[];
+  /**
+   * Only a path with an authored placement bank may be published (D-134):
+   * without one, nobody assigned to it could ever be placed, and `pathBlockers`
+   * refuses it. All three ship PUBLISHED because all three have a bank.
+   */
+  status: PathStatus;
+  /** The ladder, bottom rung first. */
+  levels: SeedLevel[];
+  /**
+   * In the path, on no rung — the state an entity's proposal lands in before an
+   * administrator places it (D-134).
+   *
+   * Seeded deliberately rather than left empty: §4C.4's whole job is this queue,
+   * and a screen that is empty on a fresh database teaches nothing about what it
+   * is for. Each one is placed on a rung of *another* path, so nothing in the
+   * catalogue is unreachable while the queue still has something in it.
+   */
+  unassignedCourses: number[];
 }
 
 /**
- * Twelve paths, two per dimension.
+ * Three paths, each a three-rung ladder.
  *
- * Two per letter rather than one because the gold rule sorts *within* a letter
- * as well as between letters — with one path per letter that ordering would
- * never be exercised, in the product or in a test.
+ * Three rungs rather than two so that a placement can land *between* the ends —
+ * a two-level path only ever answers "beginner or not", and every off-by-one in
+ * the band arithmetic would be invisible in it.
  *
- * Every path offers 11-12 courses so that choosing 5-10 is a real decision. A
- * path offering exactly 5 would make the minimum a formality and the counter
- * meaningless.
+ * **The rungs are named in each subject's own vocabulary.** English carries the
+ * CEFR bands, because that is what a language learner and an HR file both
+ * already understand by "B1" — translating it into «متقدم» would throw away the
+ * one label that is portable outside this platform. Arabic and communication
+ * skills have no such external framework, so their rungs are simply the stages
+ * they are: «المرحلة الأولى» and after it.
+ *
+ * All three ship PUBLISHED, each with an authored placement bank
+ * (`SEED_ASSESSMENTS`), so a fresh database offers three paths a learner can
+ * actually be assigned and placed on.
  */
 export const SEED_PATHS: readonly SeedPath[] = [
-  // ── R — الواقعي ────────────────────────────────────────────────────────────
   {
-    key: 'field-operations',
-    name: 'العمليات الميدانية والسلامة',
+    key: 'english',
+    name: 'مسار اللغة الإنجليزية',
     description:
-      'مسار عملي لمن يعمل خارج المكتب: إدارة المواقع، والتعامل مع المخاطر والحوادث، وتطبيق إجراءات السلامة.',
+      'مسار متدرج في اللغة الإنجليزية من المستوى المبتدئ إلى المتقدم، موجّه لاستخدامها في العمل: المراسلة، والاجتماعات، والتقارير.',
     skillOutcomes: [
-      'إدارة مواقع العمل الميدانية',
-      'الاستجابة للحوادث والمخاطر',
-      'تطبيق إجراءات السلامة المهنية',
+      'المراسلة بالإنجليزية في العمل الرسمي',
+      'متابعة اجتماع أو عرض بالإنجليزية',
+      'كتابة تقرير بالإنجليزية بلغة دقيقة',
     ],
-    riasecLetter: 'R',
-    typicalDurationMinutes: 1290,
+    typicalDurationMinutes: 2220,
     displayOrder: 1,
-    courses: [109, 118, 113, 120, 114, 119, 104, 137, 105, 107, 126],
+    status: 'PUBLISHED',
+    levels: [
+      { name: 'مبتدئ (A1–A2)', courses: [101, 102, 103, 104] },
+      { name: 'متوسط (B1–B2)', courses: [105, 106, 107, 108] },
+      { name: 'متقدم (C1)', courses: [109, 110] },
+    ],
+    /* Placed on the first rung of «مهارات التواصل»: listening is the same skill
+       in either language, and the queue is where an administrator decides
+       whether this path wants it too. */
+    unassignedCourses: [121],
   },
   {
-    key: 'facilities-logistics',
-    name: 'المرافق والخدمات اللوجستية',
+    key: 'arabic',
+    name: 'مسار اللغة العربية',
     description:
-      'مسار لتشغيل المرافق وصيانتها وإدارة المستودعات والعهد، مع الجانب المالي والتنظيمي المرتبط بها.',
+      'مسار في العربية المكتوبة والمنطوقة كما تُستخدم في الجهة: الإملاء والنحو التطبيقي، ثم المراسلات والتقارير، ثم صياغة النصوص التنظيمية.',
     skillOutcomes: [
-      'تشغيل المرافق وصيانتها',
-      'إدارة المستودعات والعهد',
-      'المتابعة المالية للمرافق',
+      'الكتابة الإدارية بلغة سليمة',
+      'تحرير التقارير والمحاضر',
+      'تدقيق النصوص قبل اعتمادها',
     ],
-    riasecLetter: 'R',
-    typicalDurationMinutes: 1305,
+    typicalDurationMinutes: 2100,
     displayOrder: 2,
-    courses: [116, 117, 115, 118, 114, 109, 147, 107, 105, 104, 137],
-  },
-
-  // ── I — البحثي ─────────────────────────────────────────────────────────────
-  {
-    key: 'data-analytics',
-    name: 'تحليل البيانات ودعم القرار',
-    description:
-      'مسار لتحويل البيانات إلى مؤشرات ولوحات تدعم اتخاذ القرار، من الأساسيات إلى العرض البصري.',
-    skillOutcomes: ['تحليل البيانات الميدانية', 'بناء لوحات المؤشرات', 'دعم القرار بالأدلة'],
-    riasecLetter: 'I',
-    typicalDurationMinutes: 1590,
-    displayOrder: 1,
-    courses: [102, 121, 125, 122, 127, 126, 131, 148, 104, 107, 105],
-  },
-  {
-    key: 'policy-research',
-    name: 'البحوث وتقييم السياسات',
-    description:
-      'مسار لتصميم الدراسات وجمع الأدلة وقياس أثر السياسات العامة وعرض النتائج على صانع القرار.',
-    skillOutcomes: [
-      'تصميم الدراسات البحثية',
-      'قياس أثر السياسات العامة',
-      'كتابة التقارير المؤسسية',
+    status: 'PUBLISHED',
+    levels: [
+      { name: 'المرحلة الأولى', courses: [111, 112, 113] },
+      { name: 'المرحلة الثانية', courses: [114, 115, 116] },
+      { name: 'المرحلة الثالثة', courses: [117, 118, 119] },
     ],
-    riasecLetter: 'I',
-    typicalDurationMinutes: 1620,
-    displayOrder: 2,
-    courses: [123, 124, 121, 127, 102, 122, 126, 108, 146, 103, 105],
+    unassignedCourses: [124],
   },
-
-  // ── A — الفني ──────────────────────────────────────────────────────────────
   {
-    key: 'digital-content',
-    name: 'المحتوى الرقمي والتصميم',
+    key: 'communication-skills',
+    name: 'مسار مهارات التواصل',
     description:
-      'مسار لإنتاج المواد البصرية والرقمية: الهوية، والعروض، والفيديو، وتصميم الخدمة حول المتعامل.',
+      'مسار في التواصل داخل الجهة ومع المتعاملين: الإنصات وإدارة الاجتماعات، ثم العرض والإقناع، ثم التفاوض والتواصل في المواقف الصعبة.',
     skillOutcomes: [
-      'تصميم الهوية والمواد البصرية',
-      'إنتاج المحتوى المرئي',
-      'تصميم الخدمة حول المتعامل',
+      'إدارة اجتماع وتوثيق قراراته',
+      'العرض والإقناع أمام جمهور',
+      'التعامل مع الخلاف والمواقف الصعبة',
     ],
-    riasecLetter: 'A',
-    typicalDurationMinutes: 1380,
-    displayOrder: 1,
-    courses: [128, 110, 131, 129, 130, 132, 133, 144, 103, 105, 126],
-  },
-  {
-    key: 'institutional-communication',
-    name: 'الاتصال المؤسسي والتوعية',
-    description:
-      'مسار لبناء الرسائل التوعوية والحملات، وإدارة الاتصال مع الجمهور والشركاء والإعلام.',
-    skillOutcomes: [
-      'صياغة الرسائل التوعوية',
-      'إدارة الحملات المؤسسية',
-      'التواصل مع الإعلام والشركاء',
+    typicalDurationMinutes: 1560,
+    displayOrder: 3,
+    status: 'PUBLISHED',
+    levels: [
+      { name: 'المرحلة الأولى', courses: [120, 121, 122] },
+      { name: 'المرحلة الثانية', courses: [123, 124] },
+      { name: 'المرحلة الثالثة', courses: [125, 126, 127] },
     ],
-    riasecLetter: 'A',
-    typicalDurationMinutes: 1275,
-    displayOrder: 2,
-    courses: [133, 103, 139, 130, 129, 144, 132, 110, 128, 105, 137],
-  },
-
-  // ── S — الاجتماعي ──────────────────────────────────────────────────────────
-  {
-    key: 'customer-service',
-    name: 'خدمة المتعاملين',
-    description:
-      'مسار للتعامل المباشر مع الجمهور: استقبال الطلبات، ومعالجة الشكاوى، وخدمة أصحاب الهمم.',
-    skillOutcomes: ['استقبال طلبات المتعاملين', 'معالجة الشكاوى بمهنية', 'خدمة أصحاب الهمم'],
-    riasecLetter: 'S',
-    typicalDurationMinutes: 1215,
-    displayOrder: 1,
-    courses: [111, 134, 138, 137, 136, 103, 148, 107, 104, 105, 126],
-  },
-  {
-    key: 'training-development',
-    name: 'التدريب وتنمية القدرات',
-    description:
-      'مسار لمن يدرّب زملاءه ويطوّر قدراتهم: إعداد الحقائب، والإلقاء، وقياس أثر التدريب.',
-    skillOutcomes: ['إعداد الحقائب التدريبية', 'الإلقاء وتيسير الجلسات', 'قياس أثر التدريب'],
-    riasecLetter: 'S',
-    typicalDurationMinutes: 1425,
-    displayOrder: 2,
-    courses: [135, 136, 106, 137, 138, 139, 144, 131, 103, 126, 105],
-  },
-
-  // ── E — المبادِر ───────────────────────────────────────────────────────────
-  {
-    key: 'leadership',
-    name: 'القيادة وإدارة الفرق',
-    description:
-      'مسار لشاغلي المواقع الإشرافية والمرشحين لها: قيادة الفريق، والتفاوض، وإدارة التغيير.',
-    skillOutcomes: ['قيادة الفريق وتوجيهه', 'التفاوض وحل الخلافات', 'إدارة التغيير المؤسسي'],
-    riasecLetter: 'E',
-    typicalDurationMinutes: 1470,
-    displayOrder: 1,
-    courses: [140, 141, 142, 143, 144, 106, 137, 127, 103, 107, 126],
-  },
-  {
-    key: 'project-management',
-    name: 'إدارة المشاريع والمبادرات',
-    description: 'مسار لتحويل المبادرات إلى مشاريع لها نطاق وموارد ومؤشرات، ومتابعتها حتى الإغلاق.',
-    skillOutcomes: [
-      'تحديد نطاق المشروع وموارده',
-      'متابعة مؤشرات الأداء',
-      'إغلاق المشاريع وتوثيقها',
-    ],
-    riasecLetter: 'E',
-    typicalDurationMinutes: 1500,
-    displayOrder: 2,
-    courses: [101, 143, 142, 141, 140, 107, 146, 121, 122, 126, 105],
-  },
-
-  // ── C — التنظيمي ───────────────────────────────────────────────────────────
-  {
-    key: 'governance-compliance',
-    name: 'الحوكمة والامتثال',
-    description:
-      'مسار للأطر التنظيمية والرقابة الداخلية وإدارة المخاطر وحماية البيانات والالتزام بالسياسات.',
-    skillOutcomes: [
-      'تطبيق الأطر التنظيمية',
-      'إدارة المخاطر المؤسسية',
-      'حماية البيانات والالتزام بالسياسات',
-    ],
-    riasecLetter: 'C',
-    typicalDurationMinutes: 1515,
-    displayOrder: 1,
-    courses: [108, 146, 148, 147, 145, 124, 104, 107, 103, 105, 126],
-  },
-  {
-    key: 'records-administration',
-    name: 'الإدارة المكتبية والسجلات',
-    description:
-      'مسار لتنظيم العمل المكتبي: الأرشفة الإلكترونية، والمراسلات، والعهد، والمتابعة المالية.',
-    skillOutcomes: [
-      'الأرشفة الإلكترونية للمستندات',
-      'إدارة المراسلات الرسمية',
-      'المتابعة المالية للعهد',
-    ],
-    riasecLetter: 'C',
-    typicalDurationMinutes: 1290,
-    displayOrder: 2,
-    courses: [145, 105, 148, 115, 147, 106, 104, 107, 103, 137, 146, 112],
+    /* Both belong to another path's ladder and are offered here as well —
+       written communication and presenting are the two places these three
+       subjects genuinely overlap (D-003). */
+    unassignedCourses: [114, 108],
   },
 ];
 
@@ -243,387 +164,224 @@ export interface SeedCourseMetadata {
  * bridge that survives a re-seed: our ids are generated, the LMS's are stable.
  */
 export const COURSE_METADATA: Readonly<Record<number, SeedCourseMetadata>> = {
+  /* ── English ──────────────────────────────────────────────────────────── */
   101: {
     objectives: [
-      'تحديد نطاق المشروع وأهدافه ومخرجاته.',
-      'بناء خطة زمنية واقعية وتوزيع الأدوار.',
-      'متابعة التنفيذ ورفع تقارير الحالة.',
+      'نطق الحروف والأصوات الإنجليزية نطقًا مفهومًا.',
+      'قراءة الكلمات القصيرة وكتابتها.',
+      'تقديم النفس بجملة أو جملتين.',
     ],
     prerequisites: null,
   },
   102: {
     objectives: [
-      'جمع البيانات من مصادرها وتنظيفها.',
-      'حساب المؤشرات الأساسية وتفسيرها.',
-      'عرض النتائج في جدول أو رسم واضح.',
+      'استخدام عبارات التحية والتعريف في المكتب.',
+      'طلب المساعدة وتوجيه سؤال بسيط.',
+      'فهم التعليمات القصيرة المتكررة في العمل.',
     ],
     prerequisites: null,
   },
   103: {
     objectives: [
-      'صياغة رسالة واضحة تناسب المتلقي.',
-      'إدارة الاجتماعات وتوثيق قراراتها.',
-      'التعامل مع سوء الفهم قبل تفاقمه.',
+      'التمييز بين المضارع والماضي والمستقبل البسيط.',
+      'بناء جملة صحيحة في كل زمن منها.',
+      'تصحيح الأخطاء الشائعة في تصريف الفعل.',
     ],
     prerequisites: null,
   },
   104: {
     objectives: [
-      'التعرف على محاولات التصيّد والإبلاغ عنها.',
-      'إدارة كلمات المرور والتحقق بخطوتين.',
-      'التعامل الآمن مع الملفات ووسائط التخزين.',
+      'إدارة حوار قصير لاستقبال زائر أو تحويل مكالمة.',
+      'تحديد موعد والاتفاق على وقته.',
+      'إعادة صياغة ما لم يُفهم بدل إنهاء الحوار.',
     ],
-    prerequisites: null,
+    prerequisites: 'إتمام «الإنجليزية اليومية في بيئة العمل» أو ما يعادله.',
   },
   105: {
     objectives: [
-      'صياغة المذكرات والخطابات الرسمية.',
-      'تنظيم التقرير بحيث تصل الخلاصة أولًا.',
-      'تجنّب الحشو والغموض في النص الإداري.',
+      'قراءة نص إداري قصير واستخراج المطلوب منه.',
+      'تخمين معنى الكلمة من سياقها قبل القاموس.',
+      'التمييز بين الفكرة الرئيسية والتفصيل.',
     ],
     prerequisites: null,
   },
   106: {
     objectives: [
-      'فهم دورة حياة الموظف من التعيين حتى الانتهاء.',
-      'تطبيق سياسات الإجازات والحضور.',
-      'التعامل مع ملفات الموظفين بسرّية.',
+      'كتابة رسالة عمل واضحة بطلب واحد محدد.',
+      'اختيار درجة الرسمية المناسبة للمخاطَب.',
+      'الردّ على رسالة والاعتذار عن طلب بلباقة.',
     ],
     prerequisites: null,
   },
   107: {
     objectives: [
-      'توصيف الإجراء الحالي وقياس زمن إنجازه.',
-      'تحديد الخطوات التي لا تضيف قيمة وحذفها.',
-      'متابعة أثر التحسين بمؤشرات محددة.',
+      'متابعة اجتماع بالإنجليزية دون فقدان الخيط.',
+      'تدوين القرارات والمهام أثناء الحديث.',
+      'طلب الإعادة أو التوضيح عند اللزوم.',
     ],
     prerequisites: null,
   },
   108: {
     objectives: [
-      'التمييز بين الحوكمة والإدارة والرقابة.',
-      'قراءة السياسات وتطبيقها في العمل اليومي.',
-      'التعرف على مسارات الإبلاغ عن المخالفات.',
+      'إعداد عرض قصير بالإنجليزية ببنية واضحة.',
+      'تقديمه بلغة بسيطة ومفهومة.',
+      'الإجابة عن أسئلة الحضور والتعامل مع ما لا تعرفه.',
     ],
     prerequisites: null,
   },
   109: {
     objectives: [
-      'الاستعداد للنزول الميداني وتجهيز المعدات.',
-      'تطبيق إجراءات السلامة أثناء العمل.',
-      'توثيق ما تم في الموقع ورفعه.',
+      'كتابة تقرير مطوّل ببنية منطقية متماسكة.',
+      'استخدام لغة دقيقة تحتمل معنى واحدًا.',
+      'مراجعة النص وتحريره قبل اعتماده.',
     ],
-    prerequisites: null,
+    prerequisites: 'إتقان الإنجليزية عند المستوى المتوسط (B2) أو ما يعادله.',
   },
   110: {
     objectives: [
-      'بناء عرض تقديمي متدرج وواضح.',
-      'استخدام الألوان والخطوط بما يخدم المحتوى.',
-      'تبسيط البيانات في رسوم مفهومة.',
+      'ترجمة نص إداري قصير ترجمة أمينة.',
+      'التعامل مع المصطلح الذي لا مقابل مباشر له.',
+      'مراجعة الترجمة مقابل أصلها.',
     ],
-    prerequisites: null,
+    prerequisites: 'إتقان الإنجليزية عند المستوى المتقدم (C1).',
   },
+
+  /* ── Arabic ───────────────────────────────────────────────────────────── */
   111: {
     objectives: [
-      'استقبال المتعامل وفهم طلبه بدقة.',
-      'إنجاز الطلب أو تحويله للجهة الصحيحة.',
-      'قياس رضا المتعامل ومتابعة الملاحظات.',
+      'كتابة الهمزات والتاءين كتابة صحيحة.',
+      'وضع الفاصلة والنقطة في مواضعها.',
+      'مراجعة نص قصير وتصحيح إملائه.',
     ],
     prerequisites: null,
   },
   112: {
     objectives: [
-      'تصنيف الوثائق الورقية وترميزها.',
-      'حفظ الملفات واسترجاعها يدويًا.',
-      'إعداد محضر الإتلاف وفق المدد النظامية.',
+      'التمييز بين الجملة الاسمية والفعلية.',
+      'ترتيب عناصر الجملة بما يوضح المعنى.',
+      'تفكيك الجملة الطويلة إلى جملتين مفهومتين.',
     ],
     prerequisites: null,
   },
   113: {
     objectives: [
-      'تنظيم فريق الموقع وتوزيع المهام.',
-      'متابعة التنفيذ ومعالجة المعوقات.',
-      'التنسيق مع الجهات الأخرى في الموقع.',
+      'إعراب ما يرد في النصوص الإدارية من مرفوعات ومنصوبات.',
+      'تصحيح الخطأ النحوي الشائع في المراسلات.',
+      'ضبط أواخر الكلمات حين يلزم الضبط.',
     ],
-    prerequisites: null,
+    prerequisites: 'إتمام «بناء الجملة العربية السليمة» أو ما يعادله.',
   },
   114: {
     objectives: [
-      'تقييم الحالة وطلب المساعدة المناسبة.',
-      'التعامل مع الإصابات والحروق الشائعة.',
-      'استخدام حقيبة الإسعافات بشكل صحيح.',
+      'صياغة مذكرة رسمية بطلب واحد واضح.',
+      'اختيار الصيغة المناسبة للمخاطَب ودرجته.',
+      'اختصار الخطاب دون إخلال بمضمونه.',
     ],
     prerequisites: null,
   },
   115: {
     objectives: [
-      'تشغيل الأجهزة المكتبية بأمان.',
-      'إجراء الصيانة اليومية البسيطة.',
-      'التعرف على الأعطال التي تستدعي المختص.',
+      'كتابة محضر اجتماع يفهمه من لم يحضره.',
+      'إعداد تقرير دوري يفصل الواقعة عن الرأي.',
+      'عرض الأرقام في التقرير عرضًا مقروءًا.',
     ],
     prerequisites: null,
   },
   116: {
     objectives: [
-      'بناء جدول صيانة وقائية للمرفق.',
-      'توثيق أعمال الصيانة ومتابعتها.',
-      'تقدير العمر التشغيلي للأصول.',
+      'حذف الحشو دون فقدان المعنى.',
+      'استبدال العبارة الطويلة بأخرى أدق.',
+      'مراجعة نص جاهز واختصاره إلى نصفه.',
     ],
     prerequisites: null,
   },
   117: {
     objectives: [
-      'استلام الأصناف وفحصها وتخزينها.',
-      'إدارة العهد وتسليمها واستردادها.',
-      'تنفيذ الجرد الدوري ومعالجة الفروقات.',
+      'مراجعة نص لغويًا قبل اعتماده.',
+      'التمييز بين الخطأ والاختيار الأسلوبي.',
+      'توحيد المصطلح والرسم عبر النص الواحد.',
     ],
     prerequisites: null,
   },
   118: {
     objectives: [
-      'تحديد مخاطر بيئة العمل وتصنيفها.',
-      'تطبيق وسائل الوقاية ومعدات الحماية.',
-      'الإبلاغ عن الحوادث وأشباه الحوادث.',
+      'صياغة مادة تنظيمية لا تحتمل أكثر من معنى.',
+      'الإحالة إلى مواد أخرى إحالة صحيحة.',
+      'مراجعة اللائحة بحثًا عن التعارض والتكرار.',
     ],
-    prerequisites: null,
+    prerequisites: 'إتمام «النحو التطبيقي: المرفوعات والمنصوبات».',
   },
   119: {
     objectives: [
-      'إجراء الفحص الدوري قبل التشغيل.',
-      'الالتزام بقواعد استخدام المركبة الحكومية.',
-      'التصرف السليم عند العطل أو الحادث.',
+      'إعداد كلمة رسمية قصيرة ومتماسكة.',
+      'إلقاؤها بلغة سليمة ونبرة مناسبة.',
+      'التعامل مع التلعثم والوقفات أثناء الإلقاء.',
     ],
-    prerequisites: 'رخصة قيادة سارية.',
+    prerequisites: null,
   },
+
+  /* ── Communication skills ─────────────────────────────────────────────── */
   120: {
     objectives: [
-      'تفعيل خطة الاستجابة وتحديد الأدوار.',
-      'إدارة الاتصال أثناء الأزمة.',
-      'توثيق الحدث وإعداد تقرير الدروس المستفادة.',
+      'اختيار قناة التواصل المناسبة للرسالة.',
+      'صياغة رسالة برسالة واحدة واضحة.',
+      'التمييز بين ما يُكتب وما يُقال.',
     ],
-    prerequisites: 'يُنصح بإكمال «السلامة المهنية والوقاية من المخاطر».',
+    prerequisites: null,
   },
   121: {
     objectives: [
-      'اختيار المقياس الإحصائي المناسب للسؤال.',
-      'قراءة التشتت والاتجاه في البيانات.',
-      'تجنّب الاستنتاجات المضللة من الأرقام.',
+      'الإنصات حتى نهاية الحديث قبل الرد.',
+      'طرح سؤال يوضّح بدل سؤال يُربك.',
+      'إعادة صياغة ما سمعته للتأكد من فهمه.',
     ],
-    prerequisites: 'يُنصح بإكمال «تحليل البيانات للمبتدئين».',
+    prerequisites: null,
   },
   122: {
     objectives: [
-      'اختيار المؤشرات التي تعبّر عن الأداء فعلًا.',
-      'تصميم لوحة تُقرأ في دقيقة واحدة.',
-      'ربط اللوحة بمصدر بيانات محدّث.',
+      'استقبال طلب المتعامل وفهمه بدقة.',
+      'إدارة توقعاته بشأن المدة والنتيجة.',
+      'إغلاق المعاملة بإجابة واضحة لا بوعد مفتوح.',
     ],
-    prerequisites: 'إلمام أساسي بجداول البيانات.',
+    prerequisites: null,
   },
   123: {
     objectives: [
-      'صياغة سؤال بحثي قابل للإجابة.',
-      'اختيار المنهج وأداة جمع البيانات.',
-      'التعامل مع أخلاقيات البحث وموافقة المشاركين.',
+      'إعداد جدول أعمال يحدد ما يُقرَّر.',
+      'إدارة النقاش وإعادته إلى موضوعه.',
+      'توثيق القرارات والمهام بصيغة قابلة للمتابعة.',
     ],
     prerequisites: null,
   },
   124: {
     objectives: [
-      'تحديد أهداف السياسة ومؤشرات نجاحها.',
-      'مقارنة النتائج المتحققة بالمستهدف.',
-      'صياغة توصيات مبنية على الأدلة.',
-    ],
-    prerequisites: 'يُنصح بإكمال «مناهج البحث وتصميم الدراسات».',
-  },
-  125: {
-    objectives: [
-      'تنظيم البيانات في جداول مترابطة.',
-      'كتابة استعلامات لاستخراج المعلومة.',
-      'تجنّب تكرار البيانات وتعارضها.',
+      'بناء رسالة مقنعة تبدأ بما يهم المستمع.',
+      'تقديمها بثقة وبإيقاع مناسب.',
+      'التعامل مع الاعتراض دون مواجهة.',
     ],
     prerequisites: null,
   },
+  125: {
+    objectives: [
+      'تحضير موقفك وبدائلك قبل التفاوض.',
+      'الوصول إلى اتفاق دون تصعيد.',
+      'حفظ العلاقة بعد انتهاء الخلاف.',
+    ],
+    prerequisites: 'إتمام «الإنصات الفعّال وطرح الأسئلة».',
+  },
   126: {
     objectives: [
-      'تمييز أسباب المشكلة عن أعراضها.',
-      'تقييم البدائل وفق معايير واضحة.',
-      'اختبار الافتراضات قبل اعتمادها.',
+      'تحديد ما يُقال ومتى ولمن في الموقف الصعب.',
+      'إبلاغ الخبر السيئ بوضوح ومسؤولية.',
+      'تجنّب الوعد الذي لا يمكن الوفاء به.',
     ],
     prerequisites: null,
   },
   127: {
     objectives: [
-      'رصد الاتجاهات المؤثرة على القطاع.',
-      'بناء سيناريوهات بديلة للمستقبل.',
-      'ترجمة السيناريو إلى استعداد عملي.',
-    ],
-    prerequisites: null,
-  },
-  128: {
-    objectives: [
-      'تطبيق عناصر الهوية على المواد الرسمية.',
-      'الحفاظ على اتساق الهوية عبر القنوات.',
-      'إعداد ملفات جاهزة للطباعة والنشر.',
-    ],
-    prerequisites: null,
-  },
-  129: {
-    objectives: [
-      'كتابة سيناريو قصير لرسالة محددة.',
-      'التصوير بإضاءة وصوت مقبولين.',
-      'إجراء المونتاج وإخراج النسخة النهائية.',
-    ],
-    prerequisites: null,
-  },
-  130: {
-    objectives: [
-      'كتابة نص رقمي موجز وواضح.',
-      'مخاطبة الجمهور المستهدف بلغته.',
-      'مراجعة النص وتحريره قبل النشر.',
-    ],
-    prerequisites: null,
-  },
-  131: {
-    objectives: [
-      'رسم رحلة المتعامل وتحديد نقاط التعثّر.',
-      'إعادة تصميم الخطوة حول احتياج المستخدم.',
-      'اختبار التصميم مع مستخدمين حقيقيين.',
-    ],
-    prerequisites: null,
-  },
-  132: {
-    objectives: [
-      'ضبط الكاميرا للتصوير في الفعاليات.',
-      'اختيار الزوايا التي تخدم الرسالة.',
-      'معالجة الصور وأرشفتها للنشر.',
-    ],
-    prerequisites: null,
-  },
-  133: {
-    objectives: [
-      'بناء رسالة توعوية حول قصة واضحة.',
-      'اختيار القناة المناسبة للجمهور.',
-      'قياس وصول الحملة وأثرها.',
-    ],
-    prerequisites: null,
-  },
-  134: {
-    objectives: [
-      'التعامل مع الغضب دون تصعيد.',
-      'تحويل الشكوى إلى حل قابل للتنفيذ.',
-      'توثيق الحالة والمتابعة حتى الإغلاق.',
-    ],
-    prerequisites: 'يُنصح بإكمال «خدمة المتعاملين».',
-  },
-  135: {
-    objectives: [
-      'تصميم حقيبة تدريبية بأهداف قابلة للقياس.',
-      'إدارة القاعة وإشراك المتدربين.',
-      'قياس أثر التدريب بعد فترة من انتهائه.',
-    ],
-    prerequisites: 'خبرة عملية لا تقل عن سنة في مجال التخصص.',
-  },
-  136: {
-    objectives: [
-      'الاستماع الفعّال وفهم احتياج الزميل.',
-      'التوجيه نحو مصادر الدعم المناسبة.',
-      'الحفاظ على السرّية وحدود الدور.',
-    ],
-    prerequisites: null,
-  },
-  137: {
-    objectives: [
-      'بناء الثقة والاتفاق على قواعد العمل.',
-      'معالجة الخلاف قبل أن يتحول إلى نزاع.',
-      'إعطاء التغذية الراجعة وتلقيها.',
-    ],
-    prerequisites: null,
-  },
-  138: {
-    objectives: [
-      'استخدام المفردات الأساسية في الخدمة.',
-      'استقبال المتعامل من أصحاب الهمم دون وسيط.',
-      'تهيئة بيئة الخدمة لتكون ميسّرة.',
-    ],
-    prerequisites: null,
-  },
-  139: {
-    objectives: [
-      'تصميم برنامج توعوي لفئة محددة.',
-      'التنسيق مع الشركاء المجتمعيين.',
-      'قياس مشاركة المجتمع وأثر البرنامج.',
-    ],
-    prerequisites: null,
-  },
-  140: {
-    objectives: [
-      'تحديد الأهداف وتفويض المهام بوضوح.',
-      'إدارة الأداء والتغذية الراجعة.',
-      'تحفيز الفريق ومعالجة ضعف الأداء.',
-    ],
-    prerequisites: 'مخصصة لشاغلي المواقع الإشرافية أو المرشحين لها.',
-  },
-  141: {
-    objectives: [
-      'الاستعداد للتفاوض وتحديد البدائل.',
-      'إدارة توقعات الأطراف المختلفة.',
-      'الوصول إلى اتفاق قابل للتنفيذ وتوثيقه.',
-    ],
-    prerequisites: null,
-  },
-  142: {
-    objectives: [
-      'تهيئة الموظفين للتغيير والتواصل بشأنه.',
-      'فهم أسباب المقاومة ومعالجتها.',
-      'ترسيخ التغيير في الإجراءات اليومية.',
-    ],
-    prerequisites: null,
-  },
-  143: {
-    objectives: [
-      'تحويل الفكرة إلى مبادرة لها نطاق وموارد.',
-      'بناء حالة عمل مقنعة لأصحاب القرار.',
-      'تحديد مؤشرات النجاح ومتابعتها.',
-    ],
-    prerequisites: null,
-  },
-  144: {
-    objectives: [
-      'بناء العرض حول رسالة واحدة واضحة.',
-      'الإلقاء بلغة جسد وصوت يدعمان المحتوى.',
-      'إدارة الأسئلة والاعتراضات بثقة.',
-    ],
-    prerequisites: null,
-  },
-  145: {
-    objectives: [
-      'تصنيف الوثائق وفق دليل موحّد.',
-      'الأرشفة الإلكترونية والاسترجاع السريع.',
-      'تطبيق مدد الحفظ والإتلاف النظامية.',
-    ],
-    prerequisites: null,
-  },
-  146: {
-    objectives: [
-      'تحديد المخاطر وتقدير أثرها واحتمالها.',
-      'تصميم الضوابط الرقابية المناسبة.',
-      'متابعة فاعلية الضوابط وتحديث السجل.',
-    ],
-    prerequisites: 'يُنصح بإكمال «مقدمة في الحوكمة والامتثال».',
-  },
-  147: {
-    objectives: [
-      'إعداد الميزانية التشغيلية وتقدير البنود.',
-      'متابعة الصرف وتحليل الانحرافات.',
-      'إعداد التقارير المالية الدورية.',
-    ],
-    prerequisites: null,
-  },
-  148: {
-    objectives: [
-      'تطبيق مبدأ جمع أقل قدر من البيانات.',
-      'التعامل مع طلبات أصحاب البيانات.',
-      'التعرف على حالات التسريب والإبلاغ عنها.',
+      'كتابة رسالة قصيرة برسالة واحدة واضحة.',
+      'اختيار النبرة المناسبة لمجموعة العمل.',
+      'معرفة متى ينتقل الموضوع من الرسالة إلى الاجتماع.',
     ],
     prerequisites: null,
   },

@@ -207,15 +207,6 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
 
   const [pathIds, setPathIds] = useState<string[]>(course.paths.map((path) => path.id));
   const rules = course.pathRules;
-  /* The letters the current selection would give the course (D-066) — the live
-     form of the read-only preview, and the input to the coherence rule. */
-  const selectedLetters = [
-    ...new Set(
-      course.availablePaths
-        .filter((path) => pathIds.includes(path.id))
-        .map((path) => path.riasecLetter),
-    ),
-  ];
   const [duration, setDuration] = useState(course.durationMinutes?.toString() ?? '');
   /* One objective per line: a repeating-row editor for three short strings is
      more UI than the data deserves, and a textarea is what an author already
@@ -267,21 +258,19 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
       <p className="mt-1 text-sm text-muted-foreground">{t('metadataHint')}</p>
 
       <form onSubmit={onSubmit} className="mt-4 space-y-5">
-        <fieldset disabled={course.isGeneral}>
+        <fieldset>
           <legend className="text-sm font-medium text-foreground">{t('fieldPaths')}</legend>
           <p className="mt-1 text-sm text-muted-foreground">
             {t('fieldPathsHint')} {t('pathsCapHint', { max: rules.maxPaths })}
           </p>
 
-          {course.isGeneral ? (
-            /* Admin-only reach (§4C.5): nothing to choose here. */
-            <p role="status" className="mt-2 text-sm text-foreground">
-              {t('courseGeneral')}
-            </p>
-          ) : null}
+          {/* What an entity decides, and what it does not (D-134): offering a
+              course to a path is theirs; which rung it sits on is the
+              ministry's, and this form has no control for it. */}
+          <p className="mt-1 text-sm text-muted-foreground">{t('pathsPlacementNote')}</p>
 
           {rules.frozen ? (
-            /* Grandfathered: over the limits from before the rule existed.
+            /* Grandfathered: over the cap from before the rule existed.
                Removals only, and said so — a disabled checkbox with no reason
                would read as a bug. */
             <p role="status" className="mt-2 text-sm text-warning">
@@ -289,32 +278,27 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
             </p>
           ) : null}
 
-          {rules.approvalRequired ? (
-            <p className="mt-2 text-sm text-muted-foreground">{t('pathsApprovalNote')}</p>
-          ) : null}
-
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             {course.availablePaths.map((path) => {
               const checked = pathIds.includes(path.id);
               const membership = course.paths.find((entry) => entry.id === path.id);
-              const wouldAddLetter = !selectedLetters.includes(path.riasecLetter);
-              /* The same three rules the server applies (TAM-141), decided
-                 per checkbox so the form never offers a choice it would then
-                 refuse: frozen → removals only; the cap; coherence. */
+              const placed = membership?.placement === 'PLACED';
+              /* The same rules the server applies: frozen → removals only, the
+                 cap, and a placed membership the entity may not withdraw. The
+                 form never offers a choice it would then be refused. */
               const disabled =
-                !checked &&
-                (rules.frozen ||
-                  pathIds.length >= rules.maxPaths ||
-                  (wouldAddLetter && selectedLetters.length >= rules.maxLetters));
-              const reason = !checked
-                ? rules.frozen
-                  ? t('pathsFrozen')
-                  : pathIds.length >= rules.maxPaths
-                    ? t('pathsCapReached')
-                    : wouldAddLetter && selectedLetters.length >= rules.maxLetters
-                      ? t('pathsLettersReached', { max: rules.maxLetters })
-                      : null
-                : null;
+                (checked && placed) ||
+                (!checked && (rules.frozen || pathIds.length >= rules.maxPaths));
+              const reason =
+                checked && placed
+                  ? t('pathsPlacedLocked')
+                  : !checked
+                    ? rules.frozen
+                      ? t('pathsFrozen')
+                      : pathIds.length >= rules.maxPaths
+                        ? t('pathsCapReached')
+                        : null
+                    : null;
 
               return (
                 <label
@@ -330,9 +314,11 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
                     className="size-4 rounded border-input"
                   />
                   <span>{path.name}</span>
-                  {membership?.status === 'PENDING' ? (
-                    <span className="rounded-sm bg-warning-50 px-1.5 py-0.5 text-xs text-warning">
-                      {t('pathPending')}
+                  {membership ? (
+                    /* Where the administrator put it — read-only, and the
+                       difference between "offered" and "reachable". */
+                    <span className="rounded-sm bg-neutral-100 px-1.5 py-0.5 text-xs text-muted-foreground">
+                      {membership.level ? membership.level.name : t('pathUnassigned')}
                     </span>
                   ) : null}
                   {reason ? (
@@ -345,23 +331,6 @@ function MetadataForm({ course, onSaved }: { course: EntityCourseDetail; onSaved
             })}
           </div>
         </fieldset>
-
-        {/*
-          Read-only, and derived from the paths above (D-066). §3A makes the path
-          the owner of the letter, so a separately authored one could contradict
-          it — and nothing downstream would notice, because the gold
-          recommendation never reads a course's letter.
-        */}
-        <p className="text-sm text-muted-foreground">
-          {t('riasecLetters')}:{' '}
-          <span className="font-medium text-foreground">
-            {course.isGeneral
-              ? t('riasecNone')
-              : selectedLetters.length > 0
-                ? selectedLetters.join(' · ')
-                : t('riasecNone')}
-          </span>
-        </p>
 
         <Field id="course-duration" label={t('fieldDuration')}>
           {(field) => (

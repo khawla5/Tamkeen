@@ -31,8 +31,9 @@ export interface PublishReadinessInputs {
 export function publishBlockers(inputs: PublishReadinessInputs): PublishBlocker[] {
   const blockers: PublishBlocker[] = [];
 
-  /* Without a path there is no route to the course: it would sit in the
-     catalogue reachable by browsing but selectable from no path build page. */
+  /* Without a *placed* membership there is no route to the course: it would sit
+     in the catalogue reachable by browsing and owed to nobody, because a learner
+     only ever sees what an administrator put on a rung (D-134). */
   if (inputs.pathCount === 0) {
     blockers.push('NO_PATH');
   }

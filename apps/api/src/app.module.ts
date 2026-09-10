@@ -4,8 +4,6 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AdminModule } from './admin/admin.module';
 import { AssessmentModule } from './assessment/assessment.module';
-import { AssignmentsModule } from './assignments/assignments.module';
-import { EnglishAssessmentModule } from './english-assessment/english-assessment.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogSyncModule } from './catalog-sync/catalog-sync.module';
@@ -73,9 +71,7 @@ import { SettingsModule } from './settings/settings.module';
        assessment ↔ dashboard from becoming a cycle. AssignmentsModule is the
        same shape for the D-132 assignment gate. */
     JourneyModule,
-    AssignmentsModule,
     AssessmentModule,
-    EnglishAssessmentModule,
     PathsModule,
     CoursesModule,
     EnrollmentModule,

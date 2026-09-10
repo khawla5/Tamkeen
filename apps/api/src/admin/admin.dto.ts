@@ -21,10 +21,10 @@ import {
 
 import {
   COURSE_VISIBILITIES,
-  RIASEC_LETTERS,
+  PATH_STATUSES,
+  type PathStatus,
   USER_ROLES,
   type CourseVisibility,
-  type RiasecLetter,
   type UserRole,
 } from '@tamkeen/types';
 
@@ -221,9 +221,25 @@ export class AddDraftQuestionDto {
   @MaxLength(500)
   text!: string;
 
-  /** Which dimension the new question's Likert options score. */
-  @IsIn(RIASEC_LETTERS)
-  letter!: RiasecLetter;
+  /** What a correct answer is worth. One mark unless the author says otherwise. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  marks?: number;
+
+  /** The rung the item is aimed at. Authoring metadata; scoring never reads it. */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsUUID()
+  levelId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsString()
+  @MaxLength(80)
+  topic?: string | null;
 }
 
 export class UpdateDraftQuestionDto {
@@ -237,67 +253,26 @@ export class UpdateDraftQuestionDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(20)
+  marks?: number;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsUUID()
+  levelId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsString()
+  @MaxLength(80)
+  topic?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   @Max(500)
   displayOrder?: number;
-}
-
-/**
- * An option's weights, one bounded integer per dimension.
- *
- * **Every letter is declared explicitly** rather than accepted as a
- * `Record<string, number>`. The DTO is the outermost gate: a `Record` would let
- * `{ "X": 4 }` through validation and leave the enum column to reject it as a
- * 500, and `{ "R": 4, "r": 4 }` through as two keys the database would treat as
- * one. Naming the six is the only shape in which the validator can say no.
- *
- * The 0-10 ceiling is not the Likert scale (0-4) — the schema has always allowed
- * an option to weigh more, and D-048 gives the administrator the weightings.
- * What the bound stops is a typo that makes one dimension unreachable by every
- * other, which the balance guard would then report as an imbalance rather than
- * as the mistake it is.
- */
-export class OptionWeightsDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(10)
-  R?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(10)
-  I?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(10)
-  A?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(10)
-  S?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(10)
-  E?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(10)
-  C?: number;
 }
 
 export class UpdateDraftOptionDto {
@@ -307,10 +282,50 @@ export class UpdateDraftOptionDto {
   @MaxLength(200)
   label?: string;
 
+  /**
+   * Whether this is the answer.
+   *
+   * Setting it true clears the flag on every sibling: a question with two
+   * correct answers is not a state the editor should be able to reach, and
+   * making the client send two requests to move a tick would leave the bank
+   * momentarily invalid between them.
+   */
   @IsOptional()
-  @ValidateNested()
-  @Type(() => OptionWeightsDto)
-  weights?: OptionWeightsDto;
+  @IsBoolean()
+  isCorrect?: boolean;
+}
+
+/** One band of the placement rule (§4C.3, D-134). The whole table is sent. */
+export class BandDto {
+  @IsUUID()
+  levelId!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_000)
+  minScore!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_000)
+  maxScore!: number;
+}
+
+export class SetBandsDto {
+  /**
+   * The complete table, or an empty list to fall back to the even split.
+   *
+   * Sent whole rather than edited row by row because the rule it expresses is a
+   * partition: a single band is meaningless on its own, and validating one at a
+   * time would let the editor sit in a state with a gap in it.
+   */
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => BandDto)
+  bands!: BandDto[];
 }
 
 export class ReorderDraftDto {
@@ -353,9 +368,6 @@ export class CreatePathDto {
   @MaxLength(80, { each: true })
   skillOutcomes?: string[];
 
-  @IsIn(RIASEC_LETTERS)
-  riasecLetter!: RiasecLetter;
-
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -372,8 +384,9 @@ export class CreatePathDto {
   @Max(1000)
   displayOrder?: number;
 
-  /* No `isActive`: a path is created empty, and an empty path is one no learner
-     could confirm. Activation is a second, deliberate step. */
+  /* No `status`: a path is created with no rungs, no assessment and no placed
+     course, which is exactly what `pathBlockers` refuses. Publishing is a
+     second, deliberate step. */
 }
 
 export class UpdatePathDto {
@@ -397,10 +410,6 @@ export class UpdatePathDto {
   skillOutcomes?: string[];
 
   @IsOptional()
-  @IsIn(RIASEC_LETTERS)
-  riasecLetter?: RiasecLetter;
-
-  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -414,23 +423,88 @@ export class UpdatePathDto {
   @Max(1000)
   displayOrder?: number;
 
-  /** Whether learners are offered it. Refused when the path is not offerable. */
+  /** Whether the ministry may assign it. Refused when the path is not offerable. */
   @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  @IsIn(PATH_STATUSES)
+  status?: PathStatus;
 }
 
 export class AttachCourseDto {
   @IsUUID()
   courseId!: string;
+
+  /* Deliberately no `levelId` and no `position`. Attaching a course to a path
+     and deciding where it sits are two decisions with two endpoints (D-134),
+     and the global pipe's `forbidNonWhitelisted` refuses either field here. */
 }
 
-export class ReorderPathCoursesDto {
+export class CreateLevelDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  name!: string;
+}
+
+export class UpdateLevelDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  name!: string;
+}
+
+export class ReorderLevelsDto {
   /** The complete order. A partial one is refused by the service. */
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID(undefined, { each: true })
+  levelIds!: string[];
+}
+
+/**
+ * Where a course sits in a path (§4C.4, D-134). **Admin only.**
+ *
+ * `levelId: null` unplaces it — back to the unassigned group, visible to no
+ * learner. `position` absent means the end of the level, which is what dropping
+ * a course onto a rung means by default.
+ */
+export class PlaceCourseDto {
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsUUID()
+  levelId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  position?: number | null;
+}
+
+export class ReorderLevelCoursesDto {
+  /** The complete order of one level's memberships. */
   @IsArray()
   @ArrayMaxSize(500)
   @IsUUID(undefined, { each: true })
-  courseIds!: string[];
+  pathCourseIds!: string[];
+}
+
+/**
+ * §4C.2 — assigning a path to employees (D-130/D-134).
+ *
+ * Sent as one request per path with many employees, because that is how an
+ * administrator works: a directorate is put on a path together. Each grant is
+ * still its own audit event.
+ */
+export class AssignPathDto {
+  @IsUUID()
+  pathId!: string;
+
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsUUID(undefined, { each: true })
+  userIds!: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

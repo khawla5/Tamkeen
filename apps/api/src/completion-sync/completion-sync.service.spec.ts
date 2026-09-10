@@ -3,6 +3,7 @@ import type { AuditEntry, AuditService } from '../audit/audit.service';
 import type { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import type { AppConfigService } from '../config/app-config.module';
 import type { EmailService } from '../email/email.service';
+import type { EnrollmentService } from '../enrollment/enrollment.service';
 import type { LmsPort } from '../moodle/lms.port';
 import { LmsUnavailableError, type LmsCourseProgress } from '../moodle/lms.types';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -26,26 +27,26 @@ interface CompletionRow {
   passThresholdUsed: number | null;
 }
 
-interface ChosenRow {
-  id: string;
+/** A course the assigned path owes this learner (D-134). */
+interface OwedRow {
   moodleCourseId: number;
-  status: string;
 }
 
 function harness(options: {
   progress?: LmsCourseProgress[];
   completions?: CompletionRow[];
-  chosen?: ChosenRow[];
+  owed?: OwedRow[];
   learners?: Array<{ id: string; email: string; moodleUserId: number | null }>;
   passThreshold?: number;
   listProgressThrows?: boolean;
   emailThrows?: boolean;
   issuanceThrows?: boolean;
   pathIssuanceThrows?: boolean;
-  pathConfirmed?: boolean;
+  /** False when the assessment has not placed the learner yet. */
+  placed?: boolean;
 }) {
   const completions = options.completions ?? [];
-  const chosen = options.chosen ?? [];
+  const owed = options.owed ?? [];
   const audits: AuditEntry[] = [];
   const emails: Array<{ to: string; title: string; certificateIssued: boolean }> = [];
   const issued: Array<{ userId: string; courseId: string }> = [];
@@ -101,35 +102,8 @@ function harness(options: {
         return Promise.resolve({});
       },
     },
-    userPathCourse: {
-      findMany: (args: { where: { course?: { moodleCourseId?: number } } }) =>
-        Promise.resolve(
-          chosen
-            .filter((row) => row.moodleCourseId === args.where.course?.moodleCourseId)
-            .map((row) => ({ id: row.id, status: row.status })),
-        ),
-      update: (args: { where: { id: string }; data: { status: string } }) => {
-        const row = chosen.find((candidate) => candidate.id === args.where.id);
-        if (row) row.status = args.data.status;
-        return Promise.resolve({});
-      },
-    },
     userPath: {
-      findUnique: () =>
-        Promise.resolve({
-          id: 'path-1',
-          pathId: 'path-def-1',
-          status: pathStatus,
-          confirmedAt: options.pathConfirmed === false ? null : new Date(),
-          courses: chosen.map((row) => ({ course: { moodleCourseId: row.moodleCourseId } })),
-        }),
-      update: (args: { where: { id: string }; data: { status: string } }) => {
-        pathUpdates.push(args.where.id);
-        /* Mirrors the real row so a second sync sees a finished path and
-           returns early, which is what makes the seam fire exactly once. */
-        pathStatus = args.data.status;
-        return Promise.resolve({});
-      },
+      findMany: () => Promise.resolve(pathStatus === 'ACTIVE' ? [{ pathId: 'path-def-1' }] : []),
     },
     course: { findUnique: () => Promise.resolve({ id: 'course-1', title: 'دورة الأمن' }) },
     path: { findUnique: () => Promise.resolve({ name: 'مسار القيادة الإدارية' }) },
@@ -194,10 +168,41 @@ function harness(options: {
     },
   } as unknown as LmsPort;
 
+  /*
+   * The one derivation of "what does this path owe, and is it finished" lives in
+   * `EnrollmentService` (D-134), so the sync is tested against that seam rather
+   * than against a second copy of the rule. The fake applies the real
+   * condition — every owed course passed — to whatever the sync has just
+   * written into `completions`.
+   */
+  const enrollment = {
+    refreshPathCompletion: (userId: string, pathId: string) => {
+      if (pathStatus !== 'ACTIVE' || options.placed === false || owed.length === 0) {
+        return Promise.resolve(false);
+      }
+
+      const finished = owed.every(
+        (row) =>
+          completions.find((completion) => completion.moodleCourseId === row.moodleCourseId)
+            ?.passed === true,
+      );
+
+      if (!finished) {
+        return Promise.resolve(false);
+      }
+
+      pathStatus = 'COMPLETED';
+      pathUpdates.push(pathId);
+      void userId;
+
+      return Promise.resolve(true);
+    },
+  } as unknown as EnrollmentService;
+
   return {
-    service: new CompletionSyncService(prisma, audit, config, email, certificates, lms),
+    service: new CompletionSyncService(prisma, audit, config, email, certificates, enrollment, lms),
     completions,
-    chosen,
+    owed,
     audits,
     emails,
     issued,
@@ -352,55 +357,20 @@ describe('CompletionSyncService', () => {
     });
   });
 
-  describe('mirroring onto the chosen courses', () => {
-    it('marks the learner’s chosen course complete', async () => {
-      const { service, chosen } = harness({
-        progress: [passed()],
-        chosen: [{ id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' }],
-      });
+  describe('one completion per course, whatever route reached it (D-003)', () => {
+    it('writes a single row keyed on the LMS course', async () => {
+      /* A course can belong to more than one path, and a learner may hold two
+         paths that both contain it. Keying on `moodle_course_id` is what makes
+         the one completion count everywhere, so nothing is ever re-taken — and
+         with `user_path_courses` gone there is no second row to keep in step
+         (D-134). */
+      const { service, completions } = harness({ progress: [passed()] });
 
       await service.sync();
-
-      expect(chosen[0]!.status).toBe('COMPLETED');
-    });
-
-    it('reuses one completion across every route to the same course (D-003)', async () => {
-      /* A course can belong to more than one path. Matching on moodle_course_id
-         is what makes the completion count wherever it is reachable, so nothing
-         is ever re-taken. */
-      const { service, chosen } = harness({
-        progress: [passed()],
-        chosen: [
-          { id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' },
-          { id: 'upc-2', moodleCourseId: 101, status: 'NOT_STARTED' },
-        ],
-      });
-
       await service.sync();
 
-      expect(chosen.map((row) => row.status)).toEqual(['COMPLETED', 'COMPLETED']);
-    });
-
-    it('marks an attempted-but-unfinished course in progress', async () => {
-      const { service, chosen } = harness({
-        progress: [{ ...passed(), completed: false, gradePercent: 40 }],
-        chosen: [{ id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' }],
-      });
-
-      await service.sync();
-
-      expect(chosen[0]!.status).toBe('IN_PROGRESS');
-    });
-
-    it('leaves an untouched course alone rather than inventing progress', async () => {
-      const { service, chosen } = harness({
-        progress: [{ ...passed(), completed: false, gradePercent: null }],
-        chosen: [{ id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' }],
-      });
-
-      await service.sync();
-
-      expect(chosen[0]!.status).toBe('NOT_STARTED');
+      expect(completions).toHaveLength(1);
+      expect(completions[0]).toMatchObject({ moodleCourseId: 101, passed: true });
     });
   });
 
@@ -408,23 +378,17 @@ describe('CompletionSyncService', () => {
     it('marks the path complete once every course is', async () => {
       const { service, pathUpdates } = harness({
         progress: [passed(101), passed(102)],
-        chosen: [
-          { id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' },
-          { id: 'upc-2', moodleCourseId: 102, status: 'NOT_STARTED' },
-        ],
+        owed: [{ moodleCourseId: 101 }, { moodleCourseId: 102 }],
       });
 
       await expect(service.sync()).resolves.toMatchObject({ pathsCompleted: 1 });
-      expect(pathUpdates).toEqual(['path-1']);
+      expect(pathUpdates).toEqual(['path-def-1']);
     });
 
     it('does not complete a path with a course still outstanding', async () => {
       const { service, pathUpdates } = harness({
         progress: [passed(101)],
-        chosen: [
-          { id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' },
-          { id: 'upc-2', moodleCourseId: 102, status: 'NOT_STARTED' },
-        ],
+        owed: [{ moodleCourseId: 101 }, { moodleCourseId: 102 }],
       });
 
       await service.sync();
@@ -432,36 +396,34 @@ describe('CompletionSyncService', () => {
       expect(pathUpdates).toEqual([]);
     });
 
-    it('audits path completion', async () => {
-      const { service, audits } = harness({
+    it('reports how many paths this run finished', async () => {
+      /* The completion decision itself belongs to `EnrollmentService`, which
+         owns the "what does this path owe" derivation and audits
+         `PATH_COMPLETED` (D-134). What the sync owns is asking every assigned
+         path, once per run, and reporting the answer. */
+      const { service, pathUpdates } = harness({
         progress: [passed(101)],
-        chosen: [{ id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' }],
+        owed: [{ moodleCourseId: 101 }],
       });
 
-      await service.sync();
-
-      expect(audits).toContainEqual(
-        expect.objectContaining({ action: AuditAction.PATH_COMPLETED }),
-      );
+      await expect(service.sync()).resolves.toMatchObject({ pathsCompleted: 1 });
+      expect(pathUpdates).toEqual(['path-def-1']);
     });
 
     it('does NOT complete a path whose courses finished below the pass threshold', async () => {
       /*
-       * The defect this gate exists to close. `UserPathCourse.status` becomes
-       * COMPLETED from the LMS's completion signal alone, so a learner can
-       * finish every course in Moodle and pass none of them. Reading the status
-       * would finish the path — and then certify it. §4.9 is explicit that the
-       * path certificate unlocks on complete **and** passed.
+       * The defect this gate exists to close. The LMS's completion signal
+       * arrives on its own, so a learner can finish every course in Moodle and
+       * pass none of them. Treating completion as sufficient would finish the
+       * path — and then certify it. §4.9 is explicit that the path certificate
+       * unlocks on complete **and** passed.
        */
       const { service, pathUpdates, issuedPaths } = harness({
         progress: [
           { ...passed(101), gradePercent: 40 },
           { ...passed(102), gradePercent: 55 },
         ],
-        chosen: [
-          { id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' },
-          { id: 'upc-2', moodleCourseId: 102, status: 'NOT_STARTED' },
-        ],
+        owed: [{ moodleCourseId: 101 }, { moodleCourseId: 102 }],
       });
 
       const result = await service.sync();
@@ -474,10 +436,7 @@ describe('CompletionSyncService', () => {
     it('does not complete a path where only some courses passed', async () => {
       const { service, pathUpdates } = harness({
         progress: [passed(101), { ...passed(102), gradePercent: 30 }],
-        chosen: [
-          { id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' },
-          { id: 'upc-2', moodleCourseId: 102, status: 'NOT_STARTED' },
-        ],
+        owed: [{ moodleCourseId: 101 }, { moodleCourseId: 102 }],
       });
 
       await service.sync();
@@ -489,10 +448,7 @@ describe('CompletionSyncService', () => {
   describe('the path certificate seam', () => {
     const finishedPath = {
       progress: [passed(101), passed(102)],
-      chosen: [
-        { id: 'upc-1', moodleCourseId: 101, status: 'NOT_STARTED' },
-        { id: 'upc-2', moodleCourseId: 102, status: 'NOT_STARTED' },
-      ],
+      owed: [{ moodleCourseId: 101 }, { moodleCourseId: 102 }],
     };
 
     it('issues the path certificate on the run that finishes the path', async () => {
@@ -504,8 +460,8 @@ describe('CompletionSyncService', () => {
     });
 
     it('does not re-enter the seam on later runs', async () => {
-      /* `refreshPathStatus` returns early once the path is COMPLETED, so this
-         fires exactly once — which is also why reconciliation has to exist. */
+      /* `refreshPathCompletion` returns false once the path is COMPLETED, so
+         this fires exactly once — which is also why reconciliation exists. */
       const { service, issuedPaths, pathEmails } = harness(finishedPath);
 
       await service.sync();
@@ -541,12 +497,12 @@ describe('CompletionSyncService', () => {
       const result = await service.sync();
 
       expect(result.pathsCompleted).toBe(1);
-      expect(pathUpdates).toEqual(['path-1']);
+      expect(pathUpdates).toEqual(['path-def-1']);
       expect(pathEmails[0]).toMatchObject({ certificateIssued: false });
     });
 
-    it('issues nothing for a path that was never confirmed', async () => {
-      const { service, issuedPaths } = harness({ ...finishedPath, pathConfirmed: false });
+    it('issues nothing for a learner the assessment has not placed', async () => {
+      const { service, issuedPaths } = harness({ ...finishedPath, placed: false });
 
       await service.sync();
 

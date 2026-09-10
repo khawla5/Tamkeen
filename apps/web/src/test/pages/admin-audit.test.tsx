@@ -44,19 +44,35 @@ const { default: AdminAuditPage } = await import('@/app/(admin)/admin/audit/page
 
 const REPORTS: AdminReports = {
   journey: {
-    assessed: 120,
-    building: 9,
-    active: 60,
+    assigned: 120,
+    placed: 90,
     completed: 20,
     pathCompletionRate: 25,
     coursesPassed: 210,
     certificatesIssued: 230,
   },
   pathPopularity: [
-    { pathId: 'p1', name: 'خدمة المتعاملين', riasecLetter: 'S', chosen: 40, completed: 12 },
-    { pathId: 'p2', name: 'الحوكمة والامتثال', riasecLetter: 'C', chosen: 8, completed: 1 },
+    { pathId: 'p1', name: 'خدمة المتعاملين', assigned: 40, completed: 12 },
+    { pathId: 'p2', name: 'الحوكمة والامتثال', assigned: 8, completed: 1 },
   ],
-  codeDistribution: [{ code: 'SIA', count: 40 }],
+  placementDistribution: [
+    {
+      pathId: 'p1',
+      pathName: 'خدمة المتعاملين',
+      levelId: 'l1',
+      levelName: 'تأسيسي',
+      position: 1,
+      employees: 25,
+    },
+    {
+      pathId: 'p1',
+      pathName: 'خدمة المتعاملين',
+      levelId: 'l2',
+      levelName: 'متقدم',
+      position: 2,
+      employees: 15,
+    },
+  ],
   certificates: { course: 200, path: 30, total: 230 },
   courseOutcomes: [
     { courseId: 'c1', title: 'دورة صعبة', enrolled: 40, passed: 4, passRate: 10 },
@@ -81,7 +97,7 @@ function log(overrides: Partial<AdminAuditPage> = {}): AdminAuditPage {
       },
     ],
     nextBefore: null,
-    actions: ['ADMIN_USER_STATUS_CHANGED', 'PATH_CONFIRMED'],
+    actions: ['ADMIN_USER_STATUS_CHANGED', 'LEARNER_PLACED'],
     ...overrides,
   };
 }
@@ -129,8 +145,7 @@ const IMPACT: AdminImpactView = {
   trend: [],
   topCourses: [],
   topPaths: [],
-  letterDistribution: [],
-  cefr: null,
+  placements: [],
 };
 
 /** Renders the page and moves to the reports tab, which no longer opens first. */
@@ -201,22 +216,32 @@ describe('Admin audit and reports (§4C.8)', () => {
     expect(await screen.findAllByText('لا توجد بيانات كافية بعد.')).toHaveLength(2);
   });
 
-  it('shows the Holland-code distribution in Arabic type names', async () => {
+  it('shows where the ministry’s people stand: each path, each rung, how many', async () => {
+    /* D-134 replaced the Holland-code distribution with the question the
+       assigned model makes answerable. A code said what somebody was drawn to;
+       a placement says what they can already do, which is the fact a training
+       programme is planned against. */
     await openReports();
 
-    /* §4C.8 asks for it, the API has always computed it and the export has
-       always carried it — the page never showed it (TAM-138). And spelled out,
-       because «SIA» in an Arabic report names nothing. */
-    expect(await screen.findByText('الاجتماعي · البحثي · الفني')).toBeInTheDocument();
+    /* The separator is its own `aria-hidden` span, so the row's text is matched
+       whole rather than by a substring that spans two elements. */
+    const row = (level: string) => (_: string, node: Element | null) =>
+      node?.tagName === 'SPAN' && node.textContent === `خدمة المتعاملين · ${level}`;
+
+    expect(await screen.findByText(row('تأسيسي'))).toBeInTheDocument();
+    expect(screen.getByText(row('متقدم'))).toBeInTheDocument();
+    expect(screen.getByText('25 موظف')).toBeInTheDocument();
+    /* Three Latin letters name nothing in an Arabic report, and nothing here
+       computes them any more. */
     expect(document.body.textContent).not.toContain('SIA');
   });
 
-  it('counts every stage the export reports, not four of the six', async () => {
+  it('counts every stage the export reports, not some of them', async () => {
     await openReports();
 
     /* The file and the page it came from used to disagree about how the
        programme was doing. */
-    expect(await screen.findByText('يختارون دوراتهم')).toBeInTheDocument();
+    expect(await screen.findByText('موظفون أُسند إليهم مسار')).toBeInTheDocument();
     expect(screen.getByText('دورات مجتازة')).toBeInTheDocument();
   });
 
@@ -284,7 +309,7 @@ describe('Admin audit and reports (§4C.8)', () => {
             {
               id: '2',
               occurredAt: '2026-08-23T08:00:00.000Z',
-              action: 'PATH_CONFIRMED',
+              action: 'LEARNER_PLACED',
               outcome: 'SUCCESS',
               actorName: 'سارة العتيبي',
               targetType: 'user_path',
@@ -473,9 +498,11 @@ describe('Admin audit and reports (§4C.8)', () => {
       const action = await screen.findByLabelText('الإجراء');
       const groups = [...action.querySelectorAll('optgroup')].map((node) => node.label);
 
-      /* Fifty-three options in one flat list is not a filter anybody uses; the
+      /* Fifty-odd options in one flat list is not a filter anybody uses; the
          grouping is the vocabulary's own, so a heading here cannot disagree with
-         what the codebase records (TAM-138). */
+         what the codebase records (TAM-138). Only the categories the fixture's
+         own actions fall into get a heading — an empty group would name a
+         category nothing in the log belongs to. */
       expect(groups).toEqual(['رحلة الموظف', 'إدارة المنصة']);
     });
 

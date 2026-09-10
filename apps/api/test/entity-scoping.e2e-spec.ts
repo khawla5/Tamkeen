@@ -51,6 +51,8 @@ describe('Entity portal scoping (e2e)', () => {
   let entityAId: string;
   let entityBId: string;
   let courseAId: string;
+  /** Any published path, so the per-path learner routes are real ones. */
+  let pathId: string;
   let courseBId: string;
   let courseUnownedId: string;
 
@@ -102,6 +104,12 @@ describe('Entity portal scoping (e2e)', () => {
      * excluded. `courseUnowned` is what proves the filter is an equality on the
      * caller's own id rather than "anything with an owner".
      */
+    const path = await prisma.path.findFirstOrThrow({
+      where: { status: 'PUBLISHED' },
+      select: { id: true },
+    });
+    pathId = path.id;
+
     courseAId = await createCourse(910_001, entityA.id, 'دورة الجهة أ');
     courseBId = await createCourse(910_002, entityB.id, 'دورة الجهة ب');
     courseUnownedId = await createCourse(910_003, null, 'دورة بلا مالك');
@@ -377,12 +385,13 @@ describe('Entity portal scoping (e2e)', () => {
     it('refuses an entity account at the learner endpoints', async () => {
       /*
        * The concrete gap Phase 4 closed. RolesGuard shipped in Phase 0 but no
-       * endpoint declared a role, so until now an ENTITY account could take the
-       * assessment, build a path and confirm it.
+       * endpoint declared a role, so until now an ENTITY account could take a
+       * path's assessment and be placed on its ladder.
        */
-      await get('/api/assessment', sessionEntityA).expect(403);
+      await get(`/api/paths/${pathId}/assessment`, sessionEntityA).expect(403);
       await get('/api/dashboard', sessionEntityA).expect(403);
       await get('/api/my-path', sessionEntityA).expect(403);
+      await get('/api/my-path/all', sessionEntityA).expect(403);
       await get('/api/courses', sessionEntityA).expect(403);
       await get('/api/paths', sessionEntityA).expect(403);
       await get('/api/certificates', sessionEntityA).expect(403);
@@ -390,15 +399,21 @@ describe('Entity portal scoping (e2e)', () => {
     });
 
     it('refuses an entity account the learner write paths too, not merely the reads', async () => {
-      await post('/api/my-path/select', { pathId: courseAId }, sessionEntityA).expect(403);
-      await post('/api/my-path/confirm', {}, sessionEntityA).expect(403);
+      /* The one write a learner has left (D-134): submitting an attempt, which
+         is what places them on a rung. */
+      await post(
+        `/api/paths/${pathId}/assessment/attempts`,
+        { assessmentId: pathId, answers: [] },
+        sessionEntityA,
+      ).expect(403);
+      await post(`/api/courses/${courseAId}/launch`, {}, sessionEntityA).expect(403);
     });
 
     it('does not implicitly grant a super-admin the learner portal', async () => {
       /* D-027: implicit role inheritance is how an admin acquires an employee's
          write path that nobody designed for them. §4C gives them their own. */
       await get('/api/dashboard', sessionAdmin).expect(403);
-      await get('/api/assessment', sessionAdmin).expect(403);
+      await get(`/api/paths/${pathId}/assessment`, sessionAdmin).expect(403);
     });
 
     it('admits a super-admin to the entity portal, unscoped', async () => {
@@ -433,7 +448,7 @@ describe('Entity portal scoping (e2e)', () => {
 
   describe('audit', () => {
     it('records a cross-portal denial', async () => {
-      await get('/api/assessment', sessionEntityB).expect(403);
+      await get(`/api/paths/${pathId}/assessment`, sessionEntityB).expect(403);
 
       const denials = await prisma.auditLog.findMany({
         where: { action: 'AUTHZ_DENIED' },

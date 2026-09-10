@@ -54,7 +54,7 @@ export class CourseAvailabilityService {
         lmsVisible: true,
         availableFrom: true,
         availableUntil: true,
-        _count: { select: { userPathCourses: true } },
+        _count: { select: { enrollments: true } },
       },
     });
 
@@ -65,7 +65,7 @@ export class CourseAvailabilityService {
         publication: course.publication as CoursePublicationValue,
         lmsPresent: course.lmsPresent,
         lmsVisible: course.lmsVisible,
-        heldByAnyLearner: course._count.userPathCourses > 0,
+        heldByAnyLearner: course._count.enrollments > 0,
         withinAvailabilityWindow: isWithinAvailabilityWindow(
           { availableFrom: course.availableFrom, availableUntil: course.availableUntil },
           now,

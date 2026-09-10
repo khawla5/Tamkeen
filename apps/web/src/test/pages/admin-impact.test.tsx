@@ -86,16 +86,25 @@ function view(overrides: Partial<AdminImpactView> = {}): AdminImpactView {
       { courseId: 'c1', title: 'السلامة الميدانية', passes: 60, averageGrade: 82 },
       { courseId: 'c2', title: 'التحقيق الجنائي', passes: 20, averageGrade: null },
     ],
-    topPaths: [{ pathId: 'p1', name: 'العمليات الميدانية', riasecLetter: 'R', completions: 9 }],
-    letterDistribution: [
-      { letter: 'S', employees: 12 },
-      { letter: 'R', employees: 8 },
-      { letter: 'I', employees: 0 },
-      { letter: 'A', employees: 0 },
-      { letter: 'E', employees: 0 },
-      { letter: 'C', employees: 0 },
+    topPaths: [{ pathId: 'p1', name: 'العمليات الميدانية', completions: 9 }],
+    placements: [
+      {
+        pathId: 'p1',
+        pathName: 'العمليات الميدانية',
+        levelId: 'l1',
+        levelName: 'تأسيسي',
+        position: 1,
+        employees: 12,
+      },
+      {
+        pathId: 'p1',
+        pathName: 'العمليات الميدانية',
+        levelId: 'l2',
+        levelName: 'متقدم',
+        position: 2,
+        employees: 8,
+      },
     ],
-    cefr: null,
     ...overrides,
   };
 }
@@ -231,24 +240,28 @@ describe('Admin impact tab (§4C.8, TAM-149)', () => {
     expect(screen.getByText('130 دورة · 110 شهادة')).toBeInTheDocument();
   });
 
-  it('names a career type in Arabic rather than by its letter', async () => {
+  it('names each path and rung the period’s assessments placed people on', async () => {
+    /* D-134 replaced the career-type share, which described inclination rather
+       than capability. This is a fact about the period like every other figure
+       on the tab. */
     renderWithProviders(<ImpactTab />);
 
-    const letters = await screen.findByRole('list', {
-      name: 'الأنماط المهنية لمن أكملوا التقييم في الفترة',
-    });
+    const placements = await screen.findByRole('list', { name: 'تحديد المستويات في الفترة' });
 
-    expect(within(letters).getByText('الاجتماعي')).toBeInTheDocument();
-    /* Six rows always: a dimension nobody led with is itself a finding. */
-    expect(within(letters).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(placements).getByText('العمليات الميدانية · تأسيسي')).toBeInTheDocument();
+    expect(within(placements).getAllByRole('listitem')).toHaveLength(2);
   });
 
-  it('says the level test is not enabled rather than showing an empty block', async () => {
+  it('says nobody was placed rather than leaving an empty block', async () => {
+    /* A quarter in which no directorate sat an assessment is a real finding,
+       not a gap in the data, so the heading stays and the list says so. */
+    api.impact.mockResolvedValue(view({ placements: [] }));
     renderWithProviders(<ImpactTab />);
 
-    /* "Not enabled" and "nobody took it" are different findings, and until
-       TAM-148 ships only one of them is true. */
-    expect(await screen.findByText('لم يُفعَّل اختبار المستوى بعد.')).toBeInTheDocument();
+    expect(await screen.findByText('تحديد المستويات في الفترة')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('list', { name: 'تحديد المستويات في الفترة' }),
+    ).not.toBeInTheDocument();
   });
 
   it('narrows every figure to the department asked for', async () => {
@@ -307,9 +320,9 @@ describe('Admin impact tab (§4C.8, TAM-149)', () => {
     expect(csv).toContain('المشاركة حسب الإدارة');
     expect(csv).toContain('أمن المنشآت');
     expect(csv).toContain('السلامة الميدانية');
-    /* The type name, not «R» — a Latin letter in an Arabic report names
-       nothing. */
-    expect(csv).toContain('الواقعي');
+    /* The path and the rung spelled out, not a level id — an identifier in an
+       Arabic report names nothing. */
+    expect(csv).toContain('العمليات الميدانية · تأسيسي');
 
     click.mockRestore();
   });

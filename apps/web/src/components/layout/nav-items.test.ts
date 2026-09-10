@@ -13,24 +13,32 @@ import {
  * Which navigation a learner sees, and — the part that keeps being wrong — which
  * they do not.
  *
- * Two rules meet here. §4.2 (as amended by D-071) states one outright: before
- * the assessment the nav is Dashboard and Profile only — a new user has exactly
- * one thing to do, and a browsable catalogue competes with it. The other is
- * ours: an item appears only once the page behind it exists, because a link to
- * a 404 advertises something the product cannot do and costs a click to find
- * out.
+ * Two rules meet here. D-071's, restated for the assigned model (D-134): an
+ * employee with no path has exactly one thing to see, and a browsable catalogue
+ * competes with it. The other is ours: an item appears only once the page behind
+ * it has something to show, because a link to a 404 advertises something the
+ * product cannot do and costs a click to find out.
  */
 
 const keys = (state: Parameters<typeof navForState>[0]) => navForState(state).map((i) => i.key);
 
 describe('navForState', () => {
-  it('shows only Dashboard and Profile before the assessment (§4.2, D-071)', () => {
-    expect(keys('PRE_ASSESSMENT')).toEqual(['dashboard', 'profile']);
+  it('shows only Dashboard and Profile before the ministry assigns a path', () => {
+    /* My Path and Courses are not destinations when there is no path. */
+    expect(keys('NO_PATH')).toEqual(['dashboard', 'profile']);
   });
 
-  it('adds Courses the moment the assessment is done, still without My Path', () => {
-    /* My Path is not a destination when there is no path. */
-    expect(keys('ASSESSED_NO_PATH')).toEqual(['dashboard', 'courses', 'profile']);
+  it('shows the full six the moment a path is assigned, before the assessment', () => {
+    /* The path page is where they go to sit it, so hiding My Path until they
+       were placed would hide the one action they have. */
+    expect(keys('AWAITING_PLACEMENT')).toEqual([
+      'dashboard',
+      'courses',
+      'myPath',
+      'certificates',
+      'cv',
+      'profile',
+    ]);
   });
 
   it('shows the full six once a path is active (§4)', () => {
@@ -51,13 +59,11 @@ describe('navForState', () => {
     expect(keys('ACTIVE_PATH')).toContain('certificates');
   });
 
-  it('keeps Certificates and the CV out of the pre-path states', () => {
-    /* Both pages exist now (D-037 is closed), but neither is a destination for
-       someone who has not started a path — §4.2 keeps that nav to three. */
-    for (const state of ['PRE_ASSESSMENT', 'ASSESSED_NO_PATH'] as const) {
-      expect(keys(state)).not.toContain('certificates');
-      expect(keys(state)).not.toContain('cv');
-    }
+  it('keeps Certificates and the CV out of the no-path state', () => {
+    /* Both pages exist (D-037 is closed), but neither is a destination for
+       somebody the ministry has not put on anything. */
+    expect(keys('NO_PATH')).not.toContain('certificates');
+    expect(keys('NO_PATH')).not.toContain('cv');
   });
 
   it('never exceeds the six steady-state items (§3)', () => {
@@ -65,7 +71,7 @@ describe('navForState', () => {
        every state shows a subset of it. */
     expect(STEADY_STATE_NAV).toHaveLength(6);
 
-    for (const state of ['PRE_ASSESSMENT', 'ASSESSED_NO_PATH', 'ACTIVE_PATH'] as const) {
+    for (const state of ['NO_PATH', 'AWAITING_PLACEMENT', 'ACTIVE_PATH'] as const) {
       expect(navForState(state).length).toBeLessThanOrEqual(6);
     }
   });
@@ -73,7 +79,7 @@ describe('navForState', () => {
   it('draws every item from the steady-state list rather than inventing one', () => {
     const known = new Set(STEADY_STATE_NAV.map((item) => item.key));
 
-    for (const state of ['PRE_ASSESSMENT', 'ASSESSED_NO_PATH', 'ACTIVE_PATH'] as const) {
+    for (const state of ['NO_PATH', 'AWAITING_PLACEMENT', 'ACTIVE_PATH'] as const) {
       for (const key of keys(state)) {
         expect(known.has(key)).toBe(true);
       }
@@ -85,7 +91,7 @@ describe('navForState', () => {
        navigation that reorders itself between states is disorienting. */
     const canonical = STEADY_STATE_NAV.map((item) => item.key);
 
-    for (const state of ['PRE_ASSESSMENT', 'ASSESSED_NO_PATH', 'ACTIVE_PATH'] as const) {
+    for (const state of ['NO_PATH', 'AWAITING_PLACEMENT', 'ACTIVE_PATH'] as const) {
       const shown = keys(state);
       expect(shown).toEqual(canonical.filter((key) => shown.includes(key)));
     }

@@ -1,13 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import {
-  COURSE_STATUSES,
-  RIASEC_LETTERS,
-  USER_PATH_COURSE_STATUSES,
-  USER_PATH_STATUSES,
-  USER_ROLES,
-} from '@tamkeen/types';
+import { COURSE_STATUSES, PATH_STATUSES, USER_PATH_STATUSES, USER_ROLES } from '@tamkeen/types';
 
 /**
  * Guards the Prisma schema against drift from the shared types and from the
@@ -149,22 +143,27 @@ describe('Prisma schema', () => {
   });
 
   describe('scope discipline', () => {
-    it('contains no tables belonging to later phases', () => {
+    it('holds nothing the product has retired (D-134)', () => {
       /*
-       * Phase 2 added `Completion` and Phase 3 added `Certificate` and
-       * `CvProfile`, so all three have left this list — the guard tracks what
-       * has actually been built rather than being widened to keep quiet.
-       * `Enrollment` remains deliberately unbuilt: §6 marks it optional, and
-       * `user_path_courses.enrolled_at` answers the only question anything
-       * asks (D-041).
+       * The mirror image of the guard this replaces. Every model here was real
+       * and is now gone with the model it served: the build flow's per-learner
+       * course list, the instrument-assignment gate, and the whole Holland bank.
+       * A leftover table is a leftover concept, and the next person to read the
+       * schema would implement against it.
        */
-      const laterPhaseModels = ['Enrollment'];
+      const retiredModels = [
+        'UserPathCourse',
+        'AssessmentAssignment',
+        'AssessmentOptionWeight',
+        'EnglishAssessment',
+        'EnglishAssessmentResult',
+      ];
 
-      const premature = laterPhaseModels.filter((model) =>
+      const leftovers = retiredModels.filter((model) =>
         new RegExp(`model\\s+${model}\\s*\\{`).test(SCHEMA),
       );
 
-      expect(premature).toEqual([]);
+      expect(leftovers).toEqual([]);
     });
   });
 
@@ -172,56 +171,66 @@ describe('Prisma schema', () => {
   // Phase 1
   // ───────────────────────────────────────────────────────────────────────────
 
-  it('keeps RiasecDimension in lockstep with RIASEC_LETTERS in @tamkeen/types', () => {
-    /* Canonical order matters as well as membership: it is the tie-break for
-       ranking (D-031), so a reordered enum would quietly change results. */
-    expect(enumValues('RiasecDimension')).toEqual([...RIASEC_LETTERS]);
-  });
-
   it('keeps CourseStatus in lockstep with COURSE_STATUSES in @tamkeen/types', () => {
     expect(enumValues('CourseStatus')).toEqual([...COURSE_STATUSES]);
   });
 
-  it('keeps the user-path status enums in lockstep with the shared types', () => {
+  it('keeps the path status enums in lockstep with the shared types', () => {
     expect(enumValues('UserPathStatus')).toEqual([...USER_PATH_STATUSES]);
-    expect(enumValues('UserPathCourseStatus')).toEqual([...USER_PATH_COURSE_STATUSES]);
+    expect(enumValues('PathStatus')).toEqual([...PATH_STATUSES]);
   });
 
-  describe('AssessmentOptionWeight', () => {
-    const weight = modelBody('AssessmentOptionWeight');
+  it('has retired the RIASEC vocabulary entirely (D-134)', () => {
+    /* Acceptance criterion 13: the recommendation model is gone from the schema,
+       not merely unused by the code. A leftover column is a leftover concept,
+       and the next person to read the schema would implement against it. */
+    expect(SCHEMA).not.toMatch(/RiasecDimension/);
+    expect(SCHEMA).not.toMatch(/riasec_letter|riasecLetter/);
+  });
 
-    it('stores the dimension as an enum, not free text or JSON (§6)', () => {
-      /* A mistyped letter in a JSON blob contributes nothing and fails silently,
-         producing a subtly wrong Holland Code that nothing surfaces. An enum
-         column makes the database reject it. */
-      expect(weight).toMatch(/dimension\s+RiasecDimension/);
-      expect(weight).not.toMatch(/Json/);
+  describe('PathAssessment', () => {
+    const assessment = modelBody('PathAssessment');
+
+    it('belongs to a path and versions within it (D-134)', () => {
+      /* Not `@unique` on `pathId`: that would forbid the copy-on-write
+         versioning D-049 requires. "One assessment per path" is the pair of
+         partial unique indexes the migration adds instead. */
+      expect(assessment).toMatch(/pathId\s+String/);
+      expect(assessment).toMatch(/@@unique\(\[pathId, version\]\)/);
+    });
+  });
+
+  describe('AssessmentBand', () => {
+    const band = modelBody('AssessmentBand');
+
+    it('maps a score range to a level of the same instrument', () => {
+      expect(band).toMatch(/levelId\s+String/);
+      expect(band).toMatch(/minScore\s+Int/);
+      expect(band).toMatch(/maxScore\s+Int/);
     });
 
-    it('allows one weight per option per dimension', () => {
-      /* Two rows for the same pair would double that dimension's contribution. */
-      expect(weight).toMatch(/@@unique\(\[optionId, dimension\]\)/);
+    it('names each level at most once per version', () => {
+      /* Two bands for one rung would make the placement depend on read order. */
+      expect(band).toMatch(/@@unique\(\[assessmentId, levelId\]\)/);
     });
   });
 
   describe('AssessmentResult', () => {
     const result = modelBody('AssessmentResult');
 
-    it('stores all six dimension scores, not just the code (§3A)', () => {
-      for (const column of ['scoreR', 'scoreI', 'scoreA', 'scoreS', 'scoreE', 'scoreC']) {
-        expect(result).toMatch(new RegExp(`${column}\\s+Int`));
-      }
-    });
-
-    it('stores the derived Holland Code and the attainable maximum', () => {
-      /* maxScore travels with the result so a historical profile can still be
+    it('stores the total and what was attainable', () => {
+      /* maxScore travels with the result so a historical attempt can still be
          shown as a percentage after the question bank changes size. */
-      expect(result).toMatch(/code\s+String/);
+      expect(result).toMatch(/totalScore\s+Int/);
       expect(result).toMatch(/maxScore\s+Int/);
     });
 
     it('records which assessment version produced it', () => {
       expect(result).toMatch(/assessmentVersion\s+Int/);
+    });
+
+    it('appends rather than replacing — the placement is the unique thing', () => {
+      expect(result).not.toMatch(/userId\s+String\s+@unique/);
     });
   });
 
@@ -242,15 +251,40 @@ describe('Prisma schema', () => {
     });
   });
 
-  describe('Path', () => {
-    const path = modelBody('Path');
+  describe('Level', () => {
+    const level = modelBody('Level');
 
-    it('is tagged with exactly one primary RIASEC letter (§3A)', () => {
-      /* Singular and required — the gold rule has nothing to match on if a path
-         can carry several letters or none. */
-      expect(path).toMatch(/riasecLetter\s+RiasecDimension\s/);
-      expect(path).not.toMatch(/riasecLetters?\s+RiasecDimension\[\]/);
-      expect(path).not.toMatch(/riasecLetter\s+RiasecDimension\?/);
+    it('numbers rungs uniquely within a path', () => {
+      expect(level).toMatch(/@@unique\(\[pathId, position\]\)/);
+    });
+
+    it('carries the composite key the placement foreign key targets (D-134)', () => {
+      /* Not a duplicate of the primary key: it is what makes "a level of the
+         same path" a fact the database enforces rather than a check the service
+         has to remember to run. */
+      expect(level).toMatch(/@@unique\(\[id, pathId\]\)/);
+    });
+  });
+
+  describe('PathCourse', () => {
+    const membership = modelBody('PathCourse');
+
+    it('holds the placement as a nullable level and position, and nothing else', () => {
+      /* The state is derived from `levelId` being null or not. A status column
+         beside it would be a second opinion about the same fact — which is what
+         `PathMembershipStatus` had become (D-134). */
+      expect(membership).toMatch(/levelId\s+String\?/);
+      expect(membership).toMatch(/position\s+Int\?/);
+      expect(membership).not.toMatch(/status\s+PathMembershipStatus/);
+      expect(membership).not.toMatch(/displayOrder/);
+    });
+
+    it('keeps two courses out of one slot', () => {
+      expect(membership).toMatch(/@@unique\(\[levelId, position\]\)/);
+    });
+
+    it('names a level through the composite key, so it must belong to the path', () => {
+      expect(membership).toMatch(/references:\s*\[id, pathId\]/);
     });
   });
 
@@ -269,17 +303,16 @@ describe('Prisma schema', () => {
   describe('UserPath', () => {
     const userPath = modelBody('UserPath');
 
-    it('makes "one path per user" a database constraint, not a convention (D-002)', () => {
-      /*
-       * The whole product rests on this. A unique index means a second path
-       * cannot be inserted even by a bug or two concurrent confirm requests —
-       * application-level checks alone lose that race.
-       */
-      expect(userPath).toMatch(/userId\s+String\s+@unique/);
+    it('lets an employee hold more than one path, once each (D-130)', () => {
+      /* The unique index moved from `userId` to the pair: the one-path ceiling
+         is gone, and assigning the same path twice is still impossible. */
+      expect(userPath).not.toMatch(/userId\s+String\s+@unique/);
+      expect(userPath).toMatch(/@@unique\(\[userId, pathId\]\)/);
     });
 
-    it('records when the path was confirmed, which is what locks it', () => {
-      expect(userPath).toMatch(/confirmedAt\s+DateTime\?/);
+    it('records when the ministry assigned it, and never leaves that null', () => {
+      expect(userPath).toMatch(/assignedAt\s+DateTime\s/);
+      expect(userPath).not.toMatch(/confirmedAt/);
     });
 
     it('will not let a path in use be deleted out from under a learner', () => {
@@ -287,18 +320,34 @@ describe('Prisma schema', () => {
     });
   });
 
-  describe('UserPathCourse', () => {
-    const chosen = modelBody('UserPathCourse');
+  describe('LearnerPlacement', () => {
+    const placement = modelBody('LearnerPlacement');
 
-    it('selects a course at most once within a path', () => {
-      expect(chosen).toMatch(/@@unique\(\[userPathId, courseId\]\)/);
+    it('holds one placement per learner per path', () => {
+      expect(placement).toMatch(/@@unique\(\[learnerId, pathId\]\)/);
     });
 
-    it('mirrors a raw grade, never a pass/fail verdict (D-007)', () => {
-      /* The pass threshold is a product setting; storing a verdict here would
-         freeze a policy decision into a row. */
-      expect(chosen).toMatch(/gradePercent\s+Int\?/);
-      expect(chosen).not.toMatch(/\bpassed\b/);
+    it('keeps the attempt and the level it named alive beneath it', () => {
+      /* Restrict on both: a placement must never point at a level that no longer
+         exists, or at an attempt somebody deleted (D-049). */
+      expect(placement).toMatch(/result\s+AssessmentResult[^\n]*onDelete:\s*Restrict/);
+      expect(placement).toMatch(/level\s+Level[^\n]*onDelete:\s*Restrict/);
+    });
+  });
+
+  describe('Enrollment', () => {
+    const enrolment = modelBody('Enrollment');
+
+    it('enrols a learner in a course once, whatever route reached it (D-003)', () => {
+      expect(enrolment).toMatch(/@@unique\(\[userId, courseId\]\)/);
+    });
+
+    it('records no verdict — progress lives in completions (D-007, D-134)', () => {
+      /* The pass threshold is a product setting; a verdict here would freeze a
+         policy decision into a row, and would be a second answer to a question
+         `completions` already answers. */
+      expect(enrolment).not.toMatch(/\bpassed\b/);
+      expect(enrolment).not.toMatch(/gradePercent/);
     });
   });
   // ───────────────────────────────────────────────────────────────────────────

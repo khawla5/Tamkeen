@@ -35,13 +35,12 @@ export interface NavItem {
 }
 
 /**
- * The steady-state navigation (CLAUDE.md §4): six items, no more. Assessment and
- * Results are contextual flow pages and deliberately absent — they are not
- * permanent destinations.
+ * The steady-state navigation (CLAUDE.md §4): six items, no more. The assessment
+ * is a contextual flow page and deliberately absent — it is something a learner
+ * does once per path, not a place they go.
  *
- * Which subset a user actually sees depends on their progress (§4.2 shows only
- * Dashboard, Courses and Profile before the assessment). That gating is Phase 1
- * work; the shell here renders whatever list it is handed.
+ * Which subset a learner sees depends on where they are; the shell renders
+ * whatever list it is handed.
  */
 export const STEADY_STATE_NAV: readonly NavItem[] = [
   { key: 'dashboard', href: '/', icon: 'dashboard' },
@@ -53,31 +52,26 @@ export const STEADY_STATE_NAV: readonly NavItem[] = [
 ];
 
 /**
- * The navigation a user actually sees, given where they are (§4.2).
+ * The navigation a learner actually sees, given where they are (§4.2, D-134).
  *
- * Two rules are at work. §4.2 (amended by D-071) states the first outright:
- * before the assessment the nav is Dashboard and Profile only — a new user has
- * exactly one thing to do, and a browsable catalogue competes with it. Courses
- * appears the moment the assessment is done; My Path only once a path exists.
+ * Two rules are at work. The first is D-071's, restated for the assigned model:
+ * an employee with no path has exactly one thing to see, and a browsable
+ * catalogue competes with it — so Dashboard and Profile are the whole nav until
+ * the ministry assigns them something.
  *
- * The second is ours: **a nav item appears only once the page behind it
- * exists.** An item leading to a 404, or to a page explaining that the feature
- * is not built, is worse than its absence — it advertises something the product
- * cannot do and costs a click to find out. Certificates and the CV both have
- * pages behind them now that Phase 3 has built them, which closes D-037.
- *
- * Certificates is shown to a learner with an active path even before they have
- * earned one, deliberately. The gallery has a real empty state that says how
- * the first certificate arrives, which is more useful than a menu item that
- * materialises one day without explanation.
+ * The second is ours: **a nav item appears only once the page behind it has
+ * something to show.** My Path and Courses both do the moment a path is
+ * assigned, even before the assessment has placed them — the path page is where
+ * they go to sit it. Certificates and the CV appear with them, deliberately:
+ * the gallery has a real empty state that says how the first certificate
+ * arrives, which is more useful than a menu item that materialises one day
+ * without explanation.
  */
 export function navForState(state: DashboardState): readonly NavItem[] {
   const keys: string[] =
-    state === 'ACTIVE_PATH'
-      ? ['dashboard', 'courses', 'myPath', 'certificates', 'cv', 'profile']
-      : state === 'ASSESSED_NO_PATH'
-        ? ['dashboard', 'courses', 'profile']
-        : ['dashboard', 'profile'];
+    state === 'NO_PATH'
+      ? ['dashboard', 'profile']
+      : ['dashboard', 'courses', 'myPath', 'certificates', 'cv', 'profile'];
 
   return STEADY_STATE_NAV.filter((item) => keys.includes(item.key));
 }

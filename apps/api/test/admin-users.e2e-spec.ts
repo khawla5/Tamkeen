@@ -486,9 +486,9 @@ describe('Admin user management (e2e)', () => {
       expect(detail.id).toBe(employeeId);
       expect(detail).toHaveProperty('certificateCount');
       expect(detail).toHaveProperty('activeSessions');
-      /* A count of attempts, never the superseded codes: a retake is the
-         person's own history, not an administrator's business (D-033). */
-      expect(detail.assessment).toBeNull();
+      /* The paths the ministry assigned and where each placed them (D-134) —
+         a summary, never the learner's own screens. */
+      expect(detail.paths).toEqual([]);
     });
 
     it('answers 404 for an unknown id and 400 for a malformed one', async () => {

@@ -4,12 +4,11 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 
-import type { CourseSummary, PathSummary, UserPathCourseStatus } from '@tamkeen/types';
+import type { CourseSummary, PathSummary } from '@tamkeen/types';
 
-import { CourseStatusChip } from '@/components/courses/course-status-chip';
+import { CourseStatusChip, type CourseChipStatus } from '@/components/courses/course-status-chip';
 import { PortalPage } from '@/components/layout/portal-page';
 import { usePortal } from '@/components/layout/portal-provider';
-import { RecommendedBadge } from '@/components/paths/recommended-badge';
 import { DataView } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,37 +27,37 @@ import { cn } from '@/lib/utils';
 const DURATION_OPTIONS = [120, 180, 240] as const;
 
 /**
- * The courses catalogue (§4.6, TAM-127).
+ * The courses catalogue (§4.6, TAM-127, D-134).
  *
- * Browsing stays **global** — every course, for everybody, exactly as §4.6
- * says. What changes with TAM-127 is where the page *starts*, because the
- * product does not treat every reader alike:
+ * Browsing stays **wide** — every course the reader may see, exactly as §4.6
+ * says. What TAM-127 decides is where the page *starts*, and the answer comes
+ * from how many paths the ministry put the reader on:
  *
- *  - A learner with a **confirmed path** can only ever act on that path's
- *    courses (`assertCoursesSelectable` refuses the rest on the server), so
- *    they land with their own path selected. «كل المسارات» is one selection
- *    away — a default, never a restriction.
- *  - A learner **still deciding** lands on the whole catalogue grouped by
- *    path, their recommended paths first, because for them the catalogue is
- *    the tool for answering "what does this path actually teach?".
+ *  - **One assigned path** is the lens they will want, so it opens selected.
+ *    «كل المسارات» is one selection away — a default, never a restriction, and
+ *    their own later choice wins.
+ *  - **Two or more** and neither is theirs more than the other, so the page
+ *    opens on all of them, grouped by path in the API's order.
  *
- * The catalogue itself opens only once the assessment is done (D-071) — the
- * nav hides it and the portal redirects the URL before this page renders.
+ * The catalogue itself opens only once a path has been assigned (D-071 restated
+ * for D-134) — the nav hides it and the portal redirects the URL before this
+ * page renders.
  */
 export default function CoursesPage() {
   const t = useTranslations('courses');
   const format = useFormat();
   const { dashboard } = usePortal();
 
-  /* Non-null exactly after the hard commitment gate, which is also the moment
-     the server stops accepting any other path's courses. */
-  const committedPathId = dashboard.state === 'ACTIVE_PATH' ? (dashboard.path?.id ?? null) : null;
+  /* The learner's own path, when the ministry has assigned exactly one: the
+     lens they will want by default. With two, neither is "theirs" more than the
+     other, so the catalogue opens on all of them. */
+  const ownPathId = dashboard.paths.length === 1 ? (dashboard.paths[0]?.id ?? null) : null;
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   /* Initial state only — the user's own later choice wins, and switching to
      «كل المسارات» must stick. */
-  const [pathId, setPathId] = useState(committedPathId ?? '');
+  const [pathId, setPathId] = useState(ownPathId ?? '');
   const [maxDuration, setMaxDuration] = useState('');
 
   /* Debounced so typing does not fire a request per keystroke. 300ms is long
@@ -82,26 +81,34 @@ export default function CoursesPage() {
   /*
    * The learner's own progress, for the card chips.
    *
-   * Fetched only when there is a confirmed path — before that every course is
-   * equally "not yours" and the request would return null on every visit. Its
+   * Every assigned path, because a course may be owed through any of them. Its
    * failure is deliberately *not* fed into the DataView below: a missing chip
    * costs a reader nothing, and blocking the whole catalogue on a decoration
    * would trade the page for a badge.
    */
-  const myPath = useApiQuery(
-    () => (committedPathId ? myPathApi.get() : Promise.resolve(null)),
-    [committedPathId],
+  const myPaths = useApiQuery(
+    () => (dashboard.paths.length > 0 ? myPathApi.all() : Promise.resolve([])),
+    [dashboard.paths.length],
   );
 
   const statusByCourseId = useMemo(() => {
-    const map = new Map<string, UserPathCourseStatus>();
+    const map = new Map<string, CourseChipStatus>();
 
-    for (const course of myPath.data?.courses ?? []) {
-      map.set(course.courseId, course.status);
+    for (const path of myPaths.data ?? []) {
+      for (const level of path.levels) {
+        for (const course of level.courses) {
+          /* Only what they owe carries a chip: a course below their rung is not
+             "not started", it is ground the placement says they covered, and
+             absence is the honest signal for it (§4.6). */
+          if (!course.startable) continue;
+
+          map.set(course.courseId, course.status === 'NOT_STARTED' ? 'IN_PATH' : course.status);
+        }
+      }
     }
 
     return map;
-  }, [myPath.data]);
+  }, [myPaths.data]);
 
   const hasFilters = Boolean(debouncedSearch || pathId || maxDuration);
 
@@ -109,24 +116,23 @@ export default function CoursesPage() {
     const sorted =
       paths.data?.paths.slice().sort((a, b) => a.name.localeCompare(b.name, 'ar')) ?? [];
 
-    /* The committed learner's own path first: it is the one selection they
-       will make most, and alphabetical order would bury it among twelve. */
-    return committedPathId
+    /* Their own path first: it is the one selection they will make most, and
+       alphabetical order would bury it among twelve. */
+    return ownPathId
       ? [
-          ...sorted.filter((path) => path.id === committedPathId),
-          ...sorted.filter((path) => path.id !== committedPathId),
+          ...sorted.filter((path) => path.id === ownPathId),
+          ...sorted.filter((path) => path.id !== ownPathId),
         ]
       : sorted;
-  }, [paths.data, committedPathId]);
+  }, [paths.data, ownPathId]);
 
   /*
-   * The grouped view (TAM-127): one section per path, in the API's order —
-   * recommended paths first, in the user's letter rank (`rankPathsByRecommendation`
-   * already applied it server-side). Nothing is re-sorted here; D-113's rule
-   * that the ranking lives in one place holds for this page too.
+   * The grouped view (TAM-127, D-134): one section per path the learner holds,
+   * in the API's order. Nothing is re-sorted here — the ordering lives in one
+   * place, which is the server.
    *
-   * A filter collapses the grouping into the flat grid: a filtered result is
-   * an answer to a question, not a tour of the catalogue.
+   * A filter collapses the grouping into the flat grid: a filtered result is an
+   * answer to a question, not a tour of the catalogue.
    */
   const groups = useMemo(() => {
     if (hasFilters || !courses.data || !paths.data) {
@@ -279,7 +285,7 @@ function PathGroup({
 }: {
   path: PathSummary;
   courses: CourseSummary[];
-  statusByCourseId: Map<string, UserPathCourseStatus>;
+  statusByCourseId: Map<string, CourseChipStatus>;
 }) {
   const t = useTranslations('courses');
   const format = useFormat();
@@ -288,9 +294,12 @@ function PathGroup({
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-semibold text-foreground">{path.name}</h2>
-        {/* Recommendation is a *path*-level fact, so it belongs on the heading
-            and never on a course card (§3A). */}
-        {path.recommended ? <RecommendedBadge /> : null}
+        {/* Where the assessment placed them, on the heading rather than on every
+            card: it is a fact about the path, and repeating it twelve times
+            would be the redundant UI §3 forbids. */}
+        {path.placedLevel ? (
+          <Badge variant="primary">{t('placedAt', { level: path.placedLevel.name })}</Badge>
+        ) : null}
         <span className="text-sm text-muted-foreground">
           {t('resultCount', { count: format.number(courses.length) })}
         </span>
@@ -307,7 +316,7 @@ function CourseGrid({
   titleAs,
 }: {
   courses: CourseSummary[];
-  statusByCourseId: Map<string, UserPathCourseStatus>;
+  statusByCourseId: Map<string, CourseChipStatus>;
   /* The grouped view puts an h2 above each grid, so its cards are h3; the flat
      grid has no heading above it and its cards stay h2. Levels follow the
      document, rather than a card deciding its own rank. */
@@ -340,7 +349,7 @@ function CourseCard({
   titleAs: Title,
 }: {
   course: CourseSummary;
-  status: UserPathCourseStatus | null;
+  status: CourseChipStatus | null;
   titleAs: 'h2' | 'h3';
 }) {
   const t = useTranslations('courses');

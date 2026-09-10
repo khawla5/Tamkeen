@@ -4,45 +4,47 @@ import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import {
-  RIASEC_LETTERS,
-  type AdminAssessmentDraft,
-  type AdminAssessmentQuestion,
-  type RiasecLetter,
+import type {
+  AdminAssessmentDraft,
+  AdminAssessmentQuestion,
+  LevelRef,
+  PlacementBand,
 } from '@tamkeen/types';
 
 import { AdminDialog } from '@/components/admin/admin-dialog';
+import { BandEditor } from '@/components/admin/band-editor';
 import { BankReadinessPanel } from '@/components/admin/bank-readiness-panel';
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useFormat } from '@/i18n/format-provider';
 import { adminApi } from '@/lib/api-client';
 
 /**
- * §4C.3 — the draft editor.
+ * §4C.3 — the draft editor for one path's placement assessment (D-134).
  *
- * **What an administrator can change here is the assessment's content, and
- * nothing else** (D-048). Question text, option labels, per-dimension weights,
- * order, and how many questions there are. The tally, the ranking, the canonical
- * tie-break and the top-three derivation are in code and this screen has no
+ * **What an administrator can change here is the instrument's content, and
+ * nothing else** (D-048). Question text, what an item is worth, which option is
+ * the answer, the rung an item is aimed at, the order, and the band table. The
+ * tally, the placement and the partition rule are in code and this screen has no
  * vocabulary for them.
  *
- * **Adding a question asks for a dimension, not a set of weights.** The full
- * weight editor is one click away on every option, but the common act — growing
- * the bank from five items per dimension to six — is six clicks of "add a
- * question for this letter", and making that the easy path is how the editor
- * helps keep the bank balanced rather than merely reporting afterwards that it
- * is not (D-071).
+ * **Marking an option correct clears the others in one action.** Two correct
+ * answers is not a state the editor should be able to reach, and making the
+ * administrator untick before ticking would leave the bank invalid between the
+ * two requests — with the readiness panel flashing a blocker at them for it.
  */
 export function AssessmentEditor({
+  pathId,
   draft,
   onChanged,
   onPublished,
 }: {
+  pathId: string;
   draft: AdminAssessmentDraft;
   onChanged: (next: AdminAssessmentDraft) => void;
   onPublished: () => void;
@@ -75,7 +77,7 @@ export function AssessmentEditor({
     setBusy(true);
 
     try {
-      await adminApi.publishAssessment();
+      await adminApi.publishAssessment(pathId);
       setConfirmingPublish(false);
       onPublished();
     } catch (caught) {
@@ -90,7 +92,7 @@ export function AssessmentEditor({
     setBusy(true);
 
     try {
-      await adminApi.discardAssessmentDraft();
+      await adminApi.discardAssessmentDraft(pathId);
       setConfirmingDiscard(false);
       onPublished();
     } catch (caught) {
@@ -108,7 +110,7 @@ export function AssessmentEditor({
 
     [ids[index], ids[target]] = [ids[target]!, ids[index]!];
 
-    return run(() => adminApi.reorderDraft(ids));
+    return run(() => adminApi.reorderDraft(pathId, ids));
   }
 
   return (
@@ -139,7 +141,18 @@ export function AssessmentEditor({
         </div>
       </Card>
 
-      <BankReadinessPanel readiness={draft.readiness} />
+      <BankReadinessPanel readiness={draft.readiness} levels={draft.levels} />
+
+      <BandEditor
+        levels={draft.levels}
+        bands={draft.bands}
+        maxScore={draft.readiness.maxScore}
+        isDefault={draft.bandsAreDefault}
+        busy={busy}
+        onSave={(bands: PlacementBand[]) =>
+          void run(() => adminApi.setAssessmentBands(pathId, bands))
+        }
+      />
 
       {error ? (
         <p role="alert" className="text-sm text-destructive">
@@ -152,17 +165,17 @@ export function AssessmentEditor({
           <li key={question.id}>
             <QuestionCard
               question={question}
+              levels={draft.levels}
               index={index}
               total={draft.questions.length}
               busy={busy}
               onMove={(direction) => void move(index, direction)}
-              onSave={(text) => run(() => adminApi.updateDraftQuestion(question.id, { text }))}
-              onRemove={() => run(() => adminApi.removeDraftQuestion(question.id))}
-              onWeights={(optionId, weights) =>
-                run(() => adminApi.updateDraftOption(optionId, { weights }))
+              onSave={(patch) =>
+                void run(() => adminApi.updateDraftQuestion(pathId, question.id, patch))
               }
-              onLabel={(optionId, label) =>
-                run(() => adminApi.updateDraftOption(optionId, { label }))
+              onRemove={() => void run(() => adminApi.removeDraftQuestion(pathId, question.id))}
+              onOption={(optionId, patch) =>
+                void run(() => adminApi.updateDraftOption(pathId, optionId, patch))
               }
             />
           </li>
@@ -171,9 +184,10 @@ export function AssessmentEditor({
 
       {adding ? (
         <AddQuestionDialog
+          levels={draft.levels}
           onClose={() => setAdding(false)}
           onAdd={async (input) => {
-            await run(() => adminApi.addDraftQuestion(input));
+            await run(() => adminApi.addDraftQuestion(pathId, input));
             setAdding(false);
           }}
         />
@@ -193,9 +207,9 @@ export function AssessmentEditor({
             {t('publishBody', { version: format.number(draft.version) })}
           </p>
           {/*
-            The sentence D-049 exists for, said where the decision is made.
-            An administrator publishing an edit needs to know, at that moment,
-            that nobody's recorded result changes — otherwise the safe move looks
+            The sentence D-049 exists for, said where the decision is made. An
+            administrator publishing an edit needs to know, at that moment, that
+            nobody's recorded placement changes — otherwise the safe move looks
             like not editing at all.
           */}
           <p className="text-sm text-muted-foreground">{t('publishFrozenNotice')}</p>
@@ -221,31 +235,32 @@ export function AssessmentEditor({
 
 function QuestionCard({
   question,
+  levels,
   index,
   total,
   busy,
   onMove,
   onSave,
   onRemove,
-  onWeights,
-  onLabel,
+  onOption,
 }: {
   question: AdminAssessmentQuestion;
+  levels: LevelRef[];
   index: number;
   total: number;
   busy: boolean;
   onMove: (direction: -1 | 1) => void;
-  onSave: (text: string) => void;
+  onSave: (patch: { text?: string; marks?: number; levelId?: string | null }) => void;
   onRemove: () => void;
-  onWeights: (optionId: string, weights: Partial<Record<RiasecLetter, number>>) => void;
-  onLabel: (optionId: string, label: string) => void;
+  onOption: (optionId: string, patch: { label?: string; isCorrect?: boolean }) => void;
 }) {
   const t = useTranslations('admin');
   const format = useFormat();
   const [text, setText] = useState(question.text);
+  const [marks, setMarks] = useState(String(question.marks));
   const [open, setOpen] = useState(false);
 
-  const dirty = text !== question.text;
+  const dirty = text !== question.text || marks !== String(question.marks);
 
   return (
     <Card className="p-5">
@@ -265,6 +280,45 @@ function QuestionCard({
               />
             )}
           </Field>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field id={`marks-${question.id}`} label={t('questionMarks')}>
+              {(field) => (
+                <Input
+                  {...field}
+                  type="number"
+                  min={1}
+                  max={20}
+                  dir="ltr"
+                  value={marks}
+                  onChange={(event) => setMarks(event.target.value)}
+                />
+              )}
+            </Field>
+
+            {/* Authoring metadata: scoring never reads it. It is here so a bank
+                spanning every rung can be reviewed by a human without reading
+                every item (D-134). */}
+            <Field id={`level-${question.id}`} label={t('questionLevel')}>
+              {(field) => (
+                <Select
+                  {...field}
+                  value={question.levelId ?? ''}
+                  disabled={busy}
+                  onChange={(event) =>
+                    onSave({ levelId: event.target.value === '' ? null : event.target.value })
+                  }
+                >
+                  <option value="">{t('questionLevelNone')}</option>
+                  {levels.map((level) => (
+                    <option key={level.id} value={level.id}>
+                      {level.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
 
           <p className="mt-1 text-xs text-muted-foreground">
             {/* The key, because it is what makes a revised question recognisably
@@ -298,13 +352,17 @@ function QuestionCard({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {/* Save appears only when there is something to save (§3). */}
         {dirty ? (
-          <Button size="sm" disabled={busy} onClick={() => onSave(text)}>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => onSave({ text, marks: Number(marks) || 1 })}
+          >
             {t('saveQuestion')}
           </Button>
         ) : null}
 
         <Button size="sm" variant="ghost" onClick={() => setOpen((value) => !value)}>
-          {open ? t('hideWeights') : t('showWeights')}
+          {open ? t('hideOptions') : t('showOptions')}
         </Button>
 
         <Button
@@ -319,17 +377,19 @@ function QuestionCard({
       </div>
 
       {open ? (
-        <div className="mt-4 space-y-3 border-t border-border pt-4">
+        <fieldset className="mt-4 space-y-3 border-t border-border pt-4">
+          <legend className="sr-only">{t('questionOptions')}</legend>
           {question.options.map((option) => (
             <OptionRow
               key={option.id}
               option={option}
+              questionId={question.id}
               busy={busy}
-              onWeights={(weights) => onWeights(option.id, weights)}
-              onLabel={(label) => onLabel(option.id, label)}
+              onLabel={(label) => onOption(option.id, { label })}
+              onCorrect={() => onOption(option.id, { isCorrect: true })}
             />
           ))}
-        </div>
+        </fieldset>
       ) : null}
     </Card>
   );
@@ -337,86 +397,66 @@ function QuestionCard({
 
 function OptionRow({
   option,
+  questionId,
   busy,
-  onWeights,
   onLabel,
+  onCorrect,
 }: {
   option: AdminAssessmentQuestion['options'][number];
+  questionId: string;
   busy: boolean;
-  onWeights: (weights: Partial<Record<RiasecLetter, number>>) => void;
   onLabel: (label: string) => void;
+  onCorrect: () => void;
 }) {
   const t = useTranslations('admin');
   const [label, setLabel] = useState(option.label);
-  const [weights, setWeights] = useState<Partial<Record<RiasecLetter, string>>>(() =>
-    Object.fromEntries(
-      RIASEC_LETTERS.filter((letter) => option.weights[letter] !== undefined).map((letter) => [
-        letter,
-        String(option.weights[letter]),
-      ]),
-    ),
-  );
-
-  function submit() {
-    const parsed: Partial<Record<RiasecLetter, number>> = {};
-
-    for (const letter of RIASEC_LETTERS) {
-      const raw = weights[letter];
-      if (raw !== undefined && raw !== '') {
-        parsed[letter] = Number(raw);
-      }
-    }
-
-    if (label !== option.label) onLabel(label);
-    onWeights(parsed);
-  }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-      <Field id={`opt-${option.id}`} label={t('optionLabel')}>
-        {(field) => (
-          <Input {...field} value={label} onChange={(event) => setLabel(event.target.value)} />
-        )}
-      </Field>
+    <div className="flex flex-wrap items-end gap-3">
+      <div className="min-w-48 flex-1">
+        <Field id={`opt-${option.id}`} label={t('optionLabel')}>
+          {(field) => (
+            <Input {...field} value={label} onChange={(event) => setLabel(event.target.value)} />
+          )}
+        </Field>
+      </div>
 
-      <div className="flex flex-wrap items-end gap-2">
-        {RIASEC_LETTERS.map((letter) => (
-          <Field key={letter} id={`w-${option.id}-${letter}`} label={letter}>
-            {(field) => (
-              <Input
-                {...field}
-                type="number"
-                min={0}
-                max={10}
-                dir="ltr"
-                className="w-16"
-                value={weights[letter] ?? ''}
-                onChange={(event) =>
-                  setWeights((current) => ({ ...current, [letter]: event.target.value }))
-                }
-              />
-            )}
-          </Field>
-        ))}
+      {/* A radio, because exactly one option is the answer — a set of checkboxes
+          would let the editor express a state the bank cannot have. */}
+      <label className="flex items-center gap-2 pb-2 text-sm text-foreground">
+        <input
+          type="radio"
+          name={`correct-${questionId}`}
+          checked={option.isCorrect}
+          disabled={busy}
+          onChange={onCorrect}
+          className="size-4"
+        />
+        {t('optionCorrect')}
+      </label>
 
-        <Button size="sm" variant="outline" disabled={busy} onClick={submit}>
+      {label !== option.label ? (
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => onLabel(label)}>
           {t('saveOption')}
         </Button>
-      </div>
+      ) : null}
     </div>
   );
 }
 
 function AddQuestionDialog({
+  levels,
   onClose,
   onAdd,
 }: {
+  levels: LevelRef[];
   onClose: () => void;
-  onAdd: (input: { text: string; letter: RiasecLetter }) => Promise<void>;
+  onAdd: (input: { text: string; marks: number; levelId: string | null }) => Promise<void>;
 }) {
   const t = useTranslations('admin');
   const [text, setText] = useState('');
-  const [letter, setLetter] = useState<RiasecLetter>('R');
+  const [marks, setMarks] = useState('1');
+  const [levelId, setLevelId] = useState('');
 
   return (
     <AdminDialog
@@ -427,7 +467,13 @@ function AddQuestionDialog({
         <Button
           type="button"
           disabled={text.trim().length < 5}
-          onClick={() => void onAdd({ text: text.trim(), letter })}
+          onClick={() =>
+            void onAdd({
+              text: text.trim(),
+              marks: Number(marks) || 1,
+              levelId: levelId === '' ? null : levelId,
+            })
+          }
         >
           {t('addQuestionAction')}
         </Button>
@@ -444,22 +490,34 @@ function AddQuestionDialog({
         )}
       </Field>
 
-      <Field id="new-question-letter" label={t('questionDimension')} required>
-        {(field) => (
-          <select
-            {...field}
-            value={letter}
-            onChange={(event) => setLetter(event.target.value as RiasecLetter)}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-          >
-            {RIASEC_LETTERS.map((value) => (
-              <option key={value} value={value}>
-                {t(`riasec.${value}`)}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field id="new-question-marks" label={t('questionMarks')}>
+          {(field) => (
+            <Input
+              {...field}
+              type="number"
+              min={1}
+              max={20}
+              dir="ltr"
+              value={marks}
+              onChange={(event) => setMarks(event.target.value)}
+            />
+          )}
+        </Field>
+
+        <Field id="new-question-level" label={t('questionLevel')}>
+          {(field) => (
+            <Select {...field} value={levelId} onChange={(event) => setLevelId(event.target.value)}>
+              <option value="">{t('questionLevelNone')}</option>
+              {levels.map((level) => (
+                <option key={level.id} value={level.id}>
+                  {level.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      </div>
     </AdminDialog>
   );
 }

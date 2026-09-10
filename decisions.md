@@ -5,6 +5,93 @@
 
 ---
 
+## D-136 — The path ladder is a screen, not a modal
+
+**Decision (user-directed, 2026-09-10):** `/admin/paths/[pathId]` is a route.
+§4C.4's path editor — the unassigned queue, the rungs and their courses, the
+rung selector and reorder arrows on every row, the learner counts, the publish
+gate and the delete section — moved out of `AdminDialog` onto its own screen,
+reached by a link from the list rather than by a click that opens a panel over
+it. The list keeps only what a list does: name, counts, status, and a link in.
+Creating a path stays a dialog, and so does the delete confirmation.
+
+**Why:** the user's words after using it — the popup «look overwhelmed». They
+are right, and the reason generalises: a modal is for one question answered
+once, and this is a work queue you scroll, leave and come back to. A dialog
+gives that no address to return to, traps focus around something the
+administrator wants to scroll, and nests its scrollbar inside the page's. The
+address is the part worth having beyond the room: a ladder can now be
+bookmarked and opened in a second tab beside the assessment it is waiting on.
+
+**Consequences:** deleting a path navigates back to the list rather than closing
+a panel, so the list's «حُذف المسار نهائيًا» status line went with it — the page
+change is the announcement it was standing in for. Creating a path now goes
+straight into its ladder, which was already the next step and is now a real
+navigation. `path-detail-panel.tsx` is `path-editor.tsx`, and its tests split
+into a list file and an editor file.
+
+**Rejected:** widening the dialog (a bigger modal is still a modal — same
+scrollbar, same missing address); a drawer (same, with less room); splitting the
+editor across two dialogs (two modals to answer one question is worse than one).
+
+## D-135 — The seeded catalogue is three paths: English, Arabic, communication skills
+
+**Decision (user-directed, 2026-09-10):** the twelve seeded ministry-operations
+paths are gone. Three remain — «مسار اللغة الإنجليزية», «مسار اللغة العربية» and
+«مسار مهارات التواصل» — and the mock LMS catalogue was rewritten from
+forty-eight courses to the twenty-seven those three are made of. **All three ship
+PUBLISHED**, each with an authored nine-item Arabic placement bank, so a fresh
+database offers three paths a learner can be assigned and placed on rather than
+two among ten drafts.
+
+**The rungs are named in each subject's own vocabulary,** at the user's
+direction: English carries the CEFR bands («مبتدئ — A1 إلى A2», «متوسط — B1 إلى
+B2», «متقدم — C1»); Arabic and communication skills are simply stages
+(«المرحلة الأولى» and after it). A CEFR band is the one Latin token the seed's
+Arabic-first test now allows, and `catalog.spec.ts` states the exemption in two
+characters and no more — «B1» is what a language learner, an HR file and every
+other language school already mean by that level, and rendering it as Arabic
+alone would throw away the only label portable outside this platform.
+
+**Why:** the ministry's actual training offer. The twelve paths were built to
+give twelve RIASEC letters something to recommend (D-011), and that model is
+retired (D-130/D-134); what survived was a catalogue nobody had asked for. The
+courses had to be replaced rather than regrouped, because the seed's own tests
+require every course to sit on a rung of some path — regrouping would have put
+«أمن المعلومات الأساسي» inside «مسار اللغة الإنجليزية», which is a catalogue that
+reads as nonsense.
+
+**Rejected:** keeping the forty-eight courses and spreading them over three
+paths (see above); shipping the three as drafts (nothing would be assignable on
+a fresh database, and every e2e suite that needs a published path would have to
+build one); a smaller replacement of five or six courses per path (the courses
+page would have had almost nothing to show).
+
+**Still placeholder:** the courses, their objectives, the path descriptions and
+the three banks are engineering-authored and plausible, not directorate content.
+The rule D-134 set stands — the ticket is not done until الإدارة العامة للتدريب
+has signed off a bank per path.
+
+## D-134 — Paths have levels; one assessment per path places the learner; an entity offers a course, an administrator places it
+
+**Decision (2026-09-09, implementing D-130's pivot in full):** the career-path structure is rebuilt around four objects and one rule about who decides what.
+
+A **path** has ordered **levels** (`levels.position`, unique per path), exactly one live **assessment** of its own, and many **path_courses** join rows. Each membership carries a nullable `(level_id, position)` pair — **both null or both set**, enforced by the database (`path_courses_placement_complete`) and by the service. That pair is the whole model: `level_id IS NULL` means *unassigned* and the course reaches no learner at all; set means *placed*, and it is visible on that rung. `placement` is derived from it in one place (`PATH_COURSE_PLACEMENTS`) so no screen can invent a third reading. Positions are re-packed to `1 … n` after every place, move, unplace and remove, in two passes through a parking offset above the range — the unique index on `(level_id, position)` refuses two rows in one slot even momentarily, and `position >= 1` refuses the obvious negative-parking trick.
+
+**Who decides what is the point of the split.** An **entity** attaches a course to a *path* and nothing more; a `levelId` or `position` in that request is refused (422), and an entity may withdraw a membership only while it is unassigned — once an administrator has placed it, removing it would pull the course out from under the learners standing on that rung. An **administrator** owns the ladder: creating and reordering rungs, placing courses onto them and ordering them within one. A **learner** takes the assessment, is placed by their score, and sees every rung with theirs marked — the ones below are ground the placement says they covered, readable but not owed.
+
+**The assessment is per path**, replacing both global instruments. It is a scored test — items carry `marks`, exactly one option per item is `isCorrect`, and a band table maps `0 … maxScore` onto the rungs as an exact partition. An unauthored table falls back to an even split (`defaultPlacementBands`), which is the rule in force rather than an empty form. The learner-facing contract carries **no answer key and no triage signal**: not `isCorrect`, and not `marks` or the rung an item targets either — knowing an item is worth three marks or aims at the top rung tells a taker where to spend effort, and a placement test is only useful if it measures what somebody can do unaided across the whole range. Copy-on-write versioning stands (D-049): an edit opens a deep copy, publishing retires its predecessor, and every placement already recorded keeps pointing at the version that produced it.
+
+**Assignment replaces the approval gate.** The ministry assigns a path to an employee, who may hold several (`user_paths` unique on `(user_id, path_id)`); the assessment then places them. There is no path selection, no 5–10 build, no confirm. An assignment may be revoked only before a placement exists, for the same reason a taken assessment could not be unassigned: a placement is a record, and revoking under it would leave it pointing at a path the employee was never on. A path may be published only when it has a rung, a published assessment and something placed — otherwise everyone assigned to it waits at «بانتظار تحديد المستوى» forever, which is what the admin dashboard's stuck-paths section and the assessment shelf both exist to surface.
+
+**Retired with it:** RIASEC in every form (`riasec_letter`, the six dimensions, the Holland code, recommendation and its ranking), the English/CEFR instrument (D-123–D-126), `user_path_courses` and the build flow, `courses.is_general`, `paths.is_active` (now `PathStatus`), the membership approval queue and the letter-coherence cap (D-119's numeric cap stands), and `assessment_assignments` (D-132/D-133 — the path assignment is the gate now, and it still lives in the account panel).
+
+**Why:** D-130 left the product describing a model it no longer implements, and the gap was not closable one screen at a time — the recommendation logic, the 5–10 rule, the single-path ceiling and the Holland scoring were one interlocking design. Levels are what makes an assigned path fair: the ministry directs *what* an employee trains in, and the assessment decides *where they start*, so a senior officer and a new recruit on the same path are not handed the same first course.
+
+**Rejected:** keeping the two global instruments and letting a path point at one (an instrument shared across paths cannot band scores onto rungs that differ per path); storing `placement` as a column (a second source of truth for something `level_id` already says); letting an entity place its own course (the ladder is curriculum sequencing, which is the ministry's judgement, not the supplier's); a nullable `position` without the paired check constraint (half-placed rows are unrepresentable by construction, and the database is where that belongs); resetting a learner's progress when a course moves rungs (see the open item below).
+
+**Open (§10 of the brief, deliberately undecided):** what should happen to a learner's in-progress work when the course they started moves to a different rung. Progress is keyed `(user, moodle_course_id)` in `completions` and survives the move untouched; the administrator is **told, not asked**. Three code locations carry it: the move itself in `AdminLevelsService.place`, its log line, and the warning on the ladder editor. A `TODO(product-decision)` marks the single point where a reset would go if the ministry ever wants one.
+
 ## D-133 — Assignment lives in «الحسابات»; /admin/assessment is the shelf of all instruments
 
 **Decision (user-directed, 2026-09-01, superseding D-132's screen — its rules stand):** the standalone «إسناد التقييمات» screen is gone. **Assigning is an account decision**, made in the manage-account panel of «الحسابات»: an employee's panel lists their assigned instruments with status (revoke only while untaken, as before) and offers the **not-yet-assigned instruments as a multi-selection** (checkboxes — amended same session from a single-choice dropdown at the user's direction) with one assign action for everything ticked, sent as one grant per instrument so each stays its own audit event; the read side rides on `GET /admin/users/:id` (`AdminUserDetail.assignments`), the writes stay on `POST/DELETE /api/admin/assignments` (the overview `GET` was removed with its screen). **`/admin/assessment` becomes the list of all assessments** — one row per instrument with its active version, question count and draft badge, each opening its own question editor beneath it (`/admin/assessment/riasec`, `/admin/assessment/english`); the two editors remain separate pages sharing no code (D-124), only the shelf is shared. The admin nav drops both `adminEnglish` and the assignment item — back to eight.

@@ -83,9 +83,10 @@ const VIEW: CvView = {
       },
     ],
     careerProfile: {
-      pathName: 'مسار القيادة الإدارية',
-      pathCompleted: true,
-      hollandCode: ['S', 'I', 'E'],
+      paths: [
+        { name: 'مسار القيادة الإدارية', levelName: 'متقدم', completed: true },
+        { name: 'مسار تحليل البيانات', levelName: null, completed: false },
+      ],
     },
   },
   savedAt: null,
@@ -144,12 +145,22 @@ describe('CV builder', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('offers the career-profile line as a toggle, on by default', async () => {
+    it('offers the career line as a toggle, on by default', async () => {
       renderWithProviders(<CvPage />);
 
       expect(
-        await screen.findByLabelText('إظهار مساري ورمز هولاند في السيرة الذاتية'),
+        await screen.findByLabelText('إظهار مساراتي ومستوياتي في السيرة الذاتية'),
       ).toBeChecked();
+    });
+
+    it('says the section will appear once a path is assigned, rather than showing an empty toggle', async () => {
+      api.get.mockResolvedValue({ ...VIEW, autofill: { ...VIEW.autofill, careerProfile: null } });
+      renderWithProviders(<CvPage />);
+
+      expect(await screen.findByText('لن يظهر هذا القسم قبل إسناد مسار إليك.')).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText('إظهار مساراتي ومستوياتي في السيرة الذاتية'),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -181,15 +192,28 @@ describe('CV builder', () => {
       expect(document_).toHaveTextContent('August 18, 2026');
     });
 
-    it('prints the Holland Code with Arabic type names, untranslated', async () => {
+    it('names each assigned path and the rung the placement test put them on', async () => {
+      /* D-134 replaced the Holland profile with the thing a CV reader can use:
+         which paths the ministry put them on and where they were placed. Path
+         and level names pass through in Arabic, untranslated (D-050). */
       renderWithProviders(<CvPage />);
       await screen.findByLabelText('الاسم الكامل');
 
       const document_ = preview();
 
-      expect(document_).toHaveTextContent('Holland profile');
-      expect(document_).toHaveTextContent('SIE');
-      expect(document_).toHaveTextContent('الاجتماعي');
+      expect(document_).toHaveTextContent('Completed the مسار القيادة الإدارية career path');
+      expect(document_).toHaveTextContent('at level متقدم');
+    });
+
+    it('says "enrolled on" rather than a level for a path whose assessment is untaken', async () => {
+      /* Inventing a rung would be a claim on a CV that nothing supports. */
+      renderWithProviders(<CvPage />);
+      await screen.findByLabelText('الاسم الكامل');
+
+      const document_ = preview();
+
+      expect(document_).toHaveTextContent('Enrolled on the مسار تحليل البيانات career path');
+      expect(document_).not.toHaveTextContent('مسار تحليل البيانات career path at level');
     });
 
     it('updates as the learner types', async () => {
@@ -207,10 +231,10 @@ describe('CV builder', () => {
       const user = userEvent.setup();
       renderWithProviders(<CvPage />);
 
-      await user.click(await screen.findByLabelText('إظهار مساري ورمز هولاند في السيرة الذاتية'));
+      await user.click(await screen.findByLabelText('إظهار مساراتي ومستوياتي في السيرة الذاتية'));
 
       await waitFor(() => {
-        expect(preview()).not.toHaveTextContent('Holland profile');
+        expect(preview()).not.toHaveTextContent('career path');
       });
       /* Only the line goes — the certificates it sat beside stay. */
       expect(preview()).toHaveTextContent('Path certificate');

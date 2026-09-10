@@ -5,6 +5,26 @@
 
 ---
 
+### 2026-09-09 — Audit + change plan: paths, levels, per-path assessment, course placement (no code)
+
+Planning session against a spec the user brought in: paths gain **ordered levels**; a course is assigned to a **path** by its entity and **placed into a level** by the admin alone; the path's assessment places the learner at a level. Audit of the existing code, then a change plan, both produced; **nothing implemented, awaiting approval**. Plan: `docs/plan-levels-and-placement.md`. Proposed decision **D-134**, branch `feature/d134-levels-and-placement`.
+
+**Already matching:** membership lives on `path_courses` (no `path_id`/`level_id` on `courses`); entities can already only send `pathIds` and reordering is admin-only; `EnglishAssessmentBand` is the score→level rule in miniature; `reorderCourses` already re-packs in two passes.
+
+**Conflicting:** no levels anywhere; `path_courses.status` encodes admin *approval*, not placement; assessments are two global instruments gated per user (D-132/D-133), not one per path; no placement record; `user_paths.user_id` is unique and `user_path_courses` holds the 5–10 selection; `riasec_letter` is load-bearing across 45 files; `courses.is_general` has no writer and no learner-side effect (D-119 was never actually built).
+
+**Eight decisions taken in session,** all toward the spec: per-path assessment wins over the global instruments; RIASEC retired; the ministry assigns paths, possibly several; placement replaces approval; an entity may unassign only while unplaced; a course may sit in several paths under a numeric cap; the learner sees all levels with theirs marked; the dev database is reset and reseeded rather than migrated. Consequences, stated plainly in the plan: the Holland instrument, the recommendation model, the 5–10 build, the one-path ceiling and last week's D-132/D-133 assignment all die.
+
+**Next:** user approves or amends the plan → implement on the branch in five checkpoints → tests for the thirteen acceptance criteria → PR. CLAUDE.md §§2/3A/4.3–4.5 need the ministry-approved rewrite D-130 already owed.
+
+### 2026-09-09 — Dev environment: `tamkeen` and `tamkeen2` split onto separate databases and ports (no product code)
+
+Ops session, no product change. The two clones were sharing one Postgres database (`tamkeen`), one Redis, one Moodle and one pair of ports, so `tamkeen2`'s `20260909152847_student_rename` migration (`users.employee_id` → `student_id`, enum `EMPLOYEE` → `STUDENT`) landed in the database this repo reads and every sign-in here returned 500 `P2022 column users.employee_id does not exist`. Both processes on 3000/4000 were in fact `tamkeen2`, not this repo.
+
+Split: the shared database was dumped and restored as a new `tamkeen2` database (63 users, 145 courses, 20 migrations — `tamkeen2` keeps all of it); the rename was reversed in `tamkeen` with the migration's own two statements inverted and its `_prisma_migrations` row deleted, leaving 19 migrations and an empty `prisma migrate diff`. `tamkeen2/.env` now points at the `tamkeen2` database, Redis index 1, and ports 3100/4100 (`apps/web/package.json` dev/start moved to 3100; a backup of the old env sits at `tamkeen2/.env.bak-before-split`). Nothing in this repo changed except this entry. **Ports from here on: `tamkeen` 3000/4000, `tamkeen2` 3100/4100.** Both stacks verified up, both report `database: up` / `lms: up`, admin sign-in 200 on each.
+
+Two things still shared and worth knowing: **one Moodle** on 8080 (both apps provision users and sync the catalogue into it) and one Mailpit. Also noted for `tamkeen2`: its rename migration renames the column but not the unique index, so `prisma migrate diff` there reports `ALTER INDEX "users_employee_id_key" RENAME TO "users_student_id_key"` — one line short in `20260909152847_student_rename`.
+
 ### 2026-09-01 — D-132: assessment assignment — the gate, the admin screen «إسناد التقييمات», the assigned-only dashboard — branch `feature/d130-assessments-admin`
 
 D-130's first implemented slice, designed and approved in-session: **employees can only take assessments the ministry has assigned to them**, both instruments (Holland RIASEC + English CEFR) administered from one screen, the human deciding (results inform, nothing auto-assigns), Holland kept alongside.
@@ -1205,3 +1225,57 @@ At the user's direction after testing the entity side: `embed=learner` in the pl
 ### 2026-08-25 — Player layout and previous/next (D-122, TAM-146) — on `feature/tam-139-entity-content-embed`
 
 The player became "the course is the page": full-height frame in the main column, a sticky context panel beside it (compact strip under `lg`), Moodle's own course heading hidden in learner mode. Then previous/next: outline endpoint + `cmid` in the plugin's ready message + `navigate` on the frame component; the panel follows the frame. Verified live and by tests. **Next:** the user's test → push + PR; TAM-142, TAM-144 queued; Arabic pack pending.
+
+### 2026-09-09 — D-134 built: levels, per-path assessment, placement — branch `feature/d134-levels-and-placement`
+
+D-130's pivot implemented in full, to a written brief the user approved after an audit and a change plan (`docs/plan-levels-and-placement.md`), with eight product questions answered by the user in-session and the dev database reset with their explicit consent.
+
+**Schema and migration.** One migration (`20260909120000_d134_levels_and_placement`) adds `levels`, `path_assessments` + `assessment_questions`/`options`/`bands`/`results`/`responses`, `learner_placements` and `enrollments`; drops `RiasecDimension`, the Holland and English instrument tables, `assessment_assignments`, `user_path_courses`, `courses.is_general`, `paths.riasec_letter` and `paths.is_active` (now `PathStatus`). Hand-augmented after the diff with the constraints the model rests on: `path_courses_placement_complete` (`level_id IS NULL` ⇔ `position IS NULL`), positive-position checks on `path_courses` and `levels`, an ordered-range check on `assessment_bands`, and partial unique indexes for one ACTIVE and one DRAFT assessment per path.
+
+**API.** `paths/path-access.ts` is the single place a learner query reaches courses through paths; `journey/learner-path.service.ts` builds the ladder and derives progress from `completions` alone. New: `admin-levels.service.ts` (rungs, `place()`, re-packing, `syncPathEnrolments`), `admin-path-assignments.service.ts` + controller, a rewritten per-path `admin-assessment.service.ts` with band editing and the publish gate, and `assessment/scoring.ts` for the scored instrument. Placement re-packs positions through a parking offset **above** the range — negative parking was the obvious trick and the `position >= 1` check refuses it, which is the constraint working.
+
+**Web.** The ladder editor (`path-detail-panel.tsx`, unassigned queue first, one rung selector per course), `band-editor.tsx` validating with the same shared `checkBands` the publish gate uses, the per-path assessment at `/paths/[pathId]/assessment` and its editor at `/admin/assessment/[pathId]`, the assessment shelf now saying which paths can place anybody, the dashboard's stuck-paths section, and the account panel's path assignment. Deleted with their model: results, path build, the English pages and editors, the RIASEC chips and path cards.
+
+**Verified.** Web 814 (57 files), API unit 643 (39 files), types 41, API e2e 580/581 — all green, typecheck and lint clean, prettier applied. The single e2e failure is **pre-existing and unrelated**: `admin-rbac` on `/api/admin/certificate-template` times out alone and resets the connection under a full run; confirmed by stashing the file and reproducing on the unmodified version. **Run the e2e suite with `MOODLE_MODE=mock`** — `.env` points at the real Moodle, whose integration user cannot delete courses, which fails `admin-courses` for the same environment reason.
+
+**Also cleaned up:** the error catalogue rebuilt against the codes the API actually throws (every ENGLISH_* and BANK_* code retired, nineteen missing ones added), `COURSE_MAX_RIASEC_LETTERS` and `PATH_MEMBERSHIP_APPROVAL` removed from the env schema and `.env.example`, and the `admin.riasec` namespace dropped from the catalogue and its completeness test.
+
+**Owed:** CLAUDE.md §§2/3A/4.2–4.6 still describe the retired model — the brief scoped the code, and D-130 asks for a ministry-approved rewrite of those sections rather than an engineering one. **Next:** the user's test → PR (never merge).
+
+### 2026-09-10 — The catalogue is three paths, and the ladder is a screen (D-135, D-136) — on `feature/d134-levels-and-placement`
+
+Two user-directed changes on top of yesterday's D-134 work.
+
+**The seeded catalogue (D-135).** Twelve ministry-operations paths out,
+three in — English, Arabic, communication skills — and the mock LMS rewritten
+from forty-eight courses to the twenty-seven those three are made of. All three
+ship PUBLISHED with an authored nine-item Arabic bank each. English's rungs
+carry the CEFR bands and the other two are stages, per the user's answers
+in-session; `catalog.spec.ts` gained a two-character exemption to the
+Arabic-first rule for a CEFR band and states why. The dev database was not
+reset: a one-off guarded script removed the twelve paths and the twenty-one
+now-unseeded courses after checking that no learner held them and no certificate
+named them, then the seed ran. Accounts and the real Moodle's synced courses
+were untouched.
+
+**The path ladder moved onto its own screen (D-136).** `/admin/paths/[pathId]`
+is a route; the list only lists and links in. The user's reason was that the
+popup «look overwhelmed», which is the right call for a work queue you scroll
+and come back to. `path-detail-panel.tsx` is now `path-editor.tsx`, deleting a
+path navigates back to the list, creating one goes straight into its ladder, and
+the tests split into `admin-paths.test.tsx` (list) and
+`admin-path-editor.test.tsx` (editor).
+
+**One real bug came out of it.** Putting the seed's deliberately-hidden course
+inside the English path made `journey.e2e-spec` fail: `PathSummary.courseCount`
+counted every *placed* membership while the path page showed only what the
+learner could *see*, so a path holding a withdrawn course (§2/D-015) advertised
+one more course than its own page could show. Both are now counted the same way.
+
+**Verified.** Web 824 (58 files), API unit 651, types 41, API e2e 580/581 —
+typecheck and lint clean. The one failure is the pre-existing `admin-rbac`
+certificate-template flake, reproduced on the unmodified file. Two e2e suites
+that borrowed a seeded published path now build their own, because borrowing one
+made their ordering decide whether the journey suite passed.
+
+**Next:** the user's test → PR (never merge).

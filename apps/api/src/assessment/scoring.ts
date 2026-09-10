@@ -1,36 +1,33 @@
-import {
-  RIASEC_LETTERS,
-  buildRiasecProfile,
-  emptyRiasecScores,
-  type RiasecLetter,
-  type RiasecProfile,
-  type RiasecScores,
-} from '@tamkeen/types';
+import { placeScore, type PlacementBand } from '@tamkeen/types';
 
 /**
- * Scoring: answers → per-dimension tally → ranked profile → Holland Code.
+ * Scoring a path's assessment: answers → marks for correct answers → one total
+ * → the level its band names (§4.3, D-134).
  *
  * Pure functions over plain shapes, deliberately not a Nest service and with no
- * Prisma import. The engine is the piece §2B singles out as "core product
- * correctness", so it is testable without a database, a module, or a container.
- * The service layer loads rows and hands them here.
+ * Prisma import: this is the piece §2B calls "core product correctness", so it
+ * must be testable without a database, a module or a container. The service
+ * layer loads rows and hands them here.
  *
- * The ranking and code derivation themselves live in `@tamkeen/types`, shared
- * with the web app so the two can never disagree about what a Holland Code is.
- * What is *here* is the part only the server may do: turning chosen options into
- * points, using weights the browser never sees.
+ * **The band mapping itself lives in `@tamkeen/types`, the answer key does
+ * not.** D-034's rule is that a shape crosses the boundary when both apps must
+ * apply it and must not disagree — the administrator's band editor validates the
+ * same partition the scorer places by, so `placeScore` and `checkBands` are
+ * shared. `isCorrect` is the opposite kind of fact: a placement test whose
+ * answer key is in a network response has no meaning at all, so everything that
+ * reads it stays here, server-side.
  */
 
-/** An option's contribution. Absent letters contribute nothing. */
-export type OptionWeights = Partial<Record<RiasecLetter, number>>;
-
+/** An option as the scorer sees it. `isCorrect` never reaches a browser. */
 export interface ScorableOption {
   id: string;
-  weights: OptionWeights;
+  isCorrect: boolean;
 }
 
 export interface ScorableQuestion {
   id: string;
+  /** What a correct answer is worth. A wrong answer is always worth nothing. */
+  marks: number;
   options: ScorableOption[];
 }
 
@@ -42,16 +39,25 @@ export interface SubmittedAnswer {
 /**
  * Error codes for an invalid submission.
  *
- * Codes, not prose — the API never returns user-facing text (D-024). Each is a
- * distinct failure a client could genuinely hit or a tampered request could
- * attempt, so they are distinguishable in an audit rather than collapsed into
- * one "bad request".
+ * Codes, not prose — the API never returns user-facing text (D-024). They match
+ * `AuditReason` exactly, so `reason: error.code` typechecks without a cast, and
+ * a test asserts they stay in step.
  */
 export const SCORING_ERROR = {
   INCOMPLETE: 'ASSESSMENT_INCOMPLETE',
   UNKNOWN_QUESTION: 'ASSESSMENT_UNKNOWN_QUESTION',
   UNKNOWN_OPTION: 'ASSESSMENT_UNKNOWN_OPTION',
   DUPLICATE_ANSWER: 'ASSESSMENT_DUPLICATE_ANSWER',
+  /**
+   * The score fell outside every band.
+   *
+   * Unreachable through the product: the publish gate refuses a band table that
+   * does not cover `0 … maxScore`. It exists because the alternative to raising
+   * it would be defaulting to a level, and quietly starting somebody on the
+   * bottom rung because a band table was malformed is worse than refusing to
+   * place them at all.
+   */
+  NO_BAND: 'ASSESSMENT_NO_BAND',
 } as const;
 
 export class ScoringError extends Error {
@@ -62,62 +68,32 @@ export class ScoringError extends Error {
 }
 
 /**
- * The most any single dimension could score, per dimension.
+ * The highest total the bank can produce: every question answered correctly.
  *
- * Needed to express a result as a percentage for the six-dimension visual
- * (§4.4). Computed from the bank rather than assumed, so it stays correct if
- * Phase 5 edits the questions.
+ * Computed from the bank rather than assumed, so it stays correct when an
+ * administrator adds an item or changes what one is worth — and so the band
+ * table's coverage can be checked against the same number the scorer uses.
  */
-export function maxAttainableByDimension(questions: readonly ScorableQuestion[]): RiasecScores {
-  const maxima = emptyRiasecScores();
-
-  for (const question of questions) {
-    for (const letter of RIASEC_LETTERS) {
-      /* The best this question could contribute to this dimension — options are
-         mutually exclusive, so it is the maximum, not the sum. */
-      const best = question.options.reduce(
-        (highest, option) => Math.max(highest, option.weights[letter] ?? 0),
-        0,
-      );
-      maxima[letter] += best;
-    }
-  }
-
-  return maxima;
+export function maxAttainableScore(questions: readonly ScorableQuestion[]): number {
+  return questions.reduce((total, question) => total + question.marks, 0);
 }
 
 /**
- * True when every dimension can attain the same maximum.
+ * Validates a submission against the bank and totals it.
  *
- * This matters because ranking compares **raw scores across dimensions**. If one
- * dimension had more items than another, it would rank higher on volume rather
- * than on the user's interests, and the resulting Holland Code would be an
- * artefact of the question bank. The seeded bank is balanced by construction and
- * a content test asserts it (D-032); this function is what that test calls, and
- * what Phase 5 must keep true when it lets an admin edit the bank.
- */
-export function isBalancedBank(questions: readonly ScorableQuestion[]): boolean {
-  const maxima = maxAttainableByDimension(questions);
-  const values = RIASEC_LETTERS.map((letter) => maxima[letter]);
-
-  return new Set(values).size === 1;
-}
-
-/**
- * Validates a submission against the bank and tallies it.
- *
- * Validation is not a formality here. The client sends option ids; without these
+ * Validation is not a formality. The client sends option ids; without these
  * checks a caller could answer a subset, answer one question twice, or send an
- * option id belonging to a different question, and the tally would silently
- * produce a skewed but plausible-looking Holland Code.
+ * option id belonging to a different question, and the total would silently come
+ * out low — which for a placement test means a person starts a rung below where
+ * they belong and repeats work they did not need.
  */
 export function tallyAnswers(
   questions: readonly ScorableQuestion[],
   answers: readonly SubmittedAnswer[],
-): RiasecScores {
+): number {
   const byQuestion = new Map(questions.map((question) => [question.id, question]));
-  const scores = emptyRiasecScores();
   const seen = new Set<string>();
+  let total = 0;
 
   for (const answer of answers) {
     const question = byQuestion.get(answer.questionId);
@@ -138,28 +114,47 @@ export function tallyAnswers(
       throw new ScoringError(SCORING_ERROR.UNKNOWN_OPTION);
     }
 
-    for (const letter of RIASEC_LETTERS) {
-      scores[letter] += option.weights[letter] ?? 0;
+    if (option.isCorrect) {
+      total += question.marks;
     }
   }
 
-  /* Every question must be answered. A partial submission would score the
-     unanswered dimensions at zero and present the result as a finished profile. */
+  /* Every question must be answered. A partial submission scores the unanswered
+     items at zero and would present the result as a finished placement. */
   if (seen.size !== questions.length) {
     throw new ScoringError(SCORING_ERROR.INCOMPLETE);
   }
 
-  return scores;
+  return total;
 }
 
-/** The whole engine: validate, tally, rank, derive the code. */
+export interface Score {
+  totalScore: number;
+  maxScore: number;
+  /** 0-100. Zero when nothing is attainable, rather than NaN. */
+  percent: number;
+  /** The level the bands placed this total on. */
+  levelId: string;
+}
+
+/** The whole engine: validate, total, place. */
 export function scoreAssessment(
   questions: readonly ScorableQuestion[],
+  bands: readonly PlacementBand[],
   answers: readonly SubmittedAnswer[],
-): RiasecProfile {
-  const scores = tallyAnswers(questions, answers);
-  const maxima = maxAttainableByDimension(questions);
-  const maxScore = Math.max(...RIASEC_LETTERS.map((letter) => maxima[letter]));
+): Score {
+  const totalScore = tallyAnswers(questions, answers);
+  const maxScore = maxAttainableScore(questions);
+  const levelId = placeScore(totalScore, bands);
 
-  return buildRiasecProfile(scores, maxScore);
+  if (!levelId) {
+    throw new ScoringError(SCORING_ERROR.NO_BAND);
+  }
+
+  return {
+    totalScore,
+    maxScore,
+    percent: maxScore > 0 ? (totalScore / maxScore) * 100 : 0,
+    levelId,
+  };
 }

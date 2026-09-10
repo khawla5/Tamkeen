@@ -55,8 +55,9 @@ const COURSE: CoursePlayerView = {
   summary: 'مقدمة عملية.',
   durationMinutes: 90,
   pathName: 'المسار التقني',
-  orderInPath: 3,
-  totalInPath: 7,
+  levelName: 'متقدم',
+  orderInLevel: 3,
+  totalInLevel: 7,
   status: 'NOT_STARTED',
   gradePercent: null,
   passed: false,
@@ -99,10 +100,13 @@ beforeEach(() => {
 });
 
 describe('course player — context', () => {
-  it('shows where the learner is in their path', async () => {
+  it('shows where the learner is in their path, and on which rung', async () => {
+    /* The rung is the fact that makes the position mean anything: "3 of 7"
+       inside متقدم is a different statement from "3 of 7" in the whole path. */
     await show();
 
     expect(screen.getByText(/المسار التقني/)).toBeInTheDocument();
+    expect(screen.getByText(/متقدم/)).toBeInTheDocument();
     expect(screen.getByText(/3/)).toBeInTheDocument();
   });
 
@@ -128,12 +132,12 @@ describe('course player — one action, chosen by state', () => {
     await show({ status: 'COMPLETED', gradePercent: 88, passed: true });
   });
 
-  it('offers no launch at all before the path is confirmed', async () => {
-    /* Nothing is enrolled until the commitment gate (§4.5), so an enabled button
+  it('offers no launch at all before the assessment has placed the learner', async () => {
+    /* Nothing is enrolled until a placement exists (D-134), so an enabled button
        would be one that cannot do what it says. */
     await show({ canLaunch: false });
 
-    expect(screen.getByText(/لم يتم تأكيد مسارك/)).toBeInTheDocument();
+    expect(screen.getByText(/لم يُحدَّد مستواك/)).toBeInTheDocument();
   });
 });
 
@@ -198,9 +202,11 @@ describe('course player — the framed course (D-121)', () => {
     );
     await show();
 
-    /* Before the launch resolves: nothing carrying a token anywhere in the page. */
+    /* The launch is minted on open — awaited, because the effect that mints it
+       runs after the course itself has rendered. */
+    await waitFor(() => expect(api.launch).toHaveBeenCalledWith('course-1', { embed: true }));
+    /* And while it is still in flight: nothing carrying a token in the page. */
     expect(document.body.innerHTML).not.toContain('token=');
-    expect(api.launch).toHaveBeenCalledWith('course-1', { embed: true });
 
     await act(async () => {
       resolveLaunch(launchResponse('embed'));

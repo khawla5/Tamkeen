@@ -425,7 +425,11 @@ export class CatalogSyncService implements OnApplicationBootstrap {
       return new Set();
     }
 
-    const held = await this.prisma.userPathCourse.findMany({
+    /* "Held" is now an enrolment (D-134): the row that says a learner was
+       placed above this course and owes it. It is the same fact
+       `user_path_courses` used to carry, minus the selection that no longer
+       exists. */
+    const held = await this.prisma.enrollment.findMany({
       where: { courseId: { in: courseIds } },
       select: { courseId: true },
       distinct: ['courseId'],

@@ -100,11 +100,14 @@ function Player({ course, onOutcome }: { course: CoursePlayerView; onOutcome: ()
           <CardHeader className="space-y-1">
             {course.pathName ? (
               <p className="text-muted-blue text-sm">
-                {course.orderInPath !== null && course.totalInPath !== null
+                {course.levelName !== null &&
+                course.orderInLevel !== null &&
+                course.totalInLevel !== null
                   ? t('pathContext', {
                       path: course.pathName,
-                      order: format.number(course.orderInPath),
-                      total: format.number(course.totalInPath),
+                      level: course.levelName,
+                      order: format.number(course.orderInLevel),
+                      total: format.number(course.totalInLevel),
                     })
                   : course.pathName}
               </p>

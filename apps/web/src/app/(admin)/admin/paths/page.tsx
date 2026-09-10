@@ -1,17 +1,17 @@
 'use client';
 
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import { RIASEC_LETTERS, type AdminPathRow, type RiasecLetter } from '@tamkeen/types';
+import type { AdminPathRow } from '@tamkeen/types';
 
 import { AdminDialog } from '@/components/admin/admin-dialog';
-import { PathDetailPanel } from '@/components/admin/path-detail-panel';
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { AdminPage } from '@/components/layout/admin-page';
 import { DataView } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -19,108 +19,60 @@ import { Textarea } from '@/components/ui/textarea';
 import { useFormat } from '@/i18n/format-provider';
 import { adminApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
+import { useAppRouter } from '@/lib/use-app-router';
+import { cn } from '@/lib/utils';
 
 /**
- * §4C.4 — study paths.
+ * §4C.4 — study paths and their ladders (D-134).
  *
- * **The 5-10 rule is printed and never offered as a control** (D-074, §2). It is
- * on the page because an administrator asked to explain a rejected path build
- * needs the numbers in front of them; it is read-only because a floor of five
- * that can be lowered is a floor of three the first time delivery is late.
+ * **Each row says how much of the path is still waiting on the administrator.**
+ * A course an entity has offered and nobody has placed reaches no learner at
+ * all, and that is invisible from every other screen — so the count of
+ * unassigned memberships is on the list itself, beside the count of placed ones,
+ * rather than a page deeper.
  *
- * Each row shows how many learners have *confirmed* the path, which is the
- * number that matters before touching anything: D-002 makes those choices
- * permanent, and nothing an administrator does here can take a path away from
- * somebody holding it.
+ * The other number is how many learners the ministry has put on the path: what
+ * matters before touching anything, because nothing an administrator does here
+ * can take a path away from somebody holding it.
+ *
+ * **The list only lists.** Editing a ladder is its own screen at
+ * `/admin/paths/[pathId]` — the work is long enough to scroll and to come back
+ * to, which is not what a modal is for. Creating a path stays a dialog, because
+ * three fields answered once is exactly what a modal is for.
  */
 export default function AdminPathsPage() {
   const t = useTranslations('admin');
   const [creating, setCreating] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const paths = useApiQuery(() => adminApi.listPaths(), []);
-  const bounds = useApiQuery(() => adminApi.pathBounds(), []);
 
   return (
     <AdminPage
       title={t('pathsTitle')}
       action={<Button onClick={() => setCreating(true)}>{t('pathCreate')}</Button>}
     >
-      <div className="space-y-6">
-        {bounds.data ? <BoundsNotice min={bounds.data.min} max={bounds.data.max} /> : null}
+      <DataView
+        isLoading={paths.isInitialLoad}
+        error={paths.error}
+        onRetry={paths.refetch}
+        isEmpty={paths.data?.length === 0}
+        emptyProps={{ title: t('pathsEmpty'), body: t('pathsEmptyHint') }}
+      >
+        <ul className="space-y-3">
+          {(paths.data ?? []).map((path) => (
+            <li key={path.id}>
+              <PathCard path={path} />
+            </li>
+          ))}
+        </ul>
+      </DataView>
 
-        {/* A deletion closes the panel and the row simply vanishes, which is
-            nothing at all to a screen reader. This is the announcement. */}
-        {notice ? (
-          <p role="status" className="text-sm text-success">
-            {notice}
-          </p>
-        ) : null}
-
-        <DataView
-          isLoading={paths.isInitialLoad}
-          error={paths.error}
-          onRetry={paths.refetch}
-          isEmpty={paths.data?.length === 0}
-          emptyProps={{ title: t('pathsEmpty'), body: t('pathsEmptyHint') }}
-        >
-          <ul className="space-y-3">
-            {(paths.data ?? []).map((path) => (
-              <li key={path.id}>
-                <PathCard path={path} onManage={() => setSelected(path.id)} />
-              </li>
-            ))}
-          </ul>
-        </DataView>
-      </div>
-
-      {creating ? (
-        <CreatePathDialog
-          onClose={() => setCreating(false)}
-          onCreated={(pathId) => {
-            setCreating(false);
-            setNotice(null);
-            paths.refetch();
-            /* Straight into the detail panel: a path is created empty and cannot
-               be offered until it has courses, so the next step is always the
-               same one. */
-            setSelected(pathId);
-          }}
-        />
-      ) : null}
-
-      {selected ? (
-        <PathDetailPanel
-          pathId={selected}
-          onClose={() => {
-            setSelected(null);
-            paths.refetch();
-          }}
-          onChanged={() => paths.refetch()}
-          onDeleted={() => {
-            setSelected(null);
-            setNotice(t('pathRemoved'));
-            paths.refetch();
-          }}
-        />
-      ) : null}
+      {creating ? <CreatePathDialog onClose={() => setCreating(false)} /> : null}
     </AdminPage>
   );
 }
 
-function BoundsNotice({ min, max }: { min: number; max: number }) {
-  const t = useTranslations('admin');
-  const format = useFormat();
-
-  return (
-    <Card className="p-4 text-sm text-muted-foreground">
-      {t('pathBoundsNotice', { min: format.number(min), max: format.number(max) })}
-    </Card>
-  );
-}
-
-function PathCard({ path, onManage }: { path: AdminPathRow; onManage: () => void }) {
+function PathCard({ path }: { path: AdminPathRow }) {
   const t = useTranslations('admin');
   const format = useFormat();
 
@@ -129,41 +81,45 @@ function PathCard({ path, onManage }: { path: AdminPathRow; onManage: () => void
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-2 font-medium text-foreground">
           {path.name}
-          {/* The accent marks the letter because that is what the letter
-              *does* — it is the recommendation signal (§3A). One accent since
-              D-069 retired gold; the treatment, not the hue, carries it. */}
-          <Badge variant="primary">{t(`riasec.${path.riasecLetter}`)}</Badge>
-          {path.isActive ? null : <Badge variant="soft">{t('pathNotOffered')}</Badge>}
+          {path.status === 'PUBLISHED' ? null : <Badge variant="soft">{t('pathDraft')}</Badge>}
+          {/* The work queue, on the list: memberships nobody has placed reach no
+              learner, and nothing else on this screen would say so. */}
+          {path.unassignedCourseCount > 0 ? (
+            <Badge variant="warning">
+              {t('pathUnassigned', { count: format.number(path.unassignedCourseCount) })}
+            </Badge>
+          ) : null}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           {t('pathSummary', {
-            courses: format.number(path.courseCount),
-            learners: format.number(path.committedLearners),
+            levels: format.number(path.levelCount),
+            courses: format.number(path.placedCourseCount),
+            learners: format.number(path.assignedLearners),
           })}
         </p>
       </div>
 
-      <Button variant="outline" onClick={onManage}>
+      {/* A link, not a button: the ladder has an address now, so it can be
+          opened in a new tab, bookmarked, and linked to from the dashboard's
+          stuck-paths list. */}
+      <Link
+        href={`/admin/paths/${path.id}`}
+        className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0')}
+      >
         {t('manage')}
-      </Button>
+      </Link>
     </Card>
   );
 }
 
-function CreatePathDialog({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: (pathId: string) => void;
-}) {
+function CreatePathDialog({ onClose }: { onClose: () => void }) {
   const t = useTranslations('admin');
+  const router = useAppRouter();
   const translateError = useErrorMessage();
 
   const [key, setKey] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [letter, setLetter] = useState<RiasecLetter>('R');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -172,11 +128,13 @@ function CreatePathDialog({
     setBusy(true);
 
     try {
-      const path = await adminApi.createPath({ key, name, description, riasecLetter: letter });
-      onCreated(path.id);
+      const path = await adminApi.createPath({ key, name, description });
+      /* Straight into the ladder editor: a path is created with no rungs, no
+         assessment and nothing placed, so the next step is always the same one
+         and it is never on this screen. */
+      router.push(`/admin/paths/${path.id}`);
     } catch (caught) {
       setError(translateError(caught));
-    } finally {
       setBusy(false);
     }
   }
@@ -228,23 +186,6 @@ function CreatePathDialog({
             )}
           </Field>
         </div>
-
-        <Field id="new-path-letter" label={t('pathLetter')} hint={t('pathLetterHint')} required>
-          {(field) => (
-            <select
-              {...field}
-              value={letter}
-              onChange={(event) => setLetter(event.target.value as RiasecLetter)}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              {RIASEC_LETTERS.map((value) => (
-                <option key={value} value={value}>
-                  {t(`riasec.${value}`)}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
       </div>
 
       {error ? (

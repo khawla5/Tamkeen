@@ -64,23 +64,22 @@ export class AdminAuditController {
     return toCsv(
       ['التقرير', 'البند', 'القيمة', 'قيمة إضافية'],
       [
-        ['المسار', 'أكملوا التقييم', reports.journey.assessed, ''],
-        ['المسار', 'يختارون دوراتهم', reports.journey.building, ''],
-        ['المسار', 'مسارهم قيد التنفيذ', reports.journey.active, ''],
+        ['المسار', 'أُسند إليهم مسار', reports.journey.assigned, ''],
+        ['المسار', 'حُدِّد مستواهم', reports.journey.placed, ''],
         ['المسار', 'أكملوا المسار', reports.journey.completed, ''],
         ['المسار', 'نسبة إكمال المسارات', reports.journey.pathCompletionRate ?? '', ''],
         ['الشهادات', 'شهادات دورات', reports.certificates.course, ''],
         ['الشهادات', 'شهادات مسارات', reports.certificates.path, ''],
         ...reports.pathPopularity.map((row) => [
-          'المسارات الأكثر اختيارًا',
+          'المسارات الأكثر إسنادًا',
           row.name,
-          row.chosen,
+          row.assigned,
           row.completed,
         ]),
-        ...reports.codeDistribution.map((row) => [
-          'توزيع الأنماط المهنية',
-          row.code,
-          row.count,
+        ...reports.placementDistribution.map((row) => [
+          'توزيع المستويات',
+          `${row.pathName} — ${row.levelName}`,
+          row.employees,
           '',
         ]),
         ...reports.courseOutcomes.map((row) => [

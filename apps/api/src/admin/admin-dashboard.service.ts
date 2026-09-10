@@ -1,11 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { RIASEC_LETTERS } from '@tamkeen/types';
 import type {
   AdminActivityRow,
   AdminDashboardView,
-  AdminLetterShare,
   AdminLmsHealth,
+  AdminPathAssignmentShare,
 } from '@tamkeen/types';
 
 import { AuditAction } from '../audit/audit.actions';
@@ -42,20 +41,20 @@ export class AdminDashboardService {
       paths,
       courses,
       journey,
-      letterDistribution,
+      pathDistribution,
       lms,
       recentActivity,
-      assessment,
+      pathsWithoutAssessment,
     ] = await Promise.all([
       this.userCounts(),
       this.entityCounts(),
       this.pathCounts(),
       this.courseCounts(),
       this.journeyCounts(),
-      this.letterDistribution(),
+      this.pathDistribution(),
       this.lmsHealth(),
       this.recentActivity(),
-      this.activeAssessment(),
+      this.pathsWithoutAssessment(),
     ]);
 
     return {
@@ -64,10 +63,10 @@ export class AdminDashboardService {
       paths,
       courses,
       journey,
-      letterDistribution,
+      pathDistribution,
       lms,
       recentActivity,
-      assessment,
+      pathsWithoutAssessment,
     };
   }
 
@@ -103,16 +102,16 @@ export class AdminDashboardService {
   }
 
   private async pathCounts(): Promise<AdminDashboardView['paths']> {
-    const [total, active] = await Promise.all([
+    const [total, published] = await Promise.all([
       this.prisma.path.count(),
-      this.prisma.path.count({ where: { isActive: true } }),
+      this.prisma.path.count({ where: { status: 'PUBLISHED' } }),
     ]);
 
-    return { total, active };
+    return { total, published, draft: total - published };
   }
 
   private async courseCounts(): Promise<AdminDashboardView['courses']> {
-    const [total, published, draft, unowned] = await Promise.all([
+    const [total, published, draft, unowned, unassigned] = await Promise.all([
       this.prisma.course.count(),
       this.prisma.course.count({ where: { publication: 'PUBLISHED' } }),
       this.prisma.course.count({ where: { publication: 'DRAFT' } }),
@@ -120,96 +119,108 @@ export class AdminDashboardService {
          (D-063). Surfaced because §4C.5 makes these the admin's to manage, and
          they are invisible from every entity portal by construction. */
       this.prisma.course.count({ where: { ownerEntityId: null } }),
+      /* In a path, on no rung — content an entity has offered and nobody has
+         placed, so no learner can see it (D-134). The administrator's own work
+         queue, and the number that says how long it has been ignored. */
+      this.prisma.course.count({
+        where: { pathCourses: { some: { levelId: null } } },
+      }),
     ]);
 
-    return { total, published, draft, unowned };
+    return { total, published, draft, unowned, unassigned };
   }
 
   private async journeyCounts(): Promise<AdminDashboardView['journey']> {
-    const [assessedRows, byStatus, coursesPassed, certificatesIssued] = await Promise.all([
-      /* Distinct users, not results: retakes append (D-033), so counting rows
-         would report one indecisive employee as several assessed people. */
-      this.prisma.assessmentResult.findMany({ distinct: ['userId'], select: { userId: true } }),
-      this.prisma.userPath.groupBy({ by: ['status'], _count: { _all: true } }),
-      this.prisma.completion.count({ where: { passed: true } }),
-      this.prisma.certificate.count(),
-    ]);
-
-    const of = (status: string) => byStatus.find((row) => row.status === status)?._count._all ?? 0;
-    const active = of('ACTIVE');
-    const completed = of('COMPLETED');
-    const committed = active + completed;
+    const [assignedRows, placedRows, completedRows, coursesPassed, certificatesIssued] =
+      await Promise.all([
+        /* Distinct users, not rows: an employee may hold more than one path
+           (D-130), and this is a question about people. */
+        this.prisma.userPath.findMany({ distinct: ['userId'], select: { userId: true } }),
+        this.prisma.learnerPlacement.findMany({
+          distinct: ['learnerId'],
+          select: { learnerId: true },
+        }),
+        this.prisma.userPath.findMany({
+          where: { status: 'COMPLETED' },
+          distinct: ['userId'],
+          select: { userId: true },
+        }),
+        this.prisma.completion.count({ where: { passed: true } }),
+        this.prisma.certificate.count(),
+      ]);
 
     return {
-      assessed: assessedRows.length,
-      building: of('BUILDING'),
-      active,
-      completed,
-      /* Undefined over an empty denominator, as everywhere else in the product. */
-      pathCompletionRate: committed === 0 ? null : Math.round((completed / committed) * 100),
+      assigned: assignedRows.length,
+      placed: placedRows.length,
+      completed: completedRows.length,
+      /* Over the people actually placed, not everyone assigned: somebody waiting
+         on an assessment has not failed to finish, and counting them would
+         report an unpublished path as a completion problem. Undefined over an
+         empty denominator, as everywhere else in the product. */
+      pathCompletionRate:
+        placedRows.length === 0
+          ? null
+          : Math.round((completedRows.length / placedRows.length) * 100),
       coursesPassed,
       certificatesIssued,
     };
   }
 
   /**
-   * Where the ministry's people are, by career type, against what is offered.
+   * Where the ministry has put its people, and how far each of those groups got
+   * (D-134).
    *
-   * **The dominant letter rather than the whole code.** The full Holland Code
-   * has thirty-odd values, is written in Latin letters, and tells an
-   * administrator nothing they can do anything about; §4C.8's reports keep that
-   * breakdown for the analyst who wants it. The *first* letter has six values,
-   * each with an Arabic name, and it is the same letter a path is tagged with
-   * (§3A) — so putting the employee count beside the count of paths offered for
-   * that letter turns a chart into a decision: a type many employees lead with
-   * and few paths serve is a gap in the catalogue, and this is the only screen
-   * where both halves of that comparison exist.
+   * It replaces the career-type distribution, which answered "where are our
+   * people's interests" — a question the ministry stopped asking when it started
+   * assigning paths. This answers the one it asks instead: of the people we put
+   * on this path, how many have been placed and started, and how many are still
+   * waiting on the assessment. A path with many assigned and few placed is the
+   * finding, and it is actionable from this screen.
    *
-   * **One result per person — their newest** (D-033). A retake is a correction,
-   * not a second opinion, so counting every result row would weight the people
-   * who changed their mind more heavily than the people who did not, and the
-   * distribution would describe the sample rather than the ministry.
-   *
-   * All six letters are always returned, including the ones nobody scored:
-   * a zero is a finding, and a row that disappears cannot be compared against
-   * the paths offered for it.
+   * **Every published path is returned, including the ones nobody is on.** A
+   * zero is a finding — a path the ministry built and never used — and a row
+   * that disappears cannot be compared against the ones that are working.
    */
-  private async letterDistribution(): Promise<AdminLetterShare[]> {
-    const [newest, pathsByLetter] = await Promise.all([
-      this.prisma.assessmentResult.findMany({
-        distinct: ['userId'],
-        orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
-        select: { code: true },
+  private async pathDistribution(): Promise<AdminPathAssignmentShare[]> {
+    const [paths, placements] = await Promise.all([
+      this.prisma.path.findMany({
+        where: { status: 'PUBLISHED' },
+        orderBy: { displayOrder: 'asc' },
+        select: { id: true, name: true, userPaths: { select: { status: true } } },
       }),
-      this.prisma.path.groupBy({
-        by: ['riasecLetter'],
-        where: { isActive: true },
-        _count: { _all: true },
-      }),
+      this.prisma.learnerPlacement.groupBy({ by: ['pathId'], _count: { _all: true } }),
     ]);
 
-    const employees = new Map<string, number>();
-    for (const row of newest) {
-      /* The code's first letter IS the dominant dimension: the code is derived
-         by ranking, with ties already broken canonically (D-031), so reading it
-         here cannot disagree with the ranking the learner was shown. */
-      const letter = row.code.charAt(0);
-      employees.set(letter, (employees.get(letter) ?? 0) + 1);
-    }
+    const placedBy = new Map(placements.map((row) => [row.pathId, row._count._all]));
 
-    const paths = new Map(pathsByLetter.map((row) => [row.riasecLetter, row._count._all]));
+    return paths
+      .map((path) => ({
+        pathId: path.id,
+        name: path.name,
+        assigned: path.userPaths.length,
+        placed: placedBy.get(path.id) ?? 0,
+        completed: path.userPaths.filter((row) => row.status === 'COMPLETED').length,
+      }))
+      .sort((a, b) => b.assigned - a.assigned || a.name.localeCompare(b.name, 'ar'));
+  }
 
-    return RIASEC_LETTERS.map((letter) => ({
-      letter,
-      employees: employees.get(letter) ?? 0,
-      activePaths: paths.get(letter) ?? 0,
-    })).sort(
-      (a, b) =>
-        b.employees - a.employees ||
-        /* Canonical R-I-A-S-E-C decides a tie, so the order is reproducible
-           rather than whatever the Map happened to hold (D-031). */
-        RIASEC_LETTERS.indexOf(a.letter) - RIASEC_LETTERS.indexOf(b.letter),
-    );
+  /**
+   * Paths nobody assigned to them can start (§4C.1, D-134).
+   *
+   * The one genuinely stuck thing this page can show. A path with no published
+   * assessment strands every learner on it at «بانتظار تحديد المستوى», and
+   * nothing else in the product says so — assignment happens on another screen,
+   * so by the time somebody notices, a directorate has been put on a path that
+   * goes nowhere.
+   */
+  private async pathsWithoutAssessment(): Promise<AdminDashboardView['pathsWithoutAssessment']> {
+    const paths = await this.prisma.path.findMany({
+      where: { status: 'PUBLISHED', assessments: { none: { status: 'ACTIVE' } } },
+      orderBy: { displayOrder: 'asc' },
+      select: { id: true, name: true },
+    });
+
+    return paths;
   }
 
   private async lmsHealth(): Promise<AdminLmsHealth> {
@@ -292,37 +303,5 @@ export class AdminDashboardService {
       targetType: row.targetType,
       occurredAt: row.occurredAt.toISOString(),
     }));
-  }
-
-  /**
-   * Which version new takers are being served, and whether an edit is in flight.
-   *
-   * `hasDraft` is what makes §4C.3 reachable from here without a second click:
-   * an unfinished assessment edit is the one thing on this page that is waiting
-   * on the administrator personally.
-   */
-  private async activeAssessment(): Promise<AdminDashboardView['assessment']> {
-    const [active, draft] = await Promise.all([
-      this.prisma.assessment.findFirst({
-        where: { status: 'ACTIVE' },
-        select: { version: true, effectiveFrom: true, createdAt: true },
-      }),
-      this.prisma.assessment.count({ where: { status: 'DRAFT' } }),
-    ]);
-
-    if (!active) {
-      return null;
-    }
-
-    return {
-      version: active.version,
-      /* `effectiveFrom` is null only for a row that was never published, which
-         an ACTIVE one cannot be — the fallback exists so a corrupt row renders
-         a date rather than crashing the whole dashboard. */
-      effectiveFrom: (active.effectiveFrom ?? active.createdAt).toISOString(),
-      /* An unfinished edit is the one thing on this page waiting on the
-         administrator personally, so it is worth a click from here (§4C.1). */
-      hasDraft: draft > 0,
-    };
   }
 }

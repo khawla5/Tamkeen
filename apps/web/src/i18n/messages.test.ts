@@ -145,16 +145,16 @@ describe('Arabic message catalog', () => {
  * Namespaces that are looked up dynamically, and the constant that supplies the
  * keys.
  *
- * These are the ones a component reads with a computed key — `t(`riasec.${letter}`)`,
- * `t(row.action)` — so a missing entry is invisible until the exact row that
- * needs it renders. Everywhere else next-intl fails loudly at the call site.
+ * These are the ones a component reads with a computed key — `t(row.action)`,
+ * `t(`setting.${key}`)` — so a missing entry is invisible until the exact row
+ * that needs it renders. Everywhere else next-intl fails loudly at the call
+ * site.
  */
 const DYNAMIC_NAMESPACES = [
-  /* Keyed by `UserPathCourseStatus` — the catalogue card, the course page and
+  /* Keyed by `CourseProgressStatus` — the catalogue card, the course page and
      the chip component all read it with a computed key. */
   'courseStatus',
   'admin.auditAction',
-  'admin.riasec',
   'admin.courseVisibility',
   'admin.versionStatus',
   'admin.setting',
@@ -262,10 +262,8 @@ describe('every system setting has readable Arabic copy', () => {
     /* A label left behind after a key is removed is a smaller problem than a
        missing one, but it is still copy describing a control nobody can reach —
        the pass threshold's label outlived its field for exactly one commit. */
-    const readOnly = ['PATH_MIN_COURSES', 'PATH_MAX_COURSES'];
     const known = new Set<string>([
       ...SETTING_KEYS,
-      ...readOnly,
       'API_RATE_LIMIT_MAX_REQUESTS',
       'API_RATE_LIMIT_WINDOW_SECONDS',
     ]);

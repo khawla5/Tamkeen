@@ -7,38 +7,42 @@ import type {
   AdminAssessmentDraft,
   AdminAssessmentOverview,
   AdminAssessmentQuestion,
-  RiasecLetter,
 } from '@tamkeen/types';
 
 import { renderWithProviders } from '@/test/render';
 
 /**
- * §4C.3 — assessment management.
+ * §4C.3 — one path's placement assessment (D-134).
  *
- * Two things carry this file.
+ * Three rules carry this file.
  *
- * **The frozen-results notice appears before the decision, not after it.** D-049
- * guarantees that editing does not change anybody's recorded result, and that
- * guarantee is only useful if the person about to edit knows it — otherwise the
- * safe-feeling move is never to improve the assessment at all.
+ * **Copy-on-write, said before the edit starts.** D-049 freezes the placements
+ * an earlier version produced, and that is only reassuring if the person about
+ * to change the instrument is told — otherwise the safe-feeling move is to
+ * never edit it, and the ministry never improves it. The notice sits above the
+ * primary action and again in the publish dialog.
  *
- * **A blocker and a warning must not look alike.** One is a refusal the server
- * will repeat; the other is a judgement the administrator is allowed to make.
- * Rendering them the same way teaches that both can be clicked past, which is
- * exactly wrong for the one that skews every Holland Code the version produces.
+ * **The answer key lives only here.** `isCorrect`, `marks` and the rung an item
+ * targets are on the admin contract and on no learner-facing view; the API test
+ * asserts the absence, and this file asserts the presence.
+ *
+ * **Publishing is refused, and explained, rather than merely disabled.** A bank
+ * that cannot place anybody is a path nobody assigned to it can start, so the
+ * blockers are listed beside the button that they disable.
  */
 
 const api = vi.hoisted(() => ({
   assessmentOverview: vi.fn(),
   assessmentDraft: vi.fn(),
   createAssessmentDraft: vi.fn(),
+  publishAssessment: vi.fn(),
   discardAssessmentDraft: vi.fn(),
   addDraftQuestion: vi.fn(),
   updateDraftQuestion: vi.fn(),
   removeDraftQuestion: vi.fn(),
-  reorderDraft: vi.fn(),
   updateDraftOption: vi.fn(),
-  publishAssessment: vi.fn(),
+  reorderDraft: vi.fn(),
+  setAssessmentBands: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async () => {
@@ -46,6 +50,10 @@ vi.mock('@/lib/api-client', async () => {
 
   return { ...actual, adminApi: api };
 });
+
+vi.mock('next/navigation', () => ({
+  useParams: () => ({ pathId: 'path-1' }),
+}));
 
 vi.mock('@/components/layout/admin-page', () => ({
   AdminPage: ({ title, children }: { title: string; children: ReactNode }) => (
@@ -56,306 +64,396 @@ vi.mock('@/components/layout/admin-page', () => ({
   ),
 }));
 
-const { default: AdminAssessmentPage } = await import('@/app/(admin)/admin/assessment/riasec/page');
+const { default: AdminAssessmentPage } =
+  await import('@/app/(admin)/admin/assessment/[pathId]/page');
 
-function question(letter: RiasecLetter, index: number): AdminAssessmentQuestion {
+const LEVELS = [
+  { id: 'l1', name: 'تأسيسي', position: 1 },
+  { id: 'l2', name: 'متقدم', position: 2 },
+];
+
+function version(overrides: Record<string, unknown> = {}) {
   return {
-    id: `q-${letter}${index}`,
-    key: `${letter}${index}`,
-    text: `عبارة عن البُعد ${letter} رقم ${index}`,
-    order: index,
-    options: [0, 1, 2, 3, 4].map((points) => ({
-      id: `o-${letter}${index}-${points}`,
-      key: `l${points}`,
-      label: `مستوى ${points}`,
-      order: points + 1,
-      weights: { [letter]: points } as Partial<Record<RiasecLetter, number>>,
-    })),
+    id: 'v1',
+    version: 1,
+    status: 'ACTIVE' as const,
+    title: 'تقييم تحديد المستوى',
+    effectiveFrom: '2026-01-01T00:00:00.000Z',
+    retiredAt: null,
+    questionCount: 9,
+    resultCount: 206,
+    ...overrides,
   };
 }
 
-const BALANCED = {
-  blockers: [],
-  warnings: [],
-  attainable: { R: 20, I: 20, A: 20, S: 20, E: 20, C: 20 },
-  balanced: true,
-};
+function question(index: number, levelId: string | null = 'l1'): AdminAssessmentQuestion {
+  return {
+    id: `q${index}`,
+    key: `Q${index}`,
+    text: `السؤال رقم ${index}`,
+    order: index,
+    marks: 2,
+    levelId,
+    topic: null,
+    options: [
+      { id: `q${index}-a`, key: 'A', label: 'الخيار الأول', order: 1, isCorrect: true },
+      { id: `q${index}-b`, key: 'B', label: 'الخيار الثاني', order: 2, isCorrect: false },
+    ],
+  };
+}
+
+function overview(overrides: Partial<AdminAssessmentOverview> = {}): AdminAssessmentOverview {
+  return {
+    pathId: 'path-1',
+    pathName: 'مسار تحليل البيانات',
+    levels: LEVELS,
+    active: version(),
+    draft: null,
+    history: [],
+    ...overrides,
+  };
+}
 
 function draft(overrides: Partial<AdminAssessmentDraft> = {}): AdminAssessmentDraft {
   return {
-    id: 'draft-1',
-    key: 'riasec-core',
+    id: 'd1',
+    pathId: 'path-1',
+    pathName: 'مسار تحليل البيانات',
     version: 2,
-    title: 'تقييم الميول المهنية',
+    title: 'تقييم تحديد المستوى',
     description: 'وصف',
-    questions: [question('R', 1), question('I', 2), question('A', 3)],
-    readiness: BALANCED,
+    levels: LEVELS,
+    questions: [question(1), question(2, 'l2')],
+    bands: [
+      { levelId: 'l1', minScore: 0, maxScore: 1 },
+      { levelId: 'l2', minScore: 2, maxScore: 4 },
+    ],
+    bandsAreDefault: true,
+    readiness: {
+      blockers: [],
+      warnings: [],
+      maxScore: 4,
+      levelsWithoutQuestion: [],
+      bandsCoverRange: true,
+    },
     basedOnVersion: 1,
     ...overrides,
   };
 }
 
-const OVERVIEW: AdminAssessmentOverview = {
-  active: {
-    id: 'v1',
-    version: 1,
-    status: 'ACTIVE',
-    title: 'تقييم الميول المهنية',
-    effectiveFrom: '2026-08-01T00:00:00.000Z',
-    retiredAt: null,
-    questionCount: 30,
-    resultCount: 120,
-  },
-  draft: null,
-  history: [],
-};
+beforeEach(() => {
+  vi.clearAllMocks();
+  api.assessmentOverview.mockResolvedValue(overview());
+  api.assessmentDraft.mockResolvedValue(draft());
+  api.createAssessmentDraft.mockResolvedValue(draft());
+});
 
-describe('Admin assessment (§4C.3)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    api.assessmentOverview.mockResolvedValue(OVERVIEW);
-    api.assessmentDraft.mockResolvedValue(draft());
-    api.createAssessmentDraft.mockResolvedValue(draft());
-  });
+/** Opens the editor from the overview, creating the draft on the way in. */
+async function openEditor() {
+  const user = userEvent.setup();
+  renderWithProviders(<AdminAssessmentPage />);
+  await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
+  await screen.findByText('مسودة الإصدار 2');
+  return user;
+}
 
-  it('shows the loading state before the overview arrives', () => {
-    api.assessmentOverview.mockReturnValue(new Promise(() => {}));
+describe('Admin assessment (§4C.3, D-134)', () => {
+  it('asks for this path’s assessment, and names the path', async () => {
     renderWithProviders(<AdminAssessmentPage />);
 
-    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'مسار تحليل البيانات' })).toBeInTheDocument();
+    expect(api.assessmentOverview).toHaveBeenCalledWith('path-1');
   });
 
-  it('offers a retry when the overview fails', async () => {
-    api.assessmentOverview.mockRejectedValue(new Error('down'));
-    renderWithProviders(<AdminAssessmentPage />);
-
-    expect(await screen.findByRole('button', { name: /إعادة/ })).toBeInTheDocument();
-  });
-
-  it('names the version in force, since when, and how many it scored', async () => {
+  it('shows the live version with how many people it placed', async () => {
+    /* The concrete form of D-049: these placements exist and an edit does not
+       touch them. */
     renderWithProviders(<AdminAssessmentPage />);
 
     expect(await screen.findByText('الإصدار 1')).toBeInTheDocument();
-    expect(screen.getByText('المعمول به')).toBeInTheDocument();
-    /* The concrete form of D-049: these results exist, and an edit will not
-       touch them. */
-    expect(screen.getByText('120')).toBeInTheDocument();
+    expect(screen.getByText('206')).toBeInTheDocument();
   });
 
-  it('says results are frozen before the edit starts, not after', async () => {
+  it('says an edit freezes existing placements, before the edit starts', async () => {
     renderWithProviders(<AdminAssessmentPage />);
 
-    const notice = await screen.findByText(/نتائج من أكملوا التقييم لا تتغيّر/);
-    expect(notice).toBeInTheDocument();
+    expect(await screen.findByText(/لا تتغيّر ولا يُعاد احتسابها/)).toBeInTheDocument();
   });
 
-  it('explains an assessment that does not exist rather than rendering an empty card', async () => {
-    api.assessmentOverview.mockResolvedValue({ ...OVERVIEW, active: null });
+  it('offers a way in for a path with no assessment at all', async () => {
+    /* A disabled button would leave the administrator with no way to fix the one
+       case this screen exists for. */
+    api.assessmentOverview.mockResolvedValue(overview({ active: null }));
     renderWithProviders(<AdminAssessmentPage />);
 
-    expect(await screen.findByText(/لا يوجد تقييم مفعّل/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'بدء التعديل' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'إنشاء التقييم' })).toBeEnabled();
   });
 
-  it('opens the editor by creating a draft when none exists', async () => {
-    const user = userEvent.setup();
-    api.assessmentDraft.mockRejectedValue(new Error('no draft'));
-
+  it('lists the retired versions, each with the placements it produced', async () => {
+    api.assessmentOverview.mockResolvedValue(
+      overview({
+        history: [version({ id: 'v0', version: 0, status: 'RETIRED', resultCount: 40 })],
+      }),
+    );
     renderWithProviders(<AdminAssessmentPage />);
-    await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
 
-    /* One action, not two: §3 asks a primary action to do the thing it says. */
-    await waitFor(() => expect(api.createAssessmentDraft).toHaveBeenCalled());
-    expect(await screen.findByText('مسودة الإصدار 2')).toBeInTheDocument();
+    expect(await screen.findByText('الإصدارات السابقة')).toBeInTheDocument();
+    expect(screen.getByText('40')).toBeInTheDocument();
   });
 
-  it('offers no back control, and two exits that actually leave', async () => {
-    const user = userEvent.setup();
-    api.assessmentDraft.mockRejectedValue(new Error('no draft'));
-
-    renderWithProviders(<AdminAssessmentPage />);
-    await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-    await screen.findByText('مسودة الإصدار 2');
-
-    /* «رجوع» could not work: the page routes to the editor whenever a draft
-       exists, and entering created one — so it returned to the overview for as
-       long as the refetch took and landed back here. Publishing and discarding
-       are the exits that do what they say. */
-    expect(screen.queryByRole('button', { name: 'رجوع' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'نشر الإصدار' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'حذف المسودة' })).toBeInTheDocument();
-  });
-
-  it('goes straight to an existing draft rather than starting a second', async () => {
-    api.assessmentOverview.mockResolvedValue({
-      ...OVERVIEW,
-      draft: { ...OVERVIEW.active!, id: 'd', version: 2, status: 'DRAFT', effectiveFrom: null },
-    });
-
+  it('goes straight into the editor when a draft is already open', async () => {
+    /* Otherwise an administrator returning mid-edit meets a screen offering to
+       start what they already started. */
+    api.assessmentOverview.mockResolvedValue(
+      overview({ draft: version({ id: 'v2', version: 2, status: 'DRAFT' }) }),
+    );
     renderWithProviders(<AdminAssessmentPage />);
 
     expect(await screen.findByText('مسودة الإصدار 2')).toBeInTheDocument();
-    expect(api.createAssessmentDraft).not.toHaveBeenCalled();
   });
 
-  describe('the readiness panel', () => {
-    it('confirms a balanced bank in words', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
+  it('creates the draft on entering the editor when there is none', async () => {
+    api.assessmentDraft.mockRejectedValue(new Error('no draft'));
+    await openEditor();
 
-      expect(await screen.findByText(/البنك متوازن وجاهز للنشر/)).toBeInTheDocument();
-    });
+    expect(api.createAssessmentDraft).toHaveBeenCalledWith('path-1');
+  });
+});
 
-    it('blocks publishing an unbalanced bank and says which dimensions differ', async () => {
-      const user = userEvent.setup();
-      api.assessmentDraft.mockResolvedValue(
-        draft({
-          readiness: {
-            blockers: ['BANK_UNBALANCED'],
-            warnings: [],
-            attainable: { R: 20, I: 20, A: 20, S: 24, E: 20, C: 20 },
-            balanced: false,
-          },
-        }),
-      );
+describe('Admin assessment — the answer key (§4C.3)', () => {
+  it('shows what a question is worth and which rung it targets', async () => {
+    /* Both are on the admin contract and on neither learner view. Marks and the
+       target rung let a taker triage, which is what a placement test cannot
+       afford. */
+    await openEditor();
 
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-
-      const alert = await screen.findByRole('alert');
-      expect(alert).toHaveTextContent(/الأبعاد الستة غير متساوية/);
-      /* Naming the attainable maxima is what turns "something is wrong" into
-         "even up the Social dimension". */
-      expect(within(alert).getByText('24')).toBeInTheDocument();
-
-      expect(screen.getByRole('button', { name: 'نشر الإصدار' })).toBeDisabled();
-    });
-
-    it('lets a warning through, and says so', async () => {
-      const user = userEvent.setup();
-      api.assessmentDraft.mockResolvedValue(
-        draft({
-          readiness: { ...BALANCED, warnings: ['BANK_ADJACENT_DIMENSIONS'] },
-        }),
-      );
-
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-
-      expect(await screen.findByText(/يتتابع سؤالان أو أكثر/)).toBeInTheDocument();
-      expect(screen.getByText(/هذا تنبيه وليس منعًا/)).toBeInTheDocument();
-      /* The difference that matters: a warning does not disable publishing. */
-      expect(screen.getByRole('button', { name: 'نشر الإصدار' })).toBeEnabled();
-    });
-
-    it('renders a blocker as an alert and a warning as ordinary content', async () => {
-      const user = userEvent.setup();
-      api.assessmentDraft.mockResolvedValue(
-        draft({ readiness: { ...BALANCED, warnings: ['BANK_ADJACENT_DIMENSIONS'] } }),
-      );
-
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-      await screen.findByText(/يتتابع سؤالان أو أكثر/);
-
-      /* A warning is not announced assertively: it is not an error, and
-         interrupting a screen-reader user for a judgement they are allowed to
-         make is the wrong use of a live region. */
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    });
+    expect(screen.getAllByLabelText('درجة السؤال')[0]).toHaveValue(2);
+    expect(screen.getAllByLabelText('المستوى المستهدف')[0]).toHaveValue('l1');
+    expect(screen.getAllByLabelText('المستوى المستهدف')[1]).toHaveValue('l2');
   });
 
-  describe('editing', () => {
-    it('offers save only once the text has changed', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
+  it('keeps the options folded away until asked for', async () => {
+    /* Nine questions with four options each is a wall; the key is opened one
+       item at a time. */
+    const user = await openEditor();
 
-      const texts = await screen.findAllByLabelText('نص السؤال');
-      expect(screen.queryByRole('button', { name: 'حفظ النص' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('نص الخيار')).not.toBeInTheDocument();
 
-      await user.type(texts[0]!, 'ز');
+    await user.click(screen.getAllByRole('button', { name: 'عرض الخيارات' })[0]!);
 
-      expect(await screen.findByRole('button', { name: 'حفظ النص' })).toBeInTheDocument();
-    });
-
-    it('asks for a dimension when adding a question, not for six weights', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-      await user.click(await screen.findByRole('button', { name: 'إضافة سؤال' }));
-
-      /* Growing a balanced bank means adding one question per letter. Making
-         that the easy path is how the editor helps rather than only reports. */
-      expect(await screen.findByLabelText('البُعد')).toBeInTheDocument();
-      expect(screen.getByText(/يأخذ السؤال الجديد نفس درجات الموافقة/)).toBeInTheDocument();
-    });
-
-    it('keeps the weight editor behind a click, so the common case stays legible', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-      await screen.findByText('مسودة الإصدار 2');
-
-      expect(screen.queryByLabelText('نص الخيار')).not.toBeInTheDocument();
-
-      await user.click(screen.getAllByRole('button', { name: 'عرض الأوزان' })[0]!);
-
-      expect(await screen.findAllByLabelText('نص الخيار')).not.toHaveLength(0);
-    });
-
-    it('disables moving the first question up and the last one down', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-
-      const up = await screen.findAllByRole('button', { name: 'تحريك لأعلى' });
-      const down = screen.getAllByRole('button', { name: 'تحريك لأسفل' });
-
-      expect(up[0]).toBeDisabled();
-      expect(down.at(-1)).toBeDisabled();
-    });
+    expect(screen.getAllByLabelText('نص الخيار').length).toBe(2);
   });
 
-  describe('publishing', () => {
-    it('states the frozen-results rule again in the confirmation', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-      await user.click(await screen.findByRole('button', { name: 'نشر الإصدار' }));
+  it('records a new correct answer as one decision, not two', async () => {
+    /* Exactly one option per question is correct, so marking one is what
+       unmarks the other — the server enforces it and the screen asks for it
+       once. */
+    api.updateDraftOption.mockResolvedValue(draft());
+    const user = await openEditor();
 
-      /* The most consequential action in the portal. It is said once on the
-         overview and again here, because these are different moments. */
-      expect(await screen.findByText(/لا يُعاد احتسابها/)).toBeInTheDocument();
-      expect(screen.getByText(/سيصبح الإصدار 2 هو التقييم المعمول به/)).toBeInTheDocument();
-    });
+    await user.click(screen.getAllByRole('button', { name: 'عرض الخيارات' })[0]!);
+    await user.click(screen.getAllByRole('radio')[1]!);
 
-    it('shows the server’s refusal rather than assuming the client check was enough', async () => {
-      const user = userEvent.setup();
-      const { ApiError } = await import('@/lib/api-client');
-      api.publishAssessment.mockRejectedValue(new ApiError('BANK_UNBALANCED', 409));
+    await waitFor(() =>
+      expect(api.updateDraftOption).toHaveBeenCalledWith('path-1', 'q1-b', { isCorrect: true }),
+    );
+  });
 
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-      await user.click(await screen.findByRole('button', { name: 'نشر الإصدار' }));
-      /* `name` is a substring match by default, and 'نشر' also matches 'نشر
-         الإصدار'. An anchored expression names the confirm button only. */
-      await user.click(await screen.findByRole('button', { name: /^نشر$/ }));
+  it('changes the rung a question targets without a save step', async () => {
+    api.updateDraftQuestion.mockResolvedValue(draft());
+    const user = await openEditor();
 
-      /* The disabled button is a courtesy; the rule is the server's, and a
-         draft edited in another tab can still be refused here. */
-      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/غير متساوية/));
-    });
+    await user.selectOptions(screen.getAllByLabelText('المستوى المستهدف')[0]!, 'l2');
 
-    it('warns that discarding loses the work and spares the live version', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminAssessmentPage />);
-      await user.click(await screen.findByRole('button', { name: 'بدء التعديل' }));
-      await user.click(await screen.findByRole('button', { name: 'حذف المسودة' }));
+    await waitFor(() =>
+      expect(api.updateDraftQuestion).toHaveBeenCalledWith('path-1', 'q1', { levelId: 'l2' }),
+    );
+  });
 
-      expect(await screen.findByText(/ستفقد كل التعديلات غير المنشورة/)).toBeInTheDocument();
-      expect(screen.getByText(/التقييم المعمول به لا يتأثر/)).toBeInTheDocument();
-    });
+  it('offers save on a question only once its text or marks changed', async () => {
+    const user = await openEditor();
+
+    expect(screen.queryByRole('button', { name: 'حفظ النص' })).not.toBeInTheDocument();
+
+    await user.type(screen.getAllByLabelText('نص السؤال')[0]!, '؟');
+
+    expect(screen.getAllByRole('button', { name: 'حفظ النص' })).toHaveLength(1);
+  });
+
+  it('disables moving the first question up and the last one down', async () => {
+    await openEditor();
+
+    const up = screen.getAllByRole('button', { name: 'تحريك لأعلى' });
+    const down = screen.getAllByRole('button', { name: 'تحريك لأسفل' });
+
+    expect(up[0]).toBeDisabled();
+    expect(down[down.length - 1]).toBeDisabled();
+  });
+});
+
+describe('Admin assessment — readiness and publishing (§4C.3)', () => {
+  it('refuses publication and lists why, rather than only disabling the button', async () => {
+    api.assessmentDraft.mockResolvedValue(
+      draft({
+        readiness: {
+          blockers: ['BANK_NO_CORRECT_OPTION', 'BANK_BANDS_NOT_A_PARTITION'],
+          warnings: [],
+          maxScore: 4,
+          levelsWithoutQuestion: [],
+          bandsCoverRange: false,
+        },
+      }),
+    );
+    await openEditor();
+
+    expect(screen.getByText('يوجد سؤال بلا إجابة صحيحة محددة.')).toBeInTheDocument();
+    expect(
+      screen.getByText('نطاقات الدرجات لا تغطي كل الدرجات دون فجوة أو تداخل.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'نشر الإصدار' })).toBeDisabled();
+  });
+
+  it('warns without blocking when a rung has no question aimed at it', async () => {
+    /* Advisory, not a refusal: a bank can still place people, but nobody meant
+       a rung to be untested. */
+    api.assessmentDraft.mockResolvedValue(
+      draft({
+        readiness: {
+          blockers: [],
+          warnings: ['BANK_LEVEL_WITHOUT_QUESTION'],
+          maxScore: 4,
+          levelsWithoutQuestion: ['l2'],
+          bandsCoverRange: true,
+        },
+      }),
+    );
+    await openEditor();
+
+    expect(screen.getByText('يوجد مستوى بلا سؤال موجَّه إليه.')).toBeInTheDocument();
+    /* Named, not counted: "one level" leaves the administrator to find which. */
+    expect(screen.getAllByText('متقدم').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'نشر الإصدار' })).toBeEnabled();
+  });
+
+  it('states the highest attainable score, which the bands have to cover', async () => {
+    await openEditor();
+
+    expect(screen.getByText(/أعلى درجة ممكنة 4/)).toBeInTheDocument();
+  });
+
+  it('repeats the frozen-results notice at the moment of publishing', async () => {
+    const user = await openEditor();
+
+    await user.click(screen.getByRole('button', { name: 'نشر الإصدار' }));
+
+    const dialog = within(document.querySelector('dialog')!);
+    expect(dialog.getByText(/تبقى كما هي، ولا يُعاد احتسابها/)).toBeInTheDocument();
+  });
+
+  it('publishes only after the confirmation, and leaves the editor', async () => {
+    api.publishAssessment.mockResolvedValue(undefined);
+    const user = await openEditor();
+
+    await user.click(screen.getByRole('button', { name: 'نشر الإصدار' }));
+    expect(api.publishAssessment).not.toHaveBeenCalled();
+
+    await user.click(
+      within(document.querySelector('dialog')!).getByRole('button', { name: 'نشر' }),
+    );
+
+    await waitFor(() => expect(api.publishAssessment).toHaveBeenCalledWith('path-1'));
+  });
+
+  it('says what a discard costs, and what it does not', async () => {
+    const user = await openEditor();
+
+    await user.click(screen.getByRole('button', { name: 'حذف المسودة' }));
+
+    expect(
+      within(document.querySelector('dialog')!).getByText(/التقييم المعمول به لا يتأثر/),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the server’s refusal rather than assuming the disabled button was enough', async () => {
+    const { ApiError } = await import('@/lib/api-client');
+    api.publishAssessment.mockRejectedValue(new ApiError('BANK_NO_CORRECT_OPTION', 409));
+    const user = await openEditor();
+
+    await user.click(screen.getByRole('button', { name: 'نشر الإصدار' }));
+    await user.click(
+      within(document.querySelector('dialog')!).getByRole('button', { name: 'نشر' }),
+    );
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+});
+
+describe('Admin assessment — the placement bands (§4C.3, D-134)', () => {
+  it('shows one row per rung, each with its own two bounds', async () => {
+    await openEditor();
+
+    expect(screen.getByText('قاعدة تحديد المستوى')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('من')).toHaveLength(2);
+    expect(screen.getAllByLabelText('إلى')).toHaveLength(2);
+    expect(screen.getAllByLabelText('من')[0]).toHaveValue(0);
+    expect(screen.getAllByLabelText('إلى')[1]).toHaveValue(4);
+  });
+
+  it('says the bands are the even split nobody has authored yet', async () => {
+    /* A default that looked authored would let an administrator believe a
+       decision was made about where the rungs fall. */
+    await openEditor();
+
+    expect(screen.getByText(/لا توجد نطاقات محفوظة/)).toBeInTheDocument();
+    /* And no reset, because there is nothing to reset to. */
+    expect(
+      screen.queryByRole('button', { name: 'العودة إلى التقسيم المتساوي' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers a way back to the even split once a rule has been authored', async () => {
+    api.assessmentDraft.mockResolvedValue(draft({ bandsAreDefault: false }));
+    await openEditor();
+
+    expect(screen.getByRole('button', { name: 'العودة إلى التقسيم المتساوي' })).toBeInTheDocument();
+  });
+
+  it('refuses to save a table that leaves a score unplaceable', async () => {
+    /* Validated with the same shared `checkBands` the server uses, so the
+       screen and the refusal cannot disagree. */
+    const user = await openEditor();
+
+    const maxima = screen.getAllByLabelText('إلى');
+    /* Ending the first rung at 0 while the second still starts at 2 leaves the
+       score 1 on no rung at all. */
+    await user.clear(maxima[0]!);
+    await user.type(maxima[0]!, '0');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('توجد درجات لا يغطيها أي نطاق.');
+    expect(screen.getByRole('button', { name: 'حفظ النطاقات' })).toBeDisabled();
+    expect(api.setAssessmentBands).not.toHaveBeenCalled();
+  });
+
+  it('saves the whole table at once, never one band', async () => {
+    /* A partition is a single object: moving one boundary necessarily changes
+       two rows, so a per-band save would force the administrator through states
+       that are invalid by construction. */
+    api.setAssessmentBands.mockResolvedValue(draft({ bandsAreDefault: false }));
+    const user = await openEditor();
+
+    const maxima = screen.getAllByLabelText('إلى');
+    const minima = screen.getAllByLabelText('من');
+    await user.clear(maxima[0]!);
+    await user.type(maxima[0]!, '2');
+    await user.clear(minima[1]!);
+    await user.type(minima[1]!, '3');
+    await user.click(screen.getByRole('button', { name: 'حفظ النطاقات' }));
+
+    await waitFor(() =>
+      expect(api.setAssessmentBands).toHaveBeenCalledWith('path-1', [
+        { levelId: 'l1', minScore: 0, maxScore: 2 },
+        { levelId: 'l2', minScore: 3, maxScore: 4 },
+      ]),
+    );
   });
 });

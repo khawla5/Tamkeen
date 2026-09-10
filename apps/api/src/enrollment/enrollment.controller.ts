@@ -1,70 +1,49 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 
 import type { DashboardView, MyPathView } from '@tamkeen/types';
 
 import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
-import { AddPathCourseDto, SelectPathDto, SetPathCoursesDto } from './enrollment.dto';
 import { EnrollmentService } from './enrollment.service';
 
 /**
- * §4.5 / §4.9. Every rule lives in the service; these methods only carry the
+ * §4.9 / §4.2. Every rule lives in the service; these methods only carry the
  * request in and the view out.
+ *
+ * **Read-only, all of it.** Selecting a path, setting its courses and confirming
+ * were the four write endpoints here, and D-134 removed the decisions they
+ * carried: the ministry assigns the path (§4C.2) and the assessment decides
+ * where in it a learner starts (§4.3).
  */
 @Controller('my-path')
 @Roles('EMPLOYEE')
 export class EnrollmentController {
   constructor(private readonly enrollment: EnrollmentService) {}
 
-  /** Null rather than 404 — "no path yet" is a normal state, not a failure. */
+  /**
+   * The learner's paths. Null rather than 404 for somebody holding none — "no
+   * path yet" is a normal state, not a failure.
+   */
   @Get()
-  get(@CurrentUser() user: AuthenticatedUser): Promise<MyPathView | null> {
-    return this.enrollment.getMyPath(user.id);
-  }
-
-  @Post('select')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  select(
+  get(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: SelectPathDto,
-    @Req() request: Request,
-  ): Promise<void> {
-    return this.enrollment.selectPath(user.id, dto.pathId, request.ip ?? null);
+    @Query('pathId') pathId?: string,
+  ): Promise<MyPathView | null> {
+    return this.enrollment.getMyPath(user.id, pathId);
   }
 
-  /** Replaces the selection wholesale — the build page sends what is ticked. */
-  @Put('courses')
-  @HttpCode(HttpStatus.OK)
-  async setCourses(
+  /** Every assigned path at once, for the screen that lists them. */
+  @Get('all')
+  list(@CurrentUser() user: AuthenticatedUser): Promise<MyPathView[]> {
+    return this.enrollment.listMyPaths(user.id);
+  }
+
+  @Get(':pathId')
+  getOne(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: SetPathCoursesDto,
-    @Req() request: Request,
-  ): Promise<{ selectedCourseIds: string[] }> {
-    const selectedCourseIds = await this.enrollment.setCourses(
-      user.id,
-      dto.courseIds,
-      request.ip ?? null,
-    );
-
-    return { selectedCourseIds };
-  }
-
-  /** §4.9's quiet post-commitment add. */
-  @Post('courses')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  addCourse(
-    @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: AddPathCourseDto,
-    @Req() request: Request,
-  ): Promise<void> {
-    return this.enrollment.addCourse(user.id, dto.courseId, request.ip ?? null);
-  }
-
-  @Post('confirm')
-  @HttpCode(HttpStatus.OK)
-  confirm(@CurrentUser() user: AuthenticatedUser, @Req() request: Request): Promise<MyPathView> {
-    return this.enrollment.confirm(user.id, request.ip ?? null);
+    @Param('pathId', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) pathId: string,
+  ): Promise<MyPathView | null> {
+    return this.enrollment.getMyPath(user.id, pathId);
   }
 }
 

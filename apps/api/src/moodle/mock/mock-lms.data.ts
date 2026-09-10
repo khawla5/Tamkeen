@@ -5,367 +5,218 @@ import type { LmsCourse } from '../lms.types';
  *
  * Titles are Arabic because every downstream consumer — the catalogue page, the
  * course card, the certificate — is Arabic-first, and mock data in English would
- * hide RTL layout problems until Phase 2.
+ * hide RTL layout problems until Phase 2. That holds for the English-language
+ * courses too: a ministry names its training in Arabic whatever language the
+ * training is *in*, and «الإنجليزية للمراسلات الرسمية» is the real shape of
+ * that row.
  *
- * Deliberately *not* organised by career path or tagged with a RIASEC letter:
- * that is product metadata our own database layers on top (CLAUDE.md §6), and
- * putting it here would imply the LMS owns it. These are just courses.
+ * Deliberately *not* organised by path or rung: that is product metadata our own
+ * database layers on top (CLAUDE.md §6), and putting it here would imply the LMS
+ * owns it. These are just courses.
  *
- * Phase 1 grew this from 12 to 48. Twelve could not support twelve paths each
- * offering a genuine 5-10 choice, so the build page would have been a formality
- * rather than a decision. The *shape* of the data is unchanged — this is still
- * only what an LMS knows about a course.
+ * **Twenty-seven, not forty-eight.** The catalogue was a broad sweep of ministry
+ * operations while twelve paths needed filling. It now serves three — English,
+ * Arabic and communication skills — so it is the courses those three are made
+ * of and nothing else. A catalogue carrying subjects no path teaches is content
+ * no learner can be routed to, which is exactly what the seed's own tests
+ * refuse.
  */
 export const MOCK_COURSES: readonly LmsCourse[] = [
+  /* ── English (مسار اللغة الإنجليزية) ──────────────────────────────────── */
   {
     lmsCourseId: 101,
-    title: 'مقدمة في إدارة المشاريع',
-    summary: 'أساسيات تخطيط المشاريع وتنفيذها ومتابعتها في القطاع الحكومي.',
+    title: 'الإنجليزية للمبتدئين: الأصوات والحروف',
+    summary: 'نطق الحروف والأصوات وقراءة الكلمات القصيرة، لمن يبدأ من الصفر.',
     durationMinutes: 240,
     visible: true,
   },
   {
     lmsCourseId: 102,
-    title: 'تحليل البيانات للمبتدئين',
-    summary: 'جمع البيانات وتنظيمها واستخلاص المؤشرات الأساسية منها.',
-    durationMinutes: 300,
-    visible: true,
-  },
-  {
-    lmsCourseId: 103,
-    title: 'مهارات التواصل المؤسسي',
-    summary: 'التواصل الفعّال داخل الفريق ومع الجهات الأخرى.',
+    title: 'الإنجليزية اليومية في بيئة العمل',
+    summary: 'عبارات التحية والتعريف بالنفس وطلب المساعدة داخل المكتب.',
     durationMinutes: 180,
     visible: true,
   },
   {
+    lmsCourseId: 103,
+    title: 'القواعد الأساسية: الأزمنة البسيطة',
+    summary: 'المضارع والماضي والمستقبل البسيط وبناء جملة صحيحة بها.',
+    durationMinutes: 210,
+    visible: true,
+  },
+  {
     lmsCourseId: 104,
-    title: 'أمن المعلومات الأساسي',
-    summary: 'حماية البيانات وكلمات المرور والتعامل مع محاولات التصيّد.',
+    title: 'المحادثة الوظيفية للمبتدئين',
+    summary: 'حوارات قصيرة: استقبال زائر، تحويل مكالمة، تحديد موعد.',
     durationMinutes: 150,
     visible: true,
   },
   {
     lmsCourseId: 105,
-    title: 'الكتابة الإدارية',
-    summary: 'صياغة المذكرات والتقارير الرسمية بلغة واضحة.',
-    durationMinutes: 120,
+    title: 'القراءة والاستيعاب — المستوى المتوسط',
+    summary: 'قراءة نصوص إدارية قصيرة واستخراج المعلومة المطلوبة منها.',
+    durationMinutes: 240,
     visible: true,
   },
   {
     lmsCourseId: 106,
-    title: 'أساسيات الموارد البشرية',
-    summary: 'دورة حياة الموظف والسياسات المرتبطة بها.',
+    title: 'المراسلات والبريد الإلكتروني بالإنجليزية',
+    summary: 'صياغة رسائل عمل واضحة ومهذّبة والردّ عليها.',
     durationMinutes: 210,
     visible: true,
   },
   {
     lmsCourseId: 107,
-    title: 'الجودة وتحسين الإجراءات',
-    summary: 'قياس الإجراءات وتبسيطها وتقليل زمن الإنجاز.',
-    durationMinutes: 270,
+    title: 'الاستماع وتدوين الملاحظات بالإنجليزية',
+    summary: 'متابعة اجتماع أو عرض بالإنجليزية وتدوين ما يلزم منه.',
+    durationMinutes: 180,
     visible: true,
   },
   {
     lmsCourseId: 108,
-    title: 'مقدمة في الحوكمة والامتثال',
-    summary: 'الأطر التنظيمية والرقابة الداخلية والالتزام بها.',
+    title: 'العروض التقديمية بالإنجليزية',
+    summary: 'إعداد عرض قصير وتقديمه والإجابة عن الأسئلة بالإنجليزية.',
     durationMinutes: 240,
     visible: true,
   },
   {
     lmsCourseId: 109,
-    title: 'العمل الميداني والسلامة',
-    summary: 'إجراءات السلامة والتعامل مع المواقف الميدانية.',
-    durationMinutes: 180,
-    visible: true,
-  },
-  {
-    lmsCourseId: 110,
-    title: 'التصميم البصري للعروض',
-    summary: 'إعداد عروض تقديمية واضحة ومتناسقة.',
-    durationMinutes: 150,
-    visible: true,
-  },
-  {
-    lmsCourseId: 111,
-    title: 'خدمة المتعاملين',
-    summary: 'استقبال الطلبات ومعالجتها ورفع مستوى الرضا.',
-    durationMinutes: 165,
-    visible: true,
-  },
-  {
-    /* One hidden course on purpose: catalogue sync in Phase 2 must handle a
-       course the LMS is not currently showing, and a mock where everything is
-       visible would never exercise that branch. */
-    lmsCourseId: 112,
-    title: 'الأرشفة الورقية التقليدية',
-    summary: 'دورة لم تعد معروضة للمتعلمين الجدد بعد التحول الرقمي.',
-    durationMinutes: 90,
-    visible: false,
-  },
-
-  // ── Field and facilities ──────────────────────────────────────────────────
-  {
-    lmsCourseId: 113,
-    title: 'إدارة المواقع الميدانية',
-    summary: 'تنظيم فرق العمل في الموقع وتوزيع المهام ومتابعة التنفيذ.',
-    durationMinutes: 200,
-    visible: true,
-  },
-  {
-    lmsCourseId: 114,
-    title: 'الإسعافات الأولية في بيئة العمل',
-    summary: 'التصرف الصحيح في الإصابات الشائعة حتى وصول المختصين.',
-    durationMinutes: 120,
-    visible: true,
-  },
-  {
-    lmsCourseId: 115,
-    title: 'تشغيل الأجهزة والمعدات المكتبية',
-    summary: 'الاستخدام الآمن للأجهزة وصيانتها اليومية البسيطة.',
-    durationMinutes: 135,
-    visible: true,
-  },
-  {
-    lmsCourseId: 116,
-    title: 'الصيانة الوقائية للمرافق',
-    summary: 'جدولة أعمال الصيانة ومنع الأعطال قبل وقوعها.',
-    durationMinutes: 240,
-    visible: true,
-  },
-  {
-    lmsCourseId: 117,
-    title: 'إدارة المستودعات والعهد',
-    summary: 'استلام الأصناف وتخزينها وجرد العهد وتسليمها.',
-    durationMinutes: 210,
-    visible: true,
-  },
-  {
-    lmsCourseId: 118,
-    title: 'السلامة المهنية والوقاية من المخاطر',
-    summary: 'تحديد مخاطر بيئة العمل وتطبيق إجراءات الوقاية منها.',
-    durationMinutes: 180,
-    visible: true,
-  },
-  {
-    lmsCourseId: 119,
-    title: 'القيادة الآمنة للمركبات الحكومية',
-    summary: 'قواعد الاستخدام والفحص الدوري والتعامل مع الطوارئ.',
-    durationMinutes: 150,
-    visible: true,
-  },
-  {
-    lmsCourseId: 120,
-    title: 'إدارة الأزمات الميدانية',
-    summary: 'التنسيق والاتصال واتخاذ القرار أثناء الحوادث.',
-    durationMinutes: 225,
-    visible: true,
-  },
-
-  // ── Research and analysis ─────────────────────────────────────────────────
-  {
-    lmsCourseId: 121,
-    title: 'الإحصاء التطبيقي للقطاع الحكومي',
-    summary: 'المقاييس الإحصائية وقراءتها في تقارير الأداء.',
-    durationMinutes: 270,
-    visible: true,
-  },
-  {
-    lmsCourseId: 122,
-    title: 'لوحات المؤشرات وتصور البيانات',
-    summary: 'بناء لوحات مؤشرات تعرض الأداء بوضوح لصانع القرار.',
-    durationMinutes: 240,
-    visible: true,
-  },
-  {
-    lmsCourseId: 123,
-    title: 'مناهج البحث وتصميم الدراسات',
-    summary: 'صياغة سؤال البحث واختيار المنهج وجمع الأدلة.',
+    title: 'الكتابة التقريرية المتقدمة بالإنجليزية',
+    summary: 'تقارير ومذكرات مطوّلة بلغة دقيقة وبنية منطقية.',
     durationMinutes: 300,
     visible: true,
   },
   {
+    /* Hidden on purpose: §2/D-015 distinguishes "available to add" from "still
+       completable if already enrolled", and a mock where everything is visible
+       would never exercise that branch. */
+    lmsCourseId: 110,
+    title: 'الترجمة التحريرية من الإنجليزية وإليها',
+    summary: 'دورة لم تعد معروضة للمتدربين الجدد بعد مراجعة الخطة التدريبية.',
+    durationMinutes: 270,
+    visible: false,
+  },
+
+  /* ── Arabic (مسار اللغة العربية) ──────────────────────────────────────── */
+  {
+    lmsCourseId: 111,
+    title: 'الإملاء وعلامات الترقيم',
+    summary: 'الهمزات والتاء المربوطة والمفتوحة، ومواضع الفاصلة والنقطة.',
+    durationMinutes: 180,
+    visible: true,
+  },
+  {
+    lmsCourseId: 112,
+    title: 'بناء الجملة العربية السليمة',
+    summary: 'الجملة الاسمية والفعلية وترتيب عناصرها ووضوح معناها.',
+    durationMinutes: 210,
+    visible: true,
+  },
+  {
+    lmsCourseId: 113,
+    title: 'النحو التطبيقي: المرفوعات والمنصوبات',
+    summary: 'إعراب ما يرد في النصوص الإدارية، لا في أمثلة الكتب.',
+    durationMinutes: 300,
+    visible: true,
+  },
+  {
+    lmsCourseId: 114,
+    title: 'الكتابة الإدارية والمراسلات الرسمية',
+    summary: 'صياغة المذكرات والخطابات الرسمية بلغة واضحة ومختصرة.',
+    durationMinutes: 240,
+    visible: true,
+  },
+  {
+    lmsCourseId: 115,
+    title: 'تحرير التقارير والمحاضر',
+    summary: 'كتابة محضر اجتماع وتقرير دوري يقرؤهما غير الحاضر ويفهمهما.',
+    durationMinutes: 210,
+    visible: true,
+  },
+  {
+    lmsCourseId: 116,
+    title: 'الأسلوب العربي: الإيجاز والوضوح',
+    summary: 'اختصار الجملة الطويلة وحذف الحشو دون فقدان المعنى.',
+    durationMinutes: 180,
+    visible: true,
+  },
+  {
+    lmsCourseId: 117,
+    title: 'التدقيق اللغوي للنصوص',
+    summary: 'مراجعة نص قبل اعتماده وتصحيح ما فيه لغويًا وأسلوبيًا.',
+    durationMinutes: 240,
+    visible: true,
+  },
+  {
+    lmsCourseId: 118,
+    title: 'صياغة الأنظمة واللوائح',
+    summary: 'لغة النص التنظيمي: الدقة، وتجنّب الاحتمال، والإحالة الصحيحة.',
+    durationMinutes: 330,
+    visible: true,
+  },
+  {
+    lmsCourseId: 119,
+    title: 'الإلقاء والخطابة بالعربية الفصحى',
+    summary: 'إعداد كلمة رسمية وإلقاؤها أمام جمهور بلغة سليمة.',
+    durationMinutes: 210,
+    visible: true,
+  },
+
+  /* ── Communication skills (مسار مهارات التواصل) ───────────────────────── */
+  {
+    lmsCourseId: 120,
+    title: 'أساسيات التواصل المؤسسي',
+    summary: 'قنوات التواصل داخل الجهة ومتى تُستخدم كلٌّ منها.',
+    durationMinutes: 150,
+    visible: true,
+  },
+  {
+    lmsCourseId: 121,
+    title: 'الإنصات الفعّال وطرح الأسئلة',
+    summary: 'فهم ما يقوله الطرف الآخر فعلًا قبل الردّ عليه.',
+    durationMinutes: 120,
+    visible: true,
+  },
+  {
+    lmsCourseId: 122,
+    title: 'التواصل مع المتعاملين',
+    summary: 'استقبال الطلب وإدارة التوقعات وإغلاق المعاملة بوضوح.',
+    durationMinutes: 180,
+    visible: true,
+  },
+  {
+    lmsCourseId: 123,
+    title: 'إدارة الاجتماعات وتوثيقها',
+    summary: 'جدول أعمال، إدارة النقاش، وقرارات مكتوبة يمكن تتبّعها.',
+    durationMinutes: 210,
+    visible: true,
+  },
+  {
     lmsCourseId: 124,
-    title: 'تقييم أثر السياسات العامة',
-    summary: 'قياس نتائج السياسات ومقارنتها بالأهداف المعلنة.',
-    durationMinutes: 285,
+    title: 'العرض والإقناع أمام الجمهور',
+    summary: 'بناء رسالة مقنعة وتقديمها والتعامل مع الاعتراض.',
+    durationMinutes: 240,
     visible: true,
   },
   {
     lmsCourseId: 125,
-    title: 'أساسيات قواعد البيانات والاستعلامات',
-    summary: 'تنظيم البيانات في جداول واستخراج المعلومات منها.',
-    durationMinutes: 255,
+    title: 'التفاوض وإدارة الخلاف',
+    summary: 'الوصول إلى اتفاق دون تصعيد، وحفظ العلاقة بعد الخلاف.',
+    durationMinutes: 270,
     visible: true,
   },
   {
     lmsCourseId: 126,
-    title: 'التفكير النقدي وحل المشكلات',
-    summary: 'تحليل المشكلة وتمييز الأسباب عن الأعراض واختيار الحل.',
-    durationMinutes: 165,
+    title: 'التواصل في الأزمات والمواقف الصعبة',
+    summary: 'ما يُقال ومتى ولمن حين يكون الخبر سيئًا والوقت ضيقًا.',
+    durationMinutes: 240,
     visible: true,
   },
   {
     lmsCourseId: 127,
-    title: 'استشراف المستقبل والتخطيط بالسيناريوهات',
-    summary: 'قراءة الاتجاهات وبناء سيناريوهات بديلة للتخطيط.',
-    durationMinutes: 210,
-    visible: true,
-  },
-
-  // ── Design and communication ──────────────────────────────────────────────
-  {
-    lmsCourseId: 128,
-    title: 'تصميم الهوية البصرية للجهات الحكومية',
-    summary: 'عناصر الهوية وتطبيقها على المواد الرسمية.',
-    durationMinutes: 225,
-    visible: true,
-  },
-  {
-    lmsCourseId: 129,
-    title: 'إنتاج الفيديو القصير للتواصل الحكومي',
-    summary: 'التخطيط والتصوير والمونتاج لرسائل قصيرة ومؤثرة.',
-    durationMinutes: 195,
-    visible: true,
-  },
-  {
-    lmsCourseId: 130,
-    title: 'كتابة المحتوى الرقمي',
-    summary: 'صياغة نصوص واضحة للمنصات الرقمية تناسب الجمهور.',
+    title: 'التواصل الكتابي عبر القنوات الرقمية',
+    summary: 'الرسائل القصيرة ومجموعات العمل: نبرة مناسبة ورسالة واحدة واضحة.',
     durationMinutes: 150,
-    visible: true,
-  },
-  {
-    lmsCourseId: 131,
-    title: 'تجربة المستخدم وتصميم الخدمات',
-    summary: 'فهم رحلة المتعامل وإعادة تصميم الخدمة حول احتياجه.',
-    durationMinutes: 240,
-    visible: true,
-  },
-  {
-    lmsCourseId: 132,
-    title: 'التصوير الفوتوغرافي المؤسسي',
-    summary: 'تغطية الفعاليات وإخراج صور تصلح للنشر الرسمي.',
-    durationMinutes: 135,
-    visible: true,
-  },
-  {
-    lmsCourseId: 133,
-    title: 'رواية القصص في الحملات التوعوية',
-    summary: 'بناء رسالة توعوية مؤثرة تصل إلى الجمهور المستهدف.',
-    durationMinutes: 180,
-    visible: true,
-  },
-
-  // ── People and service ────────────────────────────────────────────────────
-  {
-    lmsCourseId: 134,
-    title: 'التعامل مع الحالات الصعبة للمتعاملين',
-    summary: 'امتصاص الغضب وإدارة الشكاوى والوصول إلى حل.',
-    durationMinutes: 165,
-    visible: true,
-  },
-  {
-    lmsCourseId: 135,
-    title: 'مهارات التدريب وإعداد المدربين',
-    summary: 'تصميم الحقيبة التدريبية وإلقاؤها وقياس أثرها.',
-    durationMinutes: 270,
-    visible: true,
-  },
-  {
-    lmsCourseId: 136,
-    title: 'الإرشاد المهني والدعم في بيئة العمل',
-    summary: 'مساندة الزملاء مهنيًا وتوجيههم نحو مصادر المساعدة.',
-    durationMinutes: 210,
-    visible: true,
-  },
-  {
-    lmsCourseId: 137,
-    title: 'العمل الجماعي وإدارة الاختلاف',
-    summary: 'بناء الثقة داخل الفريق ومعالجة الخلافات بشكل بنّاء.',
-    durationMinutes: 150,
-    visible: true,
-  },
-  {
-    lmsCourseId: 138,
-    title: 'لغة الإشارة للتواصل مع أصحاب الهمم',
-    summary: 'مفردات أساسية لخدمة أصحاب الهمم دون وسيط.',
-    durationMinutes: 180,
-    visible: true,
-  },
-  {
-    lmsCourseId: 139,
-    title: 'التوعية المجتمعية وبناء الشراكات',
-    summary: 'تصميم برامج توعوية والتنسيق مع الشركاء المجتمعيين.',
-    durationMinutes: 195,
-    visible: true,
-  },
-
-  // ── Leadership and initiative ─────────────────────────────────────────────
-  {
-    lmsCourseId: 140,
-    title: 'القيادة الفعّالة للفرق الحكومية',
-    summary: 'توجيه الفريق نحو الأهداف وتفويض المهام وتحفيز الأداء.',
-    durationMinutes: 255,
-    visible: true,
-  },
-  {
-    lmsCourseId: 141,
-    title: 'التفاوض وإدارة أصحاب المصلحة',
-    summary: 'الاستعداد للتفاوض وإدارة توقعات الأطراف والوصول إلى اتفاق.',
-    durationMinutes: 210,
-    visible: true,
-  },
-  {
-    lmsCourseId: 142,
-    title: 'إدارة التغيير المؤسسي',
-    summary: 'تهيئة الموظفين للتغيير ومعالجة مقاومته وترسيخه.',
-    durationMinutes: 225,
-    visible: true,
-  },
-  {
-    lmsCourseId: 143,
-    title: 'ريادة المبادرات الحكومية',
-    summary: 'تحويل الفكرة إلى مبادرة لها نطاق وموارد ومؤشرات.',
-    durationMinutes: 240,
-    visible: true,
-  },
-  {
-    lmsCourseId: 144,
-    title: 'العرض والإقناع أمام الجمهور',
-    summary: 'إعداد العرض وإلقاؤه والتعامل مع الأسئلة بثقة.',
-    durationMinutes: 165,
-    visible: true,
-  },
-
-  // ── Governance and administration ─────────────────────────────────────────
-  {
-    lmsCourseId: 145,
-    title: 'إدارة السجلات والأرشفة الإلكترونية',
-    summary: 'تصنيف الوثائق وحفظها واسترجاعها وفق دورة حياة واضحة.',
-    durationMinutes: 195,
-    visible: true,
-  },
-  {
-    lmsCourseId: 146,
-    title: 'الرقابة الداخلية وإدارة المخاطر',
-    summary: 'تحديد المخاطر وتصميم الضوابط ومتابعة فاعليتها.',
-    durationMinutes: 255,
-    visible: true,
-  },
-  {
-    lmsCourseId: 147,
-    title: 'إعداد الميزانيات والمتابعة المالية',
-    summary: 'بناء الميزانية التشغيلية ومتابعة الصرف والانحرافات.',
-    durationMinutes: 270,
-    visible: true,
-  },
-  {
-    lmsCourseId: 148,
-    title: 'حماية البيانات الشخصية والخصوصية',
-    summary: 'التعامل مع بيانات الأفراد وفق مبدأ أقل قدر من البيانات.',
-    durationMinutes: 180,
     visible: true,
   },
 ];

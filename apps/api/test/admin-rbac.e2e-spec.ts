@@ -279,6 +279,14 @@ describe('Admin portal RBAC (e2e)', () => {
       await call(route).expect(401);
     });
 
+    /*
+     * A longer budget than Jest's default five seconds, for one route rather
+     * than the file: `/admin/certificate-template` renders the real certificate
+     * artwork with a QR code to build its preview, and the first such render in
+     * a process pays for loading the Arabic typeface. A slow *unit* test is a
+     * smell; a first-call font load is arithmetic, and the alternative — a
+     * preview drawn separately from the renderer — is a preview that lies.
+     */
     it('admits a super-admin', async () => {
       const response = await call(route, sessionAdmin);
 
@@ -287,7 +295,7 @@ describe('Admin portal RBAC (e2e)', () => {
          never happen is the *authorisation* refusing the one role the portal
          exists for. */
       expect([401, 403]).not.toContain(response.status);
-    });
+    }, 30_000);
   });
 
   it('audits a refused cross-portal read', async () => {

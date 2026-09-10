@@ -21,7 +21,7 @@ type CourseRow = {
   lmsVisible: boolean;
   availableFrom: Date | null;
   availableUntil: Date | null;
-  _count: { userPathCourses: number };
+  _count: { enrollments: number };
 };
 
 const course = (overrides: Partial<CourseRow> = {}): CourseRow => ({
@@ -33,7 +33,7 @@ const course = (overrides: Partial<CourseRow> = {}): CourseRow => ({
   lmsVisible: true,
   availableFrom: null,
   availableUntil: availabilityWindowUntil('2026-09-30'),
-  _count: { userPathCourses: 0 },
+  _count: { enrollments: 0 },
   ...overrides,
 });
 
@@ -112,7 +112,7 @@ describe('CourseAvailabilityService', () => {
   it('leaves a course a learner holds completable', async () => {
     /* §2/D-015 through the derivation, not through a check here: an expired
        window never produces RETIRED, held or not. */
-    const { service, writes } = harness([course({ _count: { userPathCourses: 3 } })]);
+    const { service, writes } = harness([course({ _count: { enrollments: 3 } })]);
 
     await service.refresh(afterWindow);
 

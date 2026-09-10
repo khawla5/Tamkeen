@@ -109,24 +109,30 @@ export class AdminUsersService {
         ...USER_ROW_SELECT,
         createdAt: true,
         moodleUserId: true,
-        assessmentResults: {
-          orderBy: { completedAt: 'desc' },
-          select: { code: true, completedAt: true },
-        },
-        userPath: {
+        /* D-130/D-133: what this person has been put on, managed from this
+           same panel. Assignment is an account decision, not a screen of its
+           own. */
+        userPaths: {
+          orderBy: { assignedAt: 'asc' },
           select: {
+            id: true,
+            pathId: true,
             status: true,
-            confirmedAt: true,
-            path: { select: { name: true } },
-            courses: { select: { status: true } },
+            assignedAt: true,
+            path: {
+              select: {
+                name: true,
+                _count: { select: { pathCourses: { where: { levelId: { not: null } } } } },
+              },
+            },
           },
         },
-        /* D-132: what this person may take, managed from this same panel. */
-        assessmentAssignments: {
-          orderBy: { assignedAt: 'asc' },
-          select: { id: true, instrument: true, assignedAt: true },
+        placements: {
+          select: {
+            pathId: true,
+            level: { select: { id: true, name: true, position: true } },
+          },
         },
-        englishResult: { select: { id: true } },
         _count: { select: { certificates: true } },
       },
     });
@@ -144,42 +150,30 @@ export class AdminUsersService {
       this.prisma.completion.count({ where: { userId, passed: true } }),
     ]);
 
-    const newest = user.assessmentResults[0];
+    const levelByPath = new Map(user.placements.map((row) => [row.pathId, row.level]));
 
     return {
       ...toRow(user),
       createdAt: user.createdAt.toISOString(),
       hasLmsAccount: user.moodleUserId !== null,
-      assessment: newest
-        ? {
-            code: newest.code,
-            completedAt: newest.completedAt.toISOString(),
-            /* Retakes append (D-033). Showing the count makes a retake visible
-               without exposing the superseded codes, which are the person's
-               history and not an administrator's business. */
-            attempts: user.assessmentResults.length,
-          }
-        : null,
-      path: user.userPath
-        ? {
-            name: user.userPath.path.name,
-            status: user.userPath.status,
-            confirmedAt: user.userPath.confirmedAt?.toISOString() ?? null,
-            coursesChosen: user.userPath.courses.length,
-            coursesPassed: passed,
-          }
-        : null,
+      paths: user.userPaths.map((row) => ({
+        userPathId: row.id,
+        pathId: row.pathId,
+        name: row.path.name,
+        status: row.status,
+        assignedAt: row.assignedAt.toISOString(),
+        /* Null while the path's assessment is untaken — the one state an
+           administrator most often needs to see: assigned, but not yet started,
+           because nobody has sat the test. */
+        placedLevel: levelByPath.get(row.pathId) ?? null,
+        coursesPassed: passed,
+        /* Every course placed on the path, not only the ones above their rung:
+           this is a summary, and the finer figure is on the learner's own
+           screens. */
+        coursesTotal: row.path._count.pathCourses,
+      })),
       certificateCount: user._count.certificates,
       activeSessions,
-      assignments: user.assessmentAssignments.map((assignment) => ({
-        id: assignment.id,
-        instrument: assignment.instrument,
-        assignedAt: assignment.assignedAt.toISOString(),
-        taken:
-          assignment.instrument === 'RIASEC'
-            ? user.assessmentResults.length > 0
-            : user.englishResult !== null,
-      })),
     };
   }
 

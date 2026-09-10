@@ -8,7 +8,6 @@ import { useState, type FormEvent } from 'react';
 import type { DashboardView } from '@tamkeen/types';
 
 import { useErrorMessage } from '@/components/auth/use-error-message';
-import { CefrLevelBadge } from '@/components/english/cefr-level-badge';
 import { PortalPage } from '@/components/layout/portal-page';
 import { DigitsCard } from '@/components/profile/digits-card';
 import { PasswordCard } from '@/components/profile/password-card';
@@ -247,12 +246,12 @@ export default function ProfilePage() {
           </Card>
 
           <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
-          {/* §4.13: the placement level belongs on the profile because that is
-              where a person's own record of themselves lives, and because the CV
-              builder draws on the same facts. Read-only — there is nothing to
-              edit and no retake (D-123) — so it is a card with a link, not a
-              control. */}
-          <EnglishLevelCard level={dashboard.englishLevel} />
+          {/* Where the ministry put them, and where each assessment placed
+              them (D-134). The profile is where a person's own record of
+              themselves lives, and the CV builder draws on the same facts.
+              Read-only — a placement is not theirs to edit — so it is a card,
+              not a control. */}
+          <PlacementCard paths={dashboard.paths} />
         </div>
 
         <div className="flex flex-col gap-6">
@@ -286,41 +285,39 @@ export default function ProfilePage() {
  * own the account outright, with the real employee locked out and unnotified.
  */
 /**
- * The English placement level (§4.13), or the way to earn one.
+ * The paths the ministry assigned, and where each placed them (D-134).
  *
- * Reads `dashboard.englishLevel` rather than fetching the result: the value is
- * already loaded for every authenticated page, and a second request for one
- * badge would be a network round trip to say what the portal already knows.
+ * Reads the dashboard rather than fetching: the values are already loaded for
+ * every authenticated page, and a second request for three lines would be a
+ * network round trip to say what the portal already knows.
  */
-function EnglishLevelCard({ level }: { level: DashboardView['englishLevel'] }) {
-  const t = useTranslations('english');
+function PlacementCard({ paths }: { paths: DashboardView['paths'] }) {
+  const t = useTranslations('profile');
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t('cardTitle')}</CardTitle>
+        <CardTitle>{t('placementTitle')}</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-wrap items-center gap-4">
-        {level ? (
-          <>
-            <CefrLevelBadge level={level} />
-            <Link
-              href="/english-assessment/result"
-              className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
-            >
-              {t('viewResult')}
-            </Link>
-          </>
+      <CardContent className="flex flex-col gap-3">
+        {paths.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t('placementNone')}</p>
         ) : (
-          <>
-            <p className="text-sm text-muted-foreground">{t('cardBody')}</p>
-            <Link
-              href="/english-assessment"
-              className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
-            >
-              {t('start')}
-            </Link>
-          </>
+          <ul className="flex flex-col gap-2">
+            {paths.map((path) => (
+              <li key={path.id} className="flex flex-wrap items-baseline justify-between gap-2">
+                <Link
+                  href={`/paths/${path.id}`}
+                  className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  {path.name}
+                </Link>
+                <span className="text-sm text-muted-foreground">
+                  {path.placedLevel ? path.placedLevel.name : t('placementPending')}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </CardContent>
     </Card>

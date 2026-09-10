@@ -7,6 +7,7 @@ import { AuditAction } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { generateToken } from '../common/secure-token';
 import { AppConfigService } from '../config/app-config.module';
+import { LearnerPathService, owedCourses } from '../journey/learner-path.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { CertificateStorageService } from './certificate-storage.service';
@@ -64,6 +65,7 @@ export class CertificateIssuanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly learnerPaths: LearnerPathService,
     private readonly config: AppConfigService,
     private readonly settings: SettingsService,
     private readonly storage: CertificateStorageService,
@@ -106,10 +108,14 @@ export class CertificateIssuanceService {
       throw new CertificateNotEarnedError('NO_PASSING_COMPLETION');
     }
 
-    /* Presentational only, and absent for a course reached outside the user's
-       path — which is why it is nullable rather than an error. */
-    const userPath = await this.prisma.userPath.findUnique({
-      where: { userId },
+    /* Presentational only, and absent for a course reached outside any assigned
+       path — which is why it is nullable rather than an error. The first
+       assigned path that holds the course names it; a course in two of them is
+       one credential, and picking a lens is not a decision to put on a
+       certificate. */
+    const userPath = await this.prisma.userPath.findFirst({
+      where: { userId, path: { pathCourses: { some: { courseId } } } },
+      orderBy: { assignedAt: 'asc' },
       select: { path: { select: { name: true } } },
     });
 
@@ -180,42 +186,36 @@ export class CertificateIssuanceService {
   }
 
   /**
-   * How many of the learner's chosen courses they have passed, or `null` if the
-   * path is not theirs, not confirmed, or not finished.
+   * How many of the courses this path owes them they have passed, or `null` if
+   * the path is not assigned to them, they have not been placed in it, or they
+   * have not finished it.
+   *
+   * **"Owes them" is the courses at or above their placed rung** (D-134). A
+   * course below it is ground the placement says they had already covered, so
+   * requiring it would make a path uncompletable for exactly the people the
+   * assessment judged most capable.
    *
    * `completions.passed` is our verdict against the product threshold (D-007)
    * and already requires the LMS's completion signal, so it is the whole test —
    * a course cannot be passed without having been completed.
    */
   private async countPassedPathCourses(userId: string, pathId: string): Promise<number | null> {
-    const userPath = await this.prisma.userPath.findUnique({
-      where: { userId },
-      select: {
-        pathId: true,
-        confirmedAt: true,
-        courses: { select: { course: { select: { moodleCourseId: true } } } },
-      },
-    });
+    const ladder = await this.learnerPaths.ladder(userId, pathId);
 
-    /* A path the learner never committed to, or a different one — one path per
-       user (D-002), so this is a mismatch rather than a lookup. */
-    if (!userPath || userPath.pathId !== pathId || userPath.confirmedAt === null) {
+    if (!ladder || !ladder.placedLevel) {
       return null;
     }
 
-    const moodleCourseIds = userPath.courses.map((chosen) => chosen.course.moodleCourseId);
+    const owed = owedCourses(ladder);
 
-    /* An empty path must never read as "finished" — the 5-10 rule (§2) makes
-       this unreachable, which is exactly why it is cheap to rule out. */
-    if (moodleCourseIds.length === 0) {
+    /* An empty path must never read as "finished": a learner placed on the top
+       rung of a path with nothing on it would otherwise earn its certificate
+       without taking a single course. */
+    if (owed.length === 0) {
       return null;
     }
 
-    const passed = await this.prisma.completion.count({
-      where: { userId, moodleCourseId: { in: moodleCourseIds }, passed: true },
-    });
-
-    return passed === moodleCourseIds.length ? passed : null;
+    return owed.every((course) => course.passed) ? owed.length : null;
   }
 
   /**
@@ -439,7 +439,7 @@ export class CertificateIssuanceService {
    */
   private async reconcilePathCertificates(): Promise<{ issued: number; failed: number }> {
     const finished = await this.prisma.userPath.findMany({
-      where: { status: 'COMPLETED', confirmedAt: { not: null } },
+      where: { status: 'COMPLETED' },
       select: { userId: true, pathId: true },
       take: RECONCILE_BATCH,
     });

@@ -13,8 +13,8 @@ import { renderWithProviders } from '@/test/render';
  * The rules worth pinning in a component test are the ones a screen can quietly
  * break: that publishing is refused *and explained* rather than merely disabled,
  * that exactly one of publish/unpublish is offered, that withdrawing a course
- * learners hold says so before the entity commits, and that the RIASEC letters
- * are shown but not editable (D-066).
+ * learners hold says so before the entity commits, and that an entity offers a
+ * course to a path but never places it on a rung (D-134).
  */
 
 const api = vi.hoisted(() => ({
@@ -60,22 +60,20 @@ const detail = (overrides: Partial<EntityCourseDetail> = {}): EntityCourseDetail
   language: 'AR',
   publication: 'DRAFT',
   status: 'DRAFT',
-  paths: [{ id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E', status: 'APPROVED' }],
+  paths: [{ id: 'path-1', name: 'مسار القيادة', placement: 'UNASSIGNED', level: null }],
   objectives: ['هدف أول'],
   prerequisites: null,
-  riasecLetters: ['E'],
   content: { activityCount: 4, hasQuiz: true, completionConfigured: true },
   publishBlockers: [],
   learnersHolding: 0,
   availablePaths: [
-    { id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E' },
-    { id: 'path-2', name: 'مسار التحليل', riasecLetter: 'I' },
-    { id: 'path-3', name: 'مسار الإدارة', riasecLetter: 'E' },
-    { id: 'path-4', name: 'مسار الميدان', riasecLetter: 'R' },
-    { id: 'path-5', name: 'مسار الخدمة', riasecLetter: 'S' },
+    { id: 'path-1', name: 'مسار القيادة' },
+    { id: 'path-2', name: 'مسار التحليل' },
+    { id: 'path-3', name: 'مسار الإدارة' },
+    { id: 'path-4', name: 'مسار الميدان' },
+    { id: 'path-5', name: 'مسار الخدمة' },
   ],
-  isGeneral: false,
-  pathRules: { maxPaths: 3, maxLetters: 2, frozen: false, approvalRequired: false },
+  pathRules: { maxPaths: 3, frozen: false },
   enrolledCount: 0,
   completionRate: null,
   ...overrides,
@@ -223,19 +221,13 @@ describe('manage course', () => {
       });
     });
 
-    it('shows the RIASEC letters but offers no way to edit them (D-066)', async () => {
-      /* §3A makes the path the owner of the letter; a separately authored one
-         could contradict it and nothing downstream would notice. */
+    it('states the cap the server enforces rather than leaving it to be discovered', async () => {
+      /* The number lives in the settings and travels with the course, so the
+         form and the server can never disagree about it (TAM-141). */
       renderWithProviders(<ManageCoursePage />);
-
-      /* The derived value is shown… */
       await screen.findByLabelText('المدة بالدقائق');
-      expect(screen.getAllByText(/تصنيف هولاند/).length).toBeGreaterThan(0);
 
-      /* …and there is no control of any kind to change it. */
-      expect(screen.queryByLabelText(/تصنيف هولاند/)).not.toBeInTheDocument();
-      expect(screen.queryByRole('combobox', { name: /هولاند/ })).not.toBeInTheDocument();
-      expect(screen.queryByRole('textbox', { name: /هولاند/ })).not.toBeInTheDocument();
+      expect(screen.getByText(/بحد أقصى 3 مسارات/)).toBeInTheDocument();
     });
 
     it('confirms a save politely, and the confirmation survives the refetch', async () => {
@@ -280,7 +272,7 @@ describe('manage course', () => {
     });
   });
 
-  describe('path membership rules (TAM-141)', () => {
+  describe('path membership rules (TAM-141, D-134)', () => {
     /* The accessible name carries the disabled reason too, so match by prefix. */
     const box = (name: string) => screen.getByRole('checkbox', { name: new RegExp('^' + name) });
 
@@ -289,7 +281,7 @@ describe('manage course', () => {
       renderWithProviders(<ManageCoursePage />);
       await screen.findByLabelText('المدة بالدقائق');
 
-      /* E already; add E and I → three paths, two letters: allowed, and the cap. */
+      /* One already; two more reaches the cap of three. */
       await user.click(box('مسار الإدارة'));
       await user.click(box('مسار التحليل'));
 
@@ -300,29 +292,30 @@ describe('manage course', () => {
       expect(box('مسار التحليل')).toBeEnabled();
     });
 
-    it('disables a path that would add a third RIASEC letter, under the cap', async () => {
+    it('leaves every remaining path open while the course is under the cap', async () => {
+      /* The letter-coherence rule went with RIASEC (D-134). Nothing but the
+         plain cap narrows the choice now, so two of three must leave the rest
+         selectable — a leftover restriction would refuse a legitimate offer. */
       const user = userEvent.setup();
       renderWithProviders(<ManageCoursePage />);
       await screen.findByLabelText('المدة بالدقائق');
 
-      /* E + I selected: two letters. R and S would be a third. E is still fine. */
       await user.click(box('مسار التحليل'));
 
-      expect(box('مسار الميدان')).toBeDisabled();
-      expect(box('مسار الخدمة')).toBeDisabled();
+      expect(box('مسار الميدان')).toBeEnabled();
+      expect(box('مسار الخدمة')).toBeEnabled();
       expect(box('مسار الإدارة')).toBeEnabled();
-      expect(screen.getByText('E · I')).toBeInTheDocument();
     });
 
     it('freezes a grandfathered course to removals, and explains it', async () => {
       api.getCourse.mockResolvedValue(
         detail({
           paths: [
-            { id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E', status: 'APPROVED' },
-            { id: 'path-2', name: 'مسار التحليل', riasecLetter: 'I', status: 'APPROVED' },
-            { id: 'path-4', name: 'مسار الميدان', riasecLetter: 'R', status: 'APPROVED' },
+            { id: 'path-1', name: 'مسار القيادة', placement: 'UNASSIGNED', level: null },
+            { id: 'path-2', name: 'مسار التحليل', placement: 'UNASSIGNED', level: null },
+            { id: 'path-4', name: 'مسار الميدان', placement: 'UNASSIGNED', level: null },
           ],
-          pathRules: { maxPaths: 3, maxLetters: 2, frozen: true, approvalRequired: false },
+          pathRules: { maxPaths: 3, frozen: true },
         }),
       );
       renderWithProviders(<ManageCoursePage />);
@@ -334,32 +327,60 @@ describe('manage course', () => {
       expect(box('مسار الميدان')).toBeEnabled();
     });
 
-    it('marks a membership still awaiting the admin', async () => {
+    it('says which memberships reach a learner and which the ministry has not placed', async () => {
+      /* An offered course sitting in no level is invisible to every learner
+         (D-134). An entity that was not told would believe it had published
+         something reachable. */
       api.getCourse.mockResolvedValue(
         detail({
           paths: [
-            { id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E', status: 'APPROVED' },
-            { id: 'path-2', name: 'مسار التحليل', riasecLetter: 'I', status: 'PENDING' },
+            { id: 'path-1', name: 'مسار القيادة', placement: 'UNASSIGNED', level: null },
+            {
+              id: 'path-2',
+              name: 'مسار التحليل',
+              placement: 'PLACED',
+              level: { id: 'level-2', name: 'متقدم', position: 2 },
+            },
           ],
-          pathRules: { maxPaths: 3, maxLetters: 2, frozen: false, approvalRequired: true },
         }),
       );
       renderWithProviders(<ManageCoursePage />);
       await screen.findByLabelText('المدة بالدقائق');
 
-      expect(screen.getByText('بانتظار موافقة الإدارة')).toBeInTheDocument();
-      expect(
-        screen.getByText('المسارات الجديدة تبقى بانتظار موافقة الإدارة قبل أن يراها المتدربون.'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('لم تُدرج في مستوى بعد')).toBeInTheDocument();
+      expect(screen.getByText('متقدم')).toBeInTheDocument();
     });
 
-    it('offers no path choice on a general course', async () => {
-      api.getCourse.mockResolvedValue(detail({ isGeneral: true, paths: [], riasecLetters: [] }));
+    it('will not let the entity withdraw a membership the ministry has placed', async () => {
+      /* Absence of the choice, not a refused save: removing it would pull a
+         course out from under learners standing on that rung. */
+      api.getCourse.mockResolvedValue(
+        detail({
+          paths: [
+            {
+              id: 'path-1',
+              name: 'مسار القيادة',
+              placement: 'PLACED',
+              level: { id: 'level-1', name: 'تأسيسي', position: 1 },
+            },
+          ],
+        }),
+      );
       renderWithProviders(<ManageCoursePage />);
       await screen.findByLabelText('المدة بالدقائق');
 
-      expect(screen.getByText(/دورة عامة/)).toBeInTheDocument();
       expect(box('مسار القيادة')).toBeDisabled();
+      expect(box('مسار التحليل')).toBeEnabled();
+    });
+
+    it('offers no control over which level a course sits on', async () => {
+      /* Placement is the ministry's decision alone (D-134); a control here would
+         be one the server refuses with 422. */
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      expect(screen.queryByLabelText(/المستوى/)).not.toBeInTheDocument();
+      expect(screen.getByText(/فتحدده الإدارة/)).toBeInTheDocument();
     });
   });
 

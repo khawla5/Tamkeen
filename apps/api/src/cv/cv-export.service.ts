@@ -5,7 +5,6 @@ import { cvDocumentHtml } from '@tamkeen/types';
 import { fontFaceCss } from '../certificates/certificate-fonts';
 import { PdfRendererService } from '../certificates/pdf-renderer.service';
 import { CvService } from './cv.service';
-import { RIASEC_NAMES_AR } from './riasec-names';
 
 /**
  * The CV as a PDF (§4.11, D-050).
@@ -35,7 +34,7 @@ export class CvExportService {
     const view = await this.cv.get(userId);
 
     const html = cvDocumentHtml(
-      { profile: view.profile, autofill: view.autofill, riasecNames: RIASEC_NAMES_AR },
+      { profile: view.profile, autofill: view.autofill },
       { fontCss: fontFaceCss() },
     );
 

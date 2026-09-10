@@ -26,8 +26,11 @@ interface Options {
     subjectTitle: string;
     issuedAt: Date;
   }>;
-  result?: { code: string } | null;
-  userPath?: {
+  /** Assigned paths, oldest first. */
+  userPaths?: Array<{ status: string; path: { id: string; name: string } }>;
+  /** Placements, keyed by path id. */
+  placements?: Array<{ pathId: string; level: { name: string } }>;
+  unusedUserPath?: {
     status: string;
     confirmedAt: Date | null;
     path: { name: string };
@@ -54,11 +57,11 @@ function harness(options: Options = {}) {
     certificate: {
       findMany: () => Promise.resolve(options.certificates ?? []),
     },
-    assessmentResult: {
-      findFirst: () => Promise.resolve(options.result ?? null),
+    learnerPlacement: {
+      findMany: () => Promise.resolve(options.placements ?? []),
     },
     userPath: {
-      findUnique: () => Promise.resolve(options.userPath ?? null),
+      findMany: () => Promise.resolve(options.userPaths ?? []),
     },
   } as unknown as PrismaService;
 
@@ -145,47 +148,58 @@ describe('CvService', () => {
   });
 
   describe('the career-profile line', () => {
-    it('carries the Holland Code as letters, leaving names to the display layer', async () => {
-      /* D-050: RIASEC type names pass through as authored, and the catalogue
-         already holds the Arabic ones — so the API sends letters (D-034). */
+    it('names each assigned path and the rung the assessment put them on', async () => {
+      /* Path and level names are proper nouns and pass through as authored,
+         Arabic and all (D-050). */
       const { service } = harness({
-        result: { code: 'SIE' },
-        userPath: { status: 'ACTIVE', confirmedAt: new Date(), path: { name: 'مسار القيادة' } },
+        userPaths: [{ status: 'ACTIVE', path: { id: 'p1', name: 'مسار القيادة' } }],
+        placements: [{ pathId: 'p1', level: { name: 'متقدم' } }],
       });
 
       const view = await service.get('user-1');
 
       expect(view.autofill.careerProfile).toEqual({
-        pathName: 'مسار القيادة',
-        pathCompleted: false,
-        hollandCode: ['S', 'I', 'E'],
+        paths: [{ name: 'مسار القيادة', levelName: 'متقدم', completed: false }],
       });
     });
 
     it('marks a finished path as completed', async () => {
       const { service } = harness({
-        result: { code: 'SIE' },
-        userPath: { status: 'COMPLETED', confirmedAt: new Date(), path: { name: 'مسار القيادة' } },
+        userPaths: [{ status: 'COMPLETED', path: { id: 'p1', name: 'مسار القيادة' } }],
+        placements: [{ pathId: 'p1', level: { name: 'متخصص' } }],
       });
 
-      expect((await service.get('user-1')).autofill.careerProfile?.pathCompleted).toBe(true);
+      expect((await service.get('user-1')).autofill.careerProfile?.paths[0]?.completed).toBe(true);
     });
 
-    it('does not name a path that was never committed to', async () => {
-      /* A path still being built is not something to put on a CV (D-002). */
+    it('names a path the ministry assigned but nobody has been placed in yet', async () => {
+      /* The assignment is a fact about their training even before the assessment
+         runs; what it does not yet have is a level (D-134). */
       const { service } = harness({
-        result: { code: 'SIE' },
-        userPath: { status: 'BUILDING', confirmedAt: null, path: { name: 'مسار القيادة' } },
+        userPaths: [{ status: 'ACTIVE', path: { id: 'p1', name: 'مسار القيادة' } }],
       });
 
-      const careerProfile = (await service.get('user-1')).autofill.careerProfile;
-
-      expect(careerProfile?.pathName).toBeNull();
-      expect(careerProfile?.hollandCode).toEqual(['S', 'I', 'E']);
+      expect((await service.get('user-1')).autofill.careerProfile?.paths[0]).toEqual({
+        name: 'مسار القيادة',
+        levelName: null,
+        completed: false,
+      });
     });
 
-    it('is absent before the assessment, rather than empty', async () => {
-      const { service } = harness({ result: null });
+    it('lists every assigned path, because an employee may hold more than one', async () => {
+      const { service } = harness({
+        userPaths: [
+          { status: 'ACTIVE', path: { id: 'p1', name: 'مسار القيادة' } },
+          { status: 'COMPLETED', path: { id: 'p2', name: 'مسار البيانات' } },
+        ],
+        placements: [{ pathId: 'p2', level: { name: 'تأسيسي' } }],
+      });
+
+      expect((await service.get('user-1')).autofill.careerProfile?.paths).toHaveLength(2);
+    });
+
+    it('is absent before any path is assigned, rather than empty', async () => {
+      const { service } = harness({ userPaths: [] });
 
       expect((await service.get('user-1')).autofill.careerProfile).toBeNull();
     });
@@ -220,7 +234,10 @@ describe('CvService', () => {
        * of this were stored, a CV could outlive the record it was drawn from —
        * claiming a certificate its holder no longer has.
        */
-      const { service, upserts } = harness({ certificates: CERTIFICATES, result: { code: 'SIE' } });
+      const { service, upserts } = harness({
+        certificates: CERTIFICATES,
+        userPaths: [{ status: 'ACTIVE', path: { id: 'p1', name: 'مسار القيادة' } }],
+      });
 
       await service.save('user-1', SAVE);
 

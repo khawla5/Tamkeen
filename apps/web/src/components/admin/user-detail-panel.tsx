@@ -3,12 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import {
-  ASSESSMENT_INSTRUMENTS,
-  type AdminUserDetail,
-  type AssessmentInstrument,
-  type UserRole,
-} from '@tamkeen/types';
+import { type AdminUserDetail, type UserRole } from '@tamkeen/types';
 
 import { AdminDialog } from '@/components/admin/admin-dialog';
 import { useErrorMessage } from '@/components/auth/use-error-message';
@@ -120,25 +115,10 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
 
       <section className="rounded-md border border-border p-4">
         <h3 className="mb-2 text-sm font-semibold text-foreground">{t('journeyHeading')}</h3>
+        {/* The paths themselves are not repeated here: the assignments section
+            below names each one with its rung and its one control, and a second
+            rendering of the same list would be the redundant UI §3 forbids. */}
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <Detail
-            label={t('journeyAssessment')}
-            value={
-              user.assessment
-                ? /* Latin letters in an RTL page. */
-                  `${user.assessment.code} · ${format.date(new Date(user.assessment.completedAt))}`
-                : t('journeyNotAssessed')
-            }
-            ltr={Boolean(user.assessment)}
-          />
-          <Detail
-            label={t('journeyPath')}
-            value={
-              user.path
-                ? `${user.path.name} · ${format.fraction(user.path.coursesPassed, user.path.coursesChosen)}`
-                : t('journeyNoPath')
-            }
-          />
           <Detail label={t('journeyCertificates')} value={format.number(user.certificateCount)} />
           <Detail
             label={t('journeyLms')}
@@ -258,13 +238,17 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
 }
 
 /**
- * D-132/D-133 — which instruments this employee may take, managed here:
- * current assignments with their status (revoke only while untaken — absence,
- * not a disabled control), and the not-yet-assigned instruments as a
- * multi-selection (checkboxes — the honest multi-select control; a
- * ctrl-click `<select multiple>` hides its own mechanics) with one assign
- * action for everything ticked. When every instrument is assigned the
- * control is gone — there is nothing left to decide.
+ * D-130/D-133/D-134 — which paths this employee is on, managed here.
+ *
+ * **Assignment is an account decision**, not a screen of its own: the current
+ * assignments with their status (revoke only while nobody has been placed —
+ * absence, not a disabled control), and the paths they are not on yet as a
+ * multi-selection with one assign action for everything ticked.
+ *
+ * Checkboxes rather than a `<select multiple>`: the honest multi-select control,
+ * where a ctrl-click list hides its own mechanics. Only **published** paths are
+ * offered — a draft has no assessment or nothing placed, so assigning somebody
+ * to it would strand them, and the server refuses it anyway.
  */
 function AssignmentsSection({
   user,
@@ -276,21 +260,23 @@ function AssignmentsSection({
   run: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
   const t = useTranslations('admin');
-  const [chosen, setChosen] = useState<ReadonlySet<AssessmentInstrument>>(new Set());
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
 
-  const unassigned = ASSESSMENT_INSTRUMENTS.filter(
-    (instrument) => !user.assignments.some((assignment) => assignment.instrument === instrument),
+  const paths = useApiQuery(() => adminApi.listPaths(), []);
+
+  const assignable = (paths.data ?? []).filter(
+    (path) => path.status === 'PUBLISHED' && !user.paths.some((held) => held.pathId === path.id),
   );
   /* The selection survives refetches only while it is still assignable. */
-  const selected = unassigned.filter((instrument) => chosen.has(instrument));
+  const selected = assignable.filter((path) => chosen.has(path.id));
 
-  function toggle(instrument: AssessmentInstrument) {
+  function toggle(pathId: string) {
     setChosen((current) => {
       const next = new Set(current);
-      if (next.has(instrument)) {
-        next.delete(instrument);
+      if (next.has(pathId)) {
+        next.delete(pathId);
       } else {
-        next.add(instrument);
+        next.add(pathId);
       }
       return next;
     });
@@ -300,31 +286,32 @@ function AssignmentsSection({
     <section className="flex flex-col gap-3 rounded-md border border-border p-4">
       <h3 className="text-sm font-semibold text-foreground">{t('assignments.heading')}</h3>
 
-      {user.assignments.length > 0 ? (
+      {user.paths.length > 0 ? (
         <ul className="flex flex-col gap-2">
-          {user.assignments.map((assignment) => (
+          {user.paths.map((path) => (
             <li
-              key={assignment.id}
-              className="flex flex-wrap items-center justify-between gap-2 text-sm"
+              key={path.userPathId}
+              className="flex flex-wrap items-center gap-2 border-b border-border pb-2 last:border-b-0"
             >
-              <span className="flex items-center gap-2">
-                <span className="font-medium text-foreground">
-                  {t(`assignments.instrument.${assignment.instrument}`)}
-                </span>
-                {assignment.taken ? (
-                  <Badge variant="success">{t('assignments.statusTaken')}</Badge>
-                ) : (
-                  <Badge variant="neutral">{t('assignments.statusPending')}</Badge>
-                )}
-              </span>
-              {assignment.taken ? null : (
+              <span className="min-w-0 flex-1 text-sm text-foreground">{path.name}</span>
+
+              {path.placedLevel ? (
+                <Badge variant="success">{path.placedLevel.name}</Badge>
+              ) : (
+                <Badge variant="neutral">{t('assignments.statusPending')}</Badge>
+              )}
+
+              {/* Absence, not a disabled control (§3): once a learner has been
+                  placed the assignment is part of a record, and revoking it
+                  would leave a placement pointing at a path they were never
+                  on. */}
+              {path.placedLevel ? null : (
                 <Button
-                  type="button"
                   variant="ghost"
                   size="sm"
                   disabled={busy}
                   onClick={() =>
-                    run(() => adminApi.revokeAssignment(assignment.id), t('assignments.revoked'))
+                    run(() => adminApi.revokePath(user.id, path.pathId), t('assignments.revoked'))
                   }
                 >
                   {t('assignments.revoke')}
@@ -337,24 +324,24 @@ function AssignmentsSection({
         <p className="text-sm text-muted-foreground">{t('assignments.none')}</p>
       )}
 
-      {unassigned.length > 0 ? (
+      {assignable.length > 0 ? (
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-2 text-sm font-medium text-foreground">
             {t('assignments.assignLabel')}
           </legend>
-          {unassigned.map((instrument) => (
+          {assignable.map((path) => (
             <label
-              key={instrument}
+              key={path.id}
               className="flex w-fit cursor-pointer items-center gap-2.5 text-sm text-foreground"
             >
               <input
                 type="checkbox"
                 className="size-4 accent-primary-600"
-                checked={chosen.has(instrument)}
+                checked={chosen.has(path.id)}
                 disabled={busy}
-                onChange={() => toggle(instrument)}
+                onChange={() => toggle(path.id)}
               />
-              {t(`assignments.instrument.${instrument}`)}
+              {path.name}
             </label>
           ))}
           <Button
@@ -364,14 +351,9 @@ function AssignmentsSection({
             disabled={busy || selected.length === 0}
             onClick={() =>
               run(
-                /* One decision per instrument on the wire too — each grant is
-                   its own auditable event, exactly as the API records it. */
-                () =>
-                  Promise.all(
-                    selected.map((instrument) =>
-                      adminApi.assign({ instrument, userIds: [user.id] }),
-                    ),
-                  ),
+                /* One decision per path on the wire too — each grant is its own
+                   auditable event, exactly as the API records it. */
+                () => Promise.all(selected.map((path) => adminApi.assignPath(path.id, [user.id]))),
                 t('assignments.assigned'),
               )
             }

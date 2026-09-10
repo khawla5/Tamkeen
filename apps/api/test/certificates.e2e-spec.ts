@@ -94,9 +94,8 @@ describe('Certificate verification (e2e)', () => {
         key: `verify-path-${RUN_ID}`,
         name: 'مسار القيادة الإدارية',
         description: 'مسار اختبار.',
-        riasecLetter: 'E',
         displayOrder: 998,
-        isActive: false,
+        status: 'DRAFT',
       },
     });
     pathId = path.id;
