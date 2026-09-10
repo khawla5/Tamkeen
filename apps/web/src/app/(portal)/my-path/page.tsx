@@ -4,6 +4,7 @@ import { Check, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import type { ReactNode } from 'react';
 
 import type { MyPathCourseView, MyPathLevelView, MyPathView } from '@tamkeen/types';
 
@@ -11,7 +12,7 @@ import { PortalPage } from '@/components/layout/portal-page';
 import { DataView, EmptyState } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, cardVariants } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useFormat } from '@/i18n/format-provider';
 import { myPathApi } from '@/lib/api-client';
@@ -115,13 +116,7 @@ function PathRun({ path, others }: { path: MyPathView; others: MyPathView[] }) {
         </CardContent>
       </Card>
 
-      <ol className="flex flex-col gap-6">
-        {path.levels.map((level) => (
-          <li key={level.id}>
-            <LevelSection level={level} />
-          </li>
-        ))}
-      </ol>
+      <PathCheckpoints levels={path.levels} />
 
       {/* The locked certificate slot (§4.9). */}
       <Card variant={path.pathCertificateUnlocked ? 'selected' : 'default'}>
@@ -176,14 +171,84 @@ function PathSwitcher({ current, paths }: { current: MyPathView; paths: MyPathVi
   );
 }
 
-function LevelSection({ level }: { level: MyPathLevelView }) {
+/** A step's visual weight on the trail: passed, the one to do next, or ahead. */
+type CheckpointState = 'done' | 'current' | 'upcoming';
+
+function levelState(level: MyPathLevelView): CheckpointState {
+  if (level.standing === 'BELOW') return 'done';
+  if (level.standing === 'PLACED') return 'current';
+  return 'upcoming';
+}
+
+function courseState(course: MyPathCourseView): CheckpointState {
+  if (course.status === 'COMPLETED' || !course.startable) return 'done';
+  if (course.isNextUp) return 'current';
+  return 'upcoming';
+}
+
+/**
+ * The rungs and their courses as one connected trail (D-134): a single line
+ * runs through every checkpoint in order, a level's circle bigger than a
+ * course's, so the path reads as one continuous climb rather than a stack of
+ * unrelated cards. Every circle still sits in a fixed-width column so the
+ * line lands on its centre regardless of which size the step uses.
+ */
+function PathCheckpoints({ levels }: { levels: MyPathLevelView[] }) {
+  return (
+    <ol className="relative flex flex-col">
+      <div aria-hidden="true" className="absolute inset-y-0 start-5 w-px bg-border" />
+      {levels.map((level) => (
+        <li key={level.id} className="flex flex-col">
+          <LevelCheckpoint level={level} />
+          {level.courses.map((course) => (
+            <CourseCheckpoint key={course.courseId} course={course} />
+          ))}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function CheckpointCircle({
+  state,
+  size,
+  children,
+}: {
+  state: CheckpointState;
+  size: 'lg' | 'md';
+  children: ReactNode;
+}) {
+  return (
+    <span className="relative flex w-10 shrink-0 items-center justify-center py-1.5">
+      <span
+        className={cn(
+          'relative z-10 flex shrink-0 items-center justify-center rounded-full border-2 font-semibold',
+          size === 'lg' ? 'size-10 text-base' : 'size-8 text-sm',
+          state === 'done' && 'border-success bg-success text-white',
+          state === 'current' &&
+            'border-primary-600 bg-primary-600 text-white ring-4 ring-primary-100',
+          state === 'upcoming' && 'border-border bg-card text-muted-foreground',
+        )}
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
+
+function LevelCheckpoint({ level }: { level: MyPathLevelView }) {
   const t = useTranslations('myPath');
   const format = useFormat();
+  const state = levelState(level);
   const headingId = `my-path-level-${level.id}`;
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline gap-3">
+    <section aria-labelledby={headingId} className="flex gap-4 pb-4">
+      <CheckpointCircle state={state} size="lg">
+        {state === 'done' ? <Check aria-hidden="true" className="size-5" /> : format.number(level.position)}
+      </CheckpointCircle>
+
+      <div className="flex flex-1 flex-wrap items-baseline gap-3 pt-2.5">
         <h2 id={headingId} className="text-lg font-semibold text-foreground">
           {t('levelHeading', { position: format.number(level.position), name: level.name })}
         </h2>
@@ -192,26 +257,19 @@ function LevelSection({ level }: { level: MyPathLevelView }) {
         ) : level.standing === 'BELOW' ? (
           <Badge variant="soft">{t('standingBelow')}</Badge>
         ) : null}
-      </div>
 
-      {level.courses.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t('levelEmpty')}</p>
-      ) : (
-        <ol className="flex flex-col gap-3">
-          {level.courses.map((course) => (
-            <li key={course.courseId}>
-              <CourseRow course={course} />
-            </li>
-          ))}
-        </ol>
-      )}
+        {level.courses.length === 0 ? (
+          <p className="w-full text-sm text-muted-foreground">{t('levelEmpty')}</p>
+        ) : null}
+      </div>
     </section>
   );
 }
 
-function CourseRow({ course }: { course: MyPathCourseView }) {
+function CourseCheckpoint({ course }: { course: MyPathCourseView }) {
   const t = useTranslations('myPath');
   const format = useFormat();
+  const state = courseState(course);
 
   const statusLabel =
     course.status === 'COMPLETED'
@@ -221,58 +279,64 @@ function CourseRow({ course }: { course: MyPathCourseView }) {
         : t('statusNotStarted');
 
   return (
-    <div
-      className={cn(
-        cardVariants({ variant: course.isNextUp ? 'selected' : 'default' }),
-        'flex flex-wrap items-center justify-between gap-3 p-4',
-      )}
-    >
-      <div className="flex min-w-0 flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-medium text-foreground">{course.title}</h3>
-          {course.isNextUp ? <Badge variant="primary">{t('nextUp')}</Badge> : null}
+    <div className="flex gap-4 pb-4">
+      <CheckpointCircle state={state} size="md">
+        {state === 'done' ? <Check aria-hidden="true" className="size-4" /> : null}
+      </CheckpointCircle>
+
+      <div
+        className={cn(
+          'flex flex-1 flex-wrap items-center justify-between gap-3 rounded-lg p-3',
+          course.isNextUp && 'bg-primary-50',
+        )}
+      >
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-medium text-foreground">{course.title}</h3>
+            {course.isNextUp ? <Badge variant="primary">{t('nextUp')}</Badge> : null}
+          </div>
+
+          <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            {/* The state as a tag (TAM-119): the word carries it, the tone repeats it. */}
+            <Badge
+              variant={
+                course.status === 'COMPLETED'
+                  ? 'success'
+                  : course.status === 'IN_PROGRESS'
+                    ? 'info'
+                    : 'neutral'
+              }
+            >
+              {statusLabel}
+            </Badge>
+            {course.gradePercent !== null ? (
+              <span>{t('grade', { grade: format.percent(course.gradePercent) })}</span>
+            ) : null}
+          </p>
         </div>
 
-        <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          {/* The state as a tag (TAM-119): the word carries it, the tone repeats it. */}
-          <Badge
-            variant={
-              course.status === 'COMPLETED'
-                ? 'success'
-                : course.status === 'IN_PROGRESS'
-                  ? 'info'
-                  : 'neutral'
-            }
-          >
-            {statusLabel}
-          </Badge>
-          {course.gradePercent !== null ? (
-            <span>{t('grade', { grade: format.percent(course.gradePercent) })}</span>
-          ) : null}
-        </p>
+        {/*
+         * One action, and only on the course the learner should do next — §4.9's
+         * "must not compete with continue". A course below their rung offers
+         * nothing at all: the placement says they have covered it, and a start
+         * button would contradict that (D-134).
+         */}
+        {!course.startable ? (
+          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+            <Check aria-hidden="true" className="size-4" />
+            {t('coveredAlready')}
+          </span>
+        ) : course.status !== 'COMPLETED' ? (
+          <Button asChild variant={course.isNextUp ? 'primary' : 'outline'} size="sm">
+            {/* The player owns the handoff. Linking at the LMS directly would send
+                the learner to a Moodle page that does not know who they are — the
+                deep link carries no session (D-044). */}
+            <Link href={`/courses/${course.courseId}/player`}>
+              {course.status === 'IN_PROGRESS' ? t('continue') : t('start')}
+            </Link>
+          </Button>
+        ) : null}
       </div>
-
-      {/*
-       * One action, and only on the course the learner should do next — §4.9's
-       * "must not compete with continue". A course below their rung offers
-       * nothing at all: the placement says they have covered it, and a start
-       * button would contradict that (D-134).
-       */}
-      {!course.startable ? (
-        <span className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Check aria-hidden="true" className="size-4" />
-          {t('coveredAlready')}
-        </span>
-      ) : course.status !== 'COMPLETED' ? (
-        <Button asChild variant={course.isNextUp ? 'primary' : 'outline'} size="sm">
-          {/* The player owns the handoff. Linking at the LMS directly would send
-              the learner to a Moodle page that does not know who they are — the
-              deep link carries no session (D-044). */}
-          <Link href={`/courses/${course.courseId}/player`}>
-            {course.status === 'IN_PROGRESS' ? t('continue') : t('start')}
-          </Link>
-        </Button>
-      ) : null}
     </div>
   );
 }

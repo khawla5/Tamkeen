@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
 
 import { BrandCorner } from '@/components/brand/brand-corner';
+import { PageWatermark } from '@/components/brand/page-watermark';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
@@ -65,6 +66,8 @@ export function AppShell({
 
   return (
     <div className="relative flex min-h-dvh flex-col">
+      <PageWatermark />
+
       {/*
         First focusable element on the page — WCAG 2.4.1 bypass blocks.
         `start-3` (logical) rather than `left-3`, anchored to the relative

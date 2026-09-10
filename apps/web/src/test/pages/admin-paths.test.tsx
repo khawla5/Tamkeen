@@ -17,8 +17,11 @@ import { renderWithProviders } from '@/test/render';
  * by a link rather than a modal — the work there is long enough to scroll and
  * to come back to.
  *
- * Creating a path stays a dialog, because three fields answered once is exactly
- * what a modal is for.
+ * **"إنشاء مسار" opens that exact same screen, not a form of its own.** A
+ * path answers to nothing but a name and a description, and the ladder screen
+ * already edits both — so the button creates a plain, placeholder-named path
+ * outright and hands off straight into it, rather than asking for the same
+ * two fields a second time first.
  */
 
 const api = vi.hoisted(() => ({
@@ -96,7 +99,7 @@ describe('Admin paths (§4C.4)', () => {
   it('summarises each path by its rungs, its placed courses and who is on it', async () => {
     renderWithProviders(<AdminPathsPage />);
 
-    expect(await screen.findByText(/3 مستويات · 8 دورة مُسندة · 12 موظف/)).toBeInTheDocument();
+    expect(await screen.findByText(/3 مستوى · 8 دورة مُسندة · 12 موظف/)).toBeInTheDocument();
   });
 
   it('marks on the list itself how many memberships nobody has placed', async () => {
@@ -136,69 +139,38 @@ describe('Admin paths (§4C.4)', () => {
   it('offers no ladder editing on the list itself', async () => {
     renderWithProviders(<AdminPathsPage />);
 
-    await screen.findByText(/3 مستويات/);
+    await screen.findByText(/3 مستوى/);
     expect(screen.queryByLabelText('اسم المسار')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('المستوى')).not.toBeInTheDocument();
   });
-});
 
-describe('Admin paths — creating one (§4C.4)', () => {
-  it('says the path will not be offered yet, before the administrator commits', async () => {
-    /* A path is created with no rungs, no assessment and nothing placed, so
-       offering it immediately would strand whoever was assigned it. */
-    const user = userEvent.setup();
-    renderWithProviders(<AdminPathsPage />);
-
-    await user.click(await screen.findByRole('button', { name: 'إنشاء مسار' }));
-
-    expect(screen.getByText(/يُنشأ المسار غير معروض/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'عرض المسار' })).not.toBeInTheDocument();
-  });
-
-  it('will not submit until the key, the name and a real description are there', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<AdminPathsPage />);
-    await user.click(await screen.findByRole('button', { name: 'إنشاء مسار' }));
-
-    const create = screen.getByRole('button', { name: 'إنشاء' });
-    expect(create).toBeDisabled();
-
-    await user.type(screen.getByLabelText(/اسم المسار/), 'مسار اللغة العربية');
-    await user.type(screen.getByLabelText(/المعرّف/), 'arabic');
-    expect(create).toBeDisabled();
-
-    await user.type(screen.getByLabelText(/وصف المسار/), 'وصف كافٍ لهذا المسار.');
-    expect(create).toBeEnabled();
-  });
-
-  it('goes straight into the new path’s ladder, which is always the next step', async () => {
+  it('creates a placeholder path and replaces straight into its ladder screen', async () => {
+    /* No form first: the ladder screen already edits the name and the
+       description, so asking for them here would be the same two fields
+       twice. */
     const user = userEvent.setup();
     api.createPath.mockResolvedValue({ id: 'p9' });
     renderWithProviders(<AdminPathsPage />);
 
     await user.click(await screen.findByRole('button', { name: 'إنشاء مسار' }));
-    await user.type(screen.getByLabelText(/اسم المسار/), 'مسار اللغة العربية');
-    await user.type(screen.getByLabelText(/المعرّف/), 'arabic');
-    await user.type(screen.getByLabelText(/وصف المسار/), 'وصف كافٍ لهذا المسار.');
-    await user.click(screen.getByRole('button', { name: 'إنشاء' }));
 
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/admin/paths/p9'));
+    await waitFor(() =>
+      expect(api.createPath).toHaveBeenCalledWith(
+        expect.objectContaining({ name: expect.any(String), description: expect.any(String) }),
+      ),
+    );
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/admin/paths/p9'));
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
-  it('shows the server’s refusal without losing what was typed', async () => {
+  it('shows the server’s refusal if creating the placeholder path fails', async () => {
     const user = userEvent.setup();
-    const { ApiError } = await import('@/lib/api-client');
-    api.createPath.mockRejectedValue(new ApiError('PATH_KEY_TAKEN', 409));
+    api.createPath.mockRejectedValue(new Error('down'));
     renderWithProviders(<AdminPathsPage />);
 
     await user.click(await screen.findByRole('button', { name: 'إنشاء مسار' }));
-    await user.type(screen.getByLabelText(/اسم المسار/), 'مسار اللغة العربية');
-    await user.type(screen.getByLabelText(/المعرّف/), 'english');
-    await user.type(screen.getByLabelText(/وصف المسار/), 'وصف كافٍ لهذا المسار.');
-    await user.click(screen.getByRole('button', { name: 'إنشاء' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/هذا المعرّف مستخدم/);
-    expect(screen.getByLabelText(/اسم المسار/)).toHaveValue('مسار اللغة العربية');
-    expect(nav.push).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 });

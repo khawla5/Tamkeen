@@ -6,21 +6,23 @@ import { useState } from 'react';
 
 import type { AdminPathRow } from '@tamkeen/types';
 
-import { AdminDialog } from '@/components/admin/admin-dialog';
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { AdminPage } from '@/components/layout/admin-page';
 import { DataView } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { useFormat } from '@/i18n/format-provider';
 import { adminApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 import { useAppRouter } from '@/lib/use-app-router';
 import { cn } from '@/lib/utils';
+
+/** A path key nobody has to read or type: it never appears again once the
+ *  path exists, so a short random slug does the job a form field used to. */
+function randomPathKey(): string {
+  return `path-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 /**
  * §4C.4 — study paths and their ladders (D-134).
@@ -37,37 +39,76 @@ import { cn } from '@/lib/utils';
  *
  * **The list only lists.** Editing a ladder is its own screen at
  * `/admin/paths/[pathId]` — the work is long enough to scroll and to come back
- * to, which is not what a modal is for. Creating a path stays a dialog, because
- * three fields answered once is exactly what a modal is for.
+ * to, which is not what a modal is for.
+ *
+ * **"إنشاء مسار" lands there too, immediately — the same screen "إدارة"
+ * opens, not a form of its own first.** A path answers to nothing but a name
+ * and a description, and both are already editable the moment the ladder
+ * screen opens; asking for them a second time in a dialog or a separate page
+ * would be the same two fields twice. So the button creates a plain, unnamed
+ * path outright and hands off straight into its ladder screen, where the
+ * administrator's first move is simply to name it.
  */
 export default function AdminPathsPage() {
   const t = useTranslations('admin');
-  const [creating, setCreating] = useState(false);
+  const router = useAppRouter();
+  const translateError = useErrorMessage();
 
   const paths = useApiQuery(() => adminApi.listPaths(), []);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function create() {
+    setError(null);
+    setCreating(true);
+
+    try {
+      const path = await adminApi.createPath({
+        key: randomPathKey(),
+        name: t('pathNewDefaultName'),
+        description: t('pathNewDefaultDescription'),
+      });
+      /* Replace, not push: the placeholder path this just created is not
+         somewhere the back button should return to. */
+      router.replace(`/admin/paths/${path.id}`);
+    } catch (caught) {
+      setError(translateError(caught));
+      setCreating(false);
+    }
+  }
 
   return (
     <AdminPage
       title={t('pathsTitle')}
-      action={<Button onClick={() => setCreating(true)}>{t('pathCreate')}</Button>}
+      action={
+        <Button onClick={() => void create()} disabled={creating}>
+          {t('pathCreate')}
+        </Button>
+      }
     >
-      <DataView
-        isLoading={paths.isInitialLoad}
-        error={paths.error}
-        onRetry={paths.refetch}
-        isEmpty={paths.data?.length === 0}
-        emptyProps={{ title: t('pathsEmpty'), body: t('pathsEmptyHint') }}
-      >
-        <ul className="space-y-3">
-          {(paths.data ?? []).map((path) => (
-            <li key={path.id}>
-              <PathCard path={path} />
-            </li>
-          ))}
-        </ul>
-      </DataView>
+      <div className="space-y-4">
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
 
-      {creating ? <CreatePathDialog onClose={() => setCreating(false)} /> : null}
+        <DataView
+          isLoading={paths.isInitialLoad}
+          error={paths.error}
+          onRetry={paths.refetch}
+          isEmpty={paths.data?.length === 0}
+          emptyProps={{ title: t('pathsEmpty'), body: t('pathsEmptyHint') }}
+        >
+          <ul className="space-y-3">
+            {(paths.data ?? []).map((path) => (
+              <li key={path.id}>
+                <PathCard path={path} />
+              </li>
+            ))}
+          </ul>
+        </DataView>
+      </div>
     </AdminPage>
   );
 }
@@ -112,87 +153,3 @@ function PathCard({ path }: { path: AdminPathRow }) {
   );
 }
 
-function CreatePathDialog({ onClose }: { onClose: () => void }) {
-  const t = useTranslations('admin');
-  const router = useAppRouter();
-  const translateError = useErrorMessage();
-
-  const [key, setKey] = useState('');
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    setError(null);
-    setBusy(true);
-
-    try {
-      const path = await adminApi.createPath({ key, name, description });
-      /* Straight into the ladder editor: a path is created with no rungs, no
-         assessment and nothing placed, so the next step is always the same one
-         and it is never on this screen. */
-      router.push(`/admin/paths/${path.id}`);
-    } catch (caught) {
-      setError(translateError(caught));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <AdminDialog
-      title={t('pathCreate')}
-      /* Says up front that the path will not be offered yet, so the absence of
-         an "activate" switch on this form is an answer rather than an omission. */
-      description={t('pathCreateHint')}
-      onClose={onClose}
-      footer={
-        <Button
-          type="button"
-          disabled={busy || !key || !name || description.trim().length < 10}
-          onClick={submit}
-        >
-          {t('pathCreateAction')}
-        </Button>
-      }
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="new-path-name" label={t('pathName')} required>
-          {(field) => (
-            <Input {...field} value={name} onChange={(event) => setName(event.target.value)} />
-          )}
-        </Field>
-
-        <Field id="new-path-key" label={t('pathKey')} hint={t('entityKeyHint')} required>
-          {(field) => (
-            <Input
-              {...field}
-              dir="ltr"
-              value={key}
-              onChange={(event) => setKey(event.target.value)}
-            />
-          )}
-        </Field>
-
-        <div className="sm:col-span-2">
-          <Field id="new-path-description" label={t('pathDescription')} required>
-            {(field) => (
-              <Textarea
-                {...field}
-                rows={3}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            )}
-          </Field>
-        </div>
-      </div>
-
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </AdminDialog>
-  );
-}
