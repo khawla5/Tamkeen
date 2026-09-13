@@ -1621,6 +1621,9 @@
     "standingBelow": "دون مستواك",
     "levelEmpty": "لا توجد دورات في هذا المستوى.",
     "coveredAlready": "ضمن ما تجاوزته",
-    "lockedUntilPlaced": "تُفتح بعد تحديد مستواك"
+    "lockedUntilPlaced": "تُفتح بعد تحديد مستواك",
+    "courseOutlineLoading": "جارٍ تحميل محتويات الدورة...",
+    "courseOutlineEmpty": "تظهر محتويات الدورة هنا بعد أن تبدأها من صفحة مساري.",
+    "openCoursePage": "فتح صفحة الدورة"
   }
 }

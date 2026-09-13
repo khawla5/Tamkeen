@@ -49,7 +49,10 @@ export function AuthLayout({
   const tAuth = useTranslations('auth');
 
   return (
-    <div className="relative flex min-h-dvh flex-col bg-background">
+    <div className="relative flex min-h-dvh flex-col">
+      {/* No background colour here: `body` already paints it, and painting it
+          again here would sit in front of the page-wide watermark and hide it
+          completely. */}
       <Lattice />
 
       <header className="relative border-b border-border bg-surface/90 backdrop-blur">

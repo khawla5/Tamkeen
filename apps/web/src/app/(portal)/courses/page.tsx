@@ -277,7 +277,13 @@ export default function CoursesPage() {
   );
 }
 
-/** One path's courses, under a heading that says why the path is here. */
+/**
+ * One path's courses, under a rectangle that *is* the path (D-134): its name,
+ * where the assessment placed them, and how many courses it holds — the same
+ * three facts the heading used to state as text, now a single card that leads
+ * straight into the path's own ladder, where those courses are shown in their
+ * placement order rather than the catalogue's flat grid.
+ */
 function PathGroup({
   path,
   courses,
@@ -292,18 +298,26 @@ function PathGroup({
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <Link
+        href={`/paths/${path.id}`}
+        className={cn(
+          cardVariants(),
+          'flex flex-col gap-1 p-5 transition-colors hover:border-primary-600',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2',
+        )}
+      >
         <h2 className="text-lg font-semibold text-foreground">{path.name}</h2>
-        {/* Where the assessment placed them, on the heading rather than on every
-            card: it is a fact about the path, and repeating it twelve times
-            would be the redundant UI §3 forbids. */}
+        {/* Where the assessment placed them: a fact about the path, stated
+            once on its own card rather than repeated on every course below it. */}
         {path.placedLevel ? (
-          <Badge variant="primary">{t('placedAt', { level: path.placedLevel.name })}</Badge>
+          <p className="text-sm font-medium text-primary-700">
+            {t('placedAt', { level: path.placedLevel.name })}
+          </p>
         ) : null}
-        <span className="text-sm text-muted-foreground">
-          {t('resultCount', { count: format.number(courses.length) })}
-        </span>
-      </div>
+        <p className="text-sm text-muted-foreground">
+          {t('resultCount', { count: format.number(path.courseCount) })}
+        </p>
+      </Link>
 
       <CourseGrid courses={courses} statusByCourseId={statusByCourseId} titleAs="h3" />
     </section>
