@@ -16,8 +16,14 @@
  */
 
 import type {
+  AdminAssessmentAssignmentRow,
   AdminAssessmentDraft,
+<<<<<<< HEAD
   AdminAssignResult,
+=======
+  AdminAssessmentGroupRow,
+  AdminAssessmentKeyOption,
+>>>>>>> origin/main
   AdminAttachableCourse,
   AdminCoursePage,
   AdminCourseRow,
@@ -39,6 +45,7 @@ import type {
   AdminUserRow,
   UserRole,
   AssessmentResultView,
+  AssignmentScope,
   CertificateSummary,
   CvProfile,
   CvView,
@@ -682,7 +689,39 @@ export const adminApi = {
   assessmentVersion: (pathId: string, assessmentId: string) =>
     api.get<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/versions/${assessmentId}`),
 
+<<<<<<< HEAD
   // §4C.4 — study paths, their ladders, and what is placed on them
+=======
+  // §4C.3 — assignment (TAM-147): who is handed which instrument or group
+  assessmentKeys: () => api.get<AdminAssessmentKeyOption[]>('/api/admin/assessment-keys'),
+
+  listAssignments: () =>
+    api.get<AdminAssessmentAssignmentRow[]>('/api/admin/assessment-assignments'),
+
+  createAssignment: (input: {
+    assessmentKey: string;
+    scope: AssignmentScope;
+    target?: string;
+    required: boolean;
+    displayOrder: number;
+  }) => api.post<AdminAssessmentAssignmentRow[]>('/api/admin/assessment-assignments', input),
+
+  updateAssignment: (id: string, patch: { required?: boolean; displayOrder?: number }) =>
+    api.patch<AdminAssessmentAssignmentRow[]>(`/api/admin/assessment-assignments/${id}`, patch),
+
+  removeAssignment: (id: string) =>
+    api.delete<AdminAssessmentAssignmentRow[]>(`/api/admin/assessment-assignments/${id}`),
+
+  listAssessmentGroups: () => api.get<AdminAssessmentGroupRow[]>('/api/admin/assessment-groups'),
+
+  saveAssessmentGroup: (input: { key: string; name: string; memberKeys: string[] }) =>
+    api.put<AdminAssessmentGroupRow[]>('/api/admin/assessment-groups', input),
+
+  removeAssessmentGroup: (id: string) =>
+    api.delete<AdminAssessmentGroupRow[]>(`/api/admin/assessment-groups/${id}`),
+
+  // §4C.4 — study paths
+>>>>>>> origin/main
   listPaths: () => api.get<AdminPathRow[]>('/api/admin/paths'),
 
   getPath: (pathId: string) => api.get<AdminPathDetail>(`/api/admin/paths/${pathId}`),

@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import type {
   AdminInviteResult,
   AdminRegistrationPolicyView,
+  AdminUserAssessmentSummary,
   AdminUserDetail,
   AdminUserPage,
   AdminUserRow,
@@ -109,11 +110,23 @@ export class AdminUsersService {
         ...USER_ROW_SELECT,
         createdAt: true,
         moodleUserId: true,
+<<<<<<< HEAD
         /* D-130/D-133: what this person has been put on, managed from this
            same panel. Assignment is an account decision, not a screen of its
            own. */
         userPaths: {
           orderBy: { assignedAt: 'asc' },
+=======
+        /* `kind: 'RIASEC'` (TAM-147): the singular `assessment` field below is
+           the Holland result specifically — a CEFR attempt has no `code` and
+           belongs to a separate part of this screen, not this one. */
+        assessmentResults: {
+          where: { kind: 'RIASEC' },
+          orderBy: { completedAt: 'desc' },
+          select: { code: true, completedAt: true },
+        },
+        userPath: {
+>>>>>>> origin/main
           select: {
             id: true,
             pathId: true,
@@ -141,21 +154,63 @@ export class AdminUsersService {
       throw new NotFoundException('USER_NOT_FOUND');
     }
 
-    const [activeSessions, passed] = await Promise.all([
+    const [activeSessions, passed, allResults] = await Promise.all([
       this.prisma.session.count({
         where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
       }),
       /* Passed, not merely completed (D-054). The two diverge exactly when a
          learner is stuck, which is what this screen exists to reveal. */
       this.prisma.completion.count({ where: { userId, passed: true } }),
+      /* Every instrument, every kind — the generalised counterpart to the
+         RIASEC-only query above (§4C.2 part 5, TAM-147). A second query
+         rather than a second filter on the same relation: Prisma cannot
+         select `assessmentResults` twice under different `where`s in one
+         `select`, and this one needs the joined title besides. */
+      this.prisma.assessmentResult.findMany({
+        where: { userId },
+        orderBy: { completedAt: 'desc' },
+        select: {
+          kind: true,
+          code: true,
+          cefrLevel: true,
+          assessmentVersion: true,
+          completedAt: true,
+          assessment: { select: { key: true, title: true } },
+        },
+      }),
     ]);
 
     const levelByPath = new Map(user.placements.map((row) => [row.pathId, row.level]));
+
+    const attemptsByKey = new Map<string, number>();
+    for (const row of allResults) {
+      attemptsByKey.set(row.assessment.key, (attemptsByKey.get(row.assessment.key) ?? 0) + 1);
+    }
+
+    /* Ordered newest-first above, so the first row seen per key is that
+       instrument's current result (D-033's convention, applied generically). */
+    const seenKeys = new Set<string>();
+    const assessments: AdminUserAssessmentSummary[] = [];
+    for (const row of allResults) {
+      if (seenKeys.has(row.assessment.key)) continue;
+      seenKeys.add(row.assessment.key);
+
+      assessments.push({
+        key: row.assessment.key,
+        kind: row.kind,
+        title: row.assessment.title,
+        result: row.kind === 'RIASEC' ? row.code! : row.cefrLevel!,
+        version: row.assessmentVersion,
+        completedAt: row.completedAt.toISOString(),
+        attempts: attemptsByKey.get(row.assessment.key)!,
+      });
+    }
 
     return {
       ...toRow(user),
       createdAt: user.createdAt.toISOString(),
       hasLmsAccount: user.moodleUserId !== null,
+<<<<<<< HEAD
       paths: user.userPaths.map((row) => ({
         userPathId: row.id,
         pathId: row.pathId,
@@ -172,6 +227,30 @@ export class AdminUsersService {
            screens. */
         coursesTotal: row.path._count.pathCourses,
       })),
+=======
+      assessment: newest
+        ? {
+            /* Non-null: filtered to `kind: 'RIASEC'` above, and every row of
+               that kind has `code` set (TAM-147). */
+            code: newest.code!,
+            completedAt: newest.completedAt.toISOString(),
+            /* Retakes append (D-033). Showing the count makes a retake visible
+               without exposing the superseded codes, which are the person's
+               history and not an administrator's business. */
+            attempts: user.assessmentResults.length,
+          }
+        : null,
+      assessments,
+      path: user.userPath
+        ? {
+            name: user.userPath.path.name,
+            status: user.userPath.status,
+            confirmedAt: user.userPath.confirmedAt?.toISOString() ?? null,
+            coursesChosen: user.userPath.courses.length,
+            coursesPassed: passed,
+          }
+        : null,
+>>>>>>> origin/main
       certificateCount: user._count.certificates,
       activeSessions,
     };

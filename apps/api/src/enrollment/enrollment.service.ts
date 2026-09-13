@@ -8,7 +8,12 @@ import type {
   MyPathView,
 } from '@tamkeen/types';
 
+<<<<<<< HEAD
 import { AuditAction } from '../audit/audit.actions';
+=======
+import { AssessmentAssignmentResolutionService } from '../assessment-assignment/assessment-assignment-resolution.service';
+import { AuditAction, AuditReason, type AuditTargetType } from '../audit/audit.actions';
+>>>>>>> origin/main
 import { AuditService } from '../audit/audit.service';
 import { JourneyStateService } from '../journey/journey-state.service';
 import {
@@ -44,6 +49,7 @@ export class EnrollmentService {
     private readonly journey: JourneyStateService,
     private readonly learnerPaths: LearnerPathService,
     private readonly audit: AuditService,
+    private readonly assignments: AssessmentAssignmentResolutionService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
 
@@ -119,10 +125,89 @@ export class EnrollmentService {
     const state = await this.journey.getState(userId);
     const ladders = await this.learnerPaths.allLadders(userId, state);
 
+<<<<<<< HEAD
     const paths: DashboardPath[] = ladders.map((ladder) => {
       const owed = owedCourses(ladder);
       const next = owed.find((course) => !course.passed) ?? null;
 
+=======
+    /*
+     * Read in every state, including PRE_ASSESSMENT. Every instrument the
+     * employee has ever taken, newest per instrument key — one query answers
+     * both the legacy `englishLevel` field and the generalised `assessments`
+     * array below (TAM-147), where it used to take a dedicated
+     * `englishAssessmentResult` read of its own.
+     *
+     * Read here rather than through `JourneyStateService`, deliberately: the
+     * journey service exists so the rules that depend on *both* the Holland
+     * result and the path live in one place, and most instruments (CEFR
+     * included) depend on neither. Putting this there would imply a
+     * relationship that does not exist.
+     */
+    const [resolvedAssignments, results] = await Promise.all([
+      this.assignments.resolveForUser(userId),
+      this.prisma.assessmentResult.findMany({
+        where: { userId },
+        orderBy: { completedAt: 'desc' },
+        select: {
+          kind: true,
+          code: true,
+          cefrLevel: true,
+          completedAt: true,
+          assessment: { select: { key: true } },
+        },
+      }),
+    ]);
+
+    /* Newest attempt per instrument key — retakes append (D-033), so the first
+       one seen in `completedAt desc` order is "the" result for that key. */
+    const newestByKey = new Map<string, (typeof results)[number]>();
+    for (const result of results) {
+      if (!newestByKey.has(result.assessment.key)) {
+        newestByKey.set(result.assessment.key, result);
+      }
+    }
+
+    const assessments: DashboardView['assessments'] = resolvedAssignments.map((assignment) => {
+      const result = newestByKey.get(assignment.key);
+
+      return {
+        key: assignment.key,
+        kind: assignment.kind,
+        title: assignment.title,
+        required: assignment.required,
+        takenAt: result ? result.completedAt.toISOString() : null,
+        /* The one summary line a tracker stage shows — the Holland chips for
+           a RIASEC row, the CEFR level for a CEFR one. Never the six scores
+           or the raw total; this is a stage label, not a results page. */
+        summary: result ? (result.kind === 'RIASEC' ? result.code : result.cefrLevel) : null,
+      };
+    });
+
+    const empty = {
+      assessments,
+      /* Independent of the Holland journey and of assignment (D-123): reported
+         the moment a CEFR result exists at all, whether or not §4C.3 assigned
+         it — a required instrument someone took before it was ever assigned
+         still has an answer here. */
+      englishLevel: results.find((result) => result.kind === 'CEFR')?.cefrLevel ?? null,
+      recommendedPaths: [],
+      upcomingCourses: [],
+      latestCertificate: null,
+      recentActivity: [] as DashboardActivity[],
+    };
+
+    if (!state.latestResult) {
+      return { state: 'PRE_ASSESSMENT', codeString: null, path: null, ...empty };
+    }
+
+    const codeString = state.latestResult.profile.codeString;
+    const recentActivity = await this.recentActivity(userId);
+
+    /* A path being *built* is still "no path chosen": §4.2 has three states, and
+       the user's next action is the same either way — go and choose. */
+    if (!JourneyStateService.isCommitted(state)) {
+>>>>>>> origin/main
       return {
         id: ladder.pathId,
         name: ladder.pathName,
@@ -136,10 +221,47 @@ export class EnrollmentService {
     });
 
     return {
+<<<<<<< HEAD
       state: dashboardState(ladders),
       paths,
       latestCertificate: await this.latestCertificate(userId),
       recentActivity: await this.recentActivity(userId, ladders),
+=======
+      state: 'ACTIVE_PATH',
+      codeString,
+      assessments: empty.assessments,
+      englishLevel: empty.englishLevel,
+      recommendedPaths: [],
+      /* Current first, then what follows, in path order — the "what's after
+         this one" a learner actually wants. Three is a glance, not a list. */
+      upcomingCourses: myPath.courses
+        .filter((course) => course.status !== 'COMPLETED')
+        .slice(0, 3)
+        .map((course) => ({
+          id: course.id,
+          courseId: course.courseId,
+          title: course.title,
+          status: course.status,
+        })),
+      latestCertificate: latest
+        ? {
+            id: latest.id,
+            type: latest.type,
+            subjectTitle: latest.subjectTitle,
+            issuedAt: latest.issuedAt.toISOString(),
+          }
+        : null,
+      recentActivity,
+      path: {
+        id: myPath.pathId,
+        name: myPath.pathName,
+        riasecLetter: myPath.riasecLetter,
+        completedCount: myPath.completedCount,
+        inProgressCount: myPath.courses.filter((course) => course.status === 'IN_PROGRESS').length,
+        totalCount: myPath.totalCount,
+        nextCourse: next ? { id: next.id, courseId: next.courseId, title: next.title } : null,
+      },
+>>>>>>> origin/main
     };
   }
 

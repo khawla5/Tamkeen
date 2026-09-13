@@ -235,6 +235,7 @@ describe('Admin assessment management (e2e)', () => {
       },
     });
 
+<<<<<<< HEAD
     pathId = path.id;
     levels = path.levels;
   }
@@ -288,6 +289,13 @@ describe('Admin assessment management (e2e)', () => {
 
     const active = await prisma.pathAssessment.findFirstOrThrow({
       where: { pathId, status: 'ACTIVE' },
+=======
+    const active = await prisma.assessment.findFirstOrThrow({
+      /* `kind: 'RIASEC'` (TAM-147): `assessments` also holds the CEFR row now,
+         and without this the query could non-deterministically match it
+         instead. */
+      where: { status: 'ACTIVE', kind: 'RIASEC' },
+>>>>>>> origin/main
       select: {
         id: true,
         version: true,
@@ -311,8 +319,20 @@ describe('Admin assessment management (e2e)', () => {
         userId,
         assessmentId: active.id,
         assessmentVersion: active.version,
+<<<<<<< HEAD
         totalScore: maxScore,
         maxScore,
+=======
+        kind: 'RIASEC',
+        scoreR: 11,
+        scoreI: 12,
+        scoreA: 13,
+        scoreS: 14,
+        scoreE: 15,
+        scoreC: 16,
+        maxScore: 20,
+        code: 'CES',
+>>>>>>> origin/main
       },
       select: { id: true },
     });
@@ -499,9 +519,17 @@ describe('Admin assessment management (e2e)', () => {
       expect(entry?.metadata).toMatchObject({ reason: 'BANK_NOT_PUBLISHABLE' });
     });
 
+<<<<<<< HEAD
     it('left the live version untouched while the publish was refused', async () => {
       const overview = (await get(route(), sessionAdmin).expect(200))
         .body as AdminAssessmentOverview;
+=======
+    it('left the live assessment untouched while the publish was refused', async () => {
+      const active = await prisma.assessment.findFirstOrThrow({
+        where: { status: 'ACTIVE', kind: 'RIASEC' },
+        select: { version: true },
+      });
+>>>>>>> origin/main
 
       expect(overview.active).toMatchObject({ version: 1, questionCount: 6 });
     });
@@ -865,6 +893,7 @@ describe('Admin assessment management (e2e)', () => {
       expect(await prisma.assessmentQuestion.count({ where: { assessmentId: draft.id } })).toBe(0);
       expect(await prisma.assessmentBand.count({ where: { assessmentId: draft.id } })).toBe(0);
 
+<<<<<<< HEAD
       const overview = (await get(route(), sessionAdmin).expect(200))
         .body as AdminAssessmentOverview;
       expect(overview.active).toMatchObject({ version: 2, status: 'ACTIVE' });
@@ -888,6 +917,13 @@ describe('Admin assessment management (e2e)', () => {
 
     it('refuses an anonymous request', async () => {
       await request(server()).get(route()).expect(401);
+=======
+      const active = await prisma.assessment.findFirstOrThrow({
+        where: { status: 'ACTIVE', kind: 'RIASEC' },
+        select: { version: true },
+      });
+      expect(active.version).toBe(2);
+>>>>>>> origin/main
     });
   });
 });

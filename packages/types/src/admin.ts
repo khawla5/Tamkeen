@@ -1,3 +1,4 @@
+import type { AssessmentKind } from './assessment-assignment';
 import type { AuditTargetType } from './audit';
 import type {
   CourseLanguage,
@@ -213,6 +214,21 @@ export interface AdminUserRow {
   lastLoginAt: string | null;
   /** The organisation an ENTITY account acts for; null for every other role. */
   entity: { id: string; name: string } | null;
+}
+
+/** One instrument a person has taken, for the admin user detail (§4C.2 part
+ *  5, TAM-147). */
+export interface AdminUserAssessmentSummary {
+  key: string;
+  kind: AssessmentKind;
+  title: string;
+  /** The Holland code ("SIA") or the CEFR level ("B2") — never the six scores
+   *  or the raw total. */
+  result: string;
+  version: number;
+  completedAt: string;
+  /** Retakes append for RIASEC (D-033); CEFR allows exactly one (D-123). */
+  attempts: number;
 }
 
 /** A page of users, with the total so the UI can say how many matched. */

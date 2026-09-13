@@ -108,6 +108,7 @@ export class AdminAuditService {
   }
 
   private async journey(): Promise<AdminReports['journey']> {
+<<<<<<< HEAD
     const [assigned, placed, completed, coursesPassed, certificatesIssued] = await Promise.all([
       /* Distinct people, not rows: an employee may hold more than one path
          (D-130), and "how many of our workforce is in training" is a question
@@ -122,6 +123,20 @@ export class AdminAuditService {
         distinct: ['userId'],
         select: { userId: true },
       }),
+=======
+    const [assessed, byStatus, coursesPassed, certificatesIssued] = await Promise.all([
+      /* Distinct people, not results: retakes append (D-033). `kind: 'RIASEC'`
+         (TAM-147): this funnel step means the Holland assessment specifically,
+         the same reading `admin-dashboard.service.ts`'s "assessed" count
+         already gives it — someone who has only taken the CEFR placement test
+         has not passed this step. */
+      this.prisma.assessmentResult.findMany({
+        where: { kind: 'RIASEC' },
+        distinct: ['userId'],
+        select: { userId: true },
+      }),
+      this.prisma.userPath.groupBy({ by: ['status'], _count: { _all: true } }),
+>>>>>>> origin/main
       this.prisma.completion.count({ where: { passed: true } }),
       this.prisma.certificate.count(),
     ]);
@@ -162,6 +177,7 @@ export class AdminAuditService {
       .sort((a, b) => b.assigned - a.assigned || a.name.localeCompare(b.name, 'ar'));
   }
 
+<<<<<<< HEAD
   /**
    * Where the ministry's people actually stand: employees on each rung of each
    * path.
@@ -179,6 +195,23 @@ export class AdminAuditService {
 
     if (placements.length === 0) {
       return [];
+=======
+  private async codeDistribution(): Promise<AdminReports['codeDistribution']> {
+    /* `kind: 'RIASEC'` (TAM-147): a Holland Code distribution has nothing to
+       say about a CEFR row, which carries no `code`. */
+    const newest = await this.prisma.assessmentResult.findMany({
+      where: { kind: 'RIASEC' },
+      distinct: ['userId'],
+      orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
+      select: { code: true },
+    });
+
+    const counts = new Map<string, number>();
+    for (const row of newest) {
+      /* Non-null: filtered to `kind: 'RIASEC'` above. */
+      const code = row.code!;
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+>>>>>>> origin/main
     }
 
     const levels = await this.prisma.level.findMany({

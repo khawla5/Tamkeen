@@ -119,6 +119,17 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
             below names each one with its rung and its one control, and a second
             rendering of the same list would be the redundant UI §3 forbids. */}
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
+<<<<<<< HEAD
+=======
+          <Detail
+            label={t('journeyPath')}
+            value={
+              user.path
+                ? `${user.path.name} · ${format.fraction(user.path.coursesPassed, user.path.coursesChosen)}`
+                : t('journeyNoPath')
+            }
+          />
+>>>>>>> origin/main
           <Detail label={t('journeyCertificates')} value={format.number(user.certificateCount)} />
           <Detail
             label={t('journeyLms')}
@@ -127,7 +138,41 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
         </dl>
       </section>
 
+<<<<<<< HEAD
       {user.role === 'EMPLOYEE' ? <AssignmentsSection user={user} busy={busy} run={run} /> : null}
+=======
+      {/*
+       * Every instrument this person has taken (§4C.2 part 5, TAM-147) — the
+       * Holland code or the CEFR level, the version, the date, and the retake
+       * count where one exists. Never the per-question answers: those are kept
+       * only so a result can be re-explained (§3A), not for review here.
+       */}
+      <section className="rounded-md border border-border p-4">
+        <h3 className="mb-2 text-sm font-semibold text-foreground">{t('assessmentsHeading')}</h3>
+        {user.assessments.length > 0 ? (
+          <ul className="flex flex-col divide-y divide-border">
+            {user.assessments.map((assessment) => (
+              <li
+                key={assessment.key}
+                className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm"
+              >
+                <span className="font-medium text-foreground">{assessment.title}</span>
+                <span dir="ltr" className="text-muted-foreground">
+                  {assessment.result} ·{' '}
+                  {t('versionLabel', { version: format.number(assessment.version) })} ·{' '}
+                  {format.date(new Date(assessment.completedAt))}
+                  {assessment.attempts > 1
+                    ? ` · ${t('journeyAttempts', { count: format.number(assessment.attempts) })}`
+                    : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t('journeyNotAssessed')}</p>
+        )}
+      </section>
+>>>>>>> origin/main
 
       <section className="flex flex-col gap-3 rounded-md border border-border p-4">
         <h3 className="text-sm font-semibold text-foreground">{t('roleHeading')}</h3>
