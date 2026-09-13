@@ -23,7 +23,7 @@ import { EnrollmentService } from './enrollment.service';
 
 interface Row {
   id: string;
-  userPathId: string;
+  userId: string;
   courseId: string;
   moodleCourseId: number;
   enrolledAt: Date | null;
@@ -40,44 +40,45 @@ function harness(options: {
   const attempted: number[] = [];
 
   const prisma = {
-    userPathCourse: {
+    enrollment: {
       findMany: (args: {
-        where: { userPathId?: string; courseId?: { in: string[] } };
+        where: { userId?: string; courseId?: { in: string[] } };
       }): Promise<unknown[]> => {
         const pending = rows.filter((row) => row.enrolledAt === null);
 
-        /* The service makes two differently-shaped reads; the per-path one is
-           the only one scoped to a userPathId. */
-        if (args.where.userPathId !== undefined) {
-          const ids = args.where.courseId?.in ?? [];
+        /* The service makes two differently-shaped reads; the per-learner one
+           is the only one scoped to a userId. */
+        if (args.where.userId !== undefined) {
+          const ids = args.where.courseId?.in;
           return Promise.resolve(
             pending
               .filter(
-                (row) => row.userPathId === args.where.userPathId && ids.includes(row.courseId),
+                (row) =>
+                  row.userId === args.where.userId &&
+                  (ids === undefined || ids.includes(row.courseId)),
               )
               .map((row) => ({ id: row.id, course: { moodleCourseId: row.moodleCourseId } })),
           );
         }
 
         return Promise.resolve(
-          pending.map((row) => ({
-            courseId: row.courseId,
-            userPathId: row.userPathId,
-            userPath: { userId: 'user-1' },
-          })),
+          pending.map((row) => ({ userId: row.userId, courseId: row.courseId })),
         );
       },
-      update: (args: { where: { id: string }; data: { enrolledAt: Date } }) => {
+      update: (args: {
+        where: { id: string };
+        data: { enrolledAt?: Date; lastError?: string | null };
+      }) => {
         const row = rows.find((candidate) => candidate.id === args.where.id);
-        if (row) row.enrolledAt = args.data.enrolledAt;
+        if (row && args.data.enrolledAt !== undefined) row.enrolledAt = args.data.enrolledAt;
         return Promise.resolve({});
       },
       count: () => Promise.resolve(rows.filter((row) => row.enrolledAt === null).length),
     },
     user: {
-      findUniqueOrThrow: () =>
+      findUniqueOrThrow: (args: { where: { id: string } }) =>
         Promise.resolve({
-          id: 'user-1',
+          id: args.where.id,
           email: 'learner@ministry.gov.example',
           fullName: 'متدرب',
           /* `?? 5001` would be wrong: null is a meaningful value here, meaning
@@ -122,9 +123,9 @@ function harness(options: {
   };
 }
 
-const row = (id: string, moodleCourseId: number, userPathId = 'path-1'): Row => ({
+const row = (id: string, moodleCourseId: number, userId = 'user-1'): Row => ({
   id,
-  userPathId,
+  userId,
   courseId: `course-${id}`,
   moodleCourseId,
   enrolledAt: null,
@@ -137,7 +138,7 @@ describe('enrolment resilience', () => {
     });
 
     await expect(service.retryPendingEnrolments()).resolves.toMatchObject({
-      paths: 1,
+      learners: 1,
       enrolled: 3,
       stillPending: 0,
     });
@@ -236,7 +237,7 @@ describe('enrolment resilience', () => {
     });
 
     await expect(service.retryPendingEnrolments()).resolves.toEqual({
-      paths: 0,
+      learners: 0,
       enrolled: 0,
       stillPending: 0,
     });
@@ -245,12 +246,12 @@ describe('enrolment resilience', () => {
     expect(audits).toEqual([]);
   });
 
-  it('reconciles several paths in one run', async () => {
+  it('reconciles several learners in one run', async () => {
     const { service, audits } = harness({
-      rows: [row('a', 101, 'path-1'), row('b', 102, 'path-2')],
+      rows: [row('a', 101, 'user-1'), row('b', 102, 'user-2')],
     });
 
-    await expect(service.retryPendingEnrolments()).resolves.toMatchObject({ paths: 2 });
+    await expect(service.retryPendingEnrolments()).resolves.toMatchObject({ learners: 2 });
     expect(audits).toHaveLength(2);
   });
 

@@ -145,19 +145,15 @@ describe('Prisma schema', () => {
   describe('scope discipline', () => {
     it('holds nothing the product has retired (D-134)', () => {
       /*
-       * The mirror image of the guard this replaces. Every model here was real
-       * and is now gone with the model it served: the build flow's per-learner
-       * course list, the instrument-assignment gate, and the whole Holland bank.
-       * A leftover table is a leftover concept, and the next person to read the
-       * schema would implement against it.
+       * Only this branch's own single-path build flow is asserted gone here.
+       * `AssessmentAssignment` and `AssessmentOptionWeight` were on this list
+       * before the merge with main's TAM-147 — that branch shipped a separate,
+       * still-live ministry-wide instrument framework in the meantime, and
+       * reconciling the two kept it rather than deleting a feature main still
+       * serves. A leftover table is a leftover concept only when nothing else
+       * has since given it a live purpose.
        */
-      const retiredModels = [
-        'UserPathCourse',
-        'AssessmentAssignment',
-        'AssessmentOptionWeight',
-        'EnglishAssessment',
-        'EnglishAssessmentResult',
-      ];
+      const retiredModels = ['UserPathCourse', 'EnglishAssessment', 'EnglishAssessmentResult'];
 
       const leftovers = retiredModels.filter((model) =>
         new RegExp(`model\\s+${model}\\s*\\{`).test(SCHEMA),
@@ -180,12 +176,14 @@ describe('Prisma schema', () => {
     expect(enumValues('PathStatus')).toEqual([...PATH_STATUSES]);
   });
 
-  it('has retired the RIASEC vocabulary entirely (D-134)', () => {
-    /* Acceptance criterion 13: the recommendation model is gone from the schema,
-       not merely unused by the code. A leftover column is a leftover concept,
-       and the next person to read the schema would implement against it. */
-    expect(SCHEMA).not.toMatch(/RiasecDimension/);
-    expect(SCHEMA).not.toMatch(/riasec_letter|riasecLetter/);
+  it('keeps the RIASEC letter on Path for TAM-147, not revived by D-134 (D-134)', () => {
+    /* D-134 retired RIASEC from *this branch's* own ladder/placement model —
+       criterion 13 was written against that, alone, before main's TAM-147
+       existed. Reconciling with main kept riasecLetter: the ministry-wide gold
+       recommendation still reads it, and dropping it here would silently break
+       that still-live feature rather than finish anything D-134 asked for. */
+    expect(SCHEMA).toMatch(/enum RiasecDimension/);
+    expect(modelBody('Path')).toMatch(/riasecLetter\s+RiasecDimension/);
   });
 
   describe('PathAssessment', () => {
@@ -246,8 +244,8 @@ describe('Prisma schema', () => {
          remove historical responses and change past results. Deleting the
          *result* may cascade — that removes an attempt as a whole, which is
          coherent — so only the bank relations are asserted here. */
-      expect(response).toMatch(/question\s+AssessmentQuestion[^\n]*onDelete:\s*Restrict/);
-      expect(response).toMatch(/option\s+AssessmentOption[^\n]*onDelete:\s*Restrict/);
+      expect(response).toMatch(/question\s+PathAssessmentQuestion[^\n]*onDelete:\s*Restrict/);
+      expect(response).toMatch(/option\s+PathAssessmentOption[^\n]*onDelete:\s*Restrict/);
     });
   });
 
@@ -330,7 +328,7 @@ describe('Prisma schema', () => {
     it('keeps the attempt and the level it named alive beneath it', () => {
       /* Restrict on both: a placement must never point at a level that no longer
          exists, or at an attempt somebody deleted (D-049). */
-      expect(placement).toMatch(/result\s+AssessmentResult[^\n]*onDelete:\s*Restrict/);
+      expect(placement).toMatch(/result\s+PathAssessmentResult[^\n]*onDelete:\s*Restrict/);
       expect(placement).toMatch(/level\s+Level[^\n]*onDelete:\s*Restrict/);
     });
   });
