@@ -5,6 +5,7 @@ import { Award, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
+import { InstrumentTracker } from '@/components/dashboard/instrument-tracker';
 import { JourneyTracker } from '@/components/dashboard/journey-tracker';
 import { PortalPage } from '@/components/layout/portal-page';
 import { usePortal } from '@/components/layout/portal-provider';

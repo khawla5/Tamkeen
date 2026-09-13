@@ -20,11 +20,15 @@ import {
 } from 'class-validator';
 
 import {
+  ASSIGNMENT_SCOPES,
   COURSE_VISIBILITIES,
   PATH_STATUSES,
+  RIASEC_LETTERS,
   type PathStatus,
   USER_ROLES,
+  type AssignmentScope,
   type CourseVisibility,
+  type RiasecLetter,
   type UserRole,
 } from '@tamkeen/types';
 
@@ -337,6 +341,133 @@ export class ReorderDraftDto {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// §4C.3 (TAM-147) — the ministry-wide RIASEC instrument editor. Named apart
+// from the plain `*DraftDto`s above: those edit one path's own placement
+// test (D-134), these edit the RIASEC bank `AdminRiasecAssessmentService`
+// serves at `/admin/assessment` — two editors that happen to share a shape,
+// never the same rows.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class RiasecUpdateDraftDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(160)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
+}
+
+export class RiasecAddDraftQuestionDto {
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  text!: string;
+
+  /** Which dimension the new question's Likert options score. */
+  @IsIn(RIASEC_LETTERS)
+  letter!: RiasecLetter;
+}
+
+export class RiasecUpdateDraftQuestionDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  text?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  displayOrder?: number;
+}
+
+/**
+ * An option's weights, one bounded integer per dimension.
+ *
+ * **Every letter is declared explicitly** rather than accepted as a
+ * `Record<string, number>`. The DTO is the outermost gate: a `Record` would let
+ * `{ "X": 4 }` through validation and leave the enum column to reject it as a
+ * 500, and `{ "R": 4, "r": 4 }` through as two keys the database would treat as
+ * one. Naming the six is the only shape in which the validator can say no.
+ *
+ * The 0-10 ceiling is not the Likert scale (0-4) — the schema has always allowed
+ * an option to weigh more, and D-048 gives the administrator the weightings.
+ * What the bound stops is a typo that makes one dimension unreachable by every
+ * other, which the balance guard would then report as an imbalance rather than
+ * as the mistake it is.
+ */
+export class OptionWeightsDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  R?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  I?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  A?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  S?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  E?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  C?: number;
+}
+
+export class RiasecUpdateDraftOptionDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  label?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OptionWeightsDto)
+  weights?: OptionWeightsDto;
+}
+
+export class RiasecReorderDraftDto {
+  /** The complete order. A partial one is refused by the service. */
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsUUID(undefined, { each: true })
+  questionIds!: string[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // §4C.4 — path management
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -505,6 +636,72 @@ export class AssignPathDto {
   @ArrayMaxSize(500)
   @IsUUID(undefined, { each: true })
   userIds!: string[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.3 — typed instruments and their assignment (TAM-147)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class CreateAssessmentAssignmentDto {
+  /** An `Assessment.key` or an `AssessmentGroup.key` — the service resolves
+   *  which. */
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  assessmentKey!: string;
+
+  @IsIn(ASSIGNMENT_SCOPES)
+  scope!: AssignmentScope;
+
+  /** A department name for DEPARTMENT, a user id for USER. Required for both,
+   *  refused for ALL — the service enforces the pairing. */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  target?: string;
+
+  @IsBoolean()
+  required!: boolean;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  displayOrder!: number;
+}
+
+export class UpdateAssessmentAssignmentDto {
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  displayOrder?: number;
+}
+
+export class SaveAssessmentGroupDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(64)
+  @Matches(/^[a-z0-9][a-z0-9-]*$/i, { message: 'ASSESSMENT_GROUP_KEY_INVALID' })
+  key!: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  name!: string;
+
+  /** Instrument keys, in the order they should be assigned. A group with none
+   *  is a bundle with nothing to hand out — the service refuses it. */
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  memberKeys!: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import type {
   AdminInviteResult,
   AdminRegistrationPolicyView,
+  AdminUserAssessmentSummary,
   AdminUserDetail,
   AdminUserPage,
   AdminUserRow,
@@ -141,13 +142,30 @@ export class AdminUsersService {
       throw new NotFoundException('USER_NOT_FOUND');
     }
 
-    const [activeSessions, passed] = await Promise.all([
+    const [activeSessions, passed, allResults] = await Promise.all([
       this.prisma.session.count({
         where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
       }),
       /* Passed, not merely completed (D-054). The two diverge exactly when a
          learner is stuck, which is what this screen exists to reveal. */
       this.prisma.completion.count({ where: { userId, passed: true } }),
+      /* Every instrument, every kind — the generalised counterpart to the
+         RIASEC-only query above (§4C.2 part 5, TAM-147). A second query
+         rather than a second filter on the same relation: Prisma cannot
+         select `assessmentResults` twice under different `where`s in one
+         `select`, and this one needs the joined title besides. */
+      this.prisma.assessmentResult.findMany({
+        where: { userId },
+        orderBy: { completedAt: 'desc' },
+        select: {
+          kind: true,
+          code: true,
+          cefrLevel: true,
+          assessmentVersion: true,
+          completedAt: true,
+          assessment: { select: { key: true, title: true } },
+        },
+      }),
     ]);
 
     const levelByPath = new Map(user.placements.map((row) => [row.pathId, row.level]));

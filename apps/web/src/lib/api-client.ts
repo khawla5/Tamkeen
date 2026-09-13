@@ -16,6 +16,7 @@
  */
 
 import type {
+  AdminAssessmentAssignmentRow,
   AdminAssessmentDraft,
   AdminAssignResult,
   AdminAttachableCourse,
@@ -39,6 +40,7 @@ import type {
   AdminUserRow,
   UserRole,
   AssessmentResultView,
+  AssignmentScope,
   CertificateSummary,
   CvProfile,
   CvView,

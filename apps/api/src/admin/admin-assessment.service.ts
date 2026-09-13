@@ -67,12 +67,22 @@ export class AdminAssessmentService {
     private readonly audit: AuditService,
   ) {}
 
+<<<<<<< HEAD
   /** What is live for this path, what is being edited, what came before. */
   async overview(pathId: string): Promise<AdminAssessmentOverview> {
     const path = await this.requirePath(pathId);
 
     const versions = await this.prisma.pathAssessment.findMany({
       where: { pathId },
+=======
+  /** §4C.3's landing state. */
+  async overview(): Promise<AdminAssessmentOverview> {
+    const rows = await this.prisma.assessment.findMany({
+      /* `kind: 'RIASEC'` (TAM-147): `assessments` now also holds CEFR rows,
+         and without this filter their ACTIVE/DRAFT/RETIRED rows would mix
+         into this instrument's own landing state. */
+      where: { kind: 'RIASEC' },
+>>>>>>> origin/main
       orderBy: { version: 'desc' },
       select: VERSION_SELECT,
     });
@@ -100,6 +110,7 @@ export class AdminAssessmentService {
    * error — that is how a path acquires one, and refusing here would leave a new
    * path with no way to reach §4C.3 at all.
    */
+<<<<<<< HEAD
   async createDraft(
     pathId: string,
     actorId: string,
@@ -109,6 +120,15 @@ export class AdminAssessmentService {
 
     const existing = await this.prisma.pathAssessment.findFirst({
       where: { pathId, status: 'DRAFT' },
+=======
+  async createDraft(actorId: string, ipAddress: string | null): Promise<AdminAssessmentDraft> {
+    /* `kind: 'RIASEC'` on both queries below (TAM-147): without it, a CEFR
+       draft or CEFR's own ACTIVE row could be picked up here — refusing this
+       instrument's own draft over an unrelated one being edited, or seeding
+       a "Holland" draft from the English bank. */
+    const existing = await this.prisma.assessment.findFirst({
+      where: { status: 'DRAFT', kind: 'RIASEC' },
+>>>>>>> origin/main
       select: { id: true },
     });
 
@@ -118,8 +138,13 @@ export class AdminAssessmentService {
       throw new ConflictException('ASSESSMENT_DRAFT_EXISTS');
     }
 
+<<<<<<< HEAD
     const active = await this.prisma.pathAssessment.findFirst({
       where: { pathId, status: 'ACTIVE' },
+=======
+    const active = await this.prisma.assessment.findFirst({
+      where: { status: 'ACTIVE', kind: 'RIASEC' },
+>>>>>>> origin/main
       select: {
         version: true,
         title: true,
@@ -633,6 +658,7 @@ export class AdminAssessmentService {
     };
   }
 
+<<<<<<< HEAD
   private async requirePath(pathId: string): Promise<{ name: string; levels: LevelRef[] }> {
     const path = await this.prisma.path.findUnique({
       where: { id: pathId },
@@ -664,6 +690,13 @@ export class AdminAssessmentService {
     const draft = await this.prisma.pathAssessment.findFirst({
       where: { pathId, status: 'DRAFT' },
       select: { id: true, version: true },
+=======
+  private async requireDraft() {
+    const draft = await this.prisma.assessment.findFirst({
+      /* `kind: 'RIASEC'` (TAM-147) — see `createDraft`'s comment. */
+      where: { status: 'DRAFT', kind: 'RIASEC' },
+      select: { id: true, key: true, version: true, title: true, description: true },
+>>>>>>> origin/main
     });
 
     if (!draft) {

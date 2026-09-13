@@ -44,6 +44,7 @@ export class EnrollmentService {
     private readonly journey: JourneyStateService,
     private readonly learnerPaths: LearnerPathService,
     private readonly audit: AuditService,
+    private readonly assignments: AssessmentAssignmentResolutionService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
 

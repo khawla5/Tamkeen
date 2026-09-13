@@ -42,6 +42,8 @@ export const AUDIT_TARGET_TYPES = [
   'course',
   'assessment',
   'assessment_result',
+  'assessment_assignment',
+  'assessment_group',
   'certificate',
   'setting',
 ] as const;
