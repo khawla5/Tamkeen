@@ -17,6 +17,19 @@ export * from './assessment';
 export * from './catalog';
 export * from './journey';
 
+/* Phase 1 — the RIASEC domain, kept alongside D-134's own ladder/placement
+   above rather than replaced by it (TAM-147's dashboard/impact reporting
+   still reads a path's one primary letter). */
+export * from './riasec';
+
+/* The English (CEFR) placement test — a sibling instrument, sharing no type
+   with the RIASEC one (§4.13, D-123). */
+export * from './english-assessment';
+
+/* Typed instruments and assignment — the framework RIASEC and CEFR both sit
+   in now (TAM-147). */
+export * from './assessment-assignment';
+
 /* Phase 3 — certificates and the CV. */
 export * from './certificates';
 export * from './notifications';

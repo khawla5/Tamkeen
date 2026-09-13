@@ -104,6 +104,7 @@ const DETAIL: AdminUserDetail = {
   ...row(),
   createdAt: '2026-07-01T00:00:00.000Z',
   hasLmsAccount: true,
+  assessments: [],
   certificateCount: 2,
   activeSessions: 1,
   /* D-133/D-134: one path placed, one still awaiting the assessment — the panel

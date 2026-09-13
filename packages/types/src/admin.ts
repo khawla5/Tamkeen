@@ -272,6 +272,10 @@ export interface AdminUserDetail extends AdminUserRow {
     coursesPassed: number;
     coursesTotal: number;
   }>;
+  /** Every ministry-wide instrument this employee has taken, one row per
+   *  instrument key at its latest attempt (TAM-147) — a path's own placement
+   *  test is not among these, it is `paths[].placedLevel` above. */
+  assessments: AdminUserAssessmentSummary[];
   certificateCount: number;
   /** Live sessions right now — the answer to "is this suspension effective?" */
   activeSessions: number;

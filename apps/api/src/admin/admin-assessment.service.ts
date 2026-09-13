@@ -67,22 +67,12 @@ export class AdminAssessmentService {
     private readonly audit: AuditService,
   ) {}
 
-<<<<<<< HEAD
   /** What is live for this path, what is being edited, what came before. */
   async overview(pathId: string): Promise<AdminAssessmentOverview> {
     const path = await this.requirePath(pathId);
 
     const versions = await this.prisma.pathAssessment.findMany({
       where: { pathId },
-=======
-  /** §4C.3's landing state. */
-  async overview(): Promise<AdminAssessmentOverview> {
-    const rows = await this.prisma.assessment.findMany({
-      /* `kind: 'RIASEC'` (TAM-147): `assessments` now also holds CEFR rows,
-         and without this filter their ACTIVE/DRAFT/RETIRED rows would mix
-         into this instrument's own landing state. */
-      where: { kind: 'RIASEC' },
->>>>>>> origin/main
       orderBy: { version: 'desc' },
       select: VERSION_SELECT,
     });
@@ -110,7 +100,6 @@ export class AdminAssessmentService {
    * error — that is how a path acquires one, and refusing here would leave a new
    * path with no way to reach §4C.3 at all.
    */
-<<<<<<< HEAD
   async createDraft(
     pathId: string,
     actorId: string,
@@ -120,15 +109,6 @@ export class AdminAssessmentService {
 
     const existing = await this.prisma.pathAssessment.findFirst({
       where: { pathId, status: 'DRAFT' },
-=======
-  async createDraft(actorId: string, ipAddress: string | null): Promise<AdminAssessmentDraft> {
-    /* `kind: 'RIASEC'` on both queries below (TAM-147): without it, a CEFR
-       draft or CEFR's own ACTIVE row could be picked up here — refusing this
-       instrument's own draft over an unrelated one being edited, or seeding
-       a "Holland" draft from the English bank. */
-    const existing = await this.prisma.assessment.findFirst({
-      where: { status: 'DRAFT', kind: 'RIASEC' },
->>>>>>> origin/main
       select: { id: true },
     });
 
@@ -138,13 +118,8 @@ export class AdminAssessmentService {
       throw new ConflictException('ASSESSMENT_DRAFT_EXISTS');
     }
 
-<<<<<<< HEAD
     const active = await this.prisma.pathAssessment.findFirst({
       where: { pathId, status: 'ACTIVE' },
-=======
-    const active = await this.prisma.assessment.findFirst({
-      where: { status: 'ACTIVE', kind: 'RIASEC' },
->>>>>>> origin/main
       select: {
         version: true,
         title: true,
@@ -205,7 +180,7 @@ export class AdminAssessmentService {
          * intermittent failure with nothing wrong in it.
          */
         for (const question of active?.questions ?? []) {
-          await tx.assessmentQuestion.create({
+          await tx.pathAssessmentQuestion.create({
             data: {
               assessmentId: draft.id,
               /* Keys carry over, so an item that survives an edit is
@@ -303,17 +278,17 @@ export class AdminAssessmentService {
     }
 
     const [maxOrder, keys] = await Promise.all([
-      this.prisma.assessmentQuestion.aggregate({
+      this.prisma.pathAssessmentQuestion.aggregate({
         where: { assessmentId: draft.id },
         _max: { displayOrder: true },
       }),
-      this.prisma.assessmentQuestion.findMany({
+      this.prisma.pathAssessmentQuestion.findMany({
         where: { assessmentId: draft.id },
         select: { key: true },
       }),
     ]);
 
-    await this.prisma.assessmentQuestion.create({
+    await this.prisma.pathAssessmentQuestion.create({
       data: {
         assessmentId: draft.id,
         key: nextKey(keys.map((row) => row.key)),
@@ -348,7 +323,7 @@ export class AdminAssessmentService {
       await this.requireLevel(pathId, dto.levelId);
     }
 
-    await this.prisma.assessmentQuestion.update({
+    await this.prisma.pathAssessmentQuestion.update({
       where: { id: questionId },
       data: {
         ...(dto.text === undefined ? {} : { text: dto.text }),
@@ -366,7 +341,7 @@ export class AdminAssessmentService {
     const draft = await this.requireDraft(pathId);
     await this.requireDraftQuestion(draft.id, questionId);
 
-    await this.prisma.assessmentQuestion.delete({ where: { id: questionId } });
+    await this.prisma.pathAssessmentQuestion.delete({ where: { id: questionId } });
 
     return this.load(draft.id);
   }
@@ -375,7 +350,7 @@ export class AdminAssessmentService {
   async reorder(pathId: string, dto: ReorderDraftDto): Promise<AdminAssessmentDraft> {
     const draft = await this.requireDraft(pathId);
 
-    const existing = await this.prisma.assessmentQuestion.findMany({
+    const existing = await this.prisma.pathAssessmentQuestion.findMany({
       where: { assessmentId: draft.id },
       select: { id: true },
     });
@@ -392,13 +367,16 @@ export class AdminAssessmentService {
 
     await this.prisma.$transaction(async (tx) => {
       for (const [index, id] of dto.questionIds.entries()) {
-        await tx.assessmentQuestion.update({
+        await tx.pathAssessmentQuestion.update({
           where: { id },
           data: { displayOrder: -(index + 1) },
         });
       }
       for (const [index, id] of dto.questionIds.entries()) {
-        await tx.assessmentQuestion.update({ where: { id }, data: { displayOrder: index + 1 } });
+        await tx.pathAssessmentQuestion.update({
+          where: { id },
+          data: { displayOrder: index + 1 },
+        });
       }
     });
 
@@ -412,7 +390,7 @@ export class AdminAssessmentService {
   ): Promise<AdminAssessmentDraft> {
     const draft = await this.requireDraft(pathId);
 
-    const option = await this.prisma.assessmentOption.findFirst({
+    const option = await this.prisma.pathAssessmentOption.findFirst({
       where: { id: optionId, question: { assessmentId: draft.id } },
       select: { id: true, questionId: true },
     });
@@ -428,13 +406,13 @@ export class AdminAssessmentService {
         /* Moving the tick is one action, not two. Making the client clear the
            old one first would leave the bank momentarily two-answered, and the
            readiness panel would flicker a blocker at them for it. */
-        await tx.assessmentOption.updateMany({
+        await tx.pathAssessmentOption.updateMany({
           where: { questionId: option.questionId },
           data: { isCorrect: false },
         });
       }
 
-      await tx.assessmentOption.update({
+      await tx.pathAssessmentOption.update({
         where: { id: optionId },
         data: {
           ...(dto.label === undefined ? {} : { label: dto.label }),
@@ -478,10 +456,10 @@ export class AdminAssessmentService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.assessmentBand.deleteMany({ where: { assessmentId: draft.id } });
+      await tx.pathAssessmentBand.deleteMany({ where: { assessmentId: draft.id } });
 
       if (dto.bands.length > 0) {
-        await tx.assessmentBand.createMany({
+        await tx.pathAssessmentBand.createMany({
           data: dto.bands.map((band) => ({
             assessmentId: draft.id,
             levelId: band.levelId,
@@ -658,7 +636,6 @@ export class AdminAssessmentService {
     };
   }
 
-<<<<<<< HEAD
   private async requirePath(pathId: string): Promise<{ name: string; levels: LevelRef[] }> {
     const path = await this.prisma.path.findUnique({
       where: { id: pathId },
@@ -690,13 +667,6 @@ export class AdminAssessmentService {
     const draft = await this.prisma.pathAssessment.findFirst({
       where: { pathId, status: 'DRAFT' },
       select: { id: true, version: true },
-=======
-  private async requireDraft() {
-    const draft = await this.prisma.assessment.findFirst({
-      /* `kind: 'RIASEC'` (TAM-147) — see `createDraft`'s comment. */
-      where: { status: 'DRAFT', kind: 'RIASEC' },
-      select: { id: true, key: true, version: true, title: true, description: true },
->>>>>>> origin/main
     });
 
     if (!draft) {
@@ -707,7 +677,7 @@ export class AdminAssessmentService {
   }
 
   private async requireDraftQuestion(assessmentId: string, questionId: string): Promise<void> {
-    const question = await this.prisma.assessmentQuestion.findFirst({
+    const question = await this.prisma.pathAssessmentQuestion.findFirst({
       where: { id: questionId, assessmentId },
       select: { id: true },
     });

@@ -95,6 +95,7 @@ describe('Certificate verification (e2e)', () => {
         name: 'مسار القيادة الإدارية',
         description: 'مسار اختبار.',
         displayOrder: 998,
+        riasecLetter: 'R',
         status: 'DRAFT',
       },
     });

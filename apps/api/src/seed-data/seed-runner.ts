@@ -143,6 +143,7 @@ async function seedCatalog(
       skillOutcomes: seedPath.skillOutcomes,
       typicalDurationMinutes: seedPath.typicalDurationMinutes,
       displayOrder: seedPath.displayOrder,
+      riasecLetter: seedPath.riasecLetter,
       status: seedPath.status,
     };
 
@@ -322,7 +323,7 @@ async function seedBank(
   for (const [index, question] of seed.questions.entries()) {
     const levelId = levelIdByName.get(question.levelName) ?? null;
 
-    const row = await prisma.assessmentQuestion.upsert({
+    const row = await prisma.pathAssessmentQuestion.upsert({
       where: { assessmentId_key: { assessmentId, key: question.key } },
       create: {
         assessmentId,
@@ -344,7 +345,7 @@ async function seedBank(
     });
 
     for (const [optionIndex, option] of question.options.entries()) {
-      await prisma.assessmentOption.upsert({
+      await prisma.pathAssessmentOption.upsert({
         where: { questionId_key: { questionId: row.id, key: option.key } },
         create: {
           questionId: row.id,
@@ -364,12 +365,12 @@ async function seedBank(
     /* An option dropped from the seed leaves the bank. Responses reference
        options with `Restrict`, so this refuses rather than silently deleting an
        answer somebody gave — which is D-035's rule working as intended. */
-    await prisma.assessmentOption.deleteMany({
+    await prisma.pathAssessmentOption.deleteMany({
       where: { questionId: row.id, key: { notIn: question.options.map((option) => option.key) } },
     });
   }
 
-  await prisma.assessmentQuestion.deleteMany({
+  await prisma.pathAssessmentQuestion.deleteMany({
     where: { assessmentId, key: { notIn: seed.questions.map((question) => question.key) } },
   });
 }

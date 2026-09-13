@@ -8,6 +8,7 @@ import type {
   MyPathView,
 } from '@tamkeen/types';
 
+import { AssessmentAssignmentResolutionService } from '../assessment-assignment/assessment-assignment-resolution.service';
 import { AuditAction } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { JourneyStateService } from '../journey/journey-state.service';

@@ -2,6 +2,7 @@ import type { AssessmentAssignmentResolutionService } from '../assessment-assign
 import { AuditAction } from '../audit/audit.actions';
 import type { AuditEntry, AuditService } from '../audit/audit.service';
 import type { JourneyStateService } from '../journey/journey-state.service';
+import type { LearnerPathService } from '../journey/learner-path.service';
 import type { LmsPort } from '../moodle/lms.port';
 import { LmsOperationError, LmsUnavailableError } from '../moodle/lms.types';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -110,10 +111,11 @@ function harness(options: {
   } as unknown as LmsPort;
 
   const journey = {} as unknown as JourneyStateService;
+  const learnerPaths = {} as unknown as LearnerPathService;
   const assignments = {} as unknown as AssessmentAssignmentResolutionService;
 
   return {
-    service: new EnrollmentService(prisma, journey, audit, assignments, lms),
+    service: new EnrollmentService(prisma, journey, learnerPaths, audit, assignments, lms),
     rows,
     audits,
     attempted,

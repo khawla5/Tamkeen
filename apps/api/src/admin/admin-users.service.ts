@@ -170,6 +170,33 @@ export class AdminUsersService {
 
     const levelByPath = new Map(user.placements.map((row) => [row.pathId, row.level]));
 
+    /* One row per instrument key, at its latest attempt — `allResults` is
+       already newest-first, so the first row seen per key is that latest
+       attempt, and the rest are only counted. */
+    const attemptsByKey = new Map<string, number>();
+    const assessments: AdminUserAssessmentSummary[] = [];
+
+    for (const result of allResults) {
+      const key = result.assessment.key;
+      attemptsByKey.set(key, (attemptsByKey.get(key) ?? 0) + 1);
+
+      if (attemptsByKey.get(key) === 1) {
+        assessments.push({
+          key,
+          kind: result.kind,
+          title: result.assessment.title,
+          result: result.kind === 'RIASEC' ? (result.code ?? '') : (result.cefrLevel ?? ''),
+          version: result.assessmentVersion,
+          completedAt: result.completedAt.toISOString(),
+          attempts: 1,
+        });
+      }
+    }
+
+    for (const summary of assessments) {
+      summary.attempts = attemptsByKey.get(summary.key) ?? summary.attempts;
+    }
+
     return {
       ...toRow(user),
       createdAt: user.createdAt.toISOString(),
@@ -190,6 +217,7 @@ export class AdminUsersService {
            screens. */
         coursesTotal: row.path._count.pathCourses,
       })),
+      assessments,
       certificateCount: user._count.certificates,
       activeSessions,
     };

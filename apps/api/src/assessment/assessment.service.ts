@@ -256,7 +256,7 @@ export class AssessmentService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
-        const result = await tx.assessmentResult.create({
+        const result = await tx.pathAssessmentResult.create({
           data: {
             userId,
             assessmentId: assessment.id,
@@ -267,7 +267,7 @@ export class AssessmentService {
           select: { id: true },
         });
 
-        await tx.assessmentResponse.createMany({
+        await tx.pathAssessmentResponse.createMany({
           data: dto.answers.map((answer) => ({
             resultId: result.id,
             questionId: answer.questionId,

@@ -124,10 +124,10 @@ describe('Admin path management (e2e)', () => {
          "frozen as taken" true (D-049), so the teardown has to unwind the
          attempt before the instrument that scored it. */
       await prisma.learnerPlacement.deleteMany({ where: { pathId } });
-      await prisma.assessmentResponse.deleteMany({
+      await prisma.pathAssessmentResponse.deleteMany({
         where: { result: { assessment: { pathId } } },
       });
-      await prisma.assessmentResult.deleteMany({ where: { assessment: { pathId } } });
+      await prisma.pathAssessmentResult.deleteMany({ where: { assessment: { pathId } } });
       await prisma.userPath.deleteMany({ where: { pathId } });
       await prisma.pathCourse.deleteMany({ where: { pathId } });
       await prisma.pathAssessment.deleteMany({ where: { pathId } });
@@ -573,7 +573,7 @@ describe('Admin path management (e2e)', () => {
       const path = await detail();
 
       for (const [index, level] of path.levels.entries()) {
-        const question = await prisma.assessmentQuestion.create({
+        const question = await prisma.pathAssessmentQuestion.create({
           data: {
             assessmentId: draft.id,
             key: `q${index + 1}`,
@@ -585,7 +585,7 @@ describe('Admin path management (e2e)', () => {
           select: { id: true },
         });
 
-        await prisma.assessmentOption.createMany({
+        await prisma.pathAssessmentOption.createMany({
           data: [
             { questionId: question.id, key: 'a', displayOrder: 1, label: 'صحيح', isCorrect: true },
             { questionId: question.id, key: 'b', displayOrder: 2, label: 'خطأ', isCorrect: false },

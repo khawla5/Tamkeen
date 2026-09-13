@@ -52,13 +52,9 @@ import { ADMIN_CONTROLLERS } from './admin.controllers';
     AdminUsersService,
     AdminEntitiesService,
     AdminAssessmentService,
-<<<<<<< HEAD
     AdminPathAssignmentsService,
     AdminLevelsService,
-=======
     AdminAssessmentAssignmentsService,
-    AdminEnglishService,
->>>>>>> origin/main
     AdminPathsService,
     AdminCoursesService,
     AdminSettingsService,

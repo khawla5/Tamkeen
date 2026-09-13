@@ -132,8 +132,10 @@ describe('Admin assessment management (e2e)', () => {
     /* Order matters: responses reference questions with Restrict, and results
        reference the assessment version with Restrict. */
     await prisma.learnerPlacement.deleteMany({ where: { pathId } });
-    await prisma.assessmentResponse.deleteMany({ where: { result: { assessment: { pathId } } } });
-    await prisma.assessmentResult.deleteMany({ where: { assessment: { pathId } } });
+    await prisma.pathAssessmentResponse.deleteMany({
+      where: { result: { assessment: { pathId } } },
+    });
+    await prisma.pathAssessmentResult.deleteMany({ where: { assessment: { pathId } } });
     await prisma.pathAssessment.deleteMany({ where: { pathId } });
     await prisma.userPath.deleteMany({ where: { pathId } });
     await prisma.level.deleteMany({ where: { pathId } });
@@ -220,6 +222,7 @@ describe('Admin assessment management (e2e)', () => {
         name: 'مسار اختبار التقييم',
         description: 'مسار أُنشئ لاختبار إدارة التقييم.',
         displayOrder: 990,
+        riasecLetter: 'R',
         status: 'DRAFT',
         levels: {
           create: [
@@ -306,7 +309,7 @@ describe('Admin assessment management (e2e)', () => {
     const maxScore = active.questions.reduce((total, row) => total + row.marks, 0);
     /* Every answer right, so the placement lands on the top rung — the case an
        off-by-one in the band table would break first. */
-    const result = await prisma.assessmentResult.create({
+    const result = await prisma.pathAssessmentResult.create({
       data: {
         userId,
         assessmentId: active.id,
@@ -317,7 +320,7 @@ describe('Admin assessment management (e2e)', () => {
       select: { id: true },
     });
 
-    await prisma.assessmentResponse.createMany({
+    await prisma.pathAssessmentResponse.createMany({
       data: active.questions.map((question) => ({
         resultId: result.id,
         questionId: question.id,
@@ -368,6 +371,7 @@ describe('Admin assessment management (e2e)', () => {
           name: 'مسار بلا تقييم',
           description: 'مسار أُنشئ لاختبار غياب التقييم.',
           displayOrder: 991,
+          riasecLetter: 'R',
           status: 'DRAFT',
         },
         select: { id: true },
@@ -411,7 +415,7 @@ describe('Admin assessment management (e2e)', () => {
          published row, which is the whole of what D-049 rests on. */
       const activeQuestionIds = new Set(
         (
-          await prisma.assessmentQuestion.findMany({
+          await prisma.pathAssessmentQuestion.findMany({
             where: { assessmentId: activeAssessmentId },
             select: { id: true },
           })
@@ -696,7 +700,7 @@ describe('Admin assessment management (e2e)', () => {
     });
 
     it('refuses an option belonging to a published version', async () => {
-      const published = await prisma.assessmentOption.findFirstOrThrow({
+      const published = await prisma.pathAssessmentOption.findFirstOrThrow({
         where: { question: { assessmentId: activeAssessmentId } },
         select: { id: true },
       });
@@ -786,7 +790,7 @@ describe('Admin assessment management (e2e)', () => {
     });
 
     it('leaves the existing placement exactly as it was taken', async () => {
-      const result = await prisma.assessmentResult.findUniqueOrThrow({
+      const result = await prisma.pathAssessmentResult.findUniqueOrThrow({
         where: { id: frozen.resultId },
         select: {
           assessmentId: true,
@@ -814,7 +818,7 @@ describe('Admin assessment management (e2e)', () => {
     });
 
     it('leaves the questions that placement answered still readable', async () => {
-      const responses = await prisma.assessmentResponse.findMany({
+      const responses = await prisma.pathAssessmentResponse.findMany({
         where: { resultId: frozen.resultId },
         select: { question: { select: { id: true, text: true } } },
       });
@@ -862,8 +866,10 @@ describe('Admin assessment management (e2e)', () => {
       await send('delete', route('/draft'), {}, sessionAdmin).expect(204);
 
       expect(await prisma.pathAssessment.count({ where: { id: draft.id } })).toBe(0);
-      expect(await prisma.assessmentQuestion.count({ where: { assessmentId: draft.id } })).toBe(0);
-      expect(await prisma.assessmentBand.count({ where: { assessmentId: draft.id } })).toBe(0);
+      expect(await prisma.pathAssessmentQuestion.count({ where: { assessmentId: draft.id } })).toBe(
+        0,
+      );
+      expect(await prisma.pathAssessmentBand.count({ where: { assessmentId: draft.id } })).toBe(0);
 
       const overview = (await get(route(), sessionAdmin).expect(200))
         .body as AdminAssessmentOverview;

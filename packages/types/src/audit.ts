@@ -279,6 +279,18 @@ export const AuditAction = {
   ADMIN_PATH_ASSIGNED: 'ADMIN_PATH_ASSIGNED',
   /** An assignment was revoked. Refusals (already started) audit too. */
   ADMIN_PATH_UNASSIGNED: 'ADMIN_PATH_UNASSIGNED',
+  /* TAM-147 — the ministry-wide instrument registry's own assignment
+     framework, separate from a path assignment above: which RIASEC/CEFR
+     instrument (or group of them) reaches everyone / a department / a
+     person, not which path. */
+  /** An instrument or group was assigned to everyone, a department or a
+   *  person. Target type `assessment_assignment` rather than `assessment`,
+   *  because the row named is the assignment rule, not the instrument. */
+  ADMIN_ASSESSMENT_ASSIGNED: 'ADMIN_ASSESSMENT_ASSIGNED',
+  /** An assignment was revoked. */
+  ADMIN_ASSESSMENT_UNASSIGNED: 'ADMIN_ASSESSMENT_UNASSIGNED',
+  /** A group's name or member list changed. */
+  ADMIN_ASSESSMENT_GROUP_CHANGED: 'ADMIN_ASSESSMENT_GROUP_CHANGED',
   /**
    * A product knob changed (§4C.6).
    *
@@ -497,6 +509,9 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ADMIN_USER_ROLE_CHANGED: 'administration',
   ADMIN_PATH_ASSIGNED: 'administration',
   ADMIN_PATH_UNASSIGNED: 'administration',
+  ADMIN_ASSESSMENT_ASSIGNED: 'content',
+  ADMIN_ASSESSMENT_UNASSIGNED: 'content',
+  ADMIN_ASSESSMENT_GROUP_CHANGED: 'content',
   ADMIN_ENTITY_CREATED: 'administration',
   ADMIN_ENTITY_UPDATED: 'administration',
   /* The entity editing its own §4B.6 record — the same subject as the two

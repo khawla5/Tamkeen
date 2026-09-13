@@ -66,7 +66,8 @@ function Ladder({ path }: { path: PathDetail }) {
      open, everything else starts collapsed, and either the heading or the
      circle can toggle a rung — two handles on the same state, not two. */
   const [openLevels, setOpenLevels] = useState(
-    () => new Set(path.levels.filter((level) => level.standing === 'PLACED').map((level) => level.id)),
+    () =>
+      new Set(path.levels.filter((level) => level.standing === 'PLACED').map((level) => level.id)),
   );
 
   function toggleLevel(levelId: string) {
@@ -321,7 +322,11 @@ function CourseCheckpoint({
         {/* What's inside: the course's own activities, in the LMS's order —
             a smaller checkpoint trail of its own, one size below the course
             circle, only real once the learner has actually started it. */}
-        <div id={panelId} hidden={!open} className="mt-2 rounded-lg border border-border bg-card p-3">
+        <div
+          id={panelId}
+          hidden={!open}
+          className="mt-2 rounded-lg border border-border bg-card p-3"
+        >
           {outline.isLoading ? (
             <p className="text-xs text-muted-foreground">{t('courseOutlineLoading')}</p>
           ) : outline.data && outline.data.items.length > 0 ? (
