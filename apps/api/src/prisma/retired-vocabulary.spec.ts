@@ -6,11 +6,19 @@ import { join } from 'node:path';
  * schema: the retired model is gone from the source, not merely unused.
  *
  * `schema.spec.ts` proves the columns went. This proves the vocabulary went
- * with them — because a surviving `riasecLetter` or `ADD_TO_PATH` is not dead
+ * with them — because a surviving `userPathCourse` or `ADD_TO_PATH` is not dead
  * weight, it is a concept the next person to read the file will implement
- * against. Both instruments, the recommendation model and the build flow were
- * one interlocking design, and a leftover fragment of it reads as the design
- * still being live.
+ * against. The old single-path build flow was one interlocking design, and a
+ * leftover fragment of it reads as the design still being live.
+ *
+ * **RIASEC, Holland, CEFR and instrument assignment are deliberately not on
+ * this list.** D-134's own brief retired them from *this branch's* path
+ * model, but `main`'s TAM-147 shipped a separate, still-live ministry-wide
+ * instrument framework in the meantime (assignable to everyone / a
+ * department / a person, independent of any path) — reconciling the two
+ * kept that framework rather than deleting a feature main still serves.
+ * Only this branch's own single-path build flow is what D-134 actually
+ * erased.
  *
  * **Comments are exempt, deliberately.** Several of them explain what was
  * removed and why, which is the most useful thing a comment can say about a
@@ -72,13 +80,6 @@ const FILES = ROOTS.flatMap(sources).filter(
 
 /** One entry per retired concept, named so a failure says which. */
 const RETIRED: Array<{ concept: string; pattern: RegExp }> = [
-  { concept: 'the RIASEC instrument (D-134)', pattern: /\briasec/i },
-  { concept: 'the Holland code (D-134)', pattern: /\bholland/i },
-  { concept: 'the English/CEFR instrument (D-123–D-126, retired by D-134)', pattern: /\bcefr\b/i },
-  {
-    concept: 'assessment assignment (D-132/D-133, retired by D-134)',
-    pattern: /assessmentAssignment/,
-  },
   { concept: 'the 5-10 build flow (D-134)', pattern: /userPathCourse|ADD_TO_PATH/ },
   { concept: '«عامة» courses (D-119, retired by D-134)', pattern: /isGeneral/ },
   {
