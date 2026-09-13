@@ -200,8 +200,8 @@ describe('Prisma schema', () => {
     });
   });
 
-  describe('AssessmentBand', () => {
-    const band = modelBody('AssessmentBand');
+  describe('PathAssessmentBand', () => {
+    const band = modelBody('PathAssessmentBand');
 
     it('maps a score range to a level of the same instrument', () => {
       expect(band).toMatch(/levelId\s+String/);
@@ -215,8 +215,8 @@ describe('Prisma schema', () => {
     });
   });
 
-  describe('AssessmentResult', () => {
-    const result = modelBody('AssessmentResult');
+  describe('PathAssessmentResult', () => {
+    const result = modelBody('PathAssessmentResult');
 
     it('stores the total and what was attainable', () => {
       /* maxScore travels with the result so a historical attempt can still be
@@ -234,8 +234,8 @@ describe('Prisma schema', () => {
     });
   });
 
-  describe('AssessmentResponse', () => {
-    const response = modelBody('AssessmentResponse');
+  describe('PathAssessmentResponse', () => {
+    const response = modelBody('PathAssessmentResponse');
 
     it('allows one answer per question per attempt', () => {
       expect(response).toMatch(/@@unique\(\[resultId, questionId\]\)/);
