@@ -1,14 +1,20 @@
 -- D-134 — paths gain ordered levels, courses are placed onto them, and the
 -- assessment that decides where a learner starts moves onto the path itself.
--- Rationale and the full delete list: docs/plan-levels-and-placement.md
+-- Rationale: docs/plan-levels-and-placement.md
 --
--- Data this migration deliberately discards, per that plan's decision 8: every
--- Holland result and the responses behind it. Nothing else is dropped that held
--- learner-visible facts — path memberships survive and land *unassigned*, which
--- is the honest state for a row whose level nobody has chosen yet.
-DELETE FROM "assessment_responses";
-DELETE FROM "assessment_results";
-
+-- Regenerated against the merge with `main`'s TAM-147 assessment framework
+-- (RIASEC + CEFR, admin-driven assignment): that framework's own tables
+-- (`assessments`, `assessment_option_weights`, `assessment_assignments`, the
+-- `english_assessment_*` bank) are untouched here — they are a live, separate
+-- feature, not something D-134 ever meant to remove. Only this path's own
+-- placement test moves, into its own `path_assessment_*` tables so the two
+-- systems never collide on a name.
+--
+-- What this still retires is the *old* single-path course model
+-- (`user_path_courses`, `PathMembershipStatus`, `UserPathCourseStatus`) — the
+-- one thing D-134 always replaced, now with `path_courses`/`levels`/
+-- `enrollments` under the ministry's multi-path model (D-130).
+--
 -- CreateEnum
 CREATE TYPE "PathStatus" AS ENUM ('DRAFT', 'PUBLISHED');
 
@@ -24,45 +30,6 @@ ALTER TABLE "user_paths" ALTER COLUMN "status" SET DEFAULT 'ACTIVE';
 COMMIT;
 
 -- DropForeignKey
-ALTER TABLE "assessment_assignments" DROP CONSTRAINT "assessment_assignments_assigned_by_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "assessment_assignments" DROP CONSTRAINT "assessment_assignments_user_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "assessment_option_weights" DROP CONSTRAINT "assessment_option_weights_option_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "assessment_questions" DROP CONSTRAINT "assessment_questions_assessment_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "assessment_results" DROP CONSTRAINT "assessment_results_assessment_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "english_assessment_bands" DROP CONSTRAINT "english_assessment_bands_assessment_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "english_assessment_options" DROP CONSTRAINT "english_assessment_options_question_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "english_assessment_questions" DROP CONSTRAINT "english_assessment_questions_assessment_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "english_assessment_responses" DROP CONSTRAINT "english_assessment_responses_option_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "english_assessment_responses" DROP CONSTRAINT "english_assessment_responses_question_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "english_assessment_responses" DROP CONSTRAINT "english_assessment_responses_result_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "english_assessment_results" DROP CONSTRAINT "english_assessment_results_assessment_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "english_assessment_results" DROP CONSTRAINT "english_assessment_results_user_id_fkey";
-
--- DropForeignKey
 ALTER TABLE "user_path_courses" DROP CONSTRAINT "user_path_courses_course_id_fkey";
 
 -- DropForeignKey
@@ -72,28 +39,13 @@ ALTER TABLE "user_path_courses" DROP CONSTRAINT "user_path_courses_user_path_id_
 DROP INDEX "path_courses_path_id_display_order_idx";
 
 -- DropIndex
-DROP INDEX "paths_riasec_letter_idx";
-
--- DropIndex
 DROP INDEX "user_paths_user_id_key";
 
 -- AlterTable
-ALTER TABLE "assessment_options" ADD COLUMN     "is_correct" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "assessment_groups" ALTER COLUMN "member_keys" DROP DEFAULT;
 
 -- AlterTable
-ALTER TABLE "assessment_questions" ADD COLUMN     "level_id" UUID,
-ADD COLUMN     "marks" INTEGER NOT NULL DEFAULT 1,
-ADD COLUMN     "topic" TEXT;
-
--- AlterTable
-ALTER TABLE "assessment_results" DROP COLUMN "code",
-DROP COLUMN "score_a",
-DROP COLUMN "score_c",
-DROP COLUMN "score_e",
-DROP COLUMN "score_i",
-DROP COLUMN "score_r",
-DROP COLUMN "score_s",
-ADD COLUMN     "total_score" INTEGER NOT NULL;
+ALTER TABLE "assessments" ALTER COLUMN "kind" SET DEFAULT 'RIASEC';
 
 -- AlterTable
 ALTER TABLE "courses" DROP COLUMN "is_general";
@@ -112,7 +64,6 @@ ADD COLUMN     "position" INTEGER;
 
 -- AlterTable
 ALTER TABLE "paths" DROP COLUMN "is_active",
-DROP COLUMN "riasec_letter",
 ADD COLUMN     "status" "PathStatus" NOT NULL DEFAULT 'DRAFT';
 
 -- AlterTable
@@ -123,49 +74,10 @@ ADD COLUMN     "completed_at" TIMESTAMP(3),
 ALTER COLUMN "status" SET DEFAULT 'ACTIVE';
 
 -- DropTable
-DROP TABLE "assessment_assignments";
-
--- DropTable
-DROP TABLE "assessment_option_weights";
-
--- DropTable
-DROP TABLE "assessments";
-
--- DropTable
-DROP TABLE "english_assessment_bands";
-
--- DropTable
-DROP TABLE "english_assessment_options";
-
--- DropTable
-DROP TABLE "english_assessment_questions";
-
--- DropTable
-DROP TABLE "english_assessment_responses";
-
--- DropTable
-DROP TABLE "english_assessment_results";
-
--- DropTable
-DROP TABLE "english_assessments";
-
--- DropTable
 DROP TABLE "user_path_courses";
 
 -- DropEnum
-DROP TYPE "AssessmentInstrument";
-
--- DropEnum
-DROP TYPE "CefrLevel";
-
--- DropEnum
-DROP TYPE "EnglishSkill";
-
--- DropEnum
 DROP TYPE "PathMembershipStatus";
-
--- DropEnum
-DROP TYPE "RiasecDimension";
 
 -- DropEnum
 DROP TYPE "UserPathCourseStatus";
@@ -187,14 +99,63 @@ CREATE TABLE "path_assessments" (
 );
 
 -- CreateTable
-CREATE TABLE "assessment_bands" (
+CREATE TABLE "path_assessment_questions" (
+    "id" UUID NOT NULL,
+    "assessment_id" UUID NOT NULL,
+    "key" TEXT NOT NULL,
+    "display_order" INTEGER NOT NULL,
+    "text" TEXT NOT NULL,
+    "marks" INTEGER NOT NULL DEFAULT 1,
+    "level_id" UUID,
+    "topic" TEXT,
+
+    CONSTRAINT "path_assessment_questions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "path_assessment_options" (
+    "id" UUID NOT NULL,
+    "question_id" UUID NOT NULL,
+    "key" TEXT NOT NULL,
+    "display_order" INTEGER NOT NULL,
+    "label" TEXT NOT NULL,
+    "is_correct" BOOLEAN NOT NULL DEFAULT false,
+
+    CONSTRAINT "path_assessment_options_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "path_assessment_bands" (
     "id" UUID NOT NULL,
     "assessment_id" UUID NOT NULL,
     "level_id" UUID NOT NULL,
     "min_score" INTEGER NOT NULL,
     "max_score" INTEGER NOT NULL,
 
-    CONSTRAINT "assessment_bands_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "path_assessment_bands_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "path_assessment_results" (
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "assessment_id" UUID NOT NULL,
+    "assessment_version" INTEGER NOT NULL,
+    "total_score" INTEGER NOT NULL,
+    "max_score" INTEGER NOT NULL,
+    "completed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "path_assessment_results_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "path_assessment_responses" (
+    "id" UUID NOT NULL,
+    "result_id" UUID NOT NULL,
+    "question_id" UUID NOT NULL,
+    "option_id" UUID NOT NULL,
+
+    CONSTRAINT "path_assessment_responses_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -242,10 +203,28 @@ CREATE INDEX "path_assessments_path_id_status_idx" ON "path_assessments"("path_i
 CREATE UNIQUE INDEX "path_assessments_path_id_version_key" ON "path_assessments"("path_id", "version");
 
 -- CreateIndex
-CREATE INDEX "assessment_bands_assessment_id_min_score_idx" ON "assessment_bands"("assessment_id", "min_score");
+CREATE INDEX "path_assessment_questions_assessment_id_display_order_idx" ON "path_assessment_questions"("assessment_id", "display_order");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "assessment_bands_assessment_id_level_id_key" ON "assessment_bands"("assessment_id", "level_id");
+CREATE UNIQUE INDEX "path_assessment_questions_assessment_id_key_key" ON "path_assessment_questions"("assessment_id", "key");
+
+-- CreateIndex
+CREATE INDEX "path_assessment_options_question_id_display_order_idx" ON "path_assessment_options"("question_id", "display_order");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "path_assessment_options_question_id_key_key" ON "path_assessment_options"("question_id", "key");
+
+-- CreateIndex
+CREATE INDEX "path_assessment_bands_assessment_id_min_score_idx" ON "path_assessment_bands"("assessment_id", "min_score");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "path_assessment_bands_assessment_id_level_id_key" ON "path_assessment_bands"("assessment_id", "level_id");
+
+-- CreateIndex
+CREATE INDEX "path_assessment_results_user_id_completed_at_idx" ON "path_assessment_results"("user_id", "completed_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "path_assessment_responses_result_id_question_id_key" ON "path_assessment_responses"("result_id", "question_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "levels_path_id_position_key" ON "levels"("path_id", "position");
@@ -284,19 +263,34 @@ CREATE UNIQUE INDEX "user_paths_user_id_path_id_key" ON "user_paths"("user_id", 
 ALTER TABLE "path_assessments" ADD CONSTRAINT "path_assessments_path_id_fkey" FOREIGN KEY ("path_id") REFERENCES "paths"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "assessment_questions" ADD CONSTRAINT "assessment_questions_assessment_id_fkey" FOREIGN KEY ("assessment_id") REFERENCES "path_assessments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "path_assessment_questions" ADD CONSTRAINT "path_assessment_questions_assessment_id_fkey" FOREIGN KEY ("assessment_id") REFERENCES "path_assessments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "assessment_questions" ADD CONSTRAINT "assessment_questions_level_id_fkey" FOREIGN KEY ("level_id") REFERENCES "levels"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "path_assessment_questions" ADD CONSTRAINT "path_assessment_questions_level_id_fkey" FOREIGN KEY ("level_id") REFERENCES "levels"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "assessment_bands" ADD CONSTRAINT "assessment_bands_assessment_id_fkey" FOREIGN KEY ("assessment_id") REFERENCES "path_assessments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "path_assessment_options" ADD CONSTRAINT "path_assessment_options_question_id_fkey" FOREIGN KEY ("question_id") REFERENCES "path_assessment_questions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "assessment_bands" ADD CONSTRAINT "assessment_bands_level_id_fkey" FOREIGN KEY ("level_id") REFERENCES "levels"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "path_assessment_bands" ADD CONSTRAINT "path_assessment_bands_assessment_id_fkey" FOREIGN KEY ("assessment_id") REFERENCES "path_assessments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "assessment_results" ADD CONSTRAINT "assessment_results_assessment_id_fkey" FOREIGN KEY ("assessment_id") REFERENCES "path_assessments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "path_assessment_bands" ADD CONSTRAINT "path_assessment_bands_level_id_fkey" FOREIGN KEY ("level_id") REFERENCES "levels"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "path_assessment_results" ADD CONSTRAINT "path_assessment_results_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "path_assessment_results" ADD CONSTRAINT "path_assessment_results_assessment_id_fkey" FOREIGN KEY ("assessment_id") REFERENCES "path_assessments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "path_assessment_responses" ADD CONSTRAINT "path_assessment_responses_result_id_fkey" FOREIGN KEY ("result_id") REFERENCES "path_assessment_results"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "path_assessment_responses" ADD CONSTRAINT "path_assessment_responses_question_id_fkey" FOREIGN KEY ("question_id") REFERENCES "path_assessment_questions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "path_assessment_responses" ADD CONSTRAINT "path_assessment_responses_option_id_fkey" FOREIGN KEY ("option_id") REFERENCES "path_assessment_options"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "levels" ADD CONSTRAINT "levels_path_id_fkey" FOREIGN KEY ("path_id") REFERENCES "paths"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -326,10 +320,11 @@ ALTER TABLE "learner_placements" ADD CONSTRAINT "learner_placements_learner_id_f
 ALTER TABLE "learner_placements" ADD CONSTRAINT "learner_placements_path_id_fkey" FOREIGN KEY ("path_id") REFERENCES "paths"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "learner_placements" ADD CONSTRAINT "learner_placements_result_id_fkey" FOREIGN KEY ("result_id") REFERENCES "assessment_results"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "learner_placements" ADD CONSTRAINT "learner_placements_result_id_fkey" FOREIGN KEY ("result_id") REFERENCES "path_assessment_results"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "learner_placements" ADD CONSTRAINT "learner_placements_level_id_fkey" FOREIGN KEY ("level_id") REFERENCES "levels"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Constraints Prisma's schema language cannot express.
@@ -355,8 +350,8 @@ ALTER TABLE "levels"
   CHECK ("position" >= 1);
 
 -- A band is an inclusive range that runs forwards and starts at zero or above.
-ALTER TABLE "assessment_bands"
-  ADD CONSTRAINT "assessment_bands_range_ordered"
+ALTER TABLE "path_assessment_bands"
+  ADD CONSTRAINT "path_assessment_bands_range_ordered"
   CHECK ("min_score" >= 0 AND "min_score" <= "max_score");
 
 -- At most one ACTIVE and one DRAFT version per path — which is how "one

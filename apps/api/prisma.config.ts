@@ -27,5 +27,6 @@ export default defineConfig({
      * variable instead of being cryptic.
      */
     url: process.env.DATABASE_URL ?? 'postgresql://DATABASE_URL-is-not-set',
+    shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL,
   },
 });
