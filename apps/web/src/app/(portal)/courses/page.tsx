@@ -319,7 +319,7 @@ function PathGroup({
         </p>
       </Link>
 
-      <CourseGrid courses={courses} statusByCourseId={statusByCourseId} titleAs="h3" />
+      <CourseGrid courses={courses} statusByCourseId={statusByCourseId} titleAs="h3" layout="list" />
     </section>
   );
 }
@@ -328,6 +328,7 @@ function CourseGrid({
   courses,
   statusByCourseId,
   titleAs,
+  layout = 'grid',
 }: {
   courses: CourseSummary[];
   statusByCourseId: Map<string, CourseChipStatus>;
@@ -335,15 +336,21 @@ function CourseGrid({
      grid has no heading above it and its cards stay h2. Levels follow the
      document, rather than a card deciding its own rank. */
   titleAs: 'h2' | 'h3';
+  /* 'list' for a path's own courses: a single stacked column under the
+     path's rectangle rather than a multi-column grid — the flat/ungrouped
+     views stay a grid, where there is no path card above them to read as a
+     list continuing from. */
+  layout?: 'grid' | 'list';
 }) {
   return (
-    <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <ul className={cn(layout === 'grid' ? 'grid gap-4 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col')}>
       {courses.map((course) => (
         <CourseCard
           key={course.id}
           course={course}
           status={statusByCourseId.get(course.id) ?? null}
           titleAs={titleAs}
+          layout={layout}
         />
       ))}
     </ul>
@@ -351,7 +358,10 @@ function CourseGrid({
 }
 
 /**
- * A catalogue card.
+ * A catalogue card — or, under a path's own rectangle, plain text in a list
+ * rather than another box: the path card already drew the boundary, and a
+ * box inside a box for every course under it would be a border repeated
+ * fifteen times over for no new information.
  *
  * Always a link to the course's own page — never a deep link into the player.
  * One predictable behaviour: the chip informs, the detail page acts (§4.7 owns
@@ -361,10 +371,12 @@ function CourseCard({
   course,
   status,
   titleAs: Title,
+  layout,
 }: {
   course: CourseSummary;
   status: CourseChipStatus | null;
   titleAs: 'h2' | 'h3';
+  layout: 'grid' | 'list';
 }) {
   const t = useTranslations('courses');
   const format = useFormat();
@@ -377,9 +389,10 @@ function CourseCard({
       <Link
         href={`/courses/${course.id}`}
         className={cn(
-          cardVariants(),
-          'flex h-full flex-col gap-2 p-5 transition-colors hover:border-primary-600',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2',
+          'flex flex-col gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2',
+          layout === 'grid'
+            ? cn(cardVariants(), 'h-full p-5 hover:border-primary-600')
+            : 'border-b border-border py-3 first:pt-0 last:border-0 hover:text-primary-700',
         )}
       >
         <Title className="font-semibold text-foreground">{course.title}</Title>
