@@ -243,7 +243,7 @@ describe('Admin audit and reports (e2e)', () => {
       /* A filter offering only what has happened would silently lose options as
          old entries are retained away. */
       expect(page.actions).toEqual(
-        expect.arrayContaining(['CERTIFICATE_ISSUED', 'PATH_CONFIRMED']),
+        expect.arrayContaining(['CERTIFICATE_ISSUED', 'LEARNER_PLACED']),
       );
     });
 
@@ -287,7 +287,7 @@ describe('Admin audit and reports (e2e)', () => {
 
       expect(reports).toHaveProperty('journey');
       expect(reports).toHaveProperty('pathPopularity');
-      expect(reports).toHaveProperty('codeDistribution');
+      expect(reports).toHaveProperty('placementDistribution');
       expect(reports).toHaveProperty('certificates');
       expect(reports).toHaveProperty('courseOutcomes');
     });
@@ -300,12 +300,27 @@ describe('Admin audit and reports (e2e)', () => {
       expect([...rates].sort((a, b) => a - b)).toEqual(rates);
     });
 
-    it('sorts paths by how many chose them', async () => {
+    it('sorts paths by how many the ministry assigned them to', async () => {
       const reports = (await get('/api/admin/reports', sessionAdmin).expect(200))
         .body as AdminReports;
 
-      const chosen = reports.pathPopularity.map((row) => row.chosen);
-      expect([...chosen].sort((a, b) => b - a)).toEqual(chosen);
+      const assigned = reports.pathPopularity.map((row) => row.assigned);
+      expect([...assigned].sort((a, b) => b - a)).toEqual(assigned);
+    });
+
+    it('reports where people stand, by path then rung', async () => {
+      /* D-134 replaced the Holland-code distribution: a code said what somebody
+         was drawn to, a placement says what they can already do. */
+      const reports = (await get('/api/admin/reports', sessionAdmin).expect(200))
+        .body as AdminReports;
+
+      expect(Array.isArray(reports.placementDistribution)).toBe(true);
+
+      for (const row of reports.placementDistribution) {
+        expect(row).toHaveProperty('pathName');
+        expect(row).toHaveProperty('levelName');
+        expect(row.employees).toBeGreaterThan(0);
+      }
     });
   });
 
@@ -325,9 +340,9 @@ describe('Admin audit and reports (e2e)', () => {
       expect(view).toHaveProperty('topCourses');
       expect(view).toHaveProperty('topPaths');
       expect(view.trend).toHaveLength(12);
-      expect(view.letterDistribution).toHaveLength(6);
-      /* Null until TAM-148 ships: "not enabled" is not "nobody took it". */
-      expect(view.cefr).toBeNull();
+      /* Empty when nobody was placed in the period — a real finding about the
+         quarter, not a gap in the data (D-134). */
+      expect(Array.isArray(view.placements)).toBe(true);
     });
 
     it('compares against the same window shifted, ending just before it', async () => {

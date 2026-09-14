@@ -11,7 +11,8 @@ import { EnrollmentService } from './enrollment.service';
   imports: [PrismaModule, AuditModule, JourneyModule, AssessmentAssignmentModule],
   controllers: [EnrollmentController, DashboardController],
   providers: [EnrollmentService],
-  /* Exported so the sync scheduler can drive enrolment reconciliation (D-036). */
+  /* Exported so the sync scheduler can drive enrolment reconciliation (D-036),
+     and so the assessment can enrol a learner the moment it places them. */
   exports: [EnrollmentService],
 })
 export class EnrollmentModule {}

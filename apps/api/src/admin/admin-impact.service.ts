@@ -1,13 +1,12 @@
 import { Injectable } from '@nestjs/common';
 
-import {
-  RIASEC_LETTERS,
-  type AdminImpactCourseRow,
-  type AdminImpactDepartmentRow,
-  type AdminImpactLetterShare,
-  type AdminImpactPathRow,
-  type AdminImpactTrendPoint,
-  type AdminImpactView,
+import type {
+  AdminImpactCourseRow,
+  AdminImpactDepartmentRow,
+  AdminImpactPathRow,
+  AdminImpactPlacementShare,
+  AdminImpactTrendPoint,
+  AdminImpactView,
 } from '@tamkeen/types';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -66,7 +65,7 @@ export class AdminImpactService {
       previousLearning,
       trend,
       topPaths,
-      letterDistribution,
+      placements,
       rate,
       previousRate,
     ] = await Promise.all([
@@ -77,7 +76,7 @@ export class AdminImpactService {
       this.learningTotals(previous, department),
       this.trend(period, department),
       this.topPaths(period, department),
-      this.letterDistribution(period, department),
+      this.placementShare(period, department),
       this.participationRate(period.to, department),
       this.participationRate(previous.to, department),
     ]);
@@ -115,12 +114,7 @@ export class AdminImpactService {
       trend,
       topCourses: learning.topCourses,
       topPaths,
-      letterDistribution,
-      /* TAM-148 has not shipped, so there is no level to report. Null rather
-         than an empty distribution: the screen must be able to say "the level
-         test is not enabled yet" instead of "nobody has taken it", which are
-         different findings that would otherwise render identically. */
-      cefr: null,
+      placements,
     };
   }
 
@@ -144,15 +138,19 @@ export class AdminImpactService {
         where: { ...employee, emailVerifiedAt: { not: null }, createdAt: within },
         select: { department: true },
       }),
+      /* Placed in the period: the assessment ran and put them on a rung. That
+         is the moment training actually starts for somebody, which is what this
+         column is asking about. */
       this.prisma.user.findMany({
-        where: { ...employee, assessmentResults: { some: { completedAt: within } } },
+        where: { ...employee, placements: { some: { placedAt: within } } },
         select: { department: true },
       }),
-      /* `confirmed_at` is written only by the commitment gate (§2), so its
-         presence *is* the confirmation — no status check is needed, and one
-         that read `status: ACTIVE` would drop everyone who has since finished. */
+      /* Assigned in the period. `assigned_at` is written only by an
+         administrator's decision (D-130), so its presence *is* the assignment —
+         no status check is needed, and one that read `status: ACTIVE` would drop
+         everyone who has since finished. */
       this.prisma.user.findMany({
-        where: { ...employee, userPath: { confirmedAt: within } },
+        where: { ...employee, userPaths: { some: { assignedAt: within } } },
         select: { department: true },
       }),
       /* "Active" is evidence of work, from either side of the sync: a course
@@ -165,11 +163,10 @@ export class AdminImpactService {
           ...employee,
           OR: [
             { completions: { some: { completedAt: within } } },
-            {
-              userPath: {
-                courses: { some: { OR: [{ startedAt: within }, { completedAt: within }] } },
-              },
-            },
+            /* Or enrolled in the period: with no per-learner course rows left
+               (D-134), the enrolment is what records that somebody was put in
+               front of a course at all. */
+            { enrollments: { some: { enrolledAt: within } } },
           ],
         },
         select: { department: true },
@@ -180,11 +177,11 @@ export class AdminImpactService {
   }
 
   /**
-   * The share of accounts that have committed to a path, as of an instant.
+   * The share of accounts the ministry has put on a path, as of an instant.
    *
-   * **Cumulative, not per-period, and the tile says so.** A rate of "confirmed
+   * **Cumulative, not per-period, and the tile says so.** A rate of "assigned
    * this quarter" over "registered this quarter" can exceed one hundred per
-   * cent — someone who registered last year and committed this one is in the
+   * cent — someone who registered last year and was assigned this one is in the
    * numerator and not the denominator — so it would not be a rate at all.
    *
    * The denominator is *accounts*, not the ministry's headcount, which this
@@ -203,7 +200,7 @@ export class AdminImpactService {
         where: { ...employee, emailVerifiedAt: { not: null }, createdAt: { lte: asOf } },
       }),
       this.prisma.user.count({
-        where: { ...employee, userPath: { confirmedAt: { lte: asOf } } },
+        where: { ...employee, userPaths: { some: { assignedAt: { lte: asOf } } } },
       }),
     ]);
 
@@ -335,7 +332,7 @@ export class AdminImpactService {
 
     const paths = await this.prisma.path.findMany({
       where: { id: { in: pathIds } },
-      select: { id: true, name: true, riasecLetter: true },
+      select: { id: true, name: true },
     });
 
     const byId = new Map(paths.map((path) => [path.id, path]));
@@ -348,7 +345,6 @@ export class AdminImpactService {
               {
                 pathId: path.id,
                 name: path.name,
-                riasecLetter: path.riasecLetter,
                 completions: row._count._all,
               },
             ]
@@ -415,39 +411,63 @@ export class AdminImpactService {
    * All six letters always, including the ones nobody scored: a zero is a
    * finding, and a row that disappears cannot be compared against anything.
    */
-  private async letterDistribution(
+
+  /**
+   * Where the assessments placed people *in the period*.
+   *
+   * A fact about the period, like every other figure on this tab: how many
+   * people were placed, and on which rungs. It replaces the career-type share,
+   * which described inclination rather than capability.
+   *
+   * Empty when nobody was placed, which is a real finding rather than a gap —
+   * a quarter in which no directorate sat an assessment is exactly what
+   * management needs to see.
+   */
+  private async placementShare(
     range: ImpactRange,
     department: string | null,
-  ): Promise<AdminImpactLetterShare[]> {
-    const newest = await this.prisma.assessmentResult.findMany({
-      /* `kind: 'RIASEC'` (TAM-147): this table now also carries CEFR rows,
-         whose `code` is null. Without the filter, a person's *newest* result
-         within the period could be a CEFR attempt and `code` would be null
-         here — the letter distribution is a Holland reading specifically, so
-         it reads Holland rows specifically. */
-      where: { kind: 'RIASEC', completedAt: between(range), user: this.employeeWhere(department) },
-      distinct: ['userId'],
-      orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
-      select: { code: true },
+  ): Promise<AdminImpactPlacementShare[]> {
+    const placements = await this.prisma.learnerPlacement.groupBy({
+      by: ['pathId', 'levelId'],
+      where: { placedAt: between(range), learner: this.employeeWhere(department) },
+      _count: { _all: true },
     });
 
-    const employees = new Map<string, number>();
-    for (const row of newest) {
-      /* The code's first letter IS the dominant dimension: it is derived by
-         ranking with ties already broken canonically (D-031), so reading it
-         here cannot disagree with the profile the employee was shown. */
-      const letter = row.code!.charAt(0);
-      employees.set(letter, (employees.get(letter) ?? 0) + 1);
+    if (placements.length === 0) {
+      return [];
     }
 
-    return RIASEC_LETTERS.map((letter) => ({
-      letter,
-      employees: employees.get(letter) ?? 0,
-    })).sort(
-      (a, b) =>
-        b.employees - a.employees ||
-        RIASEC_LETTERS.indexOf(a.letter) - RIASEC_LETTERS.indexOf(b.letter),
-    );
+    const levels = await this.prisma.level.findMany({
+      where: { id: { in: placements.map((row) => row.levelId) } },
+      select: {
+        id: true,
+        name: true,
+        position: true,
+        path: { select: { id: true, name: true, displayOrder: true } },
+      },
+    });
+
+    const byId = new Map(levels.map((level) => [level.id, level]));
+
+    return placements
+      .flatMap((row) => {
+        const level = byId.get(row.levelId);
+        if (!level) return [];
+
+        return [
+          {
+            pathId: level.path.id,
+            pathName: level.path.name,
+            levelId: level.id,
+            levelName: level.name,
+            position: level.position,
+            employees: row._count._all,
+            order: level.path.displayOrder,
+          },
+        ];
+      })
+      .sort((a, b) => a.order - b.order || a.position - b.position)
+      .map(({ order: _order, ...rest }) => rest);
   }
 
   /**

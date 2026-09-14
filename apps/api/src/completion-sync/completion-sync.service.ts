@@ -8,6 +8,7 @@ import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import type { LmsCourseProgress } from '../moodle/lms.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../config/app-config.module';
+import { EnrollmentService } from '../enrollment/enrollment.service';
 import { evaluateCompletion, isGradedButNotComplete } from './pass-threshold';
 
 export interface CompletionSyncResult {
@@ -49,14 +50,19 @@ export class CompletionSyncService {
     private readonly config: AppConfigService,
     private readonly email: EmailService,
     private readonly certificates: CertificateIssuanceService,
+    private readonly enrollment: EnrollmentService,
     @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
 
   async sync(): Promise<CompletionSyncResult> {
+    /* Anyone the ministry has assigned a path and who has an LMS account. A
+       learner not yet placed has nothing to sync, but the read is cheap and the
+       alternative — joining through placements — would silently stop syncing
+       somebody whose placement an administrator later corrects. */
     const learners = await this.prisma.user.findMany({
       where: {
         moodleUserId: { not: null },
-        userPath: { confirmedAt: { not: null } },
+        userPaths: { some: {} },
       },
       select: { id: true, email: true, moodleUserId: true },
     });
@@ -188,13 +194,15 @@ export class CompletionSyncService {
       if (passedNow) newlyPassed += 1;
     }
 
-    const path = await this.refreshPathStatus(learner.id);
+    /* Every assigned path is re-checked, not just one: a course can be placed
+       in two of them, so one pass may finish both. */
+    const finished = await this.refreshPathStatuses(learner.id);
 
-    if (path.completed) {
-      await this.onPathCompleted(learner, path.pathId);
+    for (const pathId of finished) {
+      await this.onPathCompleted(learner, pathId);
     }
 
-    return { completions, newlyPassed, pathCompleted: path.completed };
+    return { completions, newlyPassed, pathCompleted: finished.length > 0 };
   }
 
   /**
@@ -251,8 +259,6 @@ export class CompletionSyncService {
       },
     });
 
-    await this.mirrorOntoChosenCourses(learner.id, entry.lmsCourseId, verdict);
-
     const newlyPassed = verdict.passed && existing?.passed !== true;
 
     if (newlyPassed) {
@@ -263,109 +269,38 @@ export class CompletionSyncService {
   }
 
   /**
-   * Reflects a completion onto whichever of the learner's chosen courses it
-   * belongs to.
-   *
-   * Matched through `moodle_course_id`, which is what makes shared-course reuse
-   * work (D-003): one completion satisfies the course by whatever route the
-   * learner reached it, and nothing is ever re-taken.
-   */
-  private async mirrorOntoChosenCourses(
-    userId: string,
-    moodleCourseId: number,
-    verdict: { completed: boolean; completedAt: Date | null; gradePercent: number | null },
-  ): Promise<void> {
-    const chosen = await this.prisma.userPathCourse.findMany({
-      where: { userPath: { userId }, course: { moodleCourseId } },
-      select: { id: true, status: true },
-    });
-
-    for (const row of chosen) {
-      const status = verdict.completed
-        ? 'COMPLETED'
-        : verdict.gradePercent !== null
-          ? 'IN_PROGRESS'
-          : row.status;
-
-      await this.prisma.userPathCourse.update({
-        where: { id: row.id },
-        data: {
-          status,
-          gradePercent: verdict.gradePercent,
-          completedAt: verdict.completedAt,
-          /* Set once, on first evidence of activity, and never moved backwards. */
-          ...(row.status === 'NOT_STARTED' && status !== 'NOT_STARTED'
-            ? { startedAt: new Date() }
-            : {}),
-        },
-      });
-    }
-  }
-
-  /**
-   * Marks the path finished once every chosen course has been **passed**.
+   * Marks each assigned path finished once every course it **owes** the learner
+   * has been passed. Returns the paths this run finished.
    *
    * **Passed, not merely completed** — and the distinction is the whole point.
-   * `UserPathCourse.status` becomes `COMPLETED` from the LMS's completion
-   * signal alone, so a learner who finishes a course in Moodle and scores below
-   * the product threshold is completed-but-not-passed, which Phase 2 records
-   * correctly (D-042 §4). Reading the status here would have finished a path
-   * nobody passed, and then certified it — §4.9 is explicit that the path
-   * certificate unlocks on "complete **and** passed".
+   * The LMS's completion signal arrives on its own, so a learner who finishes a
+   * course in Moodle and scores below the product threshold is
+   * completed-but-not-passed, which Phase 2 records correctly (D-042 §4).
+   * Treating completion as sufficient here would finish a path nobody passed,
+   * and then certify it — §4.9 is explicit that the path certificate unlocks on
+   * "complete **and** passed".
    *
-   * `completions.passed` is our verdict against the threshold (D-007) and
-   * already requires the completion signal, so it is the whole test.
-   *
-   * Returns whether this run is the one that finished it.
+   * **Owes** is the D-134 rule: the courses at or above the rung the assessment
+   * placed them on. A course below it is ground the placement says they had
+   * already covered, so requiring it would make a path uncompletable for exactly
+   * the people judged most capable. `EnrollmentService.refreshPathCompletion`
+   * owns that derivation, so this and My Path cannot disagree about it.
    */
-  private async refreshPathStatus(userId: string): Promise<{ completed: boolean; pathId: string }> {
-    const userPath = await this.prisma.userPath.findUnique({
-      where: { userId },
-      select: {
-        id: true,
-        pathId: true,
-        status: true,
-        confirmedAt: true,
-        courses: { select: { course: { select: { moodleCourseId: true } } } },
-      },
+  private async refreshPathStatuses(userId: string): Promise<string[]> {
+    const assigned = await this.prisma.userPath.findMany({
+      where: { userId, status: 'ACTIVE' },
+      select: { pathId: true },
     });
 
-    if (!userPath || userPath.confirmedAt === null || userPath.status === 'COMPLETED') {
-      return { completed: false, pathId: userPath?.pathId ?? '' };
+    const finished: string[] = [];
+
+    for (const row of assigned) {
+      if (await this.enrollment.refreshPathCompletion(userId, row.pathId)) {
+        finished.push(row.pathId);
+      }
     }
 
-    const moodleCourseIds = userPath.courses.map((chosen) => chosen.course.moodleCourseId);
-
-    /* An empty path must never read as finished. The 5-10 rule makes it
-       unreachable, which is why ruling it out costs nothing. */
-    if (moodleCourseIds.length === 0) {
-      return { completed: false, pathId: userPath.pathId };
-    }
-
-    const passedCount = await this.prisma.completion.count({
-      where: { userId, moodleCourseId: { in: moodleCourseIds }, passed: true },
-    });
-
-    if (passedCount !== moodleCourseIds.length) {
-      return { completed: false, pathId: userPath.pathId };
-    }
-
-    await this.prisma.userPath.update({
-      where: { id: userPath.id },
-      data: { status: 'COMPLETED' },
-    });
-
-    await this.audit.record({
-      action: AuditAction.PATH_COMPLETED,
-      outcome: 'SUCCESS',
-      actorUserId: userId,
-      ipAddress: null,
-      targetType: 'user_path',
-      targetId: userPath.id,
-      detail: { courses: moodleCourseIds.length },
-    });
-
-    return { completed: true, pathId: userPath.pathId };
+    return finished;
   }
 
   /**

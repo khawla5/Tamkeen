@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuditModule } from '../audit/audit.module';
+import { JourneyModule } from '../journey/journey.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CertificateIssuanceService } from './certificate-issuance.service';
 import { CertificateStorageService } from './certificate-storage.service';
@@ -17,7 +18,7 @@ import { PdfRendererService } from './pdf-renderer.service';
  * fonts, one place where the Arabic-shaping problem is solved.
  */
 @Module({
-  imports: [PrismaModule, AuditModule],
+  imports: [PrismaModule, AuditModule, JourneyModule],
   controllers: [CertificatesController],
   providers: [
     CertificateIssuanceService,

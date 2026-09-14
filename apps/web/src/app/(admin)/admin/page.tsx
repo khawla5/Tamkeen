@@ -7,7 +7,6 @@ import type { AdminDashboardView } from '@tamkeen/types';
 
 import { AdminPage } from '@/components/layout/admin-page';
 import { DataView } from '@/components/states';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { adminApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
@@ -64,8 +63,8 @@ function DashboardBody({ data }: { data: AdminDashboardView }) {
       <section aria-labelledby="admin-journey">
         <SectionHeading id="admin-journey">{t('sectionJourney')}</SectionHeading>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label={t('statAssessed')} value={format.number(data.journey.assessed)} />
-          <Stat label={t('statActivePaths')} value={format.number(data.journey.active)} />
+          <Stat label={t('statAssigned')} value={format.number(data.journey.assigned)} />
+          <Stat label={t('statPlaced')} value={format.number(data.journey.placed)} />
           <Stat
             label={t('statPathCompletion')}
             /* An em dash, not 0%: a rate over an empty denominator is undefined,
@@ -86,16 +85,18 @@ function DashboardBody({ data }: { data: AdminDashboardView }) {
       <section aria-labelledby="admin-catalogue">
         <SectionHeading id="admin-catalogue">{t('sectionCatalogue')}</SectionHeading>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label={t('statPathsActive')} value={format.number(data.paths.active)} />
+          <Stat label={t('statPathsActive')} value={format.number(data.paths.published)} />
           <Stat label={t('statCoursesPublished')} value={format.number(data.courses.published)} />
           <Stat label={t('statCoursesDraft')} value={format.number(data.courses.draft)} />
-          {/* Courses no entity supplies (D-063). §4C.5 makes them the admin's,
-              and they are invisible from every entity portal by construction. */}
-          <Stat label={t('statCoursesUnowned')} value={format.number(data.courses.unowned)} />
+          {/* In a path, on no rung (D-134): content an entity has offered and
+              nobody has placed, so no learner can reach it. The one catalogue
+              number that names work waiting on the administrator. */}
+          <Stat label={t('statCoursesUnassigned')} value={format.number(data.courses.unassigned)} />
         </div>
       </section>
 
-      <LetterDistribution rows={data.letterDistribution} />
+      <PathsWithoutAssessment rows={data.pathsWithoutAssessment} />
+      <PathDistribution rows={data.pathDistribution} />
       <RecentActivity rows={data.recentActivity} />
     </div>
   );
@@ -145,89 +146,85 @@ function IntegrationHealth({ data }: { data: AdminDashboardView }) {
           <Detail label={t('lastCatalogSync')} value={stamp(data.lms.lastCatalogSyncAt)} />
           <Detail label={t('lastCompletionSync')} value={stamp(data.lms.lastCompletionSyncAt)} />
         </dl>
-
-        {data.assessment ? (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-            <p className="text-sm text-muted-foreground">
-              {t('assessmentVersion', {
-                version: format.number(data.assessment.version),
-                date: format.date(new Date(data.assessment.effectiveFrom)),
-              })}
-            </p>
-
-            {/*
-              The unfinished edit, finally shown. The server has reported
-              `hasDraft` since §4C.1 was built — "the one thing on this page
-              waiting on the administrator personally" — and nothing rendered
-              it, so a half-finished assessment could sit unpublished with no
-              trace of it anywhere an administrator looks first. It appears only
-              when there IS a draft, so it costs nothing on the ordinary day.
-            */}
-            {data.assessment.hasDraft ? (
-              <span className="flex flex-wrap items-center gap-3">
-                <span className="text-sm text-foreground">{t('assessmentDraftPending')}</span>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/admin/assessment">{t('assessmentDraftAction')}</Link>
-                </Button>
-              </span>
-            ) : null}
-          </div>
-        ) : null}
       </Card>
     </section>
   );
 }
 
 /**
- * §4C.1 — where the ministry's people are, against what is offered them.
+ * Paths nobody assigned to them can start (§4C.1, D-134).
  *
- * **This used to be a list of Holland Codes, and it said nothing.** «SIA» is
- * three Latin letters in an RTL page, one of thirty-odd values, and no
- * administrator has ever had a decision that turned on it — §4C.8's reports
- * already keep that breakdown for the analyst who wants it, so the dashboard
- * copy bought nothing either. The bars were painted in a token D-069 retired,
- * so they rendered with no fill at all: the chart was invisible as well.
- *
- * What replaces it is the same population read by its *dominant* letter — six
- * values, each with the Arabic name the ministry already uses — set beside the
- * number of paths offered for that letter. The pairing is the point: a type
- * many employees lead with and no path serves is a gap in the catalogue, and
- * this is the only screen where both halves of that comparison exist.
+ * The one genuinely stuck thing this page can show, and the reason it sits above
+ * the distribution rather than inside it: a path with no published assessment
+ * strands every learner on it at «بانتظار تحديد المستوى», and assignment happens
+ * on another screen — so by the time somebody notices, a directorate has been
+ * put on a path that goes nowhere.
  */
-function LetterDistribution({ rows }: { rows: AdminDashboardView['letterDistribution'] }) {
+function PathsWithoutAssessment({ rows }: { rows: AdminDashboardView['pathsWithoutAssessment'] }) {
+  const t = useTranslations('admin');
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <section aria-labelledby="admin-stuck-paths">
+      <SectionHeading id="admin-stuck-paths">{t('sectionStuckPaths')}</SectionHeading>
+
+      <Card edge="warning" className="p-5">
+        <p className="text-sm text-muted-foreground">{t('stuckPathsHint')}</p>
+        <ul className="mt-3 flex flex-col gap-2">
+          {rows.map((row) => (
+            <li key={row.id}>
+              <Link
+                href={`/admin/assessment/${row.id}`}
+                className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
+              >
+                {row.name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </section>
+  );
+}
+
+/**
+ * Where the ministry has put its people, and how far each group got (D-134).
+ *
+ * It replaces the career-type distribution, which answered "where are our
+ * people's interests" — a question the ministry stopped asking when it started
+ * assigning paths. A path with many assigned and few placed is the finding, and
+ * it is actionable from this screen.
+ */
+function PathDistribution({ rows }: { rows: AdminDashboardView['pathDistribution'] }) {
   const t = useTranslations('admin');
   const format = useFormat();
 
-  const assessed = rows.reduce((sum, row) => sum + row.employees, 0);
-  /* Bars scale against the largest share rather than the total: six types
-     rarely split evenly, and against the total the smaller ones would all be
-     slivers of much the same indistinguishable width. */
-  const largest = rows.reduce((max, row) => Math.max(max, row.employees), 0);
+  const assigned = rows.reduce((sum, row) => sum + row.assigned, 0);
+  /* Bars scale against the largest share rather than the total: paths rarely
+     split evenly, and against the total the smaller ones would all be slivers of
+     much the same indistinguishable width. */
+  const largest = rows.reduce((max, row) => Math.max(max, row.assigned), 0);
 
   return (
-    <section aria-labelledby="admin-codes">
-      <SectionHeading id="admin-codes">{t('sectionCodes')}</SectionHeading>
+    <section aria-labelledby="admin-paths-distribution">
+      <SectionHeading id="admin-paths-distribution">{t('sectionPathShare')}</SectionHeading>
 
-      {assessed === 0 ? (
-        <Card className="p-6 text-sm text-muted-foreground">{t('codesEmpty')}</Card>
+      {assigned === 0 ? (
+        <Card className="p-6 text-sm text-muted-foreground">{t('pathShareEmpty')}</Card>
       ) : (
         <Card className="p-5">
-          {/* Says what the section counts, because a bare "توزيع" left the
-              administrator guessing whether it meant people, paths or results. */}
-          <p className="mb-4 text-sm text-muted-foreground">{t('sectionCodesHint')}</p>
+          <p className="mb-4 text-sm text-muted-foreground">{t('sectionPathShareHint')}</p>
 
           <ul className="space-y-4">
             {rows.map((row) => (
-              <li key={row.letter} className="grid gap-1">
+              <li key={row.pathId} className="grid gap-1">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium text-foreground">
-                    {t(`riasec.${row.letter}`)}
-                  </span>
+                  <span className="text-sm font-medium text-foreground">{row.name}</span>
                   <span className="text-sm text-muted-foreground">
-                    {/* The count and its share: a bar is a comparison, and an
-                        administrator reporting upward needs the number. */}
-                    {t('codesColumnEmployees', { count: format.number(row.employees) })} ·{' '}
-                    {format.percent(Math.round((row.employees / assessed) * 100))}
+                    {t('pathShareAssigned', { count: format.number(row.assigned) })}
                   </span>
                 </div>
 
@@ -239,28 +236,28 @@ function LetterDistribution({ rows }: { rows: AdminDashboardView['letterDistribu
                     <span
                       className="block h-full rounded-full bg-primary"
                       style={{
-                        width: largest === 0 ? '0%' : `${(row.employees / largest) * 100}%`,
+                        width: largest === 0 ? '0%' : `${(row.assigned / largest) * 100}%`,
                       }}
                     />
                   </span>
 
                   {/*
-                    The other half of the comparison. A type with no path offered
-                    for it is the finding this section exists to surface, so it
-                    is said in words rather than left as a "0" to be noticed —
-                    and the warning colour is paired with that wording, never
-                    carrying the meaning alone (WCAG 1.4.1).
+                    The other half of the comparison. A path everybody was
+                    assigned and nobody was placed on is the finding this section
+                    exists to surface, so it is said in words rather than left as
+                    a "0" to be noticed — and the warning colour is paired with
+                    that wording, never carrying the meaning alone (WCAG 1.4.1).
                   */}
                   <span
                     className={
-                      row.activePaths === 0
+                      row.assigned > 0 && row.placed === 0
                         ? 'shrink-0 text-xs font-medium text-warning'
                         : 'shrink-0 text-xs text-muted-foreground'
                     }
                   >
-                    {row.activePaths === 0
-                      ? t('codesNoPaths')
-                      : t('codesColumnPaths', { count: format.number(row.activePaths) })}
+                    {row.assigned > 0 && row.placed === 0
+                      ? t('pathShareNonePlaced')
+                      : t('pathSharePlaced', { count: format.number(row.placed) })}
                   </span>
                 </div>
               </li>

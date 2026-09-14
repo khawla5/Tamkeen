@@ -14,132 +14,198 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 
-import type {
-  AdminAttachableCourse,
-  AdminPathBounds,
-  AdminPathDetail,
-  AdminPathRow,
-} from '@tamkeen/types';
+import type { AdminAttachableCourse, AdminPathDetail, AdminPathRow } from '@tamkeen/types';
 
 import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
+import { AdminLevelsService } from './admin-levels.service';
 import { AdminPathsService } from './admin-paths.service';
 import {
   AdminEntityQueryDto,
   AttachCourseDto,
+  CreateLevelDto,
   CreatePathDto,
-  ReorderPathCoursesDto,
+  PlaceCourseDto,
+  ReorderLevelCoursesDto,
+  ReorderLevelsDto,
+  UpdateLevelDto,
   UpdatePathDto,
 } from './admin.dto';
 
+const uuid = () => new ParseUUIDPipe({ errorHttpStatusCode: 400 });
+
 /**
- * §4C.4 — study paths.
+ * §4C.4 — study paths, their ladders, and what is placed on them.
+ *
+ * **Every route here is `SUPER_ADMIN`, and that is the product policy, not a
+ * convenience.** An entity offers a course to a path; which rung it goes on, in
+ * what order, and whether the path is published at all are the ministry's
+ * decisions. There is no entity-facing route to any of it.
  *
  * **Two different removals, because they are two different decisions.**
- * `PATCH { isActive: false }` retires a path: it leaves new selections and every
- * learner holding it is untouched, which is what §2 needs and is reversible.
- * `DELETE` removes it permanently and is refused for any path somebody ever
- * chose — `user_paths.path_id` is `Restrict` and a path certificate names the
- * path on a document somebody holds, so that deletion would falsify a
- * credential. What is left deletable is the path created by mistake.
- *
- * The bounds endpoint returns 5-10 and nothing writes them (D-074).
+ * `PATCH { status: 'DRAFT' }` unpublishes a path: it leaves new assignments and
+ * every learner holding it is untouched, which is what §2 needs and is
+ * reversible. `DELETE` removes it permanently and is refused for any path
+ * somebody was ever assigned — `user_paths.path_id` is `Restrict` and a path
+ * certificate names the path on a document somebody holds, so that deletion
+ * would falsify a credential. What is left deletable is the path created by
+ * mistake.
  */
 @Controller('admin/paths')
 @Roles('SUPER_ADMIN')
 export class AdminPathsController {
-  constructor(private readonly paths: AdminPathsService) {}
+  constructor(
+    private readonly paths: AdminPathsService,
+    private readonly levels: AdminLevelsService,
+  ) {}
 
   @Get()
   list(): Promise<AdminPathRow[]> {
     return this.paths.list();
   }
 
-  /** The 5-10 rule, read-only (D-074, §2). */
-  @Get('bounds')
-  bounds(): AdminPathBounds {
-    return this.paths.bounds();
-  }
-
+  /** The admin view: every membership, placed and unassigned alike. */
   @Get(':id')
-  get(
-    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) pathId: string,
-  ): Promise<AdminPathDetail> {
+  get(@Param('id', uuid()) pathId: string): Promise<AdminPathDetail> {
     return this.paths.get(pathId);
   }
 
-  /** What could be attached — drafts and hidden courses included. */
   @Get(':id/attachable')
   attachable(
-    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) pathId: string,
+    @Param('id', uuid()) pathId: string,
     @Query() query: AdminEntityQueryDto,
   ): Promise<AdminAttachableCourse[]> {
     return this.paths.attachableCourses(pathId, query.q);
   }
 
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   create(
-    @CurrentUser() actor: AuthenticatedUser,
+    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreatePathDto,
     @Req() request: Request,
   ): Promise<AdminPathDetail> {
-    return this.paths.create(dto, actor.id, request.ip ?? null);
+    return this.paths.create(dto, user.id, request.ip ?? null);
   }
 
   @Patch(':id')
   update(
-    @CurrentUser() actor: AuthenticatedUser,
-    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) pathId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
     @Body() dto: UpdatePathDto,
     @Req() request: Request,
   ): Promise<AdminPathDetail> {
-    return this.paths.update(pathId, dto, actor.id, request.ip ?? null);
+    return this.paths.update(pathId, dto, user.id, request.ip ?? null);
   }
 
-  @Post(':id/courses')
-  attach(
-    @CurrentUser() actor: AuthenticatedUser,
-    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) pathId: string,
-    @Body() dto: AttachCourseDto,
-    @Req() request: Request,
-  ): Promise<AdminPathDetail> {
-    return this.paths.attachCourse(pathId, dto, actor.id, request.ip ?? null);
-  }
-
-  /** Owed since Phase 4: `path_courses.display_order` had no editor. */
-  @Patch(':id/courses/order')
-  reorder(
-    @CurrentUser() actor: AuthenticatedUser,
-    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) pathId: string,
-    @Body() dto: ReorderPathCoursesDto,
-    @Req() request: Request,
-  ): Promise<AdminPathDetail> {
-    return this.paths.reorderCourses(pathId, dto, actor.id, request.ip ?? null);
-  }
-
-  /**
-   * Permanently removes a path nobody ever chose (§4C.4).
-   *
-   * Returns 409 `PATH_HELD_BY_LEARNERS` for any other, where retirement is the
-   * operation the administrator actually wants.
-   */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(
-    @CurrentUser() actor: AuthenticatedUser,
-    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) pathId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
     @Req() request: Request,
   ): Promise<void> {
-    return this.paths.remove(pathId, actor.id, request.ip ?? null);
+    return this.paths.remove(pathId, user.id, request.ip ?? null);
   }
 
-  @Delete(':id/courses/:courseId')
-  detach(
-    @CurrentUser() actor: AuthenticatedUser,
-    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) pathId: string,
-    @Param('courseId', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) courseId: string,
+  /* ── membership: a course is in the path, or it is not ─────────────────── */
+
+  /** Adds a course to the path. It lands unassigned, always (D-134). */
+  @Post(':id/courses')
+  @HttpCode(HttpStatus.CREATED)
+  attach(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
+    @Body() dto: AttachCourseDto,
     @Req() request: Request,
   ): Promise<AdminPathDetail> {
-    return this.paths.detachCourse(pathId, courseId, actor.id, request.ip ?? null);
+    return this.paths.attachCourse(pathId, dto, user.id, request.ip ?? null);
+  }
+
+  /** Removes it from the path entirely. Refused while a learner here holds it. */
+  @Delete(':id/courses/:pathCourseId')
+  detach(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
+    @Param('pathCourseId', uuid()) pathCourseId: string,
+    @Req() request: Request,
+  ): Promise<AdminPathDetail> {
+    return this.paths.detachCourse(pathId, pathCourseId, user.id, request.ip ?? null);
+  }
+
+  /* ── the ladder ────────────────────────────────────────────────────────── */
+
+  @Post(':id/levels')
+  @HttpCode(HttpStatus.CREATED)
+  createLevel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
+    @Body() dto: CreateLevelDto,
+    @Req() request: Request,
+  ): Promise<AdminPathDetail> {
+    return this.levels.createLevel(pathId, dto, user.id, request.ip ?? null);
+  }
+
+  /** Before `:levelId`, so "order" is never read as a level id. */
+  @Patch(':id/levels/order')
+  reorderLevels(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
+    @Body() dto: ReorderLevelsDto,
+    @Req() request: Request,
+  ): Promise<AdminPathDetail> {
+    return this.levels.reorderLevels(pathId, dto, user.id, request.ip ?? null);
+  }
+
+  @Patch(':id/levels/:levelId')
+  updateLevel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
+    @Param('levelId', uuid()) levelId: string,
+    @Body() dto: UpdateLevelDto,
+    @Req() request: Request,
+  ): Promise<AdminPathDetail> {
+    return this.levels.updateLevel(pathId, levelId, dto, user.id, request.ip ?? null);
+  }
+
+  /** Deletes a rung. Its courses revert to unassigned; none is deleted. */
+  @Delete(':id/levels/:levelId')
+  deleteLevel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
+    @Param('levelId', uuid()) levelId: string,
+    @Req() request: Request,
+  ): Promise<AdminPathDetail> {
+    return this.levels.deleteLevel(pathId, levelId, user.id, request.ip ?? null);
+  }
+
+  @Patch(':id/levels/:levelId/order')
+  reorderLevelCourses(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
+    @Param('levelId', uuid()) levelId: string,
+    @Body() dto: ReorderLevelCoursesDto,
+    @Req() request: Request,
+  ): Promise<AdminPathDetail> {
+    return this.levels.reorderLevelCourses(pathId, levelId, dto, user.id, request.ip ?? null);
+  }
+
+  /* ── placement ─────────────────────────────────────────────────────────── */
+
+  /**
+   * Places a course on a rung, moves it, or takes it off (`levelId: null`).
+   *
+   * Admin only, like everything else here — and the one endpoint in the product
+   * that writes `path_courses.level_id`.
+   */
+  @Patch(':id/courses/:pathCourseId/placement')
+  place(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', uuid()) pathId: string,
+    @Param('pathCourseId', uuid()) pathCourseId: string,
+    @Body() dto: PlaceCourseDto,
+    @Req() request: Request,
+  ): Promise<AdminPathDetail> {
+    return this.levels.place(pathId, pathCourseId, dto, user.id, request.ip ?? null);
   }
 }

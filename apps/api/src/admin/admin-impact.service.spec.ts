@@ -45,10 +45,18 @@ interface Script {
   }>;
   certificates?: { current: [number, number]; previous: [number, number] };
   pathCertificates?: Array<{ pathId: string | null; count: number }>;
-  paths?: Array<{ id: string; name: string; riasecLetter: string }>;
+  paths?: Array<{ id: string; name: string }>;
   trendPasses?: Array<{ completedAt: Date | null; syncedAt: Date }>;
   trendCertificates?: Date[];
-  results?: Array<{ userId: string; code: string; completedAt: Date }>;
+  /** Placements made in the period, as `groupBy` returns them. */
+  placements?: Array<{ pathId: string; levelId: string; count: number }>;
+  /** The levels those placements name. */
+  levels?: Array<{
+    id: string;
+    name: string;
+    position: number;
+    path: { id: string; name: string; displayOrder: number };
+  }>;
 }
 
 /**
@@ -78,8 +86,8 @@ function startOf(where: Filter): number {
   return (
     asDate(
       dig(where, ['createdAt', 'gte']),
-      dig(where, ['assessmentResults', 'some', 'completedAt', 'gte']),
-      dig(where, ['userPath', 'confirmedAt', 'gte']),
+      dig(where, ['placements', 'some', 'placedAt', 'gte']),
+      dig(where, ['userPaths', 'some', 'assignedAt', 'gte']),
       dig(where, ['OR', '0', 'completions', 'some', 'completedAt', 'gte']),
       dig(where, ['OR', '0', 'completedAt', 'gte']),
       dig(where, ['issuedAt', 'gte']),
@@ -108,15 +116,14 @@ function harness(script: Script = {}) {
 
         if (where.emailVerifiedAt)
           return Promise.resolve(asRows(pick(where, script.registered, [])));
-        if (where.assessmentResults)
-          return Promise.resolve(asRows(pick(where, script.assessed, [])));
-        if (where.userPath) return Promise.resolve(asRows(pick(where, script.committed, [])));
+        if (where.placements) return Promise.resolve(asRows(pick(where, script.assessed, [])));
+        if (where.userPaths) return Promise.resolve(asRows(pick(where, script.committed, [])));
         return Promise.resolve(asRows(pick(where, script.active, [])));
       },
       count: ({ where }: { where: Filter }) => {
         const asOf = asDate(
           dig(where, ['createdAt', 'lte']),
-          dig(where, ['userPath', 'confirmedAt', 'lte']),
+          dig(where, ['userPaths', 'some', 'assignedAt', 'lte']),
         );
         const index = asOf?.getTime() === new Date(PERIOD.to).getTime() ? 0 : 1;
         const toDate = script.toDate ?? {
@@ -166,7 +173,17 @@ function harness(script: Script = {}) {
     },
     course: { findMany: () => Promise.resolve(script.courses ?? []) },
     path: { findMany: () => Promise.resolve(script.paths ?? []) },
-    assessmentResult: { findMany: () => Promise.resolve(script.results ?? []) },
+    level: { findMany: () => Promise.resolve(script.levels ?? []) },
+    learnerPlacement: {
+      groupBy: () =>
+        Promise.resolve(
+          (script.placements ?? []).map((row) => ({
+            pathId: row.pathId,
+            levelId: row.levelId,
+            _count: { _all: row.count },
+          })),
+        ),
+    },
   };
 
   return { service: new AdminImpactService(prisma as unknown as PrismaService), seen };
@@ -208,9 +225,10 @@ describe('AdminImpactService', () => {
 
     const view = await service.view({ from: PERIOD.from, to: PERIOD.to });
 
-    /* Three rows because three *people* were assessed — the fake returns one
-       row per person, which is the shape the relation filter guarantees: a
-       retake cannot add a second row (D-033). */
+    /* Three rows because three *people* were placed — the fake returns one row
+       per person, which is the shape the relation filter guarantees: a second
+       attempt cannot add a second row, because a placement is unique per
+       learner and path (D-134). */
     expect(view.participation.assessed).toEqual({ value: 3, previous: 1, delta: 2 });
     /* A fall is reported as one, rather than clamped at zero. */
     expect(view.participation.registered).toEqual({ value: 2, previous: 3, delta: -1 });
@@ -226,7 +244,12 @@ describe('AdminImpactService', () => {
     );
 
     expect(dig(active, ['OR'])).toHaveLength(2);
-    expect(dig(active, ['OR', '1', 'userPath', 'courses', 'some', 'OR'])).toHaveLength(2);
+    /* Or enrolled in the period: with no per-learner course rows left (D-134),
+       the enrolment is what records that somebody was put in front of a course
+       at all. */
+    expect(dig(active, ['OR', '1', 'enrollments', 'some', 'enrolledAt', 'gte'])).toBeInstanceOf(
+      Date,
+    );
     /* `synced_at` is rewritten for every enrolled learner on every scheduled
        run, so using it would report the whole cohort as active every five
        minutes. */
@@ -343,16 +366,16 @@ describe('AdminImpactService', () => {
         { pathId: null, count: 3 },
       ],
       paths: [
-        { id: 'p-1', name: 'العمليات الميدانية', riasecLetter: 'R' },
-        { id: 'p-2', name: 'التحليل الجنائي', riasecLetter: 'I' },
+        { id: 'p-1', name: 'العمليات الميدانية' },
+        { id: 'p-2', name: 'التحليل الجنائي' },
       ],
     });
 
     const view = await service.view({ from: PERIOD.from, to: PERIOD.to });
 
     expect(view.topPaths).toEqual([
-      { pathId: 'p-2', name: 'التحليل الجنائي', riasecLetter: 'I', completions: 5 },
-      { pathId: 'p-1', name: 'العمليات الميدانية', riasecLetter: 'R', completions: 2 },
+      { pathId: 'p-2', name: 'التحليل الجنائي', completions: 5 },
+      { pathId: 'p-1', name: 'العمليات الميدانية', completions: 2 },
     ]);
   });
 
@@ -374,35 +397,37 @@ describe('AdminImpactService', () => {
     expect(view.trend[10]).toEqual({ month: '2026-07', coursesPassed: 1, certificates: 0 });
   });
 
-  it('reads the career types by dominant letter, all six, newest result per person', async () => {
+  it('reports where the period placed people, in path then rung order', async () => {
     const { service } = harness({
-      results: [
-        { userId: 'u-1', code: 'SIA', completedAt: new Date('2026-08-02') },
-        { userId: 'u-2', code: 'SEC', completedAt: new Date('2026-08-03') },
-        { userId: 'u-3', code: 'IRA', completedAt: new Date('2026-08-04') },
+      placements: [
+        { pathId: 'p-2', levelId: 'l-3', count: 2 },
+        { pathId: 'p-1', levelId: 'l-2', count: 5 },
+        { pathId: 'p-1', levelId: 'l-1', count: 9 },
+      ],
+      levels: [
+        { id: 'l-1', name: 'تأسيسي', position: 1, path: { id: 'p-1', name: 'أ', displayOrder: 1 } },
+        { id: 'l-2', name: 'متقدم', position: 2, path: { id: 'p-1', name: 'أ', displayOrder: 1 } },
+        { id: 'l-3', name: 'تأسيسي', position: 1, path: { id: 'p-2', name: 'ب', displayOrder: 2 } },
       ],
     });
 
     const view = await service.view({ from: PERIOD.from, to: PERIOD.to });
 
-    expect(view.letterDistribution).toHaveLength(6);
-    expect(view.letterDistribution[0]).toEqual({ letter: 'S', employees: 2 });
-    expect(view.letterDistribution.find((row) => row.letter === 'I')).toEqual({
-      letter: 'I',
-      employees: 1,
-    });
-    /* A dimension nobody led with is a finding, so it stays on the list. */
-    expect(view.letterDistribution.filter((row) => row.employees === 0)).toHaveLength(4);
+    expect(view.placements.map((row) => [row.pathName, row.levelName, row.employees])).toEqual([
+      ['أ', 'تأسيسي', 9],
+      ['أ', 'متقدم', 5],
+      ['ب', 'تأسيسي', 2],
+    ]);
   });
 
-  it('reports no language level until the level test ships', async () => {
+  it('reports an empty placement list when nobody was placed in the period', async () => {
+    /* A real finding rather than a gap: a quarter in which no directorate sat an
+       assessment is exactly what management needs to see. */
     const { service } = harness();
 
     const view = await service.view({ from: PERIOD.from, to: PERIOD.to });
 
-    /* Null, not an empty distribution: the screen has to be able to say "not
-       enabled yet" rather than "nobody has taken it" (TAM-148). */
-    expect(view.cefr).toBeNull();
+    expect(view.placements).toEqual([]);
   });
 
   it('narrows every population to the department asked for', async () => {

@@ -426,7 +426,7 @@ export class AdminCoursesService {
     const moodleCourseIds = rows.map((row) => row.moodleCourseId);
 
     const [held, certificates, completions] = await Promise.all([
-      this.prisma.userPathCourse.groupBy({
+      this.prisma.enrollment.groupBy({
         by: ['courseId'],
         where: { courseId: { in: courseIds } },
         _count: { _all: true },

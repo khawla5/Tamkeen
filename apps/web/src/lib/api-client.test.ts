@@ -156,7 +156,7 @@ describe('api-client', () => {
       fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
 
       const loaded: ApiClientModule = await import('./api-client');
-      await expect(loaded.assessmentApi.result()).resolves.toBeNull();
+      await expect(loaded.assessmentApi.result('path-1')).resolves.toBeNull();
     });
 
     it('leaves an empty array as an empty array', async () => {

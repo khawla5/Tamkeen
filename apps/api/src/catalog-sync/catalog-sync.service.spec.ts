@@ -72,7 +72,9 @@ function harness(
         return Promise.resolve({ count: 1 });
       },
     },
-    userPathCourse: {
+    /* "Held" is an enrolment since D-134: the row that says a learner was placed
+       above this course and owes it. */
+    enrollment: {
       findMany: () => Promise.resolve((options.held ?? []).map((courseId) => ({ courseId }))),
     },
   } as unknown as PrismaService;

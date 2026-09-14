@@ -106,20 +106,17 @@ function ReportsBody({
   format: ReturnType<typeof useFormat>;
 }) {
   const t = useTranslations('admin');
-  const tRiasec = useTranslations('admin.riasec');
 
   return (
     <div className="space-y-6">
       <section aria-labelledby="report-journey">
         <Heading id="report-journey">{t('reportJourney')}</Heading>
-        {/* Every stage the API counts, not four of the six (TAM-138). The export
-            carried «يختارون دوراتهم» and the courses passed; the screen it was
-            exported from did not, so the file and the page disagreed about how
-            the programme was doing. */}
+        {/* Every stage the API counts, so the screen and the export agree about
+            how the programme is doing (TAM-138). */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Stat label={t('statAssessed')} value={format.number(reports.journey.assessed)} />
-          <Stat label={t('statBuilding')} value={format.number(reports.journey.building)} />
-          <Stat label={t('statActivePaths')} value={format.number(reports.journey.active)} />
+          <Stat label={t('statAssigned')} value={format.number(reports.journey.assigned)} />
+          <Stat label={t('statPlaced')} value={format.number(reports.journey.placed)} />
+          <Stat label={t('statCompletedPaths')} value={format.number(reports.journey.completed)} />
           <Stat
             label={t('statPathCompletion')}
             value={
@@ -150,7 +147,7 @@ function ReportsBody({
                 <span className="text-sm text-foreground">{row.name}</span>
                 <span className="text-sm text-muted-foreground">
                   {t('reportPathCounts', {
-                    chosen: format.number(row.chosen),
+                    assigned: format.number(row.assigned),
                     completed: format.number(row.completed),
                   })}
                 </span>
@@ -160,28 +157,31 @@ function ReportsBody({
         )}
       </section>
 
-      <section aria-labelledby="report-codes">
-        <Heading id="report-codes">{t('reportCodes')}</Heading>
-        {/* §4C.8 asks for it, the API computes it and the export has always
-            carried it — the page never showed it (TAM-138). Spelled out in the
-            six Arabic type names, as §4.4 shows a learner their own code: three
-            Latin letters in an Arabic report name nothing. */}
-        <p className="mb-3 text-sm text-muted-foreground">{t('reportCodesHint')}</p>
+      <section aria-labelledby="report-placements">
+        <Heading id="report-placements">{t('reportPlacements')}</Heading>
+        {/* What the code distribution used to be, asked the way the assigned
+            model makes it answerable (D-134): a code told the ministry what
+            somebody was drawn to, a placement tells them what somebody can
+            already do — which is the fact a training programme is planned
+            against. */}
+        <p className="mb-3 text-sm text-muted-foreground">{t('reportPlacementsHint')}</p>
 
-        {reports.codeDistribution.length === 0 ? (
+        {reports.placementDistribution.length === 0 ? (
           <Card className="p-6 text-sm text-muted-foreground">{t('reportEmpty')}</Card>
         ) : (
           <Card className="divide-y divide-border">
-            {reports.codeDistribution.map((row) => (
+            {reports.placementDistribution.map((row) => (
               <div
-                key={row.code}
+                key={`${row.pathId}-${row.levelId}`}
                 className="flex flex-wrap items-baseline justify-between gap-3 px-5 py-3"
               >
                 <span className="text-sm text-foreground">
-                  {[...row.code].map((letter) => tRiasec(letter)).join(' · ')}
+                  {row.pathName}
+                  <span aria-hidden="true"> · </span>
+                  {row.levelName}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  {t('reportCodeCount', { count: format.number(row.count) })}
+                  {t('reportPlacementCount', { count: format.number(row.employees) })}
                 </span>
               </div>
             ))}
@@ -434,7 +434,6 @@ function AuditEntry({ row }: { row: AdminAuditRow }) {
   const tTarget = useTranslations('admin.auditTargetType');
   const tDetail = useTranslations('admin.auditDetail');
   const tValue = useTranslations('admin.auditValue');
-  const tRiasec = useTranslations('admin.riasec');
   const tSetting = useTranslations('admin.setting');
   const format = useFormat();
 
@@ -484,7 +483,7 @@ function AuditEntry({ row }: { row: AdminAuditRow }) {
                     by the surrounding RTL run, which makes the route read as a
                     different route. */}
                 <dd dir="auto" className="font-medium">
-                  {detailValue(key, value, { tValue, tRiasec, format })}
+                  {detailValue(key, value, { tValue, format })}
                 </dd>
               </div>
             ))}
@@ -548,9 +547,7 @@ function targetText(
  *  - a number goes through the shared formatter, so digits honour D-018;
  *  - a comma-joined list — changed fields, publish blockers — is split and each
  *    part translated, because that is the only form the writers emit lists in
- *    (`AuditEntry.detail` is scalar-only by design, §6);
- *  - a Holland code is spelled out in the six Arabic type names (§3A), so «SIA»
- *    reads as the profile it is rather than as three Latin letters.
+ *    (`AuditEntry.detail` is scalar-only by design, §6).
  *
  * Anything with no copy falls through as itself. That is deliberate and it is
  * where the route of a denied request lands: `/api/admin/settings` is the point
@@ -561,11 +558,10 @@ export function detailValue(
   value: string | number | boolean,
   copy: {
     tValue: { has: (key: string) => boolean; (key: string): string };
-    tRiasec: { has: (key: string) => boolean; (key: string): string };
     format: ReturnType<typeof useFormat>;
   },
 ): string {
-  const { tValue, tRiasec, format } = copy;
+  const { tValue, format } = copy;
 
   if (typeof value === 'boolean') {
     return tValue(value ? 'true' : 'false');
@@ -576,10 +572,6 @@ export function detailValue(
   }
 
   const word = (token: string): string => (tValue.has(token) ? tValue(token) : token);
-
-  if ((key === 'code' || key === 'riasecLetter') && /^[RIASEC]+$/.test(value)) {
-    return [...value].map((letter) => tRiasec(letter)).join(' · ');
-  }
 
   if (value.includes(',')) {
     return value
@@ -618,7 +610,6 @@ function useAuditCsvExport(filters: AuditFilters): {
   const tTarget = useTranslations('admin.auditTargetType');
   const tDetail = useTranslations('admin.auditDetail');
   const tValue = useTranslations('admin.auditValue');
-  const tRiasec = useTranslations('admin.riasec');
   const tSetting = useTranslations('admin.setting');
   const format = useFormat();
 
@@ -654,7 +645,6 @@ function useAuditCsvExport(filters: AuditFilters): {
               ([key, value]) =>
                 `${tDetail.has(key) ? tDetail(key) : key}: ${detailValue(key, value, {
                   tValue,
-                  tRiasec,
                   format,
                 })}`,
             )

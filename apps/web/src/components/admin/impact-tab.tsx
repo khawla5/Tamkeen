@@ -98,7 +98,6 @@ export function presetRange(preset: ImpactPreset, now = new Date()): { from: str
 
 export function ImpactTab() {
   const t = useTranslations('admin');
-  const tRiasec = useTranslations('admin.riasec');
   const format = useFormat();
 
   const [preset, setPreset] = useState<ImpactPreset>('month');
@@ -199,7 +198,7 @@ export function ImpactTab() {
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
-            onClick={() => impact.data && exportCsv(impact.data, { from, to }, t, tRiasec, format)}
+            onClick={() => impact.data && exportCsv(impact.data, { from, to }, t, format)}
             disabled={impact.data === undefined}
           >
             {t('auditExport')}
@@ -502,7 +501,6 @@ function Bar({ value, largest, className }: { value: number; largest: number; cl
 
 function Learnt({ view }: { view: AdminImpactView }) {
   const t = useTranslations('admin');
-  const tRiasec = useTranslations('admin.riasec');
   const format = useFormat();
 
   return (
@@ -527,31 +525,23 @@ function Learnt({ view }: { view: AdminImpactView }) {
           title={t('impactTopPaths')}
           rows={view.topPaths.map((row) => ({
             id: row.pathId,
-            name: `${row.name} · ${tRiasec(row.riasecLetter)}`,
+            name: row.name,
             detail: t('impactPathCompletions', { count: format.number(row.completions) }),
           }))}
         />
 
+        {/* Where the period's assessments put people (D-134). An empty list is a
+            real finding — a quarter in which no directorate sat an assessment —
+            so `List` renders its own empty state rather than the block
+            vanishing. */}
         <List
-          title={t('impactLetters')}
-          rows={view.letterDistribution.map((row) => ({
-            id: row.letter,
-            name: tRiasec(row.letter),
-            detail: t('impactLetterCount', { count: format.number(row.employees) }),
+          title={t('impactPlacements')}
+          rows={view.placements.map((row) => ({
+            id: `${row.pathId}-${row.levelId}`,
+            name: `${row.pathName} · ${row.levelName}`,
+            detail: t('impactPlacementCount', { count: format.number(row.employees) }),
           }))}
         />
-
-        {/* TAM-148 has not shipped. The block states that rather than rendering
-            an empty list, because "the level test is not enabled" and "nobody
-            has taken it" are different findings. */}
-        <Card className="p-5">
-          <h3 className="text-base font-semibold text-foreground">{t('impactCefr')}</h3>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {view.cefr === null
-              ? t('impactCefrDisabled')
-              : t('impactLetterCount', { count: format.number(view.cefr.levels.length) })}
-          </p>
-        </Card>
       </div>
     </section>
   );
@@ -660,7 +650,6 @@ function exportCsv(
      `2025-12-31_2026-12-31`, which is a different period from the one in it. */
   days: { from: string; to: string },
   t: ReturnType<typeof useTranslations<'admin'>>,
-  tRiasec: ReturnType<typeof useTranslations<'admin.riasec'>>,
   format: ReturnType<typeof useFormat>,
 ): void {
   const participation = t('impactParticipation');
@@ -749,29 +738,15 @@ function exportCsv(
         '',
       ]),
 
-      [
-        t('impactTopPaths'),
-        t('impactCsvItem'),
-        t('impactPathsCompleted'),
-        t('impactCareerType'),
-        '',
-        '',
-      ],
-      ...view.topPaths.map((row) => [
-        t('impactTopPaths'),
-        row.name,
-        row.completions,
-        tRiasec(row.riasecLetter),
-        '',
-        '',
-      ]),
+      [t('impactTopPaths'), t('impactCsvItem'), t('impactPathsCompleted'), '', '', ''],
+      ...view.topPaths.map((row) => [t('impactTopPaths'), row.name, row.completions, '', '', '']),
 
-      /* The Arabic type name, not the letter: «S» in an Arabic report names
-         nothing, which is the same reason §4C.8's other export spells the
-         Holland code out. */
-      ...view.letterDistribution.map((row) => [
-        t('impactLetters'),
-        tRiasec(row.letter),
+      /* The path and the rung, spelled out: a level id in an Arabic report names
+         nothing, which is the same reason the rest of this export carries names
+         rather than keys. */
+      ...view.placements.map((row) => [
+        t('impactPlacements'),
+        `${row.pathName} · ${row.levelName}`,
         row.employees,
         '',
         '',

@@ -6,7 +6,6 @@ import { useTranslations } from 'next-intl';
 
 import type { CourseDetail } from '@tamkeen/types';
 
-import { useErrorMessage } from '@/components/auth/use-error-message';
 import { CourseStatusChip } from '@/components/courses/course-status-chip';
 import { PortalPage } from '@/components/layout/portal-page';
 import { DataView } from '@/components/states';
@@ -14,9 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useFormat } from '@/i18n/format-provider';
-import { certificatesApi, coursesApi, myPathApi } from '@/lib/api-client';
+import { certificatesApi, coursesApi } from '@/lib/api-client';
 import { toHours } from '@/lib/duration';
-import { useApiMutation, useApiQuery } from '@/lib/use-api';
+import { useApiQuery } from '@/lib/use-api';
 
 /**
  * Course detail (§4.7, TAM-128).
@@ -35,38 +34,21 @@ export default function CourseDetailPage() {
   const courseId = params.courseId;
 
   const course = useApiQuery(() => coursesApi.detail(courseId), [courseId]);
-  const add = useApiMutation(() => myPathApi.addCourse(courseId));
-
-  async function onAdd() {
-    const result = await add.run();
-
-    /* `addCourse` resolves to undefined on both success (204) and failure, so
-       the reload is what confirms the outcome — and it is what updates the
-       action to IN_PATH either way. */
-    if (result !== undefined || !add.error) {
-      course.refetch();
-    }
-  }
 
   return (
     <PortalPage
       title={course.data?.title ?? t('title')}
-      action={
-        course.data ? (
-          <CourseAction course={course.data} isPending={add.isPending} onAdd={() => void onAdd()} />
-        ) : undefined
-      }
+      action={course.data ? <CourseAction course={course.data} /> : undefined}
     >
       <DataView isLoading={course.isLoading} error={course.error} onRetry={course.refetch}>
-        {course.data ? <Detail course={course.data} addError={add.error} /> : null}
+        {course.data ? <Detail course={course.data} /> : null}
       </DataView>
     </PortalPage>
   );
 }
 
-function Detail({ course, addError }: { course: CourseDetail; addError: unknown }) {
+function Detail({ course }: { course: CourseDetail }) {
   const t = useTranslations('courseDetail');
-  const translateError = useErrorMessage();
   const format = useFormat();
 
   const hours = toHours(course.durationMinutes);
@@ -89,9 +71,14 @@ function Detail({ course, addError }: { course: CourseDetail; addError: unknown 
                 {t('duration', { hours: format.number(hours) })}
               </span>
             ) : null}
+            {/* The path, and the rung it sits on there (D-134): a course means
+                different work depending on where it was placed, so naming the
+                path without the level would be half the fact. */}
             {course.paths.map((path) => (
               <Badge key={path.id} variant="neutral">
-                {path.name}
+                {path.level
+                  ? t('pathLevel', { path: path.name, level: path.level.name })
+                  : path.name}
               </Badge>
             ))}
             {/* At most one chip, and the same component every catalogue card
@@ -101,12 +88,6 @@ function Detail({ course, addError }: { course: CourseDetail; addError: unknown 
           </div>
         ) : null}
       </div>
-
-      {addError ? (
-        <p role="alert" className="text-sm font-medium text-destructive">
-          {translateError(addError)}
-        </p>
-      ) : null}
 
       {/* No card title: the page header already carries the course name as the
           page's single h1, and repeating it is the redundant UI §3 forbids. */}
@@ -148,40 +129,27 @@ function Detail({ course, addError }: { course: CourseDetail; addError: unknown 
 
 /** Renders the one action the server chose, in the page header — never a
  *  menu of them. */
-function CourseAction({
-  course,
-  isPending,
-  onAdd,
-}: {
-  course: CourseDetail;
-  isPending: boolean;
-  onAdd: () => void;
-}) {
+function CourseAction({ course }: { course: CourseDetail }) {
   const t = useTranslations('courseDetail');
 
   switch (course.action) {
-    case 'ADD_TO_PATH':
-      return (
-        <Button type="button" onClick={onAdd} disabled={isPending}>
-          {isPending ? t('adding') : t('actionAdd')}
-        </Button>
-      );
-
-    case 'IN_PATH':
-      return (
-        <Button asChild variant="outline">
-          <Link href={`/paths/${course.buildablePathId}`}>{t('actionInPath')}</Link>
-        </Button>
-      );
+    case 'BELOW_LEVEL':
+      /*
+       * Below the rung the assessment placed them on (D-134): theirs to read,
+       * not theirs to do. A sentence rather than a disabled button, because the
+       * action is not pending — it is not owed at all, and a greyed control
+       * would invite them to wonder what unlocks it.
+       */
+      return <p className="text-sm text-muted-foreground">{t('actionBelowLevel')}</p>;
 
     case 'START_COURSE':
       return (
         <Button asChild>
           {/* Through the player, which mints the signed handoff on click. A
               direct LMS link carries no session (D-044). `personalStatus` is
-              what tells "confirmed but unattempted" and "genuinely in
-              progress" apart (§4.7) — `action` alone collapses both into
-              START_COURSE, exactly why the field exists (TAM-128). */}
+              what tells "owed but unattempted" and "genuinely in progress"
+              apart (§4.7) — `action` alone collapses both into START_COURSE,
+              exactly why the field exists (TAM-128). */}
           <Link href={`/courses/${course.id}/player`}>
             {course.personalStatus === 'IN_PROGRESS' ? t('actionContinue') : t('actionStart')}
           </Link>

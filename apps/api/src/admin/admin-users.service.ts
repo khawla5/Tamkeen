@@ -110,20 +110,28 @@ export class AdminUsersService {
         ...USER_ROW_SELECT,
         createdAt: true,
         moodleUserId: true,
-        /* `kind: 'RIASEC'` (TAM-147): the singular `assessment` field below is
-           the Holland result specifically — a CEFR attempt has no `code` and
-           belongs to a separate part of this screen, not this one. */
-        assessmentResults: {
-          where: { kind: 'RIASEC' },
-          orderBy: { completedAt: 'desc' },
-          select: { code: true, completedAt: true },
-        },
-        userPath: {
+        /* D-130/D-133: what this person has been put on, managed from this
+           same panel. Assignment is an account decision, not a screen of its
+           own. */
+        userPaths: {
+          orderBy: { assignedAt: 'asc' },
           select: {
+            id: true,
+            pathId: true,
             status: true,
-            confirmedAt: true,
-            path: { select: { name: true } },
-            courses: { select: { status: true } },
+            assignedAt: true,
+            path: {
+              select: {
+                name: true,
+                _count: { select: { pathCourses: { where: { levelId: { not: null } } } } },
+              },
+            },
+          },
+        },
+        placements: {
+          select: {
+            pathId: true,
+            level: { select: { id: true, name: true, position: true } },
           },
         },
         _count: { select: { certificates: true } },
@@ -160,58 +168,56 @@ export class AdminUsersService {
       }),
     ]);
 
-    const newest = user.assessmentResults[0];
+    const levelByPath = new Map(user.placements.map((row) => [row.pathId, row.level]));
 
+    /* One row per instrument key, at its latest attempt — `allResults` is
+       already newest-first, so the first row seen per key is that latest
+       attempt, and the rest are only counted. */
     const attemptsByKey = new Map<string, number>();
-    for (const row of allResults) {
-      attemptsByKey.set(row.assessment.key, (attemptsByKey.get(row.assessment.key) ?? 0) + 1);
+    const assessments: AdminUserAssessmentSummary[] = [];
+
+    for (const result of allResults) {
+      const key = result.assessment.key;
+      attemptsByKey.set(key, (attemptsByKey.get(key) ?? 0) + 1);
+
+      if (attemptsByKey.get(key) === 1) {
+        assessments.push({
+          key,
+          kind: result.kind,
+          title: result.assessment.title,
+          result: result.kind === 'RIASEC' ? (result.code ?? '') : (result.cefrLevel ?? ''),
+          version: result.assessmentVersion,
+          completedAt: result.completedAt.toISOString(),
+          attempts: 1,
+        });
+      }
     }
 
-    /* Ordered newest-first above, so the first row seen per key is that
-       instrument's current result (D-033's convention, applied generically). */
-    const seenKeys = new Set<string>();
-    const assessments: AdminUserAssessmentSummary[] = [];
-    for (const row of allResults) {
-      if (seenKeys.has(row.assessment.key)) continue;
-      seenKeys.add(row.assessment.key);
-
-      assessments.push({
-        key: row.assessment.key,
-        kind: row.kind,
-        title: row.assessment.title,
-        result: row.kind === 'RIASEC' ? row.code! : row.cefrLevel!,
-        version: row.assessmentVersion,
-        completedAt: row.completedAt.toISOString(),
-        attempts: attemptsByKey.get(row.assessment.key)!,
-      });
+    for (const summary of assessments) {
+      summary.attempts = attemptsByKey.get(summary.key) ?? summary.attempts;
     }
 
     return {
       ...toRow(user),
       createdAt: user.createdAt.toISOString(),
       hasLmsAccount: user.moodleUserId !== null,
-      assessment: newest
-        ? {
-            /* Non-null: filtered to `kind: 'RIASEC'` above, and every row of
-               that kind has `code` set (TAM-147). */
-            code: newest.code!,
-            completedAt: newest.completedAt.toISOString(),
-            /* Retakes append (D-033). Showing the count makes a retake visible
-               without exposing the superseded codes, which are the person's
-               history and not an administrator's business. */
-            attempts: user.assessmentResults.length,
-          }
-        : null,
+      paths: user.userPaths.map((row) => ({
+        userPathId: row.id,
+        pathId: row.pathId,
+        name: row.path.name,
+        status: row.status,
+        assignedAt: row.assignedAt.toISOString(),
+        /* Null while the path's assessment is untaken — the one state an
+           administrator most often needs to see: assigned, but not yet started,
+           because nobody has sat the test. */
+        placedLevel: levelByPath.get(row.pathId) ?? null,
+        coursesPassed: passed,
+        /* Every course placed on the path, not only the ones above their rung:
+           this is a summary, and the finer figure is on the learner's own
+           screens. */
+        coursesTotal: row.path._count.pathCourses,
+      })),
       assessments,
-      path: user.userPath
-        ? {
-            name: user.userPath.path.name,
-            status: user.userPath.status,
-            confirmedAt: user.userPath.confirmedAt?.toISOString() ?? null,
-            coursesChosen: user.userPath.courses.length,
-            coursesPassed: passed,
-          }
-        : null,
       certificateCount: user._count.certificates,
       activeSessions,
     };

@@ -1,5 +1,4 @@
 import type { CertificateType } from './certificates';
-import type { RiasecLetter } from './riasec';
 
 /**
  * The CV builder (§4.11, D-050).
@@ -109,17 +108,26 @@ export interface CvAutofill {
   accountEmail: string;
   /** Every certificate the learner holds, newest first. */
   certifications: CvPlatformCertification[];
-  /** Null until they have taken the assessment. */
+  /** Null until the ministry assigns them a path. */
   careerProfile: CvCareerProfile | null;
 }
 
+/**
+ * What the platform can say about this person's training (§4.11, D-134).
+ *
+ * The Holland profile is gone with the instrument that produced it. What
+ * replaces it is the thing a CV reader can actually use: which paths the
+ * ministry put them on, what level they were placed at, and whether they
+ * finished. Empty while they hold no path.
+ */
 export interface CvCareerProfile {
-  /** Their committed path, or null if they have not chosen one yet. */
-  pathName: string | null;
-  /** Whether that path is finished — the difference between "completed" and "on". */
-  pathCompleted: boolean;
-  /** Top three, in rank order. Type names are resolved for display, not here. */
-  hollandCode: RiasecLetter[];
+  paths: Array<{
+    name: string;
+    /** The rung they were placed on; null while the assessment is untaken. */
+    levelName: string | null;
+    /** Finished — the difference between "completed" and "on". */
+    completed: boolean;
+  }>;
 }
 
 /** What the builder loads and the preview renders. */

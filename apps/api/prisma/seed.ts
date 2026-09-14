@@ -318,9 +318,12 @@ async function main(): Promise<void> {
   const counts = await seedProductData(prisma, resolveLms());
 
   console.log(
-    `Seeded ${counts.questions} questions (${counts.options} options), ` +
-      `${counts.englishQuestions} English placement questions, ` +
-      `${counts.courses} courses, ${counts.paths} paths, ${counts.pathCourses} memberships.`,
+    `Seeded ${counts.courses} courses; ${counts.paths} paths with ${counts.levels} levels ` +
+      `(${counts.placed} courses placed, ${counts.unassigned} awaiting placement); ` +
+      `${counts.assessments} placement assessments (${counts.questions} questions, ` +
+      `${counts.options} options); the ministry-wide RIASEC bank (${counts.ministryQuestions} ` +
+      `questions, ${counts.ministryOptions} options); the English placement test ` +
+      `(${counts.englishQuestions} questions).`,
   );
 
   /* After the catalogue, because it claims courses the catalogue seed creates. */

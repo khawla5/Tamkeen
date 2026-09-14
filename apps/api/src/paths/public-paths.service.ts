@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
- * The landing explorer's data source — every active path, unauthenticated
+ * The landing explorer's data source — every published path, unauthenticated
  * (§1, TAM-150).
  *
  * **In-memory, process-local cache**, not Redis: this is one read-mostly query
@@ -32,21 +32,21 @@ export class PublicPathsService {
     }
 
     const paths = await this.prisma.path.findMany({
-      where: { isActive: true },
+      where: { status: 'PUBLISHED' },
       orderBy: { displayOrder: 'asc' },
       select: {
         id: true,
         name: true,
         description: true,
         skillOutcomes: true,
-        riasecLetter: true,
         typicalDurationMinutes: true,
-        /* The same "on offer" definition the authenticated catalogue uses
-           (`PathsService.listForUser`) — a course a learner could not actually
-           pick does not belong in a count meant to answer "how much is here". */
+        /* The same "on offer" definition the authenticated path page uses — a
+           course sitting in the path on no level is not something a visitor
+           should be told the path contains (D-134). */
         _count: {
           select: {
-            pathCourses: { where: { status: 'APPROVED', course: { status: 'AVAILABLE' } } },
+            levels: true,
+            pathCourses: { where: { levelId: { not: null }, course: { status: 'AVAILABLE' } } },
           },
         },
       },
@@ -55,10 +55,10 @@ export class PublicPathsService {
     const summaries = paths.map((path) => ({
       id: path.id,
       name: path.name,
-      riasecLetter: path.riasecLetter,
       description: path.description,
       skillOutcomes: path.skillOutcomes,
       courseCount: path._count.pathCourses,
+      levelCount: path._count.levels,
       typicalDurationMinutes: path.typicalDurationMinutes,
     }));
 

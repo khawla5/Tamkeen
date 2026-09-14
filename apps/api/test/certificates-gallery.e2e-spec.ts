@@ -134,9 +134,9 @@ describe('Certificate gallery (e2e)', () => {
         key: `gallery-path-${RUN_ID}`,
         name: 'مسار القيادة الإدارية',
         description: 'مسار اختبار.',
-        riasecLetter: 'E',
         displayOrder: 997,
-        isActive: false,
+        riasecLetter: 'R',
+        status: 'DRAFT',
       },
     });
     pathId = path.id;

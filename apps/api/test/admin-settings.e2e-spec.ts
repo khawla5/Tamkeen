@@ -186,16 +186,14 @@ describe('Admin system settings (e2e)', () => {
     it('shows the floors that cannot be changed', async () => {
       const body = await view();
 
-      /* An administrator explaining a rejected path build needs these; nobody
-         needs a control that lowers them (D-074, §2). */
+      /* §2 makes the auth rate limits a security floor rather than a knob an
+         operator may loosen; an administrator investigating a lockout needs the
+         numbers, and nobody needs a control that lowers them. The 5-10 course
+         bounds are gone with the build flow — nobody chooses a path (D-134). */
       expect(body.readOnly.map((row) => row.key)).toEqual(
-        expect.arrayContaining([
-          'PATH_MIN_COURSES',
-          'PATH_MAX_COURSES',
-          'API_RATE_LIMIT_MAX_REQUESTS',
-        ]),
+        expect.arrayContaining(['API_RATE_LIMIT_MAX_REQUESTS', 'API_RATE_LIMIT_WINDOW_SECONDS']),
       );
-      expect(body.readOnly.find((row) => row.key === 'PATH_MIN_COURSES')?.value).toBe('5');
+      expect(body.readOnly.map((row) => row.key)).not.toContain('PATH_MIN_COURSES');
     });
 
     it('carries no secret at all', async () => {

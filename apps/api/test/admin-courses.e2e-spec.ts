@@ -105,29 +105,37 @@ describe('Admin course oversight (e2e)', () => {
         key: `acourse-${RUN_ID}`,
         name: 'مسار الإشراف',
         description: 'مسار أُنشئ لاختبار الإشراف على الدورات.',
-        riasecLetter: 'C',
         displayOrder: 900,
-        isActive: false,
-        pathCourses: { create: [{ courseId: heldCourseId, displayOrder: 1 }] },
+        riasecLetter: 'R',
+        status: 'DRAFT',
+        /* A rung, and the held course on it: an unassigned membership reaches
+           no learner, so it could not be "held" by anybody (D-134). */
+        levels: { create: [{ name: 'تأسيسي', position: 1 }] },
       },
-      select: { id: true },
+      select: { id: true, levels: { select: { id: true } } },
     });
     pathId = path.id;
+    const levelId = path.levels[0]!.id;
 
+    await prisma.pathCourse.create({
+      data: { pathId, courseId: heldCourseId, levelId, position: 1, placedAt: new Date() },
+    });
+
+    /* Held is an enrolment, not a chosen row: nobody builds a path any more, so
+       the fact that makes a course undeletable is that somebody was actually
+       put into it in the LMS (D-036/D-134). */
     const learnerId = await account('learner', 'EMPLOYEE');
-    await prisma.userPath.create({
-      data: {
-        userId: learnerId,
-        pathId,
-        courses: { create: [{ courseId: heldCourseId, displayOrder: 1 }] },
-      },
+    await prisma.userPath.create({ data: { userId: learnerId, pathId } });
+    await prisma.enrollment.create({
+      data: { userId: learnerId, courseId: heldCourseId, enrolledAt: new Date() },
     });
   }, 180_000);
 
   afterAll(async () => {
-    await prisma.userPathCourse.deleteMany({ where: { userPath: { pathId } } });
+    await prisma.enrollment.deleteMany({ where: { courseId: heldCourseId } });
     await prisma.userPath.deleteMany({ where: { pathId } });
     await prisma.pathCourse.deleteMany({ where: { pathId } });
+    await prisma.level.deleteMany({ where: { pathId } });
     await prisma.path.deleteMany({ where: { id: pathId } });
     /* By the run's marker rather than by the two ids the suite starts with:
        the deletion tests create courses of their own, and a failure partway
@@ -581,7 +589,7 @@ describe('Admin course oversight (e2e)', () => {
     it('deletes a course nobody has taken, with its path membership', async () => {
       const doomedId = await course(7, 'دورة للحذف');
 
-      await prisma.pathCourse.create({ data: { pathId, courseId: doomedId, displayOrder: 9 } });
+      await prisma.pathCourse.create({ data: { pathId, courseId: doomedId } });
 
       await send('delete', `/api/admin/courses/${doomedId}`, {}, sessionAdmin).expect(204);
 

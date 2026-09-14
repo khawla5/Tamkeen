@@ -1,81 +1,93 @@
-import type { AssessmentKind } from './assessment-assignment';
-import type { CefrLevel } from './english-assessment';
-import type { RiasecLetter } from './riasec';
+import type { CourseProgressStatus } from './catalog';
+import type { LevelRef } from './levels';
 
 /**
- * The user's journey through their one path (CLAUDE.md §4.2, §4.9).
+ * The learner's journey through the paths the ministry assigned them (§4.2,
+ * §4.9, D-130/D-134).
  */
 
 /**
- * A user has at most one of these (D-002).
+ * Where an assigned path stands for one learner.
  *
- * `BUILDING` exists as a distinct state from `ACTIVE` because selecting courses
- * is reversible and confirming is not. Collapsing the two would make the hard
- * commitment gate a UI convention rather than a data fact.
+ * `BUILDING` is gone with the build flow: nothing about a path is provisional
+ * any more. It is assigned, and it is active from that moment.
  */
-export const USER_PATH_STATUSES = ['BUILDING', 'ACTIVE', 'COMPLETED'] as const;
+export const USER_PATH_STATUSES = ['ACTIVE', 'COMPLETED'] as const;
 
 export type UserPathStatus = (typeof USER_PATH_STATUSES)[number];
 
-export const USER_PATH_COURSE_STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'] as const;
-
-export type UserPathCourseStatus = (typeof USER_PATH_COURSE_STATUSES)[number];
-
 export interface MyPathCourseView {
-  /** Id of the chosen-course record, stable across LMS changes. */
-  id: string;
   courseId: string;
   moodleCourseId: number;
   title: string;
   durationMinutes: number | null;
-  /** Position in the path, as chosen at confirm time. */
+  /** Position within its level. */
   order: number;
-  status: UserPathCourseStatus;
+  status: CourseProgressStatus;
   /**
    * Raw grade from the LMS, 0-100, or null when nothing has been attempted.
    * Never a pass/fail verdict — that is evaluated against the product threshold
-   * (D-007), and issuing anything from it is Phase 3.
+   * (D-007).
    */
   gradePercent: number | null;
-  /** Exactly one action applies at a time (§3). */
+  /** Our verdict against that threshold. */
+  passed: boolean;
+  /** Exactly one course carries this at a time (§3). */
   isNextUp: boolean;
+  /** False for a course below the learner's placed level (D-134). */
+  startable: boolean;
+}
+
+export interface MyPathLevelView {
+  id: string;
+  name: string;
+  position: number;
+  standing: 'BELOW' | 'PLACED' | 'ABOVE';
+  courses: MyPathCourseView[];
 }
 
 export interface MyPathView {
   userPathId: string;
   pathId: string;
   pathName: string;
-  riasecLetter: RiasecLetter;
   status: UserPathStatus;
-  /** ISO 8601; null while still building. */
-  confirmedAt: string | null;
-  courses: MyPathCourseView[];
+  /** ISO 8601. Never null — an assignment exists from the moment it is made. */
+  assignedAt: string;
+  /** Null until the learner takes the path's assessment. */
+  placedLevel: LevelRef | null;
+  /** The assessment standing between them and starting. Null once placed. */
+  pendingAssessmentId: string | null;
+  levels: MyPathLevelView[];
+  /** Counted over the courses at or above the learner's level — what they owe. */
   completedCount: number;
   totalCount: number;
   /**
-   * True when the path itself reached `COMPLETED` — every chosen course
-   * **passed**, not merely finished in the LMS. That is the same condition the
-   * path certificate is issued on, so an unlocked slot always has a certificate
-   * behind it.
+   * True when every course at or above the placed level is **passed**, not
+   * merely finished in the LMS. That is the same condition the path certificate
+   * is issued on, so an unlocked slot always has a certificate behind it.
    */
   pathCertificateUnlocked: boolean;
 }
 
 /**
- * Which of the three dashboard states applies (§4.2).
+ * Which dashboard state applies (§4.2, D-134).
  *
  * Decided server-side and sent as a single value, so the dashboard renders one
  * branch instead of re-deriving the rule from several nullable fields — which is
  * how a fourth, unintended state gets rendered by accident.
+ *
+ * The old three states were about a choice the learner made. Under the assigned
+ * model the question is different: has the ministry given them a path, and have
+ * they been placed in it yet.
  */
-export const DASHBOARD_STATES = ['PRE_ASSESSMENT', 'ASSESSED_NO_PATH', 'ACTIVE_PATH'] as const;
+export const DASHBOARD_STATES = ['NO_PATH', 'AWAITING_PLACEMENT', 'ACTIVE_PATH'] as const;
 
 export type DashboardState = (typeof DASHBOARD_STATES)[number];
 
 /** One line of what the learner has done, newest first (TAM-123). */
 export const DASHBOARD_ACTIVITY_KINDS = [
+  'PATH_ASSIGNED',
   'ASSESSMENT_COMPLETED',
-  'PATH_CONFIRMED',
   'COURSE_PASSED',
   'CERTIFICATE_ISSUED',
 ] as const;
@@ -84,69 +96,33 @@ export type DashboardActivityKind = (typeof DASHBOARD_ACTIVITY_KINDS)[number];
 
 export interface DashboardActivity {
   kind: DashboardActivityKind;
-  /** The course, path or certificate subject the event is about; null for the assessment. */
+  /** The course, path or certificate the event is about; null where there is none. */
   title: string | null;
   /** ISO 8601. */
   at: string;
 }
 
-/**
- * One instrument the employee's effective assignment list resolves to, and
- * what they have done about it (§4.2 part 3, TAM-147) — what the tracker
- * shows one stage per, in `displayOrder`.
- */
-export interface DashboardAssessmentSummary {
-  key: string;
-  kind: AssessmentKind;
-  title: string;
-  required: boolean;
-  /** ISO 8601, or null if not yet taken. */
-  takenAt: string | null;
-  /** The Holland chips ("SIA") for a RIASEC row, the CEFR level ("B2") for a
-   *  CEFR one — null until taken. Never the six scores or the raw total: this
-   *  is a tracker line, not a results page. */
-  summary: string | null;
+/** One assigned path on the dashboard, in assignment order. */
+export interface DashboardPath {
+  id: string;
+  name: string;
+  /** Null until its assessment is taken. */
+  placedLevel: LevelRef | null;
+  /** The assessment blocking a start, when there is one. */
+  pendingAssessmentId: string | null;
+  completedCount: number;
+  /** Courses started in the LMS but not yet passed. */
+  inProgressCount: number;
+  totalCount: number;
+  /** The single "continue where you left off" target, null when there is none. */
+  nextCourse: { courseId: string; title: string } | null;
 }
 
 export interface DashboardView {
   state: DashboardState;
-  /**
-   * Every instrument the employee's assignments resolve to, in
-   * `displayOrder` — what the §4.2 tracker (D-095) shows one stage per, and
-   * what makes `PRE_ASSESSMENT` "a required instrument is untaken" rather
-   * than "the Holland test specifically" (TAM-147). `state` itself is still
-   * decided from the Holland journey alone — see its own field below — so a
-   * required CEFR instrument left untaken narrows this list without ever
-   * moving `state` off `ACTIVE_PATH`.
-   */
-  assessments: DashboardAssessmentSummary[];
-  /** Present from ASSESSED_NO_PATH onward. */
-  codeString: string | null;
-  /**
-   * The English placement level, or null if the test has not been taken
-   * (§4.13, D-123).
-   *
-   * Present in **every** state, and deliberately not part of `DashboardState`.
-   * The English test is independent of the Holland journey — takeable at any
-   * time, gating nothing — so folding it into the state machine would couple two
-   * instruments that have no product relationship, and would give the dashboard
-   * a fourth branch for a card that is the same card in all three.
-   */
-  englishLevel: CefrLevel | null;
-  /**
-   * ASSESSED_NO_PATH only: the recommended paths in rank order, at most three,
-   * so the dashboard can put the decision in front of the user (TAM-123).
-   * Empty in the other states.
-   */
-  recommendedPaths: Array<{ id: string; name: string; riasecLetter: RiasecLetter }>;
-  /** ACTIVE_PATH only: the next courses in path order, current first, at most three. */
-  upcomingCourses: Array<{
-    id: string;
-    courseId: string;
-    title: string;
-    status: UserPathCourseStatus;
-  }>;
-  /** ACTIVE_PATH only: the most recently issued certificate, if any. */
+  /** Every path assigned to this learner. Empty in NO_PATH. */
+  paths: DashboardPath[];
+  /** The most recently issued certificate, if any. */
   latestCertificate: {
     id: string;
     type: 'COURSE' | 'PATH';
@@ -155,17 +131,4 @@ export interface DashboardView {
   } | null;
   /** The last three things that happened, newest first. */
   recentActivity: DashboardActivity[];
-  /** Present only in ACTIVE_PATH. */
-  path: {
-    id: string;
-    name: string;
-    /** The path's primary letter — the dashboard names the path by its type. */
-    riasecLetter: RiasecLetter;
-    completedCount: number;
-    /** Courses started in the LMS but not yet completed. Remaining = total − completed − inProgress. */
-    inProgressCount: number;
-    totalCount: number;
-    /** The single "continue where you left off" target, null when all done. */
-    nextCourse: { id: string; courseId: string; title: string } | null;
-  } | null;
 }

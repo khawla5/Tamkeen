@@ -20,10 +20,10 @@ import type {
   AdminAssessmentDraft,
   AdminAssessmentGroupRow,
   AdminAssessmentKeyOption,
+  AdminAssignResult,
   AdminAttachableCourse,
   AdminCoursePage,
   AdminCourseRow,
-  AdminPathBounds,
   AdminAuditPage,
   AdminCertificateTemplateView,
   AdminImpactView,
@@ -40,7 +40,6 @@ import type {
   AdminUserDetail,
   AdminUserPage,
   AdminUserRow,
-  RiasecLetter,
   UserRole,
   AssessmentResultView,
   AssignmentScope,
@@ -50,15 +49,6 @@ import type {
   CertificateVerificationView,
   AssessmentSubmission,
   AssessmentView,
-  EnglishAssessmentResultView,
-  EnglishAssessmentSubmission,
-  EnglishAssessmentView,
-  AdminEnglishDraft,
-  AdminEnglishOverview,
-  AdminEnglishVersion,
-  CefrBand,
-  CefrLevel,
-  EnglishSkill,
   CourseDetail,
   CourseLaunchView,
   CourseOutlineView,
@@ -79,7 +69,9 @@ import type {
   MyPathView,
   NumberFormat,
   PathDetail,
-  PathRecommendations,
+  AssignedPaths,
+  PathStatus,
+  PlacementBand,
   PublicPathSummary,
   UnreadNotificationsView,
 } from '@tamkeen/types';
@@ -331,26 +323,23 @@ export const profileApi = {
  * returns, so a contract change is a compile error on both sides rather than a
  * runtime surprise on one.
  */
-export const assessmentApi = {
-  get: () => api.get<AssessmentView>('/api/assessment'),
-  result: () => api.get<AssessmentResultView | null>('/api/assessment/result'),
-  submit: (submission: AssessmentSubmission) =>
-    api.post<AssessmentResultView>('/api/assessment/submit', submission),
-};
-
 /**
- * §4.13 — the English placement test. A sibling of `assessmentApi`, on the
- * sibling endpoints; the two share no request or response type.
+ * §4.3 — a path's placement assessment (D-134).
+ *
+ * Every route is under the path, because there is no such thing as "the
+ * assessment" any more: an employee may hold two paths and owe two of them.
  */
-export const englishAssessmentApi = {
-  get: () => api.get<EnglishAssessmentView>('/api/english-assessment'),
-  result: () => api.get<EnglishAssessmentResultView | null>('/api/english-assessment/result'),
-  submit: (submission: EnglishAssessmentSubmission) =>
-    api.post<EnglishAssessmentResultView>('/api/english-assessment/submit', submission),
+export const assessmentApi = {
+  get: (pathId: string) => api.get<AssessmentView>(`/api/paths/${pathId}/assessment`),
+  result: (pathId: string) =>
+    api.get<AssessmentResultView | null>(`/api/paths/${pathId}/assessment/result`),
+  submit: (pathId: string, submission: AssessmentSubmission) =>
+    api.post<AssessmentResultView>(`/api/paths/${pathId}/assessment/attempts`, submission),
 };
 
 export const pathsApi = {
-  list: () => api.get<PathRecommendations>('/api/paths'),
+  /** The paths the ministry assigned. Never a catalogue (D-130). */
+  list: () => api.get<AssignedPaths>('/api/paths'),
   detail: (pathId: string) => api.get<PathDetail>(`/api/paths/${pathId}`),
 };
 
@@ -399,13 +388,17 @@ export const coursesApi = {
   sync: (courseId: string) => api.post<{ synced: boolean }>(`/api/courses/${courseId}/sync`),
 };
 
+/**
+ * §4.9 — read-only, all of it (D-134).
+ *
+ * Selecting a path, setting its courses and confirming were the four writes
+ * here, and the decisions they carried are gone: the ministry assigns the path
+ * and the assessment decides where in it a learner starts.
+ */
 export const myPathApi = {
-  get: () => api.get<MyPathView | null>('/api/my-path'),
-  selectPath: (pathId: string) => api.post<void>('/api/my-path/select', { pathId }),
-  setCourses: (courseIds: string[]) =>
-    api.put<{ selectedCourseIds: string[] }>('/api/my-path/courses', { courseIds }),
-  addCourse: (courseId: string) => api.post<void>('/api/my-path/courses', { courseId }),
-  confirm: () => api.post<MyPathView>('/api/my-path/confirm'),
+  get: (pathId?: string) =>
+    api.get<MyPathView | null>(`/api/my-path${pathId ? `?pathId=${pathId}` : ''}`),
+  all: () => api.get<MyPathView[]>('/api/my-path/all'),
 };
 
 export const cvApi = {
@@ -623,94 +616,75 @@ export const adminApi = {
     },
   ) => api.patch<AdminEntityRow>(`/api/admin/entities/${entityId}`, patch),
 
-  /* §4C.9 — the English placement test. Its own endpoints, its own types; the
-     RIASEC calls above are untouched by it (D-124). This is the one group in
-     this client that receives the English answer key. */
-  englishOverview: () => api.get<AdminEnglishOverview>('/api/admin/english'),
-
-  englishDraft: () => api.get<AdminEnglishDraft>('/api/admin/english/draft'),
-
-  createEnglishDraft: () => api.post<AdminEnglishDraft>('/api/admin/english/draft', {}),
-
-  discardEnglishDraft: () => api.delete<void>('/api/admin/english/draft'),
-
-  updateEnglishDraft: (patch: { title?: string; description?: string }) =>
-    api.patch<AdminEnglishDraft>('/api/admin/english/draft', patch),
-
-  addEnglishQuestion: (input: {
-    text: string;
-    marks: number;
-    level: CefrLevel;
-    skill: EnglishSkill;
-    options: string[];
-    correctIndex: number;
-  }) => api.post<AdminEnglishDraft>('/api/admin/english/draft/questions', input),
-
-  updateEnglishQuestion: (
-    questionId: string,
-    patch: { text?: string; marks?: number; level?: CefrLevel; skill?: EnglishSkill },
-  ) => api.patch<AdminEnglishDraft>(`/api/admin/english/draft/questions/${questionId}`, patch),
-
-  removeEnglishQuestion: (questionId: string) =>
-    api.delete<AdminEnglishDraft>(`/api/admin/english/draft/questions/${questionId}`),
-
-  reorderEnglishDraft: (questionIds: string[]) =>
-    api.patch<AdminEnglishDraft>('/api/admin/english/draft/order', { questionIds }),
-
-  updateEnglishOption: (optionId: string, patch: { label?: string; isCorrect?: boolean }) =>
-    api.patch<AdminEnglishDraft>(`/api/admin/english/draft/options/${optionId}`, patch),
-
-  /** The whole band table, never one band — see the endpoint's own note. */
-  setEnglishBands: (bands: CefrBand[]) =>
-    api.put<AdminEnglishDraft>('/api/admin/english/draft/bands', { bands }),
-
-  publishEnglish: () => api.post<AdminEnglishVersion>('/api/admin/english/draft/publish', {}),
-
-  englishVersion: (assessmentId: string) =>
-    api.get<AdminEnglishDraft>(`/api/admin/english/versions/${assessmentId}`),
-
-  // §4C.3 — the assessment
-  assessmentOverview: () => api.get<AdminAssessmentOverview>('/api/admin/assessment'),
+  // §4C.3 — a path's placement assessment (D-134)
+  assessmentOverview: (pathId: string) =>
+    api.get<AdminAssessmentOverview>(`/api/admin/paths/${pathId}/assessment`),
 
   /**
-   * The draft bank, weights included.
+   * The draft bank, answer key included.
    *
-   * The one call in this client that receives RIASEC weightings. It answers only
-   * to a SUPER_ADMIN session; the learner's `assessmentApi.getActive()` returns
-   * the same questions with the weights stripped (D-034), and an integration
-   * test greps that response to keep it that way.
+   * The one call in this client that receives `isCorrect`, `marks` and the level
+   * an item targets. It answers only to a SUPER_ADMIN session; the learner's
+   * `assessmentApi.get()` returns the same questions with all three stripped
+   * (D-034), and an integration test greps that response to keep it that way.
    */
-  assessmentDraft: () => api.get<AdminAssessmentDraft>('/api/admin/assessment/draft'),
+  assessmentDraft: (pathId: string) =>
+    api.get<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft`),
 
-  createAssessmentDraft: () => api.post<AdminAssessmentDraft>('/api/admin/assessment/draft', {}),
+  createAssessmentDraft: (pathId: string) =>
+    api.post<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft`, {}),
 
-  discardAssessmentDraft: () => api.delete<void>('/api/admin/assessment/draft'),
+  discardAssessmentDraft: (pathId: string) =>
+    api.delete<void>(`/api/admin/paths/${pathId}/assessment/draft`),
 
-  updateAssessmentDraft: (patch: { title?: string; description?: string }) =>
-    api.patch<AdminAssessmentDraft>('/api/admin/assessment/draft', patch),
+  updateAssessmentDraft: (pathId: string, patch: { title?: string; description?: string }) =>
+    api.patch<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft`, patch),
 
-  addDraftQuestion: (input: { text: string; letter: RiasecLetter }) =>
-    api.post<AdminAssessmentDraft>('/api/admin/assessment/draft/questions', input),
+  /** The placement rule. An empty list returns the path to the even split. */
+  setAssessmentBands: (pathId: string, bands: PlacementBand[]) =>
+    api.patch<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft/bands`, { bands }),
 
-  updateDraftQuestion: (questionId: string, patch: { text?: string }) =>
-    api.patch<AdminAssessmentDraft>(`/api/admin/assessment/draft/questions/${questionId}`, patch),
+  addDraftQuestion: (
+    pathId: string,
+    input: { text: string; marks?: number; levelId?: string | null; topic?: string | null },
+  ) =>
+    api.post<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft/questions`, input),
 
-  removeDraftQuestion: (questionId: string) =>
-    api.delete<AdminAssessmentDraft>(`/api/admin/assessment/draft/questions/${questionId}`),
+  updateDraftQuestion: (
+    pathId: string,
+    questionId: string,
+    patch: { text?: string; marks?: number; levelId?: string | null; topic?: string | null },
+  ) =>
+    api.patch<AdminAssessmentDraft>(
+      `/api/admin/paths/${pathId}/assessment/draft/questions/${questionId}`,
+      patch,
+    ),
 
-  reorderDraft: (questionIds: string[]) =>
-    api.patch<AdminAssessmentDraft>('/api/admin/assessment/draft/order', { questionIds }),
+  removeDraftQuestion: (pathId: string, questionId: string) =>
+    api.delete<AdminAssessmentDraft>(
+      `/api/admin/paths/${pathId}/assessment/draft/questions/${questionId}`,
+    ),
+
+  reorderDraft: (pathId: string, questionIds: string[]) =>
+    api.patch<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft/questions/order`, {
+      questionIds,
+    }),
 
   updateDraftOption: (
+    pathId: string,
     optionId: string,
-    patch: { label?: string; weights?: Partial<Record<RiasecLetter, number>> },
-  ) => api.patch<AdminAssessmentDraft>(`/api/admin/assessment/draft/options/${optionId}`, patch),
+    patch: { label?: string; isCorrect?: boolean },
+  ) =>
+    api.patch<AdminAssessmentDraft>(
+      `/api/admin/paths/${pathId}/assessment/draft/options/${optionId}`,
+      patch,
+    ),
 
-  publishAssessment: () =>
-    api.post<AdminAssessmentVersion>('/api/admin/assessment/draft/publish', {}),
+  publishAssessment: (pathId: string) =>
+    api.post<AdminAssessmentVersion>(`/api/admin/paths/${pathId}/assessment/publish`, {}),
 
-  assessmentVersion: (assessmentId: string) =>
-    api.get<AdminAssessmentDraft>(`/api/admin/assessment/versions/${assessmentId}`),
+  assessmentVersion: (pathId: string, assessmentId: string) =>
+    api.get<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/versions/${assessmentId}`),
 
   // §4C.3 — assignment (TAM-147): who is handed which instrument or group
   assessmentKeys: () => api.get<AdminAssessmentKeyOption[]>('/api/admin/assessment-keys'),
@@ -740,11 +714,8 @@ export const adminApi = {
   removeAssessmentGroup: (id: string) =>
     api.delete<AdminAssessmentGroupRow[]>(`/api/admin/assessment-groups/${id}`),
 
-  // §4C.4 — study paths
+  // §4C.4 — study paths, their ladders, and what is placed on them
   listPaths: () => api.get<AdminPathRow[]>('/api/admin/paths'),
-
-  /** The 5-10 rule. Read-only: there is no endpoint that writes it (D-074). */
-  pathBounds: () => api.get<AdminPathBounds>('/api/admin/paths/bounds'),
 
   getPath: (pathId: string) => api.get<AdminPathDetail>(`/api/admin/paths/${pathId}`),
 
@@ -758,7 +729,6 @@ export const adminApi = {
     key: string;
     name: string;
     description: string;
-    riasecLetter: RiasecLetter;
     typicalDurationMinutes?: number;
   }) => api.post<AdminPathDetail>('/api/admin/paths', input),
 
@@ -768,24 +738,63 @@ export const adminApi = {
       name?: string;
       description?: string;
       skillOutcomes?: string[];
-      riasecLetter?: RiasecLetter;
       typicalDurationMinutes?: number;
       displayOrder?: number;
-      isActive?: boolean;
+      status?: PathStatus;
     },
   ) => api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}`, patch),
 
-  /** Permanent removal, refused for any path somebody ever chose (§4C.4). */
+  /** Permanent removal, refused for any path somebody was ever assigned. */
   deletePath: (pathId: string) => api.delete<void>(`/api/admin/paths/${pathId}`),
 
+  /** Adds a course to the path. It lands unassigned, always (D-134). */
   attachPathCourse: (pathId: string, courseId: string) =>
     api.post<AdminPathDetail>(`/api/admin/paths/${pathId}/courses`, { courseId }),
 
-  detachPathCourse: (pathId: string, courseId: string) =>
-    api.delete<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/${courseId}`),
+  detachPathCourse: (pathId: string, pathCourseId: string) =>
+    api.delete<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/${pathCourseId}`),
 
-  reorderPathCourses: (pathId: string, courseIds: string[]) =>
-    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/order`, { courseIds }),
+  // The ladder
+  createLevel: (pathId: string, name: string) =>
+    api.post<AdminPathDetail>(`/api/admin/paths/${pathId}/levels`, { name }),
+
+  renameLevel: (pathId: string, levelId: string, name: string) =>
+    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/levels/${levelId}`, { name }),
+
+  /** Its courses revert to unassigned; none is deleted. */
+  deleteLevel: (pathId: string, levelId: string) =>
+    api.delete<AdminPathDetail>(`/api/admin/paths/${pathId}/levels/${levelId}`),
+
+  reorderLevels: (pathId: string, levelIds: string[]) =>
+    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/levels/order`, { levelIds }),
+
+  /**
+   * Places a course on a rung, moves it, or takes it off (`levelId: null`).
+   *
+   * The one call in the product that writes a placement, and it is admin-only —
+   * an entity has no vocabulary for it (D-134).
+   */
+  placeCourse: (
+    pathId: string,
+    pathCourseId: string,
+    placement: { levelId: string | null; position?: number },
+  ) =>
+    api.patch<AdminPathDetail>(
+      `/api/admin/paths/${pathId}/courses/${pathCourseId}/placement`,
+      placement,
+    ),
+
+  reorderLevelCourses: (pathId: string, levelId: string, pathCourseIds: string[]) =>
+    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/levels/${levelId}/order`, {
+      pathCourseIds,
+    }),
+
+  // §4C.2 — which paths an employee is on (D-130/D-133)
+  assignPath: (pathId: string, userIds: string[]) =>
+    api.post<AdminAssignResult>('/api/admin/path-assignments', { pathId, userIds }),
+
+  revokePath: (userId: string, pathId: string) =>
+    api.delete<void>(`/api/admin/path-assignments/${userId}/${pathId}`),
 
   // §4C.5 — course oversight
   listCourses: (

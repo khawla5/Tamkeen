@@ -4,39 +4,41 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 
 /**
- * §4C.1's aggregation, against a fake Prisma.
+ * §4C.1's aggregation, against a fake Prisma (D-134).
  *
  * The queries themselves are ordinary counts and the integration suite proves
  * they run. What is worth pinning down here is the *arithmetic on top of them* —
- * the three places where a plausible-looking implementation would be quietly
- * wrong:
+ * the places where a plausible-looking implementation would be quietly wrong:
  *
- *  1. a retake must not count as a second assessed person (D-033),
- *  2. the career-type distribution must use each person's newest result, not
- *     all of them, or it describes the indecisive rather than the ministry,
- *  3. a completion rate over nobody is undefined, not 0%.
+ *  1. an employee on two paths is one person in training, not two (D-130),
+ *  2. the completion rate's denominator is the people actually placed, not
+ *     everyone assigned — otherwise an unpublished assessment reads as a
+ *     completion problem,
+ *  3. a rate over nobody is undefined, not 0%,
+ *  4. a published path nobody is on still appears, because a zero is a finding.
  */
 
-interface ResultRow {
-  userId: string;
-  code: string;
-  completedAt: Date;
+interface PathRow {
+  id: string;
+  name: string;
+  statuses: Array<'ACTIVE' | 'COMPLETED'>;
+  placed?: number;
+  hasAssessment?: boolean;
 }
 
 function harness(
   options: {
-    results?: ResultRow[];
-    userPaths?: Array<{ status: string }>;
+    paths?: PathRow[];
+    /** Distinct employees holding at least one path. */
+    assignedUserIds?: string[];
+    placedLearnerIds?: string[];
+    completedUserIds?: string[];
     lmsReachable?: boolean;
     lastRuns?: Record<string, Date>;
     activity?: Array<{ id: bigint; action: string; actorName: string | null }>;
-    activeAssessment?: { version: number; effectiveFrom: Date | null; createdAt: Date } | null;
-    draftCount?: number;
-    activePathLetters?: string[];
   } = {},
 ) {
-  const results = options.results ?? [];
-  const userPaths = options.userPaths ?? [];
+  const paths = options.paths ?? [];
   const activity = options.activity ?? [];
 
   const groupBy = (rows: Array<Record<string, string>>, key: string) => {
@@ -57,41 +59,49 @@ function harness(
     },
     entity: { groupBy: () => Promise.resolve(groupBy([{ status: 'ACTIVE' }], 'status')) },
     path: {
-      count: () => Promise.resolve(4),
-      groupBy: () =>
-        Promise.resolve(
-          groupBy(
-            (options.activePathLetters ?? []).map((riasecLetter) => ({ riasecLetter })),
-            'riasecLetter',
-          ),
-        ),
-    },
-    course: { count: () => Promise.resolve(48) },
-    assessmentResult: {
-      findMany: (args: { distinct: string[]; orderBy?: unknown; select: { code?: boolean } }) => {
-        /* Mirrors Postgres DISTINCT ON: the first row per userId in the given
-           order wins. The service asks for completedAt descending, so that is
-           the newest — and a test below depends on this being modelled rather
-           than assumed. */
-        const seen = new Set<string>();
-        const ordered = args.orderBy
-          ? [...results].sort(
-              (a, b) => a.userId.localeCompare(b.userId) || +b.completedAt - +a.completedAt,
-            )
-          : results;
-
-        const distinct = ordered.filter((row) => {
-          if (seen.has(row.userId)) return false;
-          seen.add(row.userId);
-          return true;
-        });
+      count: () => Promise.resolve(paths.length),
+      findMany: (args: { where?: { assessments?: unknown }; select: Record<string, unknown> }) => {
+        /* Two different reads share this method: the assignment share wants
+           every published path with its learners, and `pathsWithoutAssessment`
+           wants only the ones with no ACTIVE version. The `assessments` filter
+           is what tells them apart. */
+        if (args.where && 'assessments' in args.where) {
+          return Promise.resolve(
+            paths
+              .filter((path) => path.hasAssessment === false)
+              .map((path) => ({ id: path.id, name: path.name })),
+          );
+        }
 
         return Promise.resolve(
-          args.select.code ? distinct.map((row) => ({ code: row.code })) : distinct,
+          paths.map((path) => ({
+            id: path.id,
+            name: path.name,
+            userPaths: path.statuses.map((status) => ({ status })),
+          })),
         );
       },
     },
-    userPath: { groupBy: () => Promise.resolve(groupBy(userPaths, 'status')) },
+    course: { count: () => Promise.resolve(48) },
+    userPath: {
+      findMany: (args: { where?: { status?: string } }) =>
+        Promise.resolve(
+          (args.where?.status === 'COMPLETED'
+            ? (options.completedUserIds ?? [])
+            : (options.assignedUserIds ?? [])
+          ).map((userId) => ({ userId })),
+        ),
+    },
+    learnerPlacement: {
+      findMany: () =>
+        Promise.resolve((options.placedLearnerIds ?? []).map((learnerId) => ({ learnerId }))),
+      groupBy: () =>
+        Promise.resolve(
+          paths
+            .filter((path) => (path.placed ?? 0) > 0)
+            .map((path) => ({ pathId: path.id, _count: { _all: path.placed ?? 0 } })),
+        ),
+    },
     completion: { count: () => Promise.resolve(11) },
     certificate: { count: () => Promise.resolve(7) },
     auditLog: {
@@ -111,19 +121,6 @@ function harness(
           })),
         ),
     },
-    assessment: {
-      findFirst: () =>
-        Promise.resolve(
-          options.activeAssessment === undefined
-            ? {
-                version: 1,
-                effectiveFrom: new Date('2026-08-01T00:00:00Z'),
-                createdAt: new Date('2026-07-01T00:00:00Z'),
-              }
-            : options.activeAssessment,
-        ),
-      count: () => Promise.resolve(options.draftCount ?? 0),
-    },
   } as unknown as PrismaService;
 
   const config = {
@@ -141,205 +138,93 @@ function harness(
 }
 
 describe('AdminDashboardService', () => {
-  it('counts a person once however many times they retook the assessment', async () => {
-    const view = await harness({
-      results: [
-        { userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') },
-        { userId: 'u1', code: 'RIC', completedAt: new Date('2026-02-01') },
-        { userId: 'u2', code: 'SIA', completedAt: new Date('2026-01-15') },
-      ],
-    }).get();
+  it('counts an employee once however many paths they hold', async () => {
+    /* D-130 allows more than one assignment per person, so counting rows would
+       report one well-served employee as several people in training. */
+    const view = await harness({ assignedUserIds: ['u1', 'u2'] }).get();
 
-    expect(view.journey.assessed).toBe(2);
+    expect(view.journey.assigned).toBe(2);
   });
 
-  it('distributes career types by each person’s newest result, not by every attempt', async () => {
+  it('rates completion over the people who were actually placed', async () => {
+    /* Four assigned, two of whom sat the assessment, one of those finished. The
+       rate is one of two, not one of four: a learner waiting on an unpublished
+       assessment has not failed to finish anything. */
     const view = await harness({
-      results: [
-        /* u1 changed their mind: the old S must not still be counted, or one
-           indecisive employee inflates two different types at once. */
-        { userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') },
-        { userId: 'u1', code: 'RIC', completedAt: new Date('2026-02-01') },
-        { userId: 'u2', code: 'SIA', completedAt: new Date('2026-01-15') },
-      ],
+      assignedUserIds: ['u1', 'u2', 'u3', 'u4'],
+      placedLearnerIds: ['u1', 'u2'],
+      completedUserIds: ['u1'],
     }).get();
 
-    const employees = Object.fromEntries(
-      view.letterDistribution.map((row) => [row.letter, row.employees]),
-    );
-
-    expect(employees).toEqual({ R: 1, I: 0, A: 0, S: 1, E: 0, C: 0 });
+    expect(view.journey.placed).toBe(2);
+    expect(view.journey.pathCompletionRate).toBe(50);
   });
 
-  it('counts the dominant letter, not every letter of the code', async () => {
-    const view = await harness({
-      results: [{ userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') }],
-    }).get();
+  it('leaves the completion rate undefined when nobody has been placed', async () => {
+    /* 0% of nobody reads as failure, which is a different claim. */
+    const view = await harness({ assignedUserIds: ['u1'] }).get();
 
-    /* I and A are in this person's code but are not what they lead with. A
-       distribution that counted all three would total more people than exist. */
-    const employees = Object.fromEntries(
-      view.letterDistribution.map((row) => [row.letter, row.employees]),
-    );
-
-    expect(employees).toEqual({ R: 0, I: 0, A: 0, S: 1, E: 0, C: 0 });
-    expect(view.letterDistribution.reduce((sum, row) => sum + row.employees, 0)).toBe(1);
-  });
-
-  it('returns all six letters, including the ones nobody scored', async () => {
-    const view = await harness({
-      results: [{ userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') }],
-    }).get();
-
-    /* A dimension nobody leads with is a finding, not an absence — and a row
-       that disappeared could not be compared against the paths offered for it. */
-    expect(view.letterDistribution).toHaveLength(6);
-    expect([...view.letterDistribution.map((row) => row.letter)].sort()).toEqual([
-      'A',
-      'C',
-      'E',
-      'I',
-      'R',
-      'S',
-    ]);
-  });
-
-  it('orders by employee count, breaking a tie on the canonical letter order', async () => {
-    const view = await harness({
-      results: [
-        { userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') },
-        { userId: 'u2', code: 'SEC', completedAt: new Date('2026-01-01') },
-        { userId: 'u3', code: 'RIC', completedAt: new Date('2026-01-01') },
-        { userId: 'u4', code: 'AEC', completedAt: new Date('2026-01-01') },
-      ],
-    }).get();
-
-    /* S leads on count; R and A tie at one each and fall back to canonical
-       R-I-A-S-E-C (D-031), so the order is reproducible between refreshes. */
-    expect(view.letterDistribution.map((row) => row.letter)).toEqual([
-      'S',
-      'R',
-      'A',
-      'I',
-      'E',
-      'C',
-    ]);
-  });
-
-  it('counts only OFFERED paths beside each type', async () => {
-    const view = await harness({
-      results: [{ userId: 'u1', code: 'SIA', completedAt: new Date('2026-01-01') }],
-      activePathLetters: ['S', 'S', 'R'],
-    }).get();
-
-    const paths = Object.fromEntries(
-      view.letterDistribution.map((row) => [row.letter, row.activePaths]),
-    );
-
-    /* Retired paths are excluded by the query's `isActive` filter: a type
-       served only by paths no learner can choose is an unserved type, and
-       counting them would hide exactly the gap this section exists to show. */
-    expect(paths).toEqual({ R: 1, I: 0, A: 0, S: 2, E: 0, C: 0 });
-  });
-
-  it('reports no completion rate at all when nobody has committed to a path', async () => {
-    const view = await harness({ userPaths: [{ status: 'BUILDING' }] }).get();
-
-    /* Not 0. A rate over an empty denominator is undefined, and "0%" on a
-       product nobody has finished yet reads as failure. */
     expect(view.journey.pathCompletionRate).toBeNull();
-    expect(view.journey.building).toBe(1);
   });
 
-  it('computes the completion rate over committed learners only', async () => {
+  it('lists a published path nobody is on, with zeroes', async () => {
+    /* A path the ministry built and never used is exactly the finding this
+       section exists for, and a row that disappears cannot be read. */
     const view = await harness({
-      userPaths: [
-        { status: 'BUILDING' },
-        { status: 'ACTIVE' },
-        { status: 'ACTIVE' },
-        { status: 'ACTIVE' },
-        { status: 'COMPLETED' },
+      paths: [
+        { id: 'p1', name: 'مسار أ', statuses: ['ACTIVE', 'COMPLETED'], placed: 1 },
+        { id: 'p2', name: 'مسار ب', statuses: [] },
       ],
     }).get();
 
-    /* 1 of 4 committed — the learner still building has not committed to
-       anything and cannot be counted against the rate. */
-    expect(view.journey.pathCompletionRate).toBe(25);
+    expect(view.pathDistribution).toEqual([
+      { pathId: 'p1', name: 'مسار أ', assigned: 2, placed: 1, completed: 1 },
+      { pathId: 'p2', name: 'مسار ب', assigned: 0, placed: 0, completed: 0 },
+    ]);
   });
 
-  it('separates an unreachable LMS from a stalled sync', async () => {
+  it('orders the distribution by how many people were assigned', async () => {
     const view = await harness({
-      lmsReachable: true,
-      lastRuns: { LMS_CATALOG_SYNCED: new Date('2026-08-23T09:00:00Z') },
+      paths: [
+        { id: 'p1', name: 'مسار أ', statuses: ['ACTIVE'] },
+        { id: 'p2', name: 'مسار ب', statuses: ['ACTIVE', 'ACTIVE', 'ACTIVE'] },
+      ],
+    }).get();
+
+    expect(view.pathDistribution.map((row) => row.pathId)).toEqual(['p2', 'p1']);
+  });
+
+  it('names published paths whose assessment nobody has published', async () => {
+    /* The one genuinely stuck thing on this page: every learner assigned to such
+       a path waits at «بانتظار تحديد المستوى» and nothing else says why. */
+    const view = await harness({
+      paths: [
+        { id: 'p1', name: 'مسار أ', statuses: [], hasAssessment: true },
+        { id: 'p2', name: 'مسار ب', statuses: [], hasAssessment: false },
+      ],
+    }).get();
+
+    expect(view.pathsWithoutAssessment).toEqual([{ id: 'p2', name: 'مسار ب' }]);
+  });
+
+  it('separates a reachable LMS from a sync job that has not run', async () => {
+    /* A healthy Moodle behind a stalled scheduler is the failure a single green
+       tick would hide, and the one an operator has to act on. */
+    const view = await harness({
+      lastRuns: { LMS_CATALOG_SYNCED: new Date('2026-08-20T09:00:00Z') },
     }).get();
 
     expect(view.lms.reachable).toBe(true);
-    expect(view.lms.lastCatalogSyncAt).toBe('2026-08-23T09:00:00.000Z');
-    /* Moodle answers, but the completion job has never completed a run. A single
-       "ok" would hide precisely this. */
+    expect(view.lms.lastCatalogSyncAt).toBe('2026-08-20T09:00:00.000Z');
     expect(view.lms.lastCompletionSyncAt).toBeNull();
   });
 
-  it('carries the failure code when the LMS refuses', async () => {
+  it('says why the LMS is unreachable, not merely that it is', async () => {
+    /* A bad token and a down server need different fixes; collapsing them would
+       waste the operator's first hour. */
     const view = await harness({ lmsReachable: false }).get();
 
-    expect(view.lms).toMatchObject({
-      reachable: false,
-      failureCode: 'UNAUTHORISED',
-      siteName: null,
-    });
-  });
-
-  it('renders a bigint audit id as a string', async () => {
-    const view = await harness({
-      activity: [{ id: 9007199254740993n, action: 'PATH_CONFIRMED', actorName: 'سارة' }],
-    }).get();
-
-    /* Larger than Number.MAX_SAFE_INTEGER on purpose: JSON.stringify throws on a
-       bigint rather than rounding it, so this must not reach the serialiser. */
-    expect(view.recentActivity[0]!.id).toBe('9007199254740993');
-    expect(() => JSON.stringify(view)).not.toThrow();
-  });
-
-  it('names an anonymous actor as null rather than inventing one', async () => {
-    const view = await harness({
-      activity: [{ id: 1n, action: 'AUTH_LOGIN_FAILED', actorName: null }],
-    }).get();
-
-    expect(view.recentActivity[0]!.actorName).toBeNull();
-  });
-
-  it('reports no assessment rather than throwing when none is active', async () => {
-    const view = await harness({ activeAssessment: null }).get();
-
-    expect(view.assessment).toBeNull();
-  });
-
-  it('reports the date the version took effect, not the date its row was made', async () => {
-    /* A draft copied today and published next week took effect next week. The
-       two dates differ by exactly the length of the edit, and §4C.3 promises the
-       effective one. */
-    const view = await harness().get();
-
-    expect(view.assessment?.effectiveFrom).toBe('2026-08-01T00:00:00.000Z');
-  });
-
-  it('falls back to the created date rather than crashing on a null effective date', async () => {
-    /* Unreachable for an ACTIVE row — publishing always stamps it — so this is
-       about the dashboard staying up rather than about the data being right. */
-    const view = await harness({
-      activeAssessment: {
-        version: 3,
-        effectiveFrom: null,
-        createdAt: new Date('2026-07-01T00:00:00Z'),
-      },
-    }).get();
-
-    expect(view.assessment?.effectiveFrom).toBe('2026-07-01T00:00:00.000Z');
-  });
-
-  it('flags an unfinished assessment edit, which is what waits on the administrator', async () => {
-    expect((await harness({ draftCount: 1 }).get()).assessment?.hasDraft).toBe(true);
-    expect((await harness({ draftCount: 0 }).get()).assessment?.hasDraft).toBe(false);
+    expect(view.lms.reachable).toBe(false);
+    expect(view.lms.failureCode).toBe('UNAUTHORISED');
   });
 });

@@ -95,46 +95,47 @@ export class AdminAuditService {
    * truth that goes stale.
    */
   async reports(): Promise<AdminReports> {
-    const [journey, pathPopularity, codeDistribution, certificates, courseOutcomes] =
+    const [journey, pathPopularity, placementDistribution, certificates, courseOutcomes] =
       await Promise.all([
         this.journey(),
         this.pathPopularity(),
-        this.codeDistribution(),
+        this.placementDistribution(),
         this.certificates(),
         this.courseOutcomes(),
       ]);
 
-    return { journey, pathPopularity, codeDistribution, certificates, courseOutcomes };
+    return { journey, pathPopularity, placementDistribution, certificates, courseOutcomes };
   }
 
   private async journey(): Promise<AdminReports['journey']> {
-    const [assessed, byStatus, coursesPassed, certificatesIssued] = await Promise.all([
-      /* Distinct people, not results: retakes append (D-033). `kind: 'RIASEC'`
-         (TAM-147): this funnel step means the Holland assessment specifically,
-         the same reading `admin-dashboard.service.ts`'s "assessed" count
-         already gives it — someone who has only taken the CEFR placement test
-         has not passed this step. */
-      this.prisma.assessmentResult.findMany({
-        where: { kind: 'RIASEC' },
+    const [assigned, placed, completed, coursesPassed, certificatesIssued] = await Promise.all([
+      /* Distinct people, not rows: an employee may hold more than one path
+         (D-130), and "how many of our workforce is in training" is a question
+         about people. */
+      this.prisma.userPath.findMany({ distinct: ['userId'], select: { userId: true } }),
+      this.prisma.learnerPlacement.findMany({
+        distinct: ['learnerId'],
+        select: { learnerId: true },
+      }),
+      this.prisma.userPath.findMany({
+        where: { status: 'COMPLETED' },
         distinct: ['userId'],
         select: { userId: true },
       }),
-      this.prisma.userPath.groupBy({ by: ['status'], _count: { _all: true } }),
       this.prisma.completion.count({ where: { passed: true } }),
       this.prisma.certificate.count(),
     ]);
 
-    const of = (status: string) => byStatus.find((row) => row.status === status)?._count._all ?? 0;
-    const active = of('ACTIVE');
-    const completed = of('COMPLETED');
-    const committed = active + completed;
-
     return {
-      assessed: assessed.length,
-      building: of('BUILDING'),
-      active,
-      completed,
-      pathCompletionRate: committed === 0 ? null : Math.round((completed / committed) * 100),
+      assigned: assigned.length,
+      placed: placed.length,
+      completed: completed.length,
+      /* Over the people who were actually placed, not everyone assigned: a
+         learner waiting on an assessment has not failed to finish, and counting
+         them in the denominator would report a directorate's unpublished path as
+         a completion problem. */
+      pathCompletionRate:
+        placed.length === 0 ? null : Math.round((completed.length / placed.length) * 100),
       coursesPassed,
       certificatesIssued,
     };
@@ -145,7 +146,6 @@ export class AdminAuditService {
       select: {
         id: true,
         name: true,
-        riasecLetter: true,
         userPaths: { select: { status: true } },
       },
     });
@@ -154,35 +154,64 @@ export class AdminAuditService {
       .map((path) => ({
         pathId: path.id,
         name: path.name,
-        riasecLetter: path.riasecLetter,
-        /* Chosen, not "confirmed": someone still building has expressed a
-           preference, and that is what "popular" is asking about. */
-        chosen: path.userPaths.length,
+        /* Assigned, not chosen: under D-130 nobody picks a path, so this reports
+           where the ministry is putting people rather than what they preferred. */
+        assigned: path.userPaths.length,
         completed: path.userPaths.filter((row) => row.status === 'COMPLETED').length,
       }))
-      .sort((a, b) => b.chosen - a.chosen || a.name.localeCompare(b.name, 'ar'));
+      .sort((a, b) => b.assigned - a.assigned || a.name.localeCompare(b.name, 'ar'));
   }
 
-  private async codeDistribution(): Promise<AdminReports['codeDistribution']> {
-    /* `kind: 'RIASEC'` (TAM-147): a Holland Code distribution has nothing to
-       say about a CEFR row, which carries no `code`. */
-    const newest = await this.prisma.assessmentResult.findMany({
-      where: { kind: 'RIASEC' },
-      distinct: ['userId'],
-      orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
-      select: { code: true },
+  /**
+   * Where the ministry's people actually stand: employees on each rung of each
+   * path.
+   *
+   * This is what the Holland-code distribution used to be, asked the way the
+   * assigned model makes it answerable. A code told the ministry what somebody
+   * was drawn to; a placement tells them what somebody can already do, which is
+   * the fact a training programme is planned against.
+   */
+  private async placementDistribution(): Promise<AdminReports['placementDistribution']> {
+    const placements = await this.prisma.learnerPlacement.groupBy({
+      by: ['pathId', 'levelId'],
+      _count: { _all: true },
     });
 
-    const counts = new Map<string, number>();
-    for (const row of newest) {
-      /* Non-null: filtered to `kind: 'RIASEC'` above. */
-      const code = row.code!;
-      counts.set(code, (counts.get(code) ?? 0) + 1);
+    if (placements.length === 0) {
+      return [];
     }
 
-    return [...counts.entries()]
-      .map(([code, count]) => ({ code, count }))
-      .sort((a, b) => b.count - a.count || a.code.localeCompare(b.code));
+    const levels = await this.prisma.level.findMany({
+      where: { id: { in: placements.map((row) => row.levelId) } },
+      select: {
+        id: true,
+        name: true,
+        position: true,
+        path: { select: { id: true, name: true, displayOrder: true } },
+      },
+    });
+
+    const byId = new Map(levels.map((level) => [level.id, level]));
+
+    return placements
+      .flatMap((row) => {
+        const level = byId.get(row.levelId);
+        if (!level) return [];
+
+        return [
+          {
+            pathId: level.path.id,
+            pathName: level.path.name,
+            levelId: level.id,
+            levelName: level.name,
+            position: level.position,
+            employees: row._count._all,
+            order: level.path.displayOrder,
+          },
+        ];
+      })
+      .sort((a, b) => a.order - b.order || a.position - b.position)
+      .map(({ order: _order, ...rest }) => rest);
   }
 
   private async certificates(): Promise<AdminReports['certificates']> {
@@ -209,12 +238,12 @@ export class AdminAuditService {
    */
   private async courseOutcomes(): Promise<AdminReports['courseOutcomes']> {
     const courses = await this.prisma.course.findMany({
-      where: { userPathCourses: { some: {} } },
+      where: { enrollments: { some: {} } },
       select: {
         id: true,
         title: true,
         moodleCourseId: true,
-        _count: { select: { userPathCourses: true } },
+        _count: { select: { enrollments: true } },
       },
     });
 
@@ -228,7 +257,7 @@ export class AdminAuditService {
 
     return courses
       .map((course) => {
-        const enrolled = course._count.userPathCourses;
+        const enrolled = course._count.enrollments;
         const passedCount = passedBy.get(course.moodleCourseId) ?? 0;
 
         return {

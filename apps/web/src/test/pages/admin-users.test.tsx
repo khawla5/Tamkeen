@@ -21,6 +21,9 @@ import { renderWithProviders } from '@/test/render';
 const api = vi.hoisted(() => ({
   listUsers: vi.fn(),
   getUser: vi.fn(),
+  listPaths: vi.fn(),
+  assignPath: vi.fn(),
+  revokePath: vi.fn(),
   createUser: vi.fn(),
   reinvite: vi.fn(),
   setUserStatus: vi.fn(),
@@ -101,34 +104,91 @@ const DETAIL: AdminUserDetail = {
   ...row(),
   createdAt: '2026-07-01T00:00:00.000Z',
   hasLmsAccount: true,
-  assessment: { code: 'SIA', completedAt: '2026-08-05T00:00:00.000Z', attempts: 2 },
-  assessments: [
-    {
-      key: 'riasec-core',
-      kind: 'RIASEC',
-      title: 'تقييم الميول المهنية',
-      result: 'SIA',
-      version: 3,
-      completedAt: '2026-08-05T00:00:00.000Z',
-      attempts: 2,
-    },
-  ],
-  path: {
-    name: 'مسار الموارد البشرية',
-    status: 'ACTIVE',
-    confirmedAt: '2026-08-06T00:00:00.000Z',
-    coursesChosen: 6,
-    coursesPassed: 2,
-  },
+  assessments: [],
   certificateCount: 2,
   activeSessions: 1,
+  /* D-133/D-134: one path placed, one still awaiting the assessment — the panel
+     shows both states at once, and only the second may be revoked. */
+  paths: [
+    {
+      userPathId: 'up-1',
+      pathId: 'p-1',
+      name: 'مسار الموارد البشرية',
+      status: 'ACTIVE',
+      assignedAt: '2026-08-06T00:00:00.000Z',
+      placedLevel: { id: 'l-2', name: 'متقدم', position: 2 },
+      coursesPassed: 2,
+      coursesTotal: 6,
+    },
+    {
+      userPathId: 'up-2',
+      pathId: 'p-2',
+      name: 'مسار تحليل البيانات',
+      status: 'ACTIVE',
+      assignedAt: '2026-08-07T00:00:00.000Z',
+      placedLevel: null,
+      coursesPassed: 0,
+      coursesTotal: 4,
+    },
+  ],
 };
+
+/** The published paths the assign control offers. */
+const PATH_ROWS = [
+  {
+    id: 'p-1',
+    key: 'hr',
+    name: 'مسار الموارد البشرية',
+    levelCount: 3,
+    placedCourseCount: 6,
+    unassignedCourseCount: 0,
+    assignedLearners: 1,
+    status: 'PUBLISHED' as const,
+    displayOrder: 1,
+  },
+  {
+    id: 'p-2',
+    key: 'data',
+    name: 'مسار تحليل البيانات',
+    levelCount: 3,
+    placedCourseCount: 4,
+    unassignedCourseCount: 0,
+    assignedLearners: 1,
+    status: 'PUBLISHED' as const,
+    displayOrder: 2,
+  },
+  {
+    id: 'p-3',
+    key: 'ops',
+    name: 'مسار العمليات',
+    levelCount: 3,
+    placedCourseCount: 5,
+    unassignedCourseCount: 0,
+    assignedLearners: 0,
+    status: 'PUBLISHED' as const,
+    displayOrder: 3,
+  },
+  {
+    /* A draft: never offered, because assigning to it would strand the learner
+       (the server refuses it too). */
+    id: 'p-4',
+    key: 'draft',
+    name: 'مسار قيد الإعداد',
+    levelCount: 1,
+    placedCourseCount: 0,
+    unassignedCourseCount: 2,
+    assignedLearners: 0,
+    status: 'DRAFT' as const,
+    displayOrder: 4,
+  },
+];
 
 describe('Admin users (§4C.2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.listUsers.mockResolvedValue(page([row()]));
     api.listEntities.mockResolvedValue([]);
+    api.listPaths.mockResolvedValue(PATH_ROWS);
     api.getUser.mockResolvedValue(DETAIL);
   });
 
@@ -272,10 +332,62 @@ describe('Admin users (§4C.2)', () => {
 
       await user.click(await screen.findByRole('button', { name: 'إدارة' }));
 
-      expect(await screen.findByText(/SIA/)).toBeInTheDocument();
-      expect(screen.getByText(/مسار الموارد البشرية/)).toBeInTheDocument();
+      /* The rung they were placed on, not the assessment answers behind it. */
+      expect(await screen.findByText('متقدم')).toBeInTheDocument();
+      expect(screen.getAllByText('مسار الموارد البشرية').length).toBeGreaterThan(0);
       /* A count, not the certificates themselves. */
       expect(screen.getByText('الشهادات')).toBeInTheDocument();
+    });
+
+    it('assignments (D-134): lists each path, and revokes only one nobody was placed in', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByText('المسارات المُسندة');
+
+      /* One placed, one awaiting (the fixture) — one revoke, not two: a
+         placement is a record, and revoking under it would leave it pointing at
+         a path the employee was never on. */
+      expect(screen.getAllByText('مسار الموارد البشرية').length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('button', { name: 'إلغاء الإسناد' })).toHaveLength(1);
+    });
+
+    it('assignments (D-134): offers only published paths they are not on, one grant per tick', async () => {
+      api.getUser.mockResolvedValue({ ...DETAIL, paths: [] });
+      api.assignPath.mockResolvedValue({ created: 1, alreadyAssigned: 0 });
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      const group = await screen.findByRole('group', { name: 'إسناد مسارات' });
+      const boxes = within(group).getAllByRole('checkbox');
+      /* Three published, never the draft. */
+      expect(boxes).toHaveLength(3);
+
+      /* Nothing ticked, nothing to send. */
+      const assign = within(group).getByRole('button', { name: 'إسناد' });
+      expect(assign).toBeDisabled();
+
+      await user.click(within(group).getByLabelText('مسار الموارد البشرية'));
+      await user.click(within(group).getByLabelText('مسار العمليات'));
+      await user.click(assign);
+
+      /* One decision per path on the wire — each grant its own event. */
+      await waitFor(() => expect(api.assignPath).toHaveBeenCalledTimes(2));
+      expect(api.assignPath).toHaveBeenCalledWith('p-1', ['u1']);
+      expect(api.assignPath).toHaveBeenCalledWith('p-3', ['u1']);
+      expect(await screen.findByText('أُسند المسار.')).toBeInTheDocument();
+    });
+
+    it('assignments (D-134): a path they already hold is not offered again', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      const group = await screen.findByRole('group', { name: 'إسناد مسارات' });
+      /* Two of the three published paths are already theirs. */
+      expect(within(group).getAllByRole('checkbox')).toHaveLength(1);
+      expect(within(group).getByLabelText('مسار العمليات')).toBeInTheDocument();
     });
 
     it('offers suspend for an active account and reactivate for a suspended one', async () => {
@@ -292,7 +404,7 @@ describe('Admin users (§4C.2)', () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminUsersPage />);
       await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-      await screen.findByText(/SIA/);
+      await screen.findByText('المسارات المُسندة');
 
       /* An "invitation" to somebody who already signed in is a password reset,
          and the server refuses it as such. */

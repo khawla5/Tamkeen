@@ -1,7 +1,13 @@
 import type { AssessmentKind } from './assessment-assignment';
 import type { AuditTargetType } from './audit';
-import type { CourseLanguage, CoursePublication, CourseStatus } from './catalog';
-import type { RiasecLetter } from './riasec';
+import type {
+  CourseLanguage,
+  CoursePublication,
+  CourseStatus,
+  PathCoursePlacement,
+  PathStatus,
+} from './catalog';
+import type { LevelRef } from './levels';
 import type { UserRole } from './roles';
 
 /**
@@ -42,40 +48,33 @@ export interface AdminUserCounts {
  * failure rather than as "nobody has finished yet".
  */
 export interface AdminJourneyCounts {
-  assessed: number;
-  building: number;
-  active: number;
+  /** Employees holding at least one assigned path. */
+  assigned: number;
+  /** Of those, how many have taken a path's assessment and been placed. */
+  placed: number;
+  /** Employees with at least one path finished. */
   completed: number;
   pathCompletionRate: number | null;
   coursesPassed: number;
   certificatesIssued: number;
 }
 
-/** One bar of the Holland-code distribution (§4C.8's reports). */
-export interface AdminCodeShare {
-  code: string;
-  count: number;
-}
-
 /**
- * One row of the dashboard's career-type distribution (§4C.1).
+ * One row of the dashboard's assignment picture (§4C.1, D-134).
  *
- * **A letter, not a code.** The full Holland Code has thirty-odd values and
- * spells nothing an administrator can act on; the *dominant* letter has six,
- * each with an Arabic name the ministry already uses, and it is the same letter
- * `paths.riasec_letter` is tagged with (§3A). Putting the two counts on one row
- * is the whole point of the section: it answers "are we offering paths where
- * our people's interests actually are", which is a decision the admin owns.
- * The exhaustive code breakdown stays in §4C.8's reports, where the detail
- * belongs.
+ * It replaces the career-type distribution, which answered "where are our
+ * people's interests" — a question the ministry stopped asking when it started
+ * assigning paths. This answers the one it asks instead: of the people we put on
+ * this path, how many have actually been placed on a rung and started, and how
+ * many are still waiting on the assessment. A path with many assigned and few
+ * placed is the finding, and it is actionable.
  */
-export interface AdminLetterShare {
-  letter: RiasecLetter;
-  /** Employees whose dominant letter this is — one per person, newest result
-   *  only (D-033), so a retake corrects rather than double-counts. */
-  employees: number;
-  /** Paths currently offered to learners with this letter. */
-  activePaths: number;
+export interface AdminPathAssignmentShare {
+  pathId: string;
+  name: string;
+  assigned: number;
+  placed: number;
+  completed: number;
 }
 
 /**
@@ -119,16 +118,26 @@ export interface AdminDashboardView {
   users: AdminUserCounts;
   /** Organisations, as distinct from the accounts that act for them. */
   entities: { total: number; active: number; suspended: number };
-  paths: { total: number; active: number };
-  courses: { total: number; published: number; draft: number; unowned: number };
+  paths: { total: number; published: number; draft: number };
+  courses: {
+    total: number;
+    published: number;
+    draft: number;
+    unowned: number;
+    /** In a path, on no level — content no learner can reach (D-134). */
+    unassigned: number;
+  };
   journey: AdminJourneyCounts;
-  /** All six letters, always — a dimension nobody scored is itself the
-   *  finding. Ordered by employee count, descending. */
-  letterDistribution: AdminLetterShare[];
+  /** Every published path, always — one nobody was assigned is itself the
+   *  finding. Ordered by how many were assigned, descending. */
+  pathDistribution: AdminPathAssignmentShare[];
   lms: AdminLmsHealth;
   recentActivity: AdminActivityRow[];
-  /** Assessment version currently served to new takers, and since when. */
-  assessment: { version: number; effectiveFrom: string; hasDraft: boolean } | null;
+  /**
+   * Paths whose assessment is missing or still a draft, so nobody assigned to
+   * them can be placed. The one thing on this screen that is genuinely stuck.
+   */
+  pathsWithoutAssessment: Array<{ id: string; name: string }>;
 }
 
 /** The eight destinations of §4C's admin navigation. */
@@ -146,21 +155,35 @@ export const ADMIN_NAV_KEYS = [
 export type AdminNavKey = (typeof ADMIN_NAV_KEYS)[number];
 
 /**
- * A path as the admin manages it (§4C.4).
+ * A path as the admin manages it (§4C.4, D-134).
  *
- * Carries `riasecLetter` because the admin is the one who sets it, and
- * `courseCount` because a path with no courses cannot be built into a valid
- * 5-10 selection and the admin needs to see that before a learner does.
+ * The three counts are the state of the administrator's own work: how many
+ * courses have been given a rung, how many are sitting in the path waiting for
+ * one, and how many rungs there are to put them on. A path with unassigned
+ * courses is a path with content no learner can see, and that must be visible
+ * from the list rather than discovered by opening it.
  */
 export interface AdminPathRow {
   id: string;
   key: string;
   name: string;
-  riasecLetter: RiasecLetter;
-  courseCount: number;
-  /** Learners who have confirmed this path — why it may not be retired. */
-  committedLearners: number;
-  isActive: boolean;
+  levelCount: number;
+  placedCourseCount: number;
+  unassignedCourseCount: number;
+  /** Learners the ministry has assigned this path — why it may not be retired. */
+  assignedLearners: number;
+  /**
+   * Whether the path has a published assessment, and whether one is being
+   * edited.
+   *
+   * On the row rather than behind a second request because §4C.3's shelf is a
+   * list of paths, and a path with no published assessment strands everybody
+   * assigned to it at «بانتظار تحديد المستوى». That absence is the finding the
+   * shelf exists to show, so it has to be legible without opening each path.
+   */
+  hasActiveAssessment: boolean;
+  hasDraftAssessment: boolean;
+  status: PathStatus;
   displayOrder: number;
 }
 
@@ -220,31 +243,39 @@ export interface AdminUserPage {
  * What an administrator sees about one person (§4C.2's "path/assessment/
  * certificate status").
  *
- * A summary, not a second copy of the learner's own screens: the Holland Code
- * without the six scores, the path with its progress but not its course list,
- * and a certificate count rather than the certificates. An administrator asks
- * "where is this person up to and is anything stuck", and that is answerable
- * without reproducing the journey in the admin portal.
+ * A summary, not a second copy of the learner's own screens: each assigned path
+ * with where they were placed and how far they have got, but not its course
+ * list, and a certificate count rather than the certificates. An administrator
+ * asks "where is this person up to and is anything stuck", and that is
+ * answerable without reproducing the journey in the admin portal.
  */
 export interface AdminUserDetail extends AdminUserRow {
   createdAt: string;
   /** Whether an LMS account has been provisioned yet (lazy, per D-036). */
   hasLmsAccount: boolean;
-  /** @deprecated Kept for callers reading the Holland result directly; see
-   *  `assessments` for every instrument this person has taken (TAM-147). */
-  assessment: { code: string; completedAt: string; attempts: number } | null;
-  /** Every instrument this person has taken, newest attempt per instrument,
-   *  in no particular order (§4C.2 part 5, TAM-147). Read-only, and never the
-   *  per-question answers — those exist only so a result can be re-explained
-   *  (§3A), not for an administrator's review. */
-  assessments: AdminUserAssessmentSummary[];
-  path: {
+  /**
+   * Every path assigned to this employee, oldest first (D-130/D-134). Always
+   * empty for non-employee accounts. The manage-account panel is where the
+   * ministry assigns and revokes — assignment is an account decision (D-133).
+   *
+   * `placedLevel` is null while the path's assessment is untaken, which is the
+   * one state an administrator most often needs to see: assigned, but not yet
+   * started, because nobody has sat the test.
+   */
+  paths: Array<{
+    userPathId: string;
+    pathId: string;
     name: string;
-    status: 'BUILDING' | 'ACTIVE' | 'COMPLETED';
-    confirmedAt: string | null;
-    coursesChosen: number;
+    status: 'ACTIVE' | 'COMPLETED';
+    assignedAt: string;
+    placedLevel: LevelRef | null;
     coursesPassed: number;
-  } | null;
+    coursesTotal: number;
+  }>;
+  /** Every ministry-wide instrument this employee has taken, one row per
+   *  instrument key at its latest attempt (TAM-147) — a path's own placement
+   *  test is not among these, it is `paths[].placedLevel` above. */
+  assessments: AdminUserAssessmentSummary[];
   certificateCount: number;
   /** Live sessions right now — the answer to "is this suspension effective?" */
   activeSessions: number;
@@ -293,94 +324,13 @@ export interface AdminRegistrationPolicyView {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // §4C.3 — assessment management
+//
+// The contract lives in `assessment.ts`, beside the learner's, because a path's
+// assessment is one instrument seen from two sides: what a taker may see and
+// what an author may. Keeping the pair in one file is what makes the absence
+// rule — no answer key on the learner's side — checkable by reading rather than
+// by remembering.
 // ─────────────────────────────────────────────────────────────────────────────
-
-export type AssessmentVersionStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
-
-/**
- * One option as the *editor* sees it — weights included.
- *
- * This is the one shape in the whole product that carries a RIASEC weighting
- * across the wire, and it exists only behind `@Roles('SUPER_ADMIN')`. D-034 is
- * explicit that no weight may reach a taker: an assessment whose scoring key is
- * visible in a network response is one a person can steer toward whichever
- * result they already wanted, which would make every gold recommendation
- * downstream theatre. An integration test greps the *learner* endpoint for these
- * field names precisely because this type now exists.
- */
-export interface AdminAssessmentOption {
-  id: string;
-  key: string;
-  label: string;
-  order: number;
-  /** Points per dimension. An absent letter contributes nothing. */
-  weights: Partial<Record<RiasecLetter, number>>;
-}
-
-export interface AdminAssessmentQuestion {
-  id: string;
-  key: string;
-  text: string;
-  order: number;
-  options: AdminAssessmentOption[];
-}
-
-/** Why a proposed version cannot be published, or should not be without thought. */
-export interface AdminBankReadiness {
-  /** Refusals. Publishing with any of these is impossible (D-071). */
-  blockers: string[];
-  /** Advisory. Publishing proceeds; the editor says so first. */
-  warnings: string[];
-  /** What each dimension could attain — how the editor names the imbalance. */
-  attainable: Record<RiasecLetter, number>;
-  balanced: boolean;
-}
-
-/** A version in the history list (§4C.3's "version + effective date"). */
-export interface AdminAssessmentVersion {
-  id: string;
-  version: number;
-  status: AssessmentVersionStatus;
-  title: string;
-  effectiveFrom: string | null;
-  retiredAt: string | null;
-  questionCount: number;
-  /** How many people were scored against this version. Never mutated (D-049). */
-  resultCount: number;
-}
-
-/** §4C.3's landing state: what is live, what is being edited, what came before. */
-export interface AdminAssessmentOverview {
-  active: AdminAssessmentVersion | null;
-  draft: AdminAssessmentVersion | null;
-  history: AdminAssessmentVersion[];
-}
-
-/** The draft bank, with weights, as only an administrator may see it. */
-export interface AdminAssessmentDraft {
-  id: string;
-  key: string;
-  version: number;
-  title: string;
-  description: string;
-  questions: AdminAssessmentQuestion[];
-  readiness: AdminBankReadiness;
-  /** The version this draft was copied from, for "what am I changing". */
-  basedOnVersion: number | null;
-}
-
-/**
- * The six dimensions, as the editor's question-creation shortcut offers them.
- *
- * Adding a question one dimension at a time is what keeps a balanced bank
- * balanced: going from five items per dimension to six means adding six
- * questions, one per letter, and the editor should make that the easy path
- * rather than something to reconstruct from the imbalance report.
- */
-export interface AdminAddQuestionInput {
-  text: string;
-  letter: RiasecLetter;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // §4C.4 — path management
@@ -390,35 +340,60 @@ export interface AdminAddQuestionInput {
  * How many learners a path is carrying, by stage.
  *
  * The three numbers answer different questions and are never summed on screen.
- * `building` are people who have chosen the path but not committed — the only
- * group a retirement inconveniences. `active` and `completed` hold it under
- * D-002 and are unaffected by anything an administrator does here: My Path,
- * their courses and their certificates all read through `user_paths` and never
- * consult `paths.is_active`.
+ * `awaitingPlacement` are people the ministry assigned who have not yet taken
+ * the assessment — the group a missing or unpublished assessment strands, and
+ * the one an administrator can unblock. `active` and `completed` are unaffected
+ * by anything done here: their view reads through `user_paths` and never
+ * consults `paths.status`.
  */
 export interface AdminPathLearners {
-  building: number;
+  awaitingPlacement: number;
   active: number;
   completed: number;
 }
 
-/** A course attached to a path, as the admin manages it. */
+/**
+ * A course inside a path, as the admin manages it (§4C.4, D-134).
+ *
+ * The row carries both halves of the fact the screen is about: who put the
+ * course here (`assignedByEntityName`, `assignedAt` — the entity's proposal) and
+ * where it has been put (`placement`, `levelId`, `position` — the
+ * administrator's decision). `id` is the membership's id, not the course's,
+ * because placement endpoints address the membership.
+ */
 export interface AdminPathCourseRow {
   id: string;
+  courseId: string;
   moodleCourseId: number;
   title: string;
   status: CourseStatus;
-  displayOrder: number;
+  placement: PathCoursePlacement;
+  levelId: string | null;
+  /** 1-based within the level; null while unassigned. */
+  position: number | null;
   /** Which organisation supplies it; null for the seeded catalogue (D-063). */
   ownerEntityName: string | null;
+  /** Which organisation proposed it into this path; null when an admin did. */
+  assignedByEntityName: string | null;
+  assignedAt: string;
   /**
-   * How many learners hold this course *through this path*.
+   * How many learners have started this course through this path.
    *
-   * Non-zero means detaching it would leave those learners with a selection the
-   * build rules no longer recognise, so the server refuses. Shown so the refusal
-   * is predictable rather than discovered.
+   * Shown beside a move because §10 of the spec leaves the product question
+   * open: their progress is kept, and the administrator is told rather than
+   * asked.
    */
-  heldByLearners: number;
+  learnersStarted: number;
+}
+
+/** A level with what has been placed on it, in position order (§4C.4). */
+export interface AdminLevelRow {
+  id: string;
+  name: string;
+  position: number;
+  courses: AdminPathCourseRow[];
+  /** True while any learner is placed here — the reason deletion is refused. */
+  hasPlacedLearners: boolean;
 }
 
 export interface AdminPathDetail extends AdminPathRow {
@@ -428,11 +403,21 @@ export interface AdminPathDetail extends AdminPathRow {
    *  is; the landing explorer reads this same list. */
   skillOutcomes: string[];
   typicalDurationMinutes: number | null;
-  courses: AdminPathCourseRow[];
+  /** The ladder, in position order. */
+  levels: AdminLevelRow[];
+  /**
+   * Courses in the path that sit on no level — in it, and invisible to every
+   * learner until an administrator places them (D-134).
+   *
+   * A group of its own rather than a flag on a flat list, because it is the
+   * screen's actual work queue: an entity has offered these and nobody has
+   * decided where they go.
+   */
+  unassignedCourses: AdminPathCourseRow[];
   learners: AdminPathLearners;
-  /** Why this path may not be offered to learners, if it may not (§4C.4). */
+  /** Why this path may not be published, if it may not (§4C.4). */
   blockers: string[];
-  /** How many of its courses a learner could select right now. */
+  /** How many placed courses a learner could reach right now. */
   selectableCourses: number;
   /**
    * Whether a permanent delete is possible: true only while nobody has ever
@@ -448,18 +433,6 @@ export interface AdminPathDetail extends AdminPathRow {
    *  a document somebody holds, which is why it is counted separately from the
    *  learners still on it. */
   certificateCount: number;
-}
-
-/**
- * The 5-10 rule, reported so the admin screens can explain themselves.
- *
- * Read-only everywhere (D-074): §2 lists it among the non-negotiable product
- * rules, and a knob here is how a floor of five quietly becomes a floor of
- * three under delivery pressure.
- */
-export interface AdminPathBounds {
-  min: number;
-  max: number;
 }
 
 /**
@@ -565,8 +538,7 @@ export interface AdminCoursePage {
  * Secrets are absent — the Moodle web-services token, the database URL, the SMTP
  * credentials — because a setting readable by the screen that edits it is a
  * setting that appears in a network response. So are the auth rate limits, which
- * §2 makes security floors rather than knobs an operator may loosen; the 5-10
- * path bounds, which §2 makes a product rule and D-074 keeps in code; and, since
+ * §2 makes security floors rather than knobs an operator may loosen, and, since
  * the ministry's 2026-08-25 direction, the pass threshold, which is deployment
  * configuration rather than a screen (D-102).
  */
@@ -574,14 +546,12 @@ export const SETTING_KEYS = [
   /** How often the LMS is polled (D-042). Re-registers the scheduler on change. */
   'COMPLETION_SYNC_INTERVAL_MINUTES',
   /**
-   * Path membership rules for a course (TAM-141): how many paths one course
-   * may belong to, how many distinct RIASEC letters those paths may span, and
-   * whether an entity's membership needs admin approval before learners see it
-   * ('off' auto-approves — the state until Phase 5's queue exists).
+   * How many paths one course may sit in (TAM-141, D-134). The letter-coherence
+   * limit went with RIASEC, and approval went with it too: placement is now the
+   * administrator's decision, so an unplaced membership reaches nobody and needs
+   * no separate queue to hold it back.
    */
   'COURSE_MAX_PATHS',
-  'COURSE_MAX_RIASEC_LETTERS',
-  'PATH_MEMBERSHIP_APPROVAL',
   /** D-017's registration gate: the mode, the domains, the employee-id shape. */
   'REGISTRATION_MODE',
   'ALLOWED_EMAIL_DOMAINS',
@@ -643,10 +613,9 @@ export interface AdminSetting {
  * §4C.6's screen.
  *
  * **`readOnly` is not a lesser section; it is the point of half the page.** The
- * 5-10 path bounds and the auth rate limits are shown and cannot be changed —
- * §2 makes the first a product rule (D-074) and the second a security floor, and
- * an administrator asked to explain either needs the number in front of them
- * without being offered a way to move it.
+ * auth rate limits are shown and cannot be changed — §2 makes them a security
+ * floor, and an administrator asked to explain one needs the number in front of
+ * them without being offered a way to move it.
  */
 export interface AdminSettingsView {
   settings: AdminSetting[];
@@ -733,16 +702,30 @@ export interface AdminAuditPage {
 export interface AdminReports {
   /** Learners at each stage, and the rate over those who committed. */
   journey: AdminJourneyCounts;
-  /** Paths by how many learners chose them — "popular paths" in §4C.8. */
+  /** Paths by how many learners were assigned them (§4C.8). */
   pathPopularity: Array<{
     pathId: string;
     name: string;
-    riasecLetter: RiasecLetter;
-    chosen: number;
+    assigned: number;
     completed: number;
   }>;
-  /** Holland codes across the assessed population, newest result per person. */
-  codeDistribution: AdminCodeShare[];
+  /**
+   * Where the ministry's people actually stand: employees at each level of each
+   * path, in path then level order.
+   *
+   * This is what the Holland-code distribution used to be, asked the way the
+   * assigned model makes it answerable. A code told the ministry what somebody
+   * was drawn to; a placement tells them what somebody can already do, which is
+   * the fact a training programme is planned against.
+   */
+  placementDistribution: Array<{
+    pathId: string;
+    pathName: string;
+    levelId: string;
+    levelName: string;
+    position: number;
+    employees: number;
+  }>;
   /** Certificates issued, split by kind. */
   certificates: { course: number; path: number; total: number };
   /** Courses by pass rate, worst first — where learners are actually stuck. */
@@ -879,35 +862,23 @@ export interface AdminImpactCourseRow {
 export interface AdminImpactPathRow {
   pathId: string;
   name: string;
-  riasecLetter: RiasecLetter;
   completions: number;
 }
 
 /**
- * The career types of the people assessed *in the period*.
+ * Where the people placed *in the period* landed.
  *
- * The dominant letter, as §4C.1 reads it — six values each with an Arabic name
- * — and not the thirty-odd Holland codes §4C.8's other tab keeps for the
- * analyst. The catalogue half of `AdminLetterShare` is deliberately absent:
- * paths offered is a fact about now, and every other figure on this tab is a
- * fact about the period.
+ * A fact about the period, like every other figure on this tab: how many people
+ * the assessments placed, and on which rungs. It replaces the career-type
+ * share, which described inclination rather than capability.
  */
-export interface AdminImpactLetterShare {
-  letter: RiasecLetter;
+export interface AdminImpactPlacementShare {
+  pathId: string;
+  pathName: string;
+  levelId: string;
+  levelName: string;
+  position: number;
   employees: number;
-}
-
-/**
- * The language-level picture (TAM-148).
- *
- * Null until the level test ships — and null rather than an empty object so the
- * screen can tell "not enabled yet" from "enabled, nobody took it", which are
- * different findings and would otherwise render the same.
- */
-export interface AdminImpactCefr {
-  levels: Array<{ level: string; employees: number }>;
-  /** Of employees who retook in the period: whose level rose, held, fell. */
-  movement: { rose: number; held: number; fell: number };
 }
 
 /**
@@ -933,6 +904,19 @@ export interface AdminImpactView {
   trend: AdminImpactTrendPoint[];
   topCourses: AdminImpactCourseRow[];
   topPaths: AdminImpactPathRow[];
-  letterDistribution: AdminImpactLetterShare[];
-  cefr: AdminImpactCefr | null;
+  /** Empty when nobody was placed in the period — a real finding, not a gap. */
+  placements: AdminImpactPlacementShare[];
+}
+
+/* ── §4C.2 — path assignment (D-130/D-133/D-134) ───────────────────────── */
+
+export interface AdminAssignPathInput {
+  pathId: string;
+  userIds: string[];
+}
+
+/** Assignment is idempotent per (user, path); the split says what happened. */
+export interface AdminAssignResult {
+  created: number;
+  alreadyAssigned: number;
 }

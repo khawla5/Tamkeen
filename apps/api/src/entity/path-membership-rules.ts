@@ -1,80 +1,60 @@
-import type { RiasecLetter } from '@tamkeen/types';
-
 /**
- * The rules for which paths a course may belong to (TAM-141).
+ * The rules for which paths a course may belong to (TAM-141, D-134).
  *
  * A course may sit in more than one path (§2 — a modelling fact so a shared
- * course is not duplicated), and until now the only rule was "at least one".
- * That left "all twelve" legal, which breaks three things at once: the
- * course's RIASEC letters are derived from its paths (D-066), so twelve paths
- * make it all six letters — no signal; every path's 5–10 build list then
- * carries the same generic course; and path membership is *path* content the
- * admin owns (§4C.4), yet one entity has just edited every path.
+ * course is not duplicated), and the only rule left is a cap on how many. That
+ * cap is what stops one course becoming every path's filler: without it, "all
+ * twelve" is legal, every ladder carries the same generic item, and path
+ * membership — which is *path* content the admin owns (§4C.4) — has been edited
+ * wholesale by one supplier.
  *
- * Pure: the service loads the rows, this decides. Two limits, both product
- * settings:
- *  - `maxPaths`   — how many paths one course may be in (default 3).
- *  - `maxLetters` — how many distinct RIASEC letters those paths may span
- *                   (default 2). The cap alone does not protect the Holland
- *                   signal: three paths from R, S and C still smear it.
+ * **The letter-coherence rule went with RIASEC** (D-134). It existed to stop a
+ * course's derived letters being smeared across three dimensions; with no
+ * letters to derive, the cap alone carries the rule.
  *
- * **Grandfathering.** A course already outside the rules (seeded before them,
- * or the limits were lowered) keeps its memberships — learners may hold it in
- * confirmed paths, and D-002/D-040 forbid pulling it. It may *remove*
- * memberships but not add until it is back within the rules.
+ * Pure: the service loads the rows, this decides.
  *
- * A course the admin marked general («عامة») is exempt: it reaches every path
- * without memberships at all (§4C.5).
+ * **Grandfathering.** A course already over the cap (seeded before it, or the
+ * limit was lowered) keeps its memberships — learners may hold it through an
+ * assigned path, and D-002/D-040 forbid pulling it. It may *remove* memberships
+ * but not add, until it is back within the rules.
  */
 
 export interface PathMembershipCandidate {
   id: string;
-  riasecLetter: RiasecLetter;
 }
 
 export interface PathMembershipLimits {
+  /** How many paths one course may be in (default 3). */
   maxPaths: number;
-  maxLetters: number;
 }
 
 export type PathMembershipVerdict =
-  | { ok: true }
-  | { ok: false; error: 'PATH_LIMIT_EXCEEDED' | 'PATH_MIX_INCOHERENT' | 'PATH_MEMBERSHIP_FROZEN' };
+  { ok: true } | { ok: false; error: 'PATH_LIMIT_EXCEEDED' | 'PATH_MEMBERSHIP_FROZEN' };
 
-export function distinctLetters(paths: readonly PathMembershipCandidate[]): RiasecLetter[] {
-  return [...new Set(paths.map((path) => path.riasecLetter))];
-}
-
-/** True when a membership set breaks either limit. */
+/** True when a membership set breaks the cap. */
 export function exceedsLimits(
   paths: readonly PathMembershipCandidate[],
   limits: PathMembershipLimits,
 ): boolean {
-  return paths.length > limits.maxPaths || distinctLetters(paths).length > limits.maxLetters;
+  return paths.length > limits.maxPaths;
 }
 
 /**
  * Decides whether `next` may replace `current` as the course's path set.
  *
  * Order matters and each branch is the whole reason it exists:
- *  1. A general course is exempt — its reach does not come from memberships.
- *  2. A course already over the limits is frozen to removals: `next` must be a
+ *  1. A course already over the cap is frozen to removals: `next` must be a
  *     subset of `current`. Refused with its own code, so the form can say
  *     "remove only" instead of a cap message that is not the entity's fault.
- *  3. Otherwise the cap, then coherence — the cap first because it is the
- *     simpler thing to fix and the message the entity will understand first.
+ *  2. Otherwise the cap.
  */
 export function checkPathMembership(input: {
   current: readonly PathMembershipCandidate[];
   next: readonly PathMembershipCandidate[];
   limits: PathMembershipLimits;
-  isGeneral: boolean;
 }): PathMembershipVerdict {
-  const { current, next, limits, isGeneral } = input;
-
-  if (isGeneral) {
-    return { ok: true };
-  }
+  const { current, next, limits } = input;
 
   if (exceedsLimits(current, limits)) {
     const currentIds = new Set(current.map((path) => path.id));
@@ -85,10 +65,6 @@ export function checkPathMembership(input: {
 
   if (next.length > limits.maxPaths) {
     return { ok: false, error: 'PATH_LIMIT_EXCEEDED' };
-  }
-
-  if (distinctLetters(next).length > limits.maxLetters) {
-    return { ok: false, error: 'PATH_MIX_INCOHERENT' };
   }
 
   return { ok: true };

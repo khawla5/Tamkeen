@@ -4,12 +4,11 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 
-import type { CourseSummary, PathSummary, UserPathCourseStatus } from '@tamkeen/types';
+import type { CourseSummary, PathSummary } from '@tamkeen/types';
 
-import { CourseStatusChip } from '@/components/courses/course-status-chip';
+import { CourseStatusChip, type CourseChipStatus } from '@/components/courses/course-status-chip';
 import { PortalPage } from '@/components/layout/portal-page';
 import { usePortal } from '@/components/layout/portal-provider';
-import { RecommendedBadge } from '@/components/paths/recommended-badge';
 import { DataView } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,37 +27,37 @@ import { cn } from '@/lib/utils';
 const DURATION_OPTIONS = [120, 180, 240] as const;
 
 /**
- * The courses catalogue (§4.6, TAM-127).
+ * The courses catalogue (§4.6, TAM-127, D-134).
  *
- * Browsing stays **global** — every course, for everybody, exactly as §4.6
- * says. What changes with TAM-127 is where the page *starts*, because the
- * product does not treat every reader alike:
+ * Browsing stays **wide** — every course the reader may see, exactly as §4.6
+ * says. What TAM-127 decides is where the page *starts*, and the answer comes
+ * from how many paths the ministry put the reader on:
  *
- *  - A learner with a **confirmed path** can only ever act on that path's
- *    courses (`assertCoursesSelectable` refuses the rest on the server), so
- *    they land with their own path selected. «كل المسارات» is one selection
- *    away — a default, never a restriction.
- *  - A learner **still deciding** lands on the whole catalogue grouped by
- *    path, their recommended paths first, because for them the catalogue is
- *    the tool for answering "what does this path actually teach?".
+ *  - **One assigned path** is the lens they will want, so it opens selected.
+ *    «كل المسارات» is one selection away — a default, never a restriction, and
+ *    their own later choice wins.
+ *  - **Two or more** and neither is theirs more than the other, so the page
+ *    opens on all of them, grouped by path in the API's order.
  *
- * The catalogue itself opens only once the assessment is done (D-071) — the
- * nav hides it and the portal redirects the URL before this page renders.
+ * The catalogue itself opens only once a path has been assigned (D-071 restated
+ * for D-134) — the nav hides it and the portal redirects the URL before this
+ * page renders.
  */
 export default function CoursesPage() {
   const t = useTranslations('courses');
   const format = useFormat();
   const { dashboard } = usePortal();
 
-  /* Non-null exactly after the hard commitment gate, which is also the moment
-     the server stops accepting any other path's courses. */
-  const committedPathId = dashboard.state === 'ACTIVE_PATH' ? (dashboard.path?.id ?? null) : null;
+  /* The learner's own path, when the ministry has assigned exactly one: the
+     lens they will want by default. With two, neither is "theirs" more than the
+     other, so the catalogue opens on all of them. */
+  const ownPathId = dashboard.paths.length === 1 ? (dashboard.paths[0]?.id ?? null) : null;
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   /* Initial state only — the user's own later choice wins, and switching to
      «كل المسارات» must stick. */
-  const [pathId, setPathId] = useState(committedPathId ?? '');
+  const [pathId, setPathId] = useState(ownPathId ?? '');
   const [maxDuration, setMaxDuration] = useState('');
 
   /* Debounced so typing does not fire a request per keystroke. 300ms is long
@@ -82,26 +81,34 @@ export default function CoursesPage() {
   /*
    * The learner's own progress, for the card chips.
    *
-   * Fetched only when there is a confirmed path — before that every course is
-   * equally "not yours" and the request would return null on every visit. Its
+   * Every assigned path, because a course may be owed through any of them. Its
    * failure is deliberately *not* fed into the DataView below: a missing chip
    * costs a reader nothing, and blocking the whole catalogue on a decoration
    * would trade the page for a badge.
    */
-  const myPath = useApiQuery(
-    () => (committedPathId ? myPathApi.get() : Promise.resolve(null)),
-    [committedPathId],
+  const myPaths = useApiQuery(
+    () => (dashboard.paths.length > 0 ? myPathApi.all() : Promise.resolve([])),
+    [dashboard.paths.length],
   );
 
   const statusByCourseId = useMemo(() => {
-    const map = new Map<string, UserPathCourseStatus>();
+    const map = new Map<string, CourseChipStatus>();
 
-    for (const course of myPath.data?.courses ?? []) {
-      map.set(course.courseId, course.status);
+    for (const path of myPaths.data ?? []) {
+      for (const level of path.levels) {
+        for (const course of level.courses) {
+          /* Only what they owe carries a chip: a course below their rung is not
+             "not started", it is ground the placement says they covered, and
+             absence is the honest signal for it (§4.6). */
+          if (!course.startable) continue;
+
+          map.set(course.courseId, course.status === 'NOT_STARTED' ? 'IN_PATH' : course.status);
+        }
+      }
     }
 
     return map;
-  }, [myPath.data]);
+  }, [myPaths.data]);
 
   const hasFilters = Boolean(debouncedSearch || pathId || maxDuration);
 
@@ -109,24 +116,23 @@ export default function CoursesPage() {
     const sorted =
       paths.data?.paths.slice().sort((a, b) => a.name.localeCompare(b.name, 'ar')) ?? [];
 
-    /* The committed learner's own path first: it is the one selection they
-       will make most, and alphabetical order would bury it among twelve. */
-    return committedPathId
+    /* Their own path first: it is the one selection they will make most, and
+       alphabetical order would bury it among twelve. */
+    return ownPathId
       ? [
-          ...sorted.filter((path) => path.id === committedPathId),
-          ...sorted.filter((path) => path.id !== committedPathId),
+          ...sorted.filter((path) => path.id === ownPathId),
+          ...sorted.filter((path) => path.id !== ownPathId),
         ]
       : sorted;
-  }, [paths.data, committedPathId]);
+  }, [paths.data, ownPathId]);
 
   /*
-   * The grouped view (TAM-127): one section per path, in the API's order —
-   * recommended paths first, in the user's letter rank (`rankPathsByRecommendation`
-   * already applied it server-side). Nothing is re-sorted here; D-113's rule
-   * that the ranking lives in one place holds for this page too.
+   * The grouped view (TAM-127, D-134): one section per path the learner holds,
+   * in the API's order. Nothing is re-sorted here — the ordering lives in one
+   * place, which is the server.
    *
-   * A filter collapses the grouping into the flat grid: a filtered result is
-   * an answer to a question, not a tour of the catalogue.
+   * A filter collapses the grouping into the flat grid: a filtered result is an
+   * answer to a question, not a tour of the catalogue.
    */
   const groups = useMemo(() => {
     if (hasFilters || !courses.data || !paths.data) {
@@ -271,7 +277,13 @@ export default function CoursesPage() {
   );
 }
 
-/** One path's courses, under a heading that says why the path is here. */
+/**
+ * One path's courses, under a rectangle that *is* the path (D-134): its name,
+ * where the assessment placed them, and how many courses it holds — the same
+ * three facts the heading used to state as text, now a single card that leads
+ * straight into the path's own ladder, where those courses are shown in their
+ * placement order rather than the catalogue's flat grid.
+ */
 function PathGroup({
   path,
   courses,
@@ -279,24 +291,40 @@ function PathGroup({
 }: {
   path: PathSummary;
   courses: CourseSummary[];
-  statusByCourseId: Map<string, UserPathCourseStatus>;
+  statusByCourseId: Map<string, CourseChipStatus>;
 }) {
   const t = useTranslations('courses');
   const format = useFormat();
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <Link
+        href={`/paths/${path.id}`}
+        className={cn(
+          cardVariants(),
+          'flex flex-col gap-1 p-5 transition-colors hover:border-primary-600',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2',
+        )}
+      >
         <h2 className="text-lg font-semibold text-foreground">{path.name}</h2>
-        {/* Recommendation is a *path*-level fact, so it belongs on the heading
-            and never on a course card (§3A). */}
-        {path.recommended ? <RecommendedBadge /> : null}
-        <span className="text-sm text-muted-foreground">
-          {t('resultCount', { count: format.number(courses.length) })}
-        </span>
-      </div>
+        {/* Where the assessment placed them: a fact about the path, stated
+            once on its own card rather than repeated on every course below it. */}
+        {path.placedLevel ? (
+          <p className="text-sm font-medium text-primary-700">
+            {t('placedAt', { level: path.placedLevel.name })}
+          </p>
+        ) : null}
+        <p className="text-sm text-muted-foreground">
+          {t('resultCount', { count: format.number(path.courseCount) })}
+        </p>
+      </Link>
 
-      <CourseGrid courses={courses} statusByCourseId={statusByCourseId} titleAs="h3" />
+      <CourseGrid
+        courses={courses}
+        statusByCourseId={statusByCourseId}
+        titleAs="h3"
+        layout="list"
+      />
     </section>
   );
 }
@@ -305,22 +333,33 @@ function CourseGrid({
   courses,
   statusByCourseId,
   titleAs,
+  layout = 'grid',
 }: {
   courses: CourseSummary[];
-  statusByCourseId: Map<string, UserPathCourseStatus>;
+  statusByCourseId: Map<string, CourseChipStatus>;
   /* The grouped view puts an h2 above each grid, so its cards are h3; the flat
      grid has no heading above it and its cards stay h2. Levels follow the
      document, rather than a card deciding its own rank. */
   titleAs: 'h2' | 'h3';
+  /* 'list' for a path's own courses: a single stacked column under the
+     path's rectangle rather than a multi-column grid — the flat/ungrouped
+     views stay a grid, where there is no path card above them to read as a
+     list continuing from. */
+  layout?: 'grid' | 'list';
 }) {
   return (
-    <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <ul
+      className={cn(
+        layout === 'grid' ? 'grid gap-4 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col',
+      )}
+    >
       {courses.map((course) => (
         <CourseCard
           key={course.id}
           course={course}
           status={statusByCourseId.get(course.id) ?? null}
           titleAs={titleAs}
+          layout={layout}
         />
       ))}
     </ul>
@@ -328,7 +367,10 @@ function CourseGrid({
 }
 
 /**
- * A catalogue card.
+ * A catalogue card — or, under a path's own rectangle, plain text in a list
+ * rather than another box: the path card already drew the boundary, and a
+ * box inside a box for every course under it would be a border repeated
+ * fifteen times over for no new information.
  *
  * Always a link to the course's own page — never a deep link into the player.
  * One predictable behaviour: the chip informs, the detail page acts (§4.7 owns
@@ -338,10 +380,12 @@ function CourseCard({
   course,
   status,
   titleAs: Title,
+  layout,
 }: {
   course: CourseSummary;
-  status: UserPathCourseStatus | null;
+  status: CourseChipStatus | null;
   titleAs: 'h2' | 'h3';
+  layout: 'grid' | 'list';
 }) {
   const t = useTranslations('courses');
   const format = useFormat();
@@ -354,9 +398,10 @@ function CourseCard({
       <Link
         href={`/courses/${course.id}`}
         className={cn(
-          cardVariants(),
-          'flex h-full flex-col gap-2 p-5 transition-colors hover:border-primary-600',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2',
+          'flex flex-col gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2',
+          layout === 'grid'
+            ? cn(cardVariants(), 'h-full p-5 hover:border-primary-600')
+            : 'border-b border-border py-3 first:pt-0 last:border-0 hover:text-primary-700',
         )}
       >
         <Title className="font-semibold text-foreground">{course.title}</Title>

@@ -5,6 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 
 import { HTML_DIR, HTML_LANG, getFormatContext } from '@/i18n/config';
+import { PageWatermark } from '@/components/brand/page-watermark';
 import { NavigationProgress } from '@/components/layout/navigation-progress';
 import { FormatProvider } from '@/i18n/format-provider';
 
@@ -45,7 +46,11 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang={HTML_LANG} dir={HTML_DIR} className={arabic.variable}>
-      <body className="min-h-dvh font-sans antialiased">
+      <body className="relative min-h-dvh font-sans antialiased">
+        {/* Every screen carries the ministry's mark (auth pages included), not
+            just the signed-in app shell — one instance here rather than one
+            per layout. */}
+        <PageWatermark />
         <NextIntlClientProvider>
           <FormatProvider context={getFormatContext()}>
             {/* useSearchParams inside needs a Suspense boundary or the whole

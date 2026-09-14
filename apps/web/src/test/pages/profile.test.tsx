@@ -45,7 +45,7 @@ vi.mock('@/lib/api-client', async () => {
 const portal = vi.hoisted(() => ({
   value: {
     user: {} as CurrentUser,
-    dashboard: { englishLevel: null } as DashboardView,
+    dashboard: { paths: [] } as unknown as DashboardView,
     refreshSession: vi.fn(),
   },
 }));
@@ -75,17 +75,30 @@ const BASE_USER: CurrentUser = {
   numberFormat: null,
 };
 
-function setUser(
-  overrides: Partial<CurrentUser> = {},
-  englishLevel: DashboardView['englishLevel'] = null,
-) {
+function setUser(overrides: Partial<CurrentUser> = {}, paths: DashboardView['paths'] = []) {
   portal.value = {
     user: { ...BASE_USER, ...overrides },
-    /* §4.13's level card reads it from the portal rather than fetching its own
-       copy, so the page now needs a dashboard in scope. */
-    dashboard: { englishLevel } as DashboardView,
+    /* The placement card reads the paths from the portal rather than fetching
+       its own copy, so the page needs a dashboard in scope. */
+    dashboard: { paths } as unknown as DashboardView,
     refreshSession: vi.fn(),
   };
+}
+
+/** One assigned path, placed or still awaiting its assessment. */
+function assigned(placed: boolean): DashboardView['paths'] {
+  return [
+    {
+      id: 'path-1',
+      name: 'مسار تحليل البيانات',
+      placedLevel: placed ? { id: 'level-2', name: 'متقدم', position: 2 } : null,
+      pendingAssessmentId: placed ? null : 'assessment-1',
+      completedCount: 0,
+      inProgressCount: 0,
+      totalCount: placed ? 4 : 0,
+      nextCourse: null,
+    },
+  ];
 }
 
 beforeEach(() => {
@@ -461,39 +474,42 @@ describe('profile — changing the email (§4.12)', () => {
 });
 
 /**
- * §4.13's placement level on the profile — read-only, because there is nothing
- * to edit and no retake (D-123).
+ * The paths the ministry assigned and where each placed them (§4.12, D-134) —
+ * read-only, because there is nothing here to edit and no retake.
  */
-describe('profile — the English placement level', () => {
-  it('shows the level when there is one, with a way back to the result', () => {
-    setUser({}, 'C1');
+describe('profile — assigned paths and placement', () => {
+  it('names each path with the rung it placed them on', () => {
+    setUser({}, assigned(true));
     renderWithProviders(<ProfilePage />);
 
-    expect(screen.getByText('C1')).toBeInTheDocument();
-    expect(screen.getByText('متقدّم')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'عرض النتيجة' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'مسار تحليل البيانات' })).toHaveAttribute(
       'href',
-      '/english-assessment/result',
+      '/paths/path-1',
     );
+    expect(screen.getByText('متقدم')).toBeInTheDocument();
   });
 
-  it('offers the test when there is none', () => {
-    setUser({}, null);
+  it('says the placement is still pending rather than inventing a rung', () => {
+    setUser({}, assigned(false));
     renderWithProviders(<ProfilePage />);
 
-    expect(screen.getByRole('link', { name: 'ابدأ تقييم اللغة' })).toHaveAttribute(
-      'href',
-      '/english-assessment',
-    );
+    expect(screen.getByText('بانتظار تحديد المستوى')).toBeInTheDocument();
+  });
+
+  it('says so plainly when the ministry has assigned nothing', () => {
+    setUser({}, []);
+    renderWithProviders(<ProfilePage />);
+
+    expect(screen.getByText('لم يُسند إليك مسار بعد.')).toBeInTheDocument();
   });
 
   it('offers no control to change it', () => {
-    /* The card is a record, not a setting: a form here would imply the level can
-       be edited, which is the opposite of what D-123 guarantees. */
-    setUser({}, 'C1');
+    /* The card is a record, not a setting: a form here would imply a learner can
+       move their own rung, which is the opposite of what D-134 guarantees. */
+    setUser({}, assigned(true));
     renderWithProviders(<ProfilePage />);
 
-    const card = screen.getByText('مستوى اللغة الإنجليزية').closest('div');
+    const card = screen.getByText('مساراتك ومستوياتك').closest('div');
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).queryByRole('button')).toBeNull();
     expect(within(card as HTMLElement).queryByRole('textbox')).toBeNull();
