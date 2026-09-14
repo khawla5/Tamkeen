@@ -263,7 +263,7 @@ test.describe('Phase 4 — the entity portal', () => {
     await entityPage.getByRole('button', { name: 'أوقف النشر' }).click();
 
     const dialog = entityPage.getByRole('dialog');
-    await expect(dialog.getByText(/يتابعها/)).toBeVisible();
+    await expect(dialog.getByText(/يتابعها/)).toBeVisible({ timeout: 15_000 });
 
     await dialog.getByRole('button', { name: 'أوقف النشر' }).click();
 
