@@ -120,107 +120,116 @@ export async function releaseAdmin(admin: SeededAdmin): Promise<void> {
 }
 
 /**
- * The six scores and the version a person's newest result was taken under.
+ * Assigns one of the seeded, assessment-ready paths directly (D-134).
  *
- * Read straight from the database rather than scraped off the results page: the
- * assertion this exists for is that publishing an edit changed *nothing* here,
- * and a rendered page could show the same numbers while the row underneath had
- * been repointed at a different version.
+ * Assignment is exercised through the real admin screen once, in the journey
+ * suite's own happy path; every other suite that merely needs a learner with
+ * an assigned path does it this way, the same reason `seedAdmin` bypasses the
+ * registration screen — the mechanics being skipped are not what the test is
+ * about, and going through them four times over would prove the same thing
+ * four times.
  */
-export async function resultFor(email: string) {
+export async function assignSeededPath(
+  email: string,
+  options: { exclude?: string } = {},
+): Promise<{ pathId: string; pathName: string }> {
   return withClient(async (client) => {
-    const { rows } = await client.query<{
-      id: string;
-      assessment_version: number;
-      score_r: number;
-      score_i: number;
-      score_a: number;
-      score_s: number;
-      score_e: number;
-      score_c: number;
-      max_score: number;
-      code: string;
-      assessment_id: string;
-    }>(
-      `SELECT r.id, r.assessment_version, r.score_r, r.score_i, r.score_a,
-              r.score_s, r.score_e, r.score_c, r.max_score, r.code, r.assessment_id
-         FROM assessment_results r
-         JOIN users u ON u.id = r.user_id
-        WHERE u.email = $1
-        ORDER BY r.completed_at DESC
+    const learner = await client.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [
+      email,
+    ]);
+    const userId = learner.rows[0]?.id;
+    if (!userId) throw new Error(`No user found for ${email}`);
+
+    const path = await client.query<{ id: string; name: string }>(
+      `SELECT p.id, p.name
+         FROM paths p
+        WHERE p.status = 'PUBLISHED'
+          AND p.id != COALESCE($1::uuid, '00000000-0000-0000-0000-000000000000')
+          AND EXISTS (
+            SELECT 1 FROM path_assessments pa WHERE pa.path_id = p.id AND pa.status = 'ACTIVE'
+          )
+        ORDER BY p.display_order ASC
         LIMIT 1`,
-      [email],
+      [options.exclude ?? null],
+    );
+    const chosen = path.rows[0];
+    if (!chosen) throw new Error('No seeded path with a published assessment is available.');
+
+    await client.query(
+      `INSERT INTO user_paths (id, user_id, path_id, status, assigned_at, created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, 'ACTIVE', now(), now(), now())
+       ON CONFLICT (user_id, path_id) DO NOTHING`,
+      [userId, chosen.id],
     );
 
-    const row = rows[0];
-    if (!row) throw new Error(`No assessment result for ${email}`);
-
-    return {
-      id: row.id,
-      assessmentId: row.assessment_id,
-      assessmentVersion: row.assessment_version,
-      scores: {
-        R: row.score_r,
-        I: row.score_i,
-        A: row.score_a,
-        S: row.score_s,
-        E: row.score_e,
-        C: row.score_c,
-      },
-      maxScore: row.max_score,
-      code: row.code,
-    };
-  });
-}
-
-/** Which version new takers are currently served. */
-export async function activeAssessmentVersion(): Promise<number> {
-  return withClient(async (client) => {
-    const { rows } = await client.query<{ version: number }>(
-      `SELECT version FROM assessments WHERE key = 'riasec-core' AND status = 'ACTIVE'`,
-    );
-
-    if (!rows[0]) throw new Error('No active assessment');
-    return rows[0].version;
+    return { pathId: chosen.id, pathName: chosen.name };
   });
 }
 
 /**
- * Returns the instrument to a single active version 1.
- *
- * The suite publishes a real second version against the shared development
- * database, and leaving it in place would change what every later run — and
- * every developer opening the app — is served. Results belonging to versions
- * above 1 go first, because `assessment_results.assessment_id` is `Restrict`:
- * they are the suite's own takers, created and removed within it.
- *
- * Version 1 is reactivated *before* the later ones are deleted, because the
- * partial unique index permits only one ACTIVE row per key.
+ * A learner's current placement on one path: the level it put them on, the
+ * score, and the assessment version that produced it (D-134, D-049's
+ * per-path form).
  */
-export async function resetAssessmentVersions(): Promise<void> {
+export async function placementFor(
+  email: string,
+  pathId: string,
+): Promise<{ levelName: string; score: number; assessmentVersion: number }> {
+  return withClient(async (client) => {
+    const { rows } = await client.query<{
+      level_name: string;
+      score: number;
+      assessment_version: number;
+    }>(
+      `SELECT lv.name AS level_name, lp.score, r.assessment_version
+         FROM learner_placements lp
+         JOIN levels lv ON lv.id = lp.level_id
+         JOIN path_assessment_results r ON r.id = lp.result_id
+         JOIN users u ON u.id = lp.learner_id
+        WHERE u.email = $1 AND lp.path_id = $2`,
+      [email, pathId],
+    );
+    const row = rows[0];
+    if (!row) throw new Error(`No placement for ${email} on path ${pathId}`);
+
+    return {
+      levelName: row.level_name,
+      score: row.score,
+      assessmentVersion: row.assessment_version,
+    };
+  });
+}
+
+/** Which version new takers of this path's assessment are currently served. */
+export async function activePathAssessmentVersion(pathId: string): Promise<number> {
+  return withClient(async (client) => {
+    const { rows } = await client.query<{ version: number }>(
+      `SELECT version FROM path_assessments WHERE path_id = $1 AND status = 'ACTIVE'`,
+      [pathId],
+    );
+
+    if (!rows[0]) throw new Error(`No active assessment for path ${pathId}`);
+    return rows[0].version;
+  });
+}
+
+/** Assigns one specific path directly — for a suite that has already picked
+ *  which one it means to exercise, rather than taking whichever the general
+ *  {@link assignSeededPath} would have chosen. */
+export async function assignPathById(email: string, pathId: string): Promise<void> {
   await withClient(async (client) => {
-    const { rows } = await client.query<{ id: string; version: number }>(
-      `SELECT id, version FROM assessments WHERE key = 'riasec-core' ORDER BY version ASC`,
-    );
-
-    if (rows.length <= 1) return;
-
-    const first = rows[0]!;
-    const later = rows.slice(1).map((row) => row.id);
+    const learner = await client.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [
+      email,
+    ]);
+    const userId = learner.rows[0]?.id;
+    if (!userId) throw new Error(`No user found for ${email}`);
 
     await client.query(
-      `DELETE FROM assessment_responses
-        WHERE result_id IN (SELECT id FROM assessment_results WHERE assessment_id = ANY($1))`,
-      [later],
+      `INSERT INTO user_paths (id, user_id, path_id, status, assigned_at, created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, 'ACTIVE', now(), now(), now())
+       ON CONFLICT (user_id, path_id) DO NOTHING`,
+      [userId, pathId],
     );
-    await client.query(`DELETE FROM assessment_results WHERE assessment_id = ANY($1)`, [later]);
-
-    await client.query(`UPDATE assessments SET status = 'RETIRED' WHERE key = 'riasec-core'`);
-    await client.query(
-      `UPDATE assessments SET status = 'ACTIVE', retired_at = NULL WHERE id = $1`,
-      [first.id],
-    );
-    await client.query(`DELETE FROM assessments WHERE id = ANY($1)`, [later]);
   });
 }
 

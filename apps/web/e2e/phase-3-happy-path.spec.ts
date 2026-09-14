@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 import { DEPARTMENT, signedInEmployee } from './account';
+import { assignSeededPath } from './admin-fixtures';
 import { seedPassedCourseCertificate, type SeededCertificate } from './certificate-fixtures';
-import { completeAssessment, confirmFirstPath } from './journey';
+import { completeAssessment } from './journey';
 import { assertMailpitReachable } from './mailpit';
 
 /**
@@ -22,7 +23,7 @@ import { assertMailpitReachable } from './mailpit';
  * actually deployed in, not just in a spike.
  *
  * Serial, with one page across the tests: getting to a certificate means
- * registering, taking a thirty-question assessment and committing a path, and
+ * registering, being assigned a path and sitting its placement assessment, and
  * paying for that four times over would buy nothing.
  */
 
@@ -39,10 +40,11 @@ test.describe('Phase 3 journey', () => {
     page = await browser.newPage();
 
     const account = await signedInEmployee(page, 'phase3');
+    await assignSeededPath(account.email);
+    await page.goto('/');
     await page.getByRole('link', { name: 'ابدأ التقييم' }).click();
     await completeAssessment(page);
-    await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
-    await confirmFirstPath(page);
+    await expect(page).toHaveURL(/\/paths\/[0-9a-f-]+$/, { timeout: 15_000 });
 
     certificate = await seedPassedCourseCertificate(account.email);
   });
