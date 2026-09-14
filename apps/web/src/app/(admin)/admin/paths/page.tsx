@@ -152,4 +152,3 @@ function PathCard({ path }: { path: AdminPathRow }) {
     </Card>
   );
 }
-

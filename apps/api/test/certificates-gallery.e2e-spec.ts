@@ -135,6 +135,7 @@ describe('Certificate gallery (e2e)', () => {
         name: 'مسار القيادة الإدارية',
         description: 'مسار اختبار.',
         displayOrder: 997,
+        riasecLetter: 'R',
         status: 'DRAFT',
       },
     });

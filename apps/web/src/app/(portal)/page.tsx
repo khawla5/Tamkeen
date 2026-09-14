@@ -5,7 +5,6 @@ import { Award, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
-import { InstrumentTracker } from '@/components/dashboard/instrument-tracker';
 import { JourneyTracker } from '@/components/dashboard/journey-tracker';
 import { PortalPage } from '@/components/layout/portal-page';
 import { usePortal } from '@/components/layout/portal-provider';
@@ -49,22 +48,8 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-<<<<<<< HEAD
         {dashboard.state === 'NO_PATH' ? (
           <NoPath />
-=======
-        {/*
-         * One stage per required instrument (§4.2 part 3, D-095, TAM-147).
-         * Renders nothing once there is only the baseline RIASEC assignment
-         * — see the component for why.
-         */}
-        <InstrumentTracker dashboard={dashboard} />
-
-        {dashboard.state === 'PRE_ASSESSMENT' ? (
-          <PreAssessment />
-        ) : dashboard.state === 'ASSESSED_NO_PATH' ? (
-          <AssessedNoPath dashboard={dashboard} />
->>>>>>> origin/main
         ) : (
           <ul className="flex flex-col gap-6">
             {dashboard.paths.map((path) => (

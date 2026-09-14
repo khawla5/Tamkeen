@@ -10,10 +10,7 @@ import Image from 'next/image';
  */
 export function PageWatermark() {
   return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
-    >
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
       {/* Centring is symmetric, so plain physical offsets are fine here even
           though the rest of the app uses logical properties throughout. */}
       <Image

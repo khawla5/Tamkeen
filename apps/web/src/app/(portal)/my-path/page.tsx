@@ -245,7 +245,11 @@ function LevelCheckpoint({ level }: { level: MyPathLevelView }) {
   return (
     <section aria-labelledby={headingId} className="flex gap-4 pb-4">
       <CheckpointCircle state={state} size="lg">
-        {state === 'done' ? <Check aria-hidden="true" className="size-5" /> : format.number(level.position)}
+        {state === 'done' ? (
+          <Check aria-hidden="true" className="size-5" />
+        ) : (
+          format.number(level.position)
+        )}
       </CheckpointCircle>
 
       <div className="flex flex-1 flex-wrap items-baseline gap-3 pt-2.5">

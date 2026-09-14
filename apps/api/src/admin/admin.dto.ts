@@ -23,10 +23,12 @@ import {
   ASSIGNMENT_SCOPES,
   COURSE_VISIBILITIES,
   PATH_STATUSES,
+  RIASEC_LETTERS,
   type PathStatus,
   USER_ROLES,
   type AssignmentScope,
   type CourseVisibility,
+  type RiasecLetter,
   type UserRole,
 } from '@tamkeen/types';
 
@@ -331,6 +333,133 @@ export class SetBandsDto {
 }
 
 export class ReorderDraftDto {
+  /** The complete order. A partial one is refused by the service. */
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsUUID(undefined, { each: true })
+  questionIds!: string[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §4C.3 (TAM-147) — the ministry-wide RIASEC instrument editor. Named apart
+// from the plain `*DraftDto`s above: those edit one path's own placement
+// test (D-134), these edit the RIASEC bank `AdminRiasecAssessmentService`
+// serves at `/admin/assessment` — two editors that happen to share a shape,
+// never the same rows.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class RiasecUpdateDraftDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(160)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
+}
+
+export class RiasecAddDraftQuestionDto {
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  text!: string;
+
+  /** Which dimension the new question's Likert options score. */
+  @IsIn(RIASEC_LETTERS)
+  letter!: RiasecLetter;
+}
+
+export class RiasecUpdateDraftQuestionDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  text?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  displayOrder?: number;
+}
+
+/**
+ * An option's weights, one bounded integer per dimension.
+ *
+ * **Every letter is declared explicitly** rather than accepted as a
+ * `Record<string, number>`. The DTO is the outermost gate: a `Record` would let
+ * `{ "X": 4 }` through validation and leave the enum column to reject it as a
+ * 500, and `{ "R": 4, "r": 4 }` through as two keys the database would treat as
+ * one. Naming the six is the only shape in which the validator can say no.
+ *
+ * The 0-10 ceiling is not the Likert scale (0-4) — the schema has always allowed
+ * an option to weigh more, and D-048 gives the administrator the weightings.
+ * What the bound stops is a typo that makes one dimension unreachable by every
+ * other, which the balance guard would then report as an imbalance rather than
+ * as the mistake it is.
+ */
+export class OptionWeightsDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  R?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  I?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  A?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  S?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  E?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  C?: number;
+}
+
+export class RiasecUpdateDraftOptionDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  label?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OptionWeightsDto)
+  weights?: OptionWeightsDto;
+}
+
+export class RiasecReorderDraftDto {
   /** The complete order. A partial one is refused by the service. */
   @IsArray()
   @ArrayMaxSize(500)

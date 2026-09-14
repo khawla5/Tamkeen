@@ -106,6 +106,7 @@ describe('Admin course oversight (e2e)', () => {
         name: 'مسار الإشراف',
         description: 'مسار أُنشئ لاختبار الإشراف على الدورات.',
         displayOrder: 900,
+        riasecLetter: 'R',
         status: 'DRAFT',
         /* A rung, and the held course on it: an unassigned membership reaches
            no learner, so it could not be "held" by anybody (D-134). */

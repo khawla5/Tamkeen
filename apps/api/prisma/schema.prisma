@@ -97,27 +97,25 @@ model User {
   auditEvents    AuditLog[]     @relation("AuditActor")
   settingsEdited Setting[]      @relation("SettingEditor")
 
-<<<<<<< HEAD
-  /// Every attempt at every path's assessment. Append-only (D-033).
-  assessmentResults AssessmentResult[]
-  /// The paths the ministry assigned. Plural since D-130 — an employee may hold
-  /// more than one.
-  userPaths         UserPath[]
-  assignedPaths     UserPath[]         @relation("PathAssigner")
-  /// Where each of those paths starts for them.
-  placements        LearnerPlacement[]
-  enrollments       Enrollment[]
-  /// Placements this administrator made in a path's levels.
-  coursesPlaced     PathCourse[]       @relation("CoursePlacer")
-=======
   /// Every attempt at every instrument, newest wins per `kind` (TAM-147).
   /// RIASEC retakes append (D-033); CEFR allows exactly one ever (D-123), a
   /// database fact via the partial unique index on `assessment_results`
-  /// (`WHERE kind = 'CEFR'`) rather than a service-layer convention.
-  assessmentResults AssessmentResult[]
-  /// At most one — the relation is singular because `UserPath.userId` is unique.
-  userPath          UserPath?
->>>>>>> origin/main
+  /// (`WHERE kind = 'CEFR'`) rather than a service-layer convention. This is
+  /// the ministry-wide instrument registry (§4C.3) — unrelated to a path's
+  /// own placement test below.
+  assessmentResults     AssessmentResult[]
+  /// Every attempt at every path's own placement assessment (D-134).
+  /// Append-only (D-033).
+  pathAssessmentResults PathAssessmentResult[]
+  /// The paths the ministry assigned. Plural since D-130 — an employee may hold
+  /// more than one.
+  userPaths             UserPath[]
+  assignedPaths         UserPath[]             @relation("PathAssigner")
+  /// Where each of those paths starts for them.
+  placements            LearnerPlacement[]
+  enrollments           Enrollment[]
+  /// Placements this administrator made in a path's levels.
+  coursesPlaced         PathCourse[]           @relation("CoursePlacer")
 
   @@index([role])
   @@index([entityId])
@@ -270,6 +268,17 @@ model Notification {
 // Phase 1 — assessment, paths, courses, and the user's one path
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// The six Holland dimensions (CLAUDE.md §3A). Kept in lockstep with
+/// RIASEC_LETTERS in @tamkeen/types — a test asserts the two never diverge.
+enum RiasecDimension {
+  R
+  I
+  A
+  S
+  E
+  C
+}
+
 /// A course's *effective* visibility in our catalogue — derived, never authored.
 ///
 /// Phase 4 stopped anything writing this directly (D-059). It is computed by
@@ -383,9 +392,6 @@ model Setting {
   @@map("settings")
 }
 
-<<<<<<< HEAD
-/// Where a version of a path's assessment sits in its life (D-070, D-134).
-=======
 /// Which instrument an `Assessment` row is (TAM-147).
 ///
 /// A discriminator, not a second table per instrument — `english-assessment`
@@ -399,13 +405,17 @@ model Setting {
 /// grows with every instrument added. `kind` is what keeps `findFirst`-style
 /// queries correct here: every one of them now filters on it, never on
 /// `status` alone.
+///
+/// Unrelated to `PathAssessment` below, which is a path's own placement test
+/// (D-134) — this `Assessment`/`kind` framework is the ministry-wide
+/// instrument registry (§4C.3), assignable to everyone, a department or a
+/// person, independent of any path.
 enum AssessmentKind {
   RIASEC
   CEFR
 }
 
-/// Where a version of the assessment sits in its life (D-070).
->>>>>>> origin/main
+/// Where a version of a path's assessment sits in its life (D-070, D-134).
 ///
 /// Exactly one DRAFT and one ACTIVE may exist **per path**, enforced by two
 /// partial unique indexes the migration adds by hand — Prisma cannot express a
@@ -446,12 +456,57 @@ enum AssessmentStatus {
 /// that scored them, `Restrict` keeps that version alive, and the bands travel
 /// with it — so "38 out of 60 meant level 3" stays true after the ministry moves
 /// the boundary.
+///
+/// **Deliberately its own model, not a `pathId` on `Assessment` above.**
+/// `Assessment` is the ministry-wide instrument registry (TAM-147) —
+/// assignable to everyone, a department or a person via `AssessmentAssignment`,
+/// never to "whoever holds this path". A path's placement test has a different
+/// audience (only that path's learners) and a different question ("which rung
+/// do you start on" rather than "what is your RIASEC code / CEFR level"), so it
+/// stays a table of its own rather than overloading the registry with a
+/// per-path scope it was never built to express.
 model PathAssessment {
   id String @id @default(uuid()) @db.Uuid
 
   pathId String @map("path_id") @db.Uuid
   path   Path   @relation(fields: [pathId], references: [id], onDelete: Cascade)
 
+  version     Int    @default(1)
+  title       String
+  description String
+
+  status AssessmentStatus @default(DRAFT)
+
+  effectiveFrom DateTime? @map("effective_from")
+  retiredAt     DateTime? @map("retired_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  questions PathAssessmentQuestion[]
+  bands     PathAssessmentBand[]
+  results   PathAssessmentResult[]
+
+  @@unique([pathId, version])
+  @@index([pathId, status])
+  @@map("path_assessments")
+}
+
+/// One version of the ministry-wide instrument registry (TAM-147) — RIASEC
+/// and CEFR, assignable to everyone / a department / a person via
+/// `AssessmentAssignment` below. Unrelated to `PathAssessment` above, which is
+/// one path's own placement test and never assigned this way.
+///
+/// **Copy-on-write.** Editing never mutates a live bank: publishing an edit
+/// inserts a *new* row at `version + 1` with its own copy of every question,
+/// option and weight, and retires the previous one. `assessment_results` keep
+/// pointing at the version that scored them.
+model Assessment {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Stable identifier for the *instrument*, shared by all its versions.
+  key         String
+  /// 1 for the seeded bank; each published edit is the next integer.
   version     Int    @default(1)
   title       String
   description String
@@ -464,7 +519,11 @@ model PathAssessment {
 
   status AssessmentStatus @default(DRAFT)
 
+  /// When this version became the one new takers receive. Null while DRAFT —
+  /// §4C.3 must show a version *and an effective date*, and a draft has no date
+  /// because it is not in effect.
   effectiveFrom DateTime? @map("effective_from")
+  /// When a later version superseded it. Null unless RETIRED.
   retiredAt     DateTime? @map("retired_at")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -472,18 +531,10 @@ model PathAssessment {
 
   /// The Holland bank — populated only for `kind: RIASEC` rows.
   questions AssessmentQuestion[]
-<<<<<<< HEAD
-  bands     AssessmentBand[]
-  results   AssessmentResult[]
-
-  @@unique([pathId, version])
-  @@index([pathId, status])
-  @@map("path_assessments")
-=======
   /// Every result taken against this version, of whichever `kind` it is —
   /// this relation, and this table, is what makes "what has this person
   /// taken" answerable without a union across instrument-specific tables.
-  results AssessmentResult[]
+  results   AssessmentResult[]
 
   /// The CEFR item bank and its scoring bands — populated only for
   /// `kind: CEFR` rows (TAM-148's tables, repointed here by TAM-147). Kept
@@ -503,10 +554,9 @@ model PathAssessment {
   /// share this table without one.
   @@index([kind, status])
   @@map("assessments")
->>>>>>> origin/main
 }
 
-model AssessmentQuestion {
+model PathAssessmentQuestion {
   id String @id @default(uuid()) @db.Uuid
 
   assessmentId String         @map("assessment_id") @db.Uuid
@@ -533,6 +583,49 @@ model AssessmentQuestion {
   level   Level?  @relation(fields: [levelId], references: [id], onDelete: SetNull)
   topic   String?
 
+  options   PathAssessmentOption[]
+  responses PathAssessmentResponse[]
+
+  @@unique([assessmentId, key])
+  @@index([assessmentId, displayOrder])
+  @@map("path_assessment_questions")
+}
+
+model PathAssessmentOption {
+  id String @id @default(uuid()) @db.Uuid
+
+  questionId String                 @map("question_id") @db.Uuid
+  question   PathAssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  key          String
+  displayOrder Int    @map("display_order")
+  label        String
+
+  /// Exactly one option per question carries it — enforced at publish by
+  /// `assessBank`, not by the schema, because a draft must be allowed to sit in
+  /// an invalid state while it is being edited (D-073: a guard on every save
+  /// makes the legal destination unreachable).
+  isCorrect Boolean @default(false) @map("is_correct")
+
+  responses PathAssessmentResponse[]
+
+  @@unique([questionId, key])
+  @@index([questionId, displayOrder])
+  @@map("path_assessment_options")
+}
+
+model AssessmentQuestion {
+  id String @id @default(uuid()) @db.Uuid
+
+  assessmentId String     @map("assessment_id") @db.Uuid
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  /// Stable across wording edits, so revising a question does not orphan the
+  /// responses that reference it.
+  key          String
+  displayOrder Int    @map("display_order")
+  text         String
+
   options   AssessmentOption[]
   responses AssessmentResponse[]
 
@@ -551,17 +644,33 @@ model AssessmentOption {
   displayOrder Int    @map("display_order")
   label        String
 
-  /// Exactly one option per question carries it — enforced at publish by
-  /// `assessBank`, not by the schema, because a draft must be allowed to sit in
-  /// an invalid state while it is being edited (D-073: a guard on every save
-  /// makes the legal destination unreachable).
-  isCorrect Boolean @default(false) @map("is_correct")
-
+  weights   AssessmentOptionWeight[]
   responses AssessmentResponse[]
 
   @@unique([questionId, key])
   @@index([questionId, displayOrder])
   @@map("assessment_options")
+}
+
+/// What one option contributes to one dimension (§6: "store the dimension
+/// weighting per option").
+///
+/// A table with an enum column rather than a JSON blob on the option. The
+/// difference matters: a mistyped letter in JSON contributes nothing and fails
+/// silently, producing a subtly wrong Holland Code that no error surfaces. Here
+/// the database rejects it, and Phase 5's weight editor gets referential
+/// integrity without writing validation for it.
+model AssessmentOptionWeight {
+  id String @id @default(uuid()) @db.Uuid
+
+  optionId String           @map("option_id") @db.Uuid
+  option   AssessmentOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  dimension RiasecDimension
+  points    Int
+
+  @@unique([optionId, dimension])
+  @@map("assessment_option_weights")
 }
 
 /// One band of the version that owns it: a score range, and the level it places
@@ -581,7 +690,7 @@ model AssessmentOption {
 /// A path with no bands at all is not broken: `defaultPlacementBands` splits the
 /// range evenly across the levels by position, which is the spec's stated
 /// default and is what an unconfigured path places by.
-model AssessmentBand {
+model PathAssessmentBand {
   id String @id @default(uuid()) @db.Uuid
 
   assessmentId String         @map("assessment_id") @db.Uuid
@@ -598,33 +707,22 @@ model AssessmentBand {
 
   @@unique([assessmentId, levelId])
   @@index([assessmentId, minScore])
-  @@map("assessment_bands")
+  @@map("path_assessment_bands")
 }
 
-<<<<<<< HEAD
-/// A completed attempt: the total, what was attainable, and the version scored.
+/// A completed attempt at a path's own placement test: the total, what was
+/// attainable, and the version scored.
 ///
 /// **Append-only, and not unique per user.** The placement it produced is the
 /// unique thing (`learner_placements`), which is what stops a second attempt
 /// quietly moving somebody who has already started work. Keeping every attempt
 /// is D-033's rule and is what lets an administrator see why a learner sits
 /// where they do.
-=======
-/// One completed attempt, of whichever instrument it was (TAM-147).
 ///
-/// **One table answers "what has this person taken"**, for every kind — a
-/// second results table per instrument would split the journey in two and
-/// leave nothing able to answer that question without a union. So the payload
-/// is a nullable column group per `kind`, beside a `kind` column that says
-/// which group is populated: the six Holland columns for a `RIASEC` row (all
-/// six, not just the top three, so the ranking that orders gold
-/// recommendations and the profile needed to re-explain the result later both
-/// survive), `cefr_level`/`cefr_score`/`cefr_max` for a `CEFR` row. Exactly one
-/// group is ever non-null on a given row — the scorer for that `kind` is what
-/// populates it, and nothing here validates that at the schema level, the same
-/// way `assessment_option_weights` trusts its own scorer.
->>>>>>> origin/main
-model AssessmentResult {
+/// Unrelated to `AssessmentResult` below, which is the ministry-wide RIASEC/CEFR
+/// registry's own result table (TAM-147) — a path's placement test is scored
+/// and stored here instead.
+model PathAssessmentResult {
   id String @id @default(uuid()) @db.Uuid
 
   userId String @map("user_id") @db.Uuid
@@ -637,7 +735,6 @@ model AssessmentResult {
   assessment        PathAssessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
   assessmentVersion Int            @map("assessment_version")
 
-<<<<<<< HEAD
   totalScore Int @map("total_score")
   /// The marks attainable in the version scored, so a historical result can
   /// still be shown as a percentage after the bank changes size.
@@ -645,10 +742,37 @@ model AssessmentResult {
 
   completedAt DateTime @default(now()) @map("completed_at")
 
-  responses  AssessmentResponse[]
+  responses  PathAssessmentResponse[]
   placements LearnerPlacement[]
 
-=======
+  @@index([userId, completedAt])
+  @@map("path_assessment_results")
+}
+
+/// One completed attempt at a ministry-wide instrument, of whichever `kind` it
+/// was (TAM-147).
+///
+/// **One table answers "what has this person taken"**, for every kind — a
+/// second results table per instrument would split the journey in two and
+/// leave nothing able to answer that question without a union. So the payload
+/// is a nullable column group per `kind`, beside a `kind` column that says
+/// which group is populated: the six Holland columns for a `RIASEC` row (all
+/// six, not just the top three, so the ranking that orders gold
+/// recommendations and the profile needed to re-explain the result later both
+/// survive), `cefr_level`/`cefr_score`/`cefr_max` for a `CEFR` row. Exactly one
+/// group is ever non-null on a given row — the scorer for that `kind` is what
+/// populates it, and nothing here validates that at the schema level, the same
+/// way `assessment_option_weights` trusts its own scorer.
+model AssessmentResult {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  assessmentId      String     @map("assessment_id") @db.Uuid
+  assessment        Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  assessmentVersion Int        @map("assessment_version")
+
   /// Which payload group below is populated. Stored redundantly with
   /// `assessment.kind` (rather than read through the join) so "every
   /// instrument this person has taken" is one query over this table alone.
@@ -694,10 +818,27 @@ model AssessmentResult {
   /// guard is not; see the hand-written partial index in the migration
   /// (`WHERE kind = 'CEFR'` — `@@unique` cannot express the `WHERE`, the same
   /// limitation `AssessmentStatus`'s DRAFT/ACTIVE index already works around).
->>>>>>> origin/main
   @@index([userId, completedAt])
   @@index([userId, kind, completedAt])
   @@map("assessment_results")
+}
+
+model PathAssessmentResponse {
+  id String @id @default(uuid()) @db.Uuid
+
+  resultId String               @map("result_id") @db.Uuid
+  result   PathAssessmentResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  questionId String                 @map("question_id") @db.Uuid
+  /// Restrict on both, for the D-035 reason: editing the bank must not silently
+  /// delete the answers people already gave and change a historical result.
+  question   PathAssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  optionId String               @map("option_id") @db.Uuid
+  option   PathAssessmentOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@unique([resultId, questionId])
+  @@map("path_assessment_responses")
 }
 
 model AssessmentResponse {
@@ -707,27 +848,21 @@ model AssessmentResponse {
   result   AssessmentResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
 
   questionId String             @map("question_id") @db.Uuid
-  /// Restrict on both, for the D-035 reason: editing the bank must not silently
-  /// delete the answers people already gave and change a historical result.
+  /// Restrict, not Cascade: editing the bank in Phase 5 must not silently
+  /// delete the answers people already gave.
   question   AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
 
   optionId String           @map("option_id") @db.Uuid
   option   AssessmentOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
 
+  /// One answer per question per attempt — the database half of the rule the
+  /// scoring engine also enforces.
   @@unique([resultId, questionId])
   @@map("assessment_responses")
 }
 
-/// A career path: an ordered ladder of levels, a set of courses placed onto
-/// those levels, and one assessment that decides which rung a learner starts on
-/// (D-134).
+/// The six levels of the Common European Framework, **ascending** (§4.13).
 ///
-<<<<<<< HEAD
-/// The RIASEC letter is gone. It existed to drive a recommendation, and under
-/// the ministry's model there is nothing to recommend — a path is assigned, and
-/// what a learner needs to know about it is what it contains and where they
-/// stand in it.
-=======
 /// The order is a domain fact, not a presentation choice: a band table is
 /// validated as a partition of the score range in this order, and a result is
 /// rendered against it. `CEFR_LEVELS` in `@tamkeen/types` is the same list, and
@@ -983,8 +1118,6 @@ model AssessmentAssignment {
   @@map("assessment_assignments")
 }
 
-/// A career path, tagged with exactly one primary RIASEC letter (§3A).
->>>>>>> origin/main
 model Path {
   id String @id @default(uuid()) @db.Uuid
 
@@ -997,11 +1130,17 @@ model Path {
   /// alongside `description` (§4C.4, TAM-150); empty until they are.
   skillOutcomes String[] @default([]) @map("skill_outcomes")
 
+  /// Drives the gold recommendation on the dashboard and impact reporting: a
+  /// path is gold when this letter is in the user's top-three Holland Code
+  /// (TAM-147). Untouched by D-134's own ladder/placement model below — a
+  /// path still carries one primary RIASEC letter alongside its levels.
+  riasecLetter RiasecDimension @map("riasec_letter")
+
   typicalDurationMinutes Int? @map("typical_duration_minutes")
 
-  /// The ministry's own ordering of the catalogue. It used to be a tiebreak
-  /// inside a recommendation group; with recommendations gone (D-134) it is
-  /// simply the order paths are listed in.
+  /// The ministry's own ordering of the catalogue — a tiebreak inside a
+  /// recommendation group, and simply the listing order wherever nothing
+  /// recommends (D-134's own screens).
   displayOrder Int        @map("display_order")
   status       PathStatus @default(DRAFT)
 
@@ -1016,6 +1155,7 @@ model Path {
   certificates Certificate[]
 
   @@index([status])
+  @@index([riasecLetter])
   @@map("paths")
 }
 
@@ -1182,9 +1322,9 @@ model Level {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   pathCourses PathCourse[]
-  bands       AssessmentBand[]
+  bands       PathAssessmentBand[]
   placements  LearnerPlacement[]
-  questions   AssessmentQuestion[]
+  questions   PathAssessmentQuestion[]
 
   @@unique([pathId, position])
   /// Not a duplicate of the primary key: it is the target of the composite
@@ -1341,8 +1481,8 @@ model LearnerPlacement {
   path   Path   @relation(fields: [pathId], references: [id], onDelete: Cascade)
 
   /// Restrict, for D-049's reason: the attempt behind a placement must survive.
-  resultId String           @map("result_id") @db.Uuid
-  result   AssessmentResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  resultId String               @map("result_id") @db.Uuid
+  result   PathAssessmentResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
 
   /// Restrict as well — a level a learner stands on cannot be deleted under
   /// them. `LevelsService.remove` refuses before the database has to.

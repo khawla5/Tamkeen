@@ -131,7 +131,6 @@ export class AdminDashboardService {
   }
 
   private async journeyCounts(): Promise<AdminDashboardView['journey']> {
-<<<<<<< HEAD
     const [assignedRows, placedRows, completedRows, coursesPassed, certificatesIssued] =
       await Promise.all([
         /* Distinct users, not rows: an employee may hold more than one path
@@ -149,28 +148,6 @@ export class AdminDashboardService {
         this.prisma.completion.count({ where: { passed: true } }),
         this.prisma.certificate.count(),
       ]);
-=======
-    const [assessedRows, byStatus, coursesPassed, certificatesIssued] = await Promise.all([
-      /* Distinct users, not results: retakes append (D-033), so counting rows
-         would report one indecisive employee as several assessed people.
-         `kind: 'RIASEC'` (TAM-147): this counts who has taken *the* journey
-         assessment specifically — someone who has only taken the CEFR
-         placement test is not "assessed" in the sense this card means. */
-      this.prisma.assessmentResult.findMany({
-        where: { kind: 'RIASEC' },
-        distinct: ['userId'],
-        select: { userId: true },
-      }),
-      this.prisma.userPath.groupBy({ by: ['status'], _count: { _all: true } }),
-      this.prisma.completion.count({ where: { passed: true } }),
-      this.prisma.certificate.count(),
-    ]);
-
-    const of = (status: string) => byStatus.find((row) => row.status === status)?._count._all ?? 0;
-    const active = of('ACTIVE');
-    const completed = of('COMPLETED');
-    const committed = active + completed;
->>>>>>> origin/main
 
     return {
       assigned: assignedRows.length,
@@ -204,47 +181,17 @@ export class AdminDashboardService {
    * zero is a finding — a path the ministry built and never used — and a row
    * that disappears cannot be compared against the ones that are working.
    */
-<<<<<<< HEAD
   private async pathDistribution(): Promise<AdminPathAssignmentShare[]> {
     const [paths, placements] = await Promise.all([
       this.prisma.path.findMany({
         where: { status: 'PUBLISHED' },
         orderBy: { displayOrder: 'asc' },
         select: { id: true, name: true, userPaths: { select: { status: true } } },
-=======
-  private async letterDistribution(): Promise<AdminLetterShare[]> {
-    const [newest, pathsByLetter] = await Promise.all([
-      /* `kind: 'RIASEC'` (TAM-147): a career-type distribution is meaningless
-         for a CEFR row, which has no `code` at all. */
-      this.prisma.assessmentResult.findMany({
-        where: { kind: 'RIASEC' },
-        distinct: ['userId'],
-        orderBy: [{ userId: 'asc' }, { completedAt: 'desc' }],
-        select: { code: true },
-      }),
-      this.prisma.path.groupBy({
-        by: ['riasecLetter'],
-        where: { isActive: true },
-        _count: { _all: true },
->>>>>>> origin/main
       }),
       this.prisma.learnerPlacement.groupBy({ by: ['pathId'], _count: { _all: true } }),
     ]);
 
-<<<<<<< HEAD
     const placedBy = new Map(placements.map((row) => [row.pathId, row._count._all]));
-=======
-    const employees = new Map<string, number>();
-    for (const row of newest) {
-      /* The code's first letter IS the dominant dimension: the code is derived
-         by ranking, with ties already broken canonically (D-031), so reading it
-         here cannot disagree with the ranking the learner was shown.
-         Non-null by construction: filtered to `kind: 'RIASEC'` above, and
-         every row of that kind has `code` set (TAM-147). */
-      const letter = row.code!.charAt(0);
-      employees.set(letter, (employees.get(letter) ?? 0) + 1);
-    }
->>>>>>> origin/main
 
     return paths
       .map((path) => ({

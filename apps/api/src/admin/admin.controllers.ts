@@ -32,15 +32,9 @@ export const ADMIN_CONTROLLERS = [
   AdminController,
   AdminUsersController,
   AdminAssessmentController,
-<<<<<<< HEAD
-=======
-  /* §4C.9 — the English placement test's own editor (D-124). A separate
-     controller, so the RBAC suite covers it the moment it is routable. */
-  AdminEnglishController,
   /* §4C.3 — assigning instruments and groups to everyone, a department or a
      person (TAM-147). */
   AdminAssessmentAssignmentsController,
->>>>>>> origin/main
   AdminPathsController,
   /* D-130/D-134 — which paths an employee is on, which is the whole of their
      entitlement. A separate controller, so the RBAC suite covers it the moment

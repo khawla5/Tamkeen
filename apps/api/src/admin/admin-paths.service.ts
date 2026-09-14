@@ -306,6 +306,10 @@ export class AdminPathsService {
         typicalDurationMinutes: dto.typicalDurationMinutes ?? null,
         displayOrder: dto.displayOrder ?? (maxOrder._max.displayOrder ?? 0) + 1,
         status: 'DRAFT',
+        /* TAM-147's gold-recommendation field, foreign to this D-134 creation
+           flow — an admin building a ladder here has no RIASEC letter to
+           give it. Neutral placeholder until §4C.4 grows a field for it. */
+        riasecLetter: 'C',
       },
       select: { id: true },
     });

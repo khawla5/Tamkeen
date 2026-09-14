@@ -18,12 +18,9 @@
 import type {
   AdminAssessmentAssignmentRow,
   AdminAssessmentDraft,
-<<<<<<< HEAD
-  AdminAssignResult,
-=======
   AdminAssessmentGroupRow,
   AdminAssessmentKeyOption,
->>>>>>> origin/main
+  AdminAssignResult,
   AdminAttachableCourse,
   AdminCoursePage,
   AdminCourseRow,
@@ -689,9 +686,6 @@ export const adminApi = {
   assessmentVersion: (pathId: string, assessmentId: string) =>
     api.get<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/versions/${assessmentId}`),
 
-<<<<<<< HEAD
-  // §4C.4 — study paths, their ladders, and what is placed on them
-=======
   // §4C.3 — assignment (TAM-147): who is handed which instrument or group
   assessmentKeys: () => api.get<AdminAssessmentKeyOption[]>('/api/admin/assessment-keys'),
 
@@ -720,8 +714,7 @@ export const adminApi = {
   removeAssessmentGroup: (id: string) =>
     api.delete<AdminAssessmentGroupRow[]>(`/api/admin/assessment-groups/${id}`),
 
-  // §4C.4 — study paths
->>>>>>> origin/main
+  // §4C.4 — study paths, their ladders, and what is placed on them
   listPaths: () => api.get<AdminPathRow[]>('/api/admin/paths'),
 
   getPath: (pathId: string) => api.get<AdminPathDetail>(`/api/admin/paths/${pathId}`),

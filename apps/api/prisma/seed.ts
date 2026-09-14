@@ -321,7 +321,9 @@ async function main(): Promise<void> {
     `Seeded ${counts.courses} courses; ${counts.paths} paths with ${counts.levels} levels ` +
       `(${counts.placed} courses placed, ${counts.unassigned} awaiting placement); ` +
       `${counts.assessments} placement assessments (${counts.questions} questions, ` +
-      `${counts.options} options).`,
+      `${counts.options} options); the ministry-wide RIASEC bank (${counts.ministryQuestions} ` +
+      `questions, ${counts.ministryOptions} options); the English placement test ` +
+      `(${counts.englishQuestions} questions).`,
   );
 
   /* After the catalogue, because it claims courses the catalogue seed creates. */

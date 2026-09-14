@@ -49,24 +49,12 @@ export class AssessmentService {
     private readonly enrollment: EnrollmentService,
   ) {}
 
-<<<<<<< HEAD
   /** The active version for a path, in order, with no answer key attached. */
   async getActive(userId: string, pathId: string): Promise<AssessmentView> {
     await this.assertAssigned(userId, pathId);
 
     const assessment = await this.prisma.pathAssessment.findFirst({
       where: { pathId, status: 'ACTIVE' },
-=======
-  /** The active assessment, in presentation order, with no weights attached. */
-  async getActive(): Promise<AssessmentView> {
-    const assessment = await this.prisma.assessment.findFirst({
-      /* The one version new takers receive (D-069). A draft is never served: an
-         edit in progress must not reach anybody, and a partial unique index
-         guarantees there is at most one ACTIVE row to find *of this kind*
-         (TAM-147) — `assessments` now also holds CEFR rows, so `kind` is not
-         optional here the way it looked before a second instrument existed. */
-      where: { status: 'ACTIVE', kind: 'RIASEC' },
->>>>>>> origin/main
       select: {
         id: true,
         version: true,
@@ -199,11 +187,7 @@ export class AssessmentService {
        * bank the taker never saw, which is the one way a copy-on-write publish
        * could corrupt a placement.
        */
-<<<<<<< HEAD
       where: { id: dto.assessmentId, pathId, status: 'ACTIVE' },
-=======
-      where: { id: dto.assessmentId, status: 'ACTIVE', kind: 'RIASEC' },
->>>>>>> origin/main
       select: {
         id: true,
         version: true,
@@ -260,28 +244,7 @@ export class AssessmentService {
       throw error;
     }
 
-<<<<<<< HEAD
     const level = assessment.path.levels.find((candidate) => candidate.id === score.levelId);
-=======
-    const result = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.assessmentResult.create({
-        data: {
-          userId,
-          assessmentId: assessment.id,
-          assessmentVersion: assessment.version,
-          kind: 'RIASEC',
-          scoreR: profile.scores.R,
-          scoreI: profile.scores.I,
-          scoreA: profile.scores.A,
-          scoreS: profile.scores.S,
-          scoreE: profile.scores.E,
-          scoreC: profile.scores.C,
-          maxScore: profile.maxScore,
-          code: profile.codeString,
-        },
-        select: { id: true, completedAt: true },
-      });
->>>>>>> origin/main
 
     if (!level) {
       /* A band naming a level the path no longer has. The publish gate refuses
@@ -293,7 +256,7 @@ export class AssessmentService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
-        const result = await tx.assessmentResult.create({
+        const result = await tx.pathAssessmentResult.create({
           data: {
             userId,
             assessmentId: assessment.id,
@@ -304,7 +267,7 @@ export class AssessmentService {
           select: { id: true },
         });
 
-        await tx.assessmentResponse.createMany({
+        await tx.pathAssessmentResponse.createMany({
           data: dto.answers.map((answer) => ({
             resultId: result.id,
             questionId: answer.questionId,

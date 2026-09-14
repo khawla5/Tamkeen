@@ -1,8 +1,10 @@
 import type { LmsPort } from '../moodle/lms.port';
 import type { PrismaClient } from '../../generated/prisma';
 import { effectiveCourseStatus, fieldsForPublishedCourse } from '../catalog-sync/catalog-mapping';
+import { ASSESSMENT_QUESTIONS, ASSESSMENT_SEED, LIKERT_LEVELS } from './assessment';
 import { SEED_ASSESSMENTS, type SeedAssessment } from './assessments';
 import { COURSE_METADATA, SEED_PATHS } from './catalog';
+import { ENGLISH_ASSESSMENT_SEED, ENGLISH_BANDS, ENGLISH_QUESTIONS } from './english-assessment';
 
 /**
  * Turns the seed content into database rows.
@@ -33,31 +35,31 @@ export interface SeedCounts {
   assessments: number;
   questions: number;
   options: number;
+  /** TAM-147's ministry-wide RIASEC bank, counted separately from the D-134
+   *  path-scoped one above — the two instruments share no key space. */
+  ministryQuestions: number;
+  ministryOptions: number;
+  /** §4.13's placement bank, counted separately again: a third instrument,
+   *  two numbers. */
+  englishQuestions: number;
 }
 
 /**
-<<<<<<< HEAD
- * Mirrors the LMS catalogue into `courses`, then lays our ladders on top.
-=======
- * Seeds version 1 of the assessment, its questions, options and weights.
+ * Seeds version 1 of the ministry-wide RIASEC assessment, its questions,
+ * options and weights (TAM-147).
  *
  * **It bootstraps; it does not maintain.** Rows are matched by their stable
  * `key` so revising the Arabic wording here updates version 1 in place — but
  * only while version 1 is still the only version there is. The moment an
- * administrator publishes an edit through §4C.3, the ministry owns the content
- * and this function stands back: re-running the seed after that would overwrite
- * their published bank with the draft wording that shipped with the code, which
- * in a government system is data loss dressed as a convenience.
- *
- * D-032 always said the bank is seeded data "precisely so Phase 5 can edit it
- * without a deploy". This is the other half of that sentence.
+ * administrator publishes an edit through §4C.3, the ministry owns the
+ * content and this function stands back: re-running the seed after that
+ * would overwrite their published bank with the draft wording that shipped
+ * with the code, which in a government system is data loss dressed as a
+ * convenience.
  */
-/* Exported so a real-LMS run can seed the assessment without also seeding the
-   mock catalogue: the two are independent, and against a real Moodle the
-   catalogue comes from sync rather than from COURSE_METADATA. */
-export async function seedAssessment(
+async function seedAssessment(
   prisma: PrismaClient,
-): Promise<Pick<SeedCounts, 'questions' | 'options'>> {
+): Promise<Pick<SeedCounts, 'ministryQuestions' | 'ministryOptions'>> {
   const existing = await prisma.assessment.findMany({
     where: { key: ASSESSMENT_SEED.key },
     select: { id: true, version: true, status: true, effectiveFrom: true },
@@ -83,8 +85,8 @@ export async function seedAssessment(
       : [];
 
     return {
-      questions: counts.length,
-      options: counts.reduce((sum, row) => sum + row._count.options, 0),
+      ministryQuestions: counts.length,
+      ministryOptions: counts.reduce((sum, row) => sum + row._count.options, 0),
     };
   }
 
@@ -173,29 +175,23 @@ export async function seedAssessment(
     },
   });
 
-  return { questions: ASSESSMENT_QUESTIONS.length, options: optionCount };
+  return { ministryQuestions: ASSESSMENT_QUESTIONS.length, ministryOptions: optionCount };
 }
 
 /**
  * Seeds version 1 of the English placement test: its questions, options, the
  * correct answers, and the band table (§4.13, D-123, D-125).
  *
- * **It bootstraps; it does not maintain** — the D-083 rule, applied to the
- * second instrument for the same reason. Rows are matched by their stable `key`
- * so revising the wording here updates version 1 in place, but only while
- * version 1 is still the only version there is. The moment an administrator
- * publishes an edit through §4C.9 the content is the ministry's, and re-running
- * the seed must not overwrite their bank with whatever shipped in the
- * repository. In a government system that is data loss dressed as a
- * convenience, and here the loss would include the band boundaries that decide
- * what every future placement *means*.
+ * **It bootstraps; it does not maintain** — the same rule as `seedAssessment`,
+ * applied to the second ministry-wide instrument. Rows are matched by their
+ * stable `key` so revising the wording here updates version 1 in place, but
+ * only while version 1 is still the only version there is.
  *
- * **The bands are written with the questions, in the same pass**, because they
- * are only meaningful together: a table covering 0-60 is correct for this bank
- * and wrong for a bank of twenty items. Seeding them apart would leave a window
- * in which the instrument existed and could not score anybody.
+ * **The bands are written with the questions, in the same pass**, because
+ * they are only meaningful together: a table covering 0-60 is correct for
+ * this bank and wrong for a bank of twenty items.
  */
-export async function seedEnglishAssessment(
+async function seedEnglishAssessment(
   prisma: PrismaClient,
 ): Promise<Pick<SeedCounts, 'englishQuestions'>> {
   const existing = await prisma.assessment.findMany({
@@ -231,8 +227,6 @@ export async function seedEnglishAssessment(
           title: ENGLISH_ASSESSMENT_SEED.title,
           description: ENGLISH_ASSESSMENT_SEED.description,
           status: 'ACTIVE',
-          /* Kept if it has one. Re-seeding is not a new effective date — the
-             instrument has been in force since it was first published. */
           effectiveFrom: first.effectiveFrom ?? new Date(),
         },
         select: { id: true },
@@ -294,9 +288,9 @@ export async function seedEnglishAssessment(
     }
 
     /* Options dropped from an item — but only where nobody has answered them.
-       Deleting an answered option would take its responses with it and silently
-       change a historical placement; the foreign key is Restrict precisely so
-       that cannot happen by accident. */
+       Deleting an answered option would take its responses with it and
+       silently change a historical placement; the foreign key is Restrict
+       precisely so that cannot happen by accident. */
     await prisma.englishAssessmentOption.deleteMany({
       where: {
         questionId: row.id,
@@ -332,9 +326,7 @@ export async function seedEnglishAssessment(
 }
 
 /**
- * Mirrors the LMS catalogue into `courses`, then lays our paths and membership
- * on top.
->>>>>>> origin/main
+ * Mirrors the LMS catalogue into `courses`, then lays our ladders on top.
  *
  * Seeded courses are **published**, unlike ones merely discovered in the LMS
  * (D-059). The seed is authoring a known catalogue with its metadata in hand —
@@ -441,6 +433,7 @@ async function seedCatalog(
       skillOutcomes: seedPath.skillOutcomes,
       typicalDurationMinutes: seedPath.typicalDurationMinutes,
       displayOrder: seedPath.displayOrder,
+      riasecLetter: seedPath.riasecLetter,
       status: seedPath.status,
     };
 
@@ -620,7 +613,7 @@ async function seedBank(
   for (const [index, question] of seed.questions.entries()) {
     const levelId = levelIdByName.get(question.levelName) ?? null;
 
-    const row = await prisma.assessmentQuestion.upsert({
+    const row = await prisma.pathAssessmentQuestion.upsert({
       where: { assessmentId_key: { assessmentId, key: question.key } },
       create: {
         assessmentId,
@@ -642,7 +635,7 @@ async function seedBank(
     });
 
     for (const [optionIndex, option] of question.options.entries()) {
-      await prisma.assessmentOption.upsert({
+      await prisma.pathAssessmentOption.upsert({
         where: { questionId_key: { questionId: row.id, key: option.key } },
         create: {
           questionId: row.id,
@@ -662,12 +655,12 @@ async function seedBank(
     /* An option dropped from the seed leaves the bank. Responses reference
        options with `Restrict`, so this refuses rather than silently deleting an
        answer somebody gave — which is D-035's rule working as intended. */
-    await prisma.assessmentOption.deleteMany({
+    await prisma.pathAssessmentOption.deleteMany({
       where: { questionId: row.id, key: { notIn: question.options.map((option) => option.key) } },
     });
   }
 
-  await prisma.assessmentQuestion.deleteMany({
+  await prisma.pathAssessmentQuestion.deleteMany({
     where: { assessmentId, key: { notIn: seed.questions.map((question) => question.key) } },
   });
 }
@@ -678,6 +671,10 @@ export async function seedProductData(prisma: PrismaClient, lms: LmsPort): Promi
      path that owns them, so the ladders must exist first. */
   const catalog = await seedCatalog(prisma, lms);
   const assessments = await seedAssessments(prisma);
+  /* The ministry-wide instruments (TAM-147): independent of the path-scoped
+     bank above and of each other, so the order here is presentational. */
+  const ministry = await seedAssessment(prisma);
+  const english = await seedEnglishAssessment(prisma);
 
-  return { ...catalog, ...assessments };
+  return { ...catalog, ...assessments, ...ministry, ...english };
 }

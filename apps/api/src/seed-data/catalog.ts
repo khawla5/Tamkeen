@@ -1,4 +1,4 @@
-import type { PathStatus } from '@tamkeen/types';
+import type { PathStatus, RiasecLetter } from '@tamkeen/types';
 
 /**
  * Paths, their levels, what is placed on them, and the course metadata the LMS
@@ -43,6 +43,13 @@ export interface SeedPath {
   typicalDurationMinutes: number;
   /** The ministry's own ordering of the catalogue. */
   displayOrder: number;
+  /**
+   * Drives the gold recommendation (TAM-147) — kept alongside D-134's own
+   * ladder/placement below, not replaced by it. PLACEHOLDER pending
+   * directorate sign-off, same as `skillOutcomes` above: plausible for each
+   * path's subject, not yet an authored decision.
+   */
+  riasecLetter: RiasecLetter;
   /**
    * Only a path with an authored placement bank may be published (D-134):
    * without one, nobody assigned to it could ever be placed, and `pathBlockers`
@@ -94,6 +101,7 @@ export const SEED_PATHS: readonly SeedPath[] = [
     ],
     typicalDurationMinutes: 2220,
     displayOrder: 1,
+    riasecLetter: 'S',
     status: 'PUBLISHED',
     levels: [
       { name: 'مبتدئ (A1–A2)', courses: [101, 102, 103, 104] },
@@ -117,6 +125,7 @@ export const SEED_PATHS: readonly SeedPath[] = [
     ],
     typicalDurationMinutes: 2100,
     displayOrder: 2,
+    riasecLetter: 'C',
     status: 'PUBLISHED',
     levels: [
       { name: 'المرحلة الأولى', courses: [111, 112, 113] },
@@ -137,6 +146,7 @@ export const SEED_PATHS: readonly SeedPath[] = [
     ],
     typicalDurationMinutes: 1560,
     displayOrder: 3,
+    riasecLetter: 'E',
     status: 'PUBLISHED',
     levels: [
       { name: 'المرحلة الأولى', courses: [120, 121, 122] },

@@ -319,7 +319,12 @@ function PathGroup({
         </p>
       </Link>
 
-      <CourseGrid courses={courses} statusByCourseId={statusByCourseId} titleAs="h3" layout="list" />
+      <CourseGrid
+        courses={courses}
+        statusByCourseId={statusByCourseId}
+        titleAs="h3"
+        layout="list"
+      />
     </section>
   );
 }
@@ -343,7 +348,11 @@ function CourseGrid({
   layout?: 'grid' | 'list';
 }) {
   return (
-    <ul className={cn(layout === 'grid' ? 'grid gap-4 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col')}>
+    <ul
+      className={cn(
+        layout === 'grid' ? 'grid gap-4 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col',
+      )}
+    >
       {courses.map((course) => (
         <CourseCard
           key={course.id}

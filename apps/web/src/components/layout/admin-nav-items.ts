@@ -28,20 +28,6 @@ export const ADMIN_NAV: readonly NavItem[] = [
      shared. Assignment lives in «الحسابات» (the manage-account panel), not
      here — who may take is an account decision, what is asked is content. */
   { key: 'adminAssessment', href: '/admin/assessment', icon: 'assessment' },
-<<<<<<< HEAD
-=======
-  /* §4C.9 — the English placement test, beside the career assessment rather
-     than inside it. They are two instruments an administrator edits separately
-     (D-124), and folding one into the other's page would hide it. Nine items
-     now; §3's six-item rule governs the *learner's* nav, and §4C's own note
-     already explains why an administrator's surface is the whole product. */
-  { key: 'adminEnglish', href: '/admin/english', icon: 'assessment' },
-  /* §4C.3's Assignments tab (TAM-147) — who is handed which instrument or
-     named group, and whether it is required. Its own destination rather than
-     a tab inside Assessment or English: it assigns across both instruments,
-     so nesting it in either page would misname what it does. */
-  { key: 'adminAssignments', href: '/admin/assignments', icon: 'assessment' },
->>>>>>> origin/main
   { key: 'adminPaths', href: '/admin/paths', icon: 'myPath' },
   { key: 'adminCourses', href: '/admin/courses', icon: 'courses' },
   { key: 'adminTemplates', href: '/admin/templates', icon: 'templates' },
