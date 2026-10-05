@@ -12,7 +12,6 @@ import {
   type AuditActionCode,
 } from '@tamkeen/types';
 
-import { ImpactTab } from '@/components/admin/impact-tab';
 import { AdminPage } from '@/components/layout/admin-page';
 import { DataView } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
@@ -41,27 +40,26 @@ import { useApiQuery } from '@/lib/use-api';
  */
 export default function AdminAuditPage() {
   const t = useTranslations('admin');
-  const [tab, setTab] = useState<'impact' | 'reports' | 'audit'>('impact');
+  const [tab, setTab] = useState<'reports' | 'audit'>('reports');
 
   /*
-   * Three views of §4C.8, on the shared tablist (TAM-118) rather than the pair
+   * Two views of §4C.8, on the shared tablist (TAM-118) rather than the pair
    * of buttons this page hand-rolled: real `tab`/`tabpanel` semantics, arrow
    * keys that move the right way in an RTL page, and one implementation to fix
    * when any of that is wrong.
    *
-   * «الأثر» leads because it answers the question the ministry opens this page
-   * with — how many of our people took part, and is it growing. The reports are
-   * unchanged behind it, and the trail last: it is evidence, consulted when
-   * something needs explaining rather than read as a report.
+   * «الأثر» has its own destination in the rail («قياس الأثر», `/admin/impact`)
+   * so it is not repeated here. The reports lead, and the trail last: it is
+   * evidence, consulted when something needs explaining rather than read as a
+   * report.
    */
   return (
     <AdminPage title={t('auditTitle')}>
       <Tabs
         label={t('auditTitle')}
         value={tab}
-        onValueChange={(value) => setTab(value as 'impact' | 'reports' | 'audit')}
+        onValueChange={(value) => setTab(value as 'reports' | 'audit')}
         items={[
-          { value: 'impact', label: t('auditTabImpact') },
           { value: 'reports', label: t('auditTabReports') },
           { value: 'audit', label: t('auditTabTrail') },
         ]}
@@ -70,7 +68,7 @@ export default function AdminAuditPage() {
         className="print:contents"
         panelClassName="pt-6"
       >
-        {tab === 'impact' ? <ImpactTab /> : tab === 'reports' ? <ReportsTab /> : <TrailTab />}
+        {tab === 'reports' ? <ReportsTab /> : <TrailTab />}
       </Tabs>
     </AdminPage>
   );

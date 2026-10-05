@@ -21,6 +21,10 @@ import type { NavItem } from './nav-items';
  */
 export const ADMIN_NAV: readonly NavItem[] = [
   { key: 'adminDashboard', href: '/admin', icon: 'dashboard' },
+  /* Directly under the dashboard: «how many of our people took part, and is it
+     growing» is the question the ministry opens the portal with, so it sits
+     beside the overview rather than inside the audit page (§4C.8). */
+  { key: 'adminImpact', href: '/admin/impact', icon: 'impact' },
   { key: 'adminUsers', href: '/admin/users', icon: 'learners' },
   /* One item for every instrument (D-133): /admin/assessment lists the
      assessments, and each opens its own editor beneath it. The editors stay

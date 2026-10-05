@@ -114,10 +114,9 @@ function read(blob: Blob): Promise<string> {
 }
 
 /**
- * «الأثر» is the first tab now (TAM-149), so every assertion below has to say
- * which view it is about. Its own behaviour is covered in
- * `admin-impact.test.tsx`; here it only needs to render without reaching the
- * network.
+ * «الأثر» left this page for `/admin/impact`; its own behaviour is covered in
+ * `admin-impact.test.tsx`. The mock stays so a regression that brings it back
+ * is caught by the first test below rather than by a network error.
  */
 const EMPTY_COUNT = { value: 0, previous: 0, delta: 0 };
 
@@ -148,7 +147,7 @@ const IMPACT: AdminImpactView = {
   placements: [],
 };
 
-/** Renders the page and moves to the reports tab, which no longer opens first. */
+/** Renders the page and makes sure the reports tab is the one showing. */
 async function openReports() {
   const user = userEvent.setup();
   renderWithProviders(<AdminAuditPage />);
@@ -165,12 +164,14 @@ describe('Admin audit and reports (§4C.8)', () => {
     api.auditLog.mockResolvedValue(log());
   });
 
-  it('opens on the impact tab, which is the question the page is opened with', async () => {
+  it('opens on the reports tab, and no longer carries «الأثر» (it has its own page)', async () => {
     renderWithProviders(<AdminAuditPage />);
 
-    /* TAM-149: «كم من موظفينا شارك هذا الربع» comes before «كيف حال النظام». */
-    expect(await screen.findByRole('tab', { name: 'الأثر', selected: true })).toBeInTheDocument();
-    expect(api.impact).toHaveBeenCalled();
+    expect(
+      await screen.findByRole('tab', { name: 'التقارير', selected: true }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'الأثر' })).not.toBeInTheDocument();
+    expect(api.impact).not.toHaveBeenCalled();
   });
 
   it('shows the loading state before the reports arrive', async () => {

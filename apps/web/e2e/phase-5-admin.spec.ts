@@ -98,11 +98,12 @@ test.describe('Phase 5 — the administered surface', () => {
       .last();
   }
 
-  test('the navigation is the eight destinations §4C names', async () => {
+  test('the navigation is the nine destinations §4C names, «قياس الأثر» right under الرئيسية', async () => {
     const nav = page.getByRole('navigation', { name: 'التنقل الرئيسي' }).first();
 
     for (const label of [
       'الرئيسية',
+      'قياس الأثر',
       'الحسابات',
       'التقييم',
       'المسارات',
@@ -113,6 +114,10 @@ test.describe('Phase 5 — the administered surface', () => {
     ]) {
       await expect(nav.getByRole('link', { name: label })).toBeVisible();
     }
+
+    /* Order, not just presence: the new item sits directly after the dashboard. */
+    const labels = await nav.getByRole('link').allInnerTexts();
+    expect(labels.map((label) => label.trim()).slice(0, 2)).toEqual(['الرئيسية', 'قياس الأثر']);
 
     /* No learner or entity destinations leaked into the admin rail. */
     await expect(nav.getByRole('link', { name: 'مساري' })).toHaveCount(0);
@@ -371,12 +376,12 @@ test.describe('Phase 5 — the administered surface', () => {
     await expect(page.frameLocator('iframe[title="معاينة"]').locator('.emblem svg')).toBeVisible();
   });
 
-  test('§4C.8 — «الأثر» opens first and answers by period and department', async () => {
-    await page.getByRole('link', { name: 'السجل والتقارير' }).click();
+  test('§4C.8 — «قياس الأثر» answers by period and department', async () => {
+    await page.getByRole('link', { name: 'قياس الأثر' }).click();
 
     /*
-     * TAM-149. The page now opens on the question the ministry arrives with —
-     * how many of our people took part, and is it growing — rather than on the
+     * TAM-149. Its own page, answering the question the ministry arrives with —
+     * how many of our people took part, and is it growing — rather than the
      * system-health reports. Every tile carries its comparison, and the one
      * rate on the tab says what its denominator is, because it is accounts and
      * not the ministry's headcount.
@@ -407,6 +412,7 @@ test.describe('Phase 5 — the administered surface', () => {
   });
 
   test('§4C.8 — the reports answer §4C.8 questions, worst-first where it matters', async () => {
+    await page.getByRole('link', { name: 'السجل والتقارير' }).click();
     await page.getByRole('tab', { name: 'التقارير' }).click();
 
     await expect(page.getByRole('heading', { name: 'مسار الموظفين' })).toBeVisible({

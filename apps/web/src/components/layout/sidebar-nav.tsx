@@ -10,6 +10,7 @@ import {
   ScrollText,
   Settings,
   Stamp,
+  TrendingUp,
   User,
   Users,
   type LucideIcon,
@@ -35,6 +36,7 @@ const ICONS: Record<NavIconName, LucideIcon> = {
   settings: Settings,
   templates: Stamp,
   audit: ScrollText,
+  impact: TrendingUp,
 };
 
 export interface SidebarNavProps {

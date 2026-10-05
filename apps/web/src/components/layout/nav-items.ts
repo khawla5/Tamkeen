@@ -23,6 +23,8 @@ export const NAV_ICONS = [
   'settings',
   'templates',
   'audit',
+  /* The super-admin's «قياس الأثر» — participation and learning over time. */
+  'impact',
 ] as const;
 
 export type NavIconName = (typeof NAV_ICONS)[number];
