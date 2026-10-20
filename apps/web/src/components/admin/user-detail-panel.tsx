@@ -265,7 +265,11 @@ function AssignmentsSection({
   const paths = useApiQuery(() => adminApi.listPaths(), []);
 
   const assignable = (paths.data ?? []).filter(
-    (path) => path.status === 'PUBLISHED' && !user.paths.some((held) => held.pathId === path.id),
+    (path) =>
+      path.status === 'PUBLISHED' &&
+      /* A REVOKED hold is history, not a current one — the path is offered
+         again, and assigning it reactivates that same row. */
+      !user.paths.some((held) => held.pathId === path.id && held.status !== 'REVOKED'),
   );
   /* The selection survives refetches only while it is still assignable. */
   const selected = assignable.filter((path) => chosen.has(path.id));
@@ -295,24 +299,36 @@ function AssignmentsSection({
             >
               <span className="min-w-0 flex-1 text-sm text-foreground">{path.name}</span>
 
-              {path.placedLevel ? (
+              {path.status === 'REVOKED' ? (
+                <Badge variant="neutral">{t('assignments.statusRevoked')}</Badge>
+              ) : path.placedLevel ? (
                 <Badge variant="success">{path.placedLevel.name}</Badge>
               ) : (
                 <Badge variant="neutral">{t('assignments.statusPending')}</Badge>
               )}
 
-              {/* Absence, not a disabled control (§3): once a learner has been
-                  placed the assignment is part of a record, and revoking it
-                  would leave a placement pointing at a path they were never
-                  on. */}
-              {path.placedLevel ? null : (
+              {/* A REVOKED row has nothing left to revoke — it is already the
+                  history a revoke produces, and reassigning it happens through
+                  the list below, not a control here. Everything still held
+                  (placed or not) can be revoked: the row moves to REVOKED and
+                  keeps whatever progress exists under it rather than being
+                  deleted (§3 — absence once there truly is nothing left, not
+                  before). */}
+              {path.status === 'REVOKED' ? null : (
                 <Button
                   variant="ghost"
                   size="sm"
                   disabled={busy}
-                  onClick={() =>
-                    run(() => adminApi.revokePath(user.id, path.pathId), t('assignments.revoked'))
-                  }
+                  onClick={() => {
+                    if (path.placedLevel && !window.confirm(t('assignments.revokeConfirm'))) {
+                      return;
+                    }
+
+                    void run(
+                      () => adminApi.revokePath(user.id, path.pathId),
+                      t('assignments.revoked'),
+                    );
+                  }}
                 >
                   {t('assignments.revoke')}
                 </Button>

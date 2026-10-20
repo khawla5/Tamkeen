@@ -180,8 +180,14 @@ function levelState(level: MyPathLevelView): CheckpointState {
   return 'upcoming';
 }
 
-function courseState(course: MyPathCourseView): CheckpointState {
-  if (course.status === 'COMPLETED' || !course.startable) return 'done';
+function courseState(course: MyPathCourseView, levelStanding: MyPathLevelView['standing']): CheckpointState {
+  if (course.status === 'COMPLETED') return 'done';
+  /* Ground below the learner's rung reads as covered, same as the level
+     circle above it. A rung above theirs is real work they have not reached
+     yet — 'upcoming', never 'done': a green check there would claim they
+     passed something they have not even started. */
+  if (levelStanding === 'BELOW') return 'done';
+  if (!course.startable) return 'upcoming';
   if (course.isNextUp) return 'current';
   return 'upcoming';
 }
@@ -201,7 +207,7 @@ function PathCheckpoints({ levels }: { levels: MyPathLevelView[] }) {
         <li key={level.id} className="flex flex-col">
           <LevelCheckpoint level={level} />
           {level.courses.map((course) => (
-            <CourseCheckpoint key={course.courseId} course={course} />
+            <CourseCheckpoint key={course.courseId} course={course} levelStanding={level.standing} />
           ))}
         </li>
       ))}
@@ -270,10 +276,17 @@ function LevelCheckpoint({ level }: { level: MyPathLevelView }) {
   );
 }
 
-function CourseCheckpoint({ course }: { course: MyPathCourseView }) {
+function CourseCheckpoint({
+  course,
+  levelStanding,
+}: {
+  course: MyPathCourseView;
+  levelStanding: MyPathLevelView['standing'];
+}) {
   const t = useTranslations('myPath');
   const format = useFormat();
-  const state = courseState(course);
+  const state = courseState(course, levelStanding);
+  const below = levelStanding === 'BELOW';
 
   const statusLabel =
     course.status === 'COMPLETED'
@@ -323,12 +336,19 @@ function CourseCheckpoint({ course }: { course: MyPathCourseView }) {
          * One action, and only on the course the learner should do next — §4.9's
          * "must not compete with continue". A course below their rung offers
          * nothing at all: the placement says they have covered it, and a start
-         * button would contradict that (D-134).
+         * button would contradict that (D-134). A course above their rung is
+         * real work they have not reached yet — locked, not covered, so it
+         * gets its own word rather than borrowing the "already done" one.
          */}
-        {!course.startable ? (
+        {below ? (
           <span className="flex items-center gap-1 text-sm text-muted-foreground">
             <Check aria-hidden="true" className="size-4" />
             {t('coveredAlready')}
+          </span>
+        ) : !course.startable ? (
+          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+            <Lock aria-hidden="true" className="size-4" />
+            {t('lockedAboveLevel')}
           </span>
         ) : course.status !== 'COMPLETED' ? (
           <Button asChild variant={course.isNextUp ? 'primary' : 'outline'} size="sm">

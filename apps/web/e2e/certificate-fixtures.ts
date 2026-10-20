@@ -62,12 +62,18 @@ async function withClient<T>(run: (client: Client) => Promise<T>): Promise<T> {
 }
 
 /**
- * Records a passing completion for the learner's first chosen course and issues
+ * Records a passing completion for the learner's first owed course and issues
  * the certificate that would follow it.
  *
  * The completion row is written the way the sync job writes it — same shape,
  * same `passThresholdUsed` — so the state the browser then sees is the state a
- * real pass produces.
+ * real pass produces. There is no per-learner course row to mirror it onto any
+ * more (D-134): a course's status on the ladder is derived live from this
+ * table and `enrollments`, not stored beside the membership.
+ *
+ * "Owed" means placed at or above the learner's own rung — `path_courses`
+ * placed below it is ground the placement already covers, not something to
+ * complete, so it is the wrong course for this fixture to pick.
  */
 export async function seedPassedCourseCertificate(email: string): Promise<SeededCertificate> {
   return withClient(async (client) => {
@@ -80,16 +86,19 @@ export async function seedPassedCourseCertificate(email: string): Promise<Seeded
 
     const course = await client.query<{ id: string; title: string; moodle_course_id: number }>(
       `SELECT c.id, c.title, c.moodle_course_id
-         FROM user_path_courses upc
-         JOIN user_paths up ON up.id = upc.user_path_id
-         JOIN courses c ON c.id = upc.course_id
-        WHERE up.user_id = $1
-        ORDER BY upc.display_order ASC
+         FROM learner_placements lp
+         JOIN levels placed_lv ON placed_lv.id = lp.level_id
+         JOIN path_courses pc ON pc.path_id = lp.path_id
+         JOIN levels lv ON lv.id = pc.level_id
+         JOIN courses c ON c.id = pc.course_id
+        WHERE lp.learner_id = $1
+          AND lv.position >= placed_lv.position
+        ORDER BY lv.position ASC, pc.position ASC
         LIMIT 1`,
       [user.id],
     );
     const chosen = course.rows[0];
-    if (!chosen) throw new Error(`${email} has no chosen courses — confirm a path first`);
+    if (!chosen) throw new Error(`${email} has no owed courses — place them on a path first`);
 
     await client.query(
       `INSERT INTO completions
@@ -99,15 +108,6 @@ export async function seedPassedCourseCertificate(email: string): Promise<Seeded
        ON CONFLICT (user_id, moodle_course_id) DO UPDATE
          SET passed = true, completed = true, grade_percent = 88`,
       [user.id, chosen.moodle_course_id],
-    );
-
-    /* Mirrored onto the chosen course exactly as the sync would, so My Path and
-       the dashboard show a finished course rather than an untouched one. */
-    await client.query(
-      `UPDATE user_path_courses SET status = 'COMPLETED', grade_percent = 88, completed_at = now()
-        WHERE course_id = $1
-          AND user_path_id IN (SELECT id FROM user_paths WHERE user_id = $2)`,
-      [chosen.id, user.id],
     );
 
     const id = randomUUID();

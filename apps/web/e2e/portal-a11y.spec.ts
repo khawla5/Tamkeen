@@ -2,7 +2,8 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 import { signedInEmployee } from './account';
-import { completeAssessment, confirmFirstPath } from './journey';
+import { assignSeededPath } from './admin-fixtures';
+import { completeAssessment } from './journey';
 import { assertMailpitReachable } from './mailpit';
 
 /**
@@ -50,25 +51,26 @@ test.describe('the shell, held to WCAG 2.1 A/AA (TAM-117)', () => {
   });
 
   test('the dashboard passes axe in all three states', async ({ page }) => {
-    await signedInEmployee(page, 'a11y-shell');
+    const account = await signedInEmployee(page, 'a11y-shell');
 
-    /* PRE_ASSESSMENT: two-item nav, the one card. */
+    /* NO_PATH: two-item nav, the one informational card (D-134 — there is
+       nothing to choose until the ministry assigns something). */
     await expect(page.getByRole('heading', { level: 1, name: 'الرئيسية' })).toBeVisible();
-    await expectNoViolations(page, 'PRE_ASSESSMENT');
-    await expectNoHorizontalOverflow(page, 'PRE_ASSESSMENT');
+    await expectNoViolations(page, 'NO_PATH');
+    await expectNoHorizontalOverflow(page, 'NO_PATH');
 
-    /* ASSESSED_NO_PATH: chips, recommendations. */
-    await page.getByRole('link', { name: 'ابدأ التقييم' }).click();
-    await completeAssessment(page);
+    /* AWAITING_PLACEMENT: a path is assigned, and the one action on it is the
+       placement assessment. */
+    await assignSeededPath(account.email);
     await page.goto('/');
-    await expect(page.getByRole('link', { name: 'اختر مسارك' })).toBeVisible();
-    await expectNoViolations(page, 'ASSESSED_NO_PATH');
-    await expectNoHorizontalOverflow(page, 'ASSESSED_NO_PATH');
+    await expect(page.getByRole('link', { name: 'ابدأ التقييم' })).toBeVisible();
+    await expectNoViolations(page, 'AWAITING_PLACEMENT');
+    await expectNoHorizontalOverflow(page, 'AWAITING_PLACEMENT');
 
     /* ACTIVE_PATH: status strip, continue card, tiles — TAM-108's own
        acceptance line for this state ("usable at 360px RTL"). */
-    await page.goto('/results');
-    await confirmFirstPath(page);
+    await page.getByRole('link', { name: 'ابدأ التقييم' }).click();
+    await completeAssessment(page);
     await page.goto('/');
     await expect(page.getByText('قيد التنفيذ').first()).toBeVisible();
     await expectNoViolations(page, 'ACTIVE_PATH');

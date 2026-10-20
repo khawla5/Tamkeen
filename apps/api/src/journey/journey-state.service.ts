@@ -42,7 +42,10 @@ export class JourneyStateService {
   async getState(userId: string): Promise<JourneyState> {
     const [userPaths, placements, enrollments] = await Promise.all([
       this.prisma.userPath.findMany({
-        where: { userId },
+        /* A REVOKED row is history, not something the learner still holds
+           (D-134's "absence, not a disabled control") — it never surfaces
+           here, only on the admin's own view of the account. */
+        where: { userId, status: { in: ['ACTIVE', 'COMPLETED'] } },
         orderBy: { assignedAt: 'asc' },
         select: {
           id: true,
@@ -87,7 +90,9 @@ export class JourneyStateService {
           userPathId: row.id,
           pathId: row.pathId,
           pathName: row.path.name,
-          status: row.status,
+          /* The `where` above already excludes REVOKED; Prisma's return type
+             cannot express that narrowing, so it is asserted here instead. */
+          status: row.status as 'ACTIVE' | 'COMPLETED',
           assignedAt: row.assignedAt,
           placedLevel: level,
           /* Only pending while they have not been placed. An assessment they
