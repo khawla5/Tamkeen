@@ -172,7 +172,14 @@ describe('Prisma schema', () => {
   });
 
   it('keeps the path status enums in lockstep with the shared types', () => {
-    expect(enumValues('UserPathStatus')).toEqual([...USER_PATH_STATUSES]);
+    /* One deliberate gap: `REVOKED` is real in the database (an admin
+       unassigned a path after the learner was already placed, and the row
+       is kept as history) but is never a status a learner's own state can
+       hold — `JourneyStateService` filters it out at the query itself, so
+       the shared, learner-facing `UserPathStatus` stays the two values a
+       learner can actually see. Only the admin-facing type in
+       `packages/types/src/admin.ts` carries the third. */
+    expect(enumValues('UserPathStatus')).toEqual([...USER_PATH_STATUSES, 'REVOKED']);
     expect(enumValues('PathStatus')).toEqual([...PATH_STATUSES]);
   });
 

@@ -165,7 +165,16 @@ export class LearnerPathService {
               status: progressOf(completion),
               gradePercent: completion?.gradePercent ?? null,
               passed: completion?.passed === true,
-              startable: placedPosition !== null && standing !== 'BELOW',
+              /* Exactly the learner's own rung — not "at or above" (§8
+                 assumption 1). A course above it is real, visible ground they
+                 have not reached yet, and letting them start it would let a
+                 later rung's work count before the ones beneath it are done.
+                 `placedPosition !== null` is still required alongside
+                 `standing === 'PLACED'`: `levelStanding` reports the first
+                 rung as 'PLACED' even before an assessment has been taken
+                 (so an unplaced learner's ladder does not read as entirely
+                 locked), which must not make its courses launchable. */
+              startable: placedPosition !== null && standing === 'PLACED',
             };
           }),
         };

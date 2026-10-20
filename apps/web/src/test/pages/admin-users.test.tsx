@@ -339,17 +339,47 @@ describe('Admin users (§4C.2)', () => {
       expect(screen.getByText('الشهادات')).toBeInTheDocument();
     });
 
-    it('assignments (D-134): lists each path, and revokes only one nobody was placed in', async () => {
+    it('assignments (D-134): lists each path, both placed and awaiting may be revoked', async () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminUsersPage />);
       await user.click(await screen.findByRole('button', { name: 'إدارة' }));
       await screen.findByText('المسارات المُسندة');
 
-      /* One placed, one awaiting (the fixture) — one revoke, not two: a
-         placement is a record, and revoking under it would leave it pointing at
-         a path the employee was never on. */
+      /* One placed, one awaiting (the fixture) — both are still held, so both
+         offer a revoke; a placed one moves to REVOKED (kept as history) rather
+         than being deleted, which is what the confirmation below is about. */
       expect(screen.getAllByText('مسار الموارد البشرية').length).toBeGreaterThan(0);
-      expect(screen.getAllByRole('button', { name: 'إلغاء الإسناد' })).toHaveLength(1);
+      expect(screen.getAllByRole('button', { name: 'إلغاء الإسناد' })).toHaveLength(2);
+    });
+
+    it('assignments (D-134): revoking a placed path asks first, and a decline sends nothing', async () => {
+      const user = userEvent.setup();
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByText('المسارات المُسندة');
+
+      const [placedRevoke] = screen.getAllByRole('button', { name: 'إلغاء الإسناد' });
+      await user.click(placedRevoke!);
+
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(api.revokePath).not.toHaveBeenCalled();
+      confirmSpy.mockRestore();
+    });
+
+    it('assignments (D-134): confirming revokes a placed path too', async () => {
+      const user = userEvent.setup();
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      api.revokePath.mockResolvedValue(undefined);
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByText('المسارات المُسندة');
+
+      const [placedRevoke] = screen.getAllByRole('button', { name: 'إلغاء الإسناد' });
+      await user.click(placedRevoke!);
+
+      await waitFor(() => expect(api.revokePath).toHaveBeenCalledWith('u1', 'p-1'));
+      confirmSpy.mockRestore();
     });
 
     it('assignments (D-134): offers only published paths they are not on, one grant per tick', async () => {
