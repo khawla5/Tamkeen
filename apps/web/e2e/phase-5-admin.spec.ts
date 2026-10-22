@@ -98,7 +98,7 @@ test.describe('Phase 5 — the administered surface', () => {
       .last();
   }
 
-  test('the navigation is the nine destinations §4C names, «قياس الأثر» right under الرئيسية', async () => {
+  test('the navigation is the eight destinations the ministry keeps, «قياس الأثر» right under الرئيسية', async () => {
     const nav = page.getByRole('navigation', { name: 'التنقل الرئيسي' }).first();
 
     for (const label of [
@@ -110,7 +110,6 @@ test.describe('Phase 5 — the administered surface', () => {
       'الدورات',
       'الإعدادات',
       'الشهادات',
-      'السجل والتقارير',
     ]) {
       await expect(nav.getByRole('link', { name: label })).toBeVisible();
     }
@@ -118,6 +117,9 @@ test.describe('Phase 5 — the administered surface', () => {
     /* Order, not just presence: the new item sits directly after the dashboard. */
     const labels = await nav.getByRole('link').allInnerTexts();
     expect(labels.map((label) => label.trim()).slice(0, 2)).toEqual(['الرئيسية', 'قياس الأثر']);
+
+    /* The audit-and-reports screen is not a destination any more. */
+    await expect(nav.getByRole('link', { name: 'السجل والتقارير' })).toHaveCount(0);
 
     /* No learner or entity destinations leaked into the admin rail. */
     await expect(nav.getByRole('link', { name: 'مساري' })).toHaveCount(0);
@@ -411,58 +413,6 @@ test.describe('Phase 5 — the administered surface', () => {
     expect(download.suggestedFilename()).toMatch(/^tamkeen-impact-\d{4}-\d{2}-\d{2}_/);
   });
 
-  test('§4C.8 — the reports answer §4C.8 questions, worst-first where it matters', async () => {
-    await page.getByRole('link', { name: 'السجل والتقارير' }).click();
-    await page.getByRole('tab', { name: 'التقارير' }).click();
-
-    await expect(page.getByRole('heading', { name: 'مسار الموظفين' })).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByRole('heading', { name: 'المسارات الأكثر اختيارًا' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'نتائج الدورات' })).toBeVisible();
-
-    /* Sorted from the least-passed, because those are the courses somebody has
-       to do something about. Said on the screen, so the order is not mistaken
-       for an arbitrary one. */
-    await expect(page.getByText(/مرتّبة من الأقل اجتيازًا/)).toBeVisible();
-  });
-
-  test('§4C.8 — the trail lists this run’s own actions, and filters', async () => {
-    await page.getByRole('tab', { name: 'سجل العمليات' }).click();
-
-    /* Scoped to the trail's own list. `getByRole('listitem')` unscoped also
-       matches the navigation rail, which would make every assertion below pass
-       without the trail rendering at all. */
-    const entries = page.getByRole('list', { name: 'سجل العمليات' }).getByRole('listitem');
-
-    /* This run has written entries of its own — a sign-in, a path creation, two
-       settings changes — so an empty trail here is a failure, not a quiet
-       environment. */
-    await expect(entries.first()).toBeVisible({ timeout: 15_000 });
-
-    await page.getByLabel('النتيجة').selectOption('SUCCESS');
-    await expect(entries.first()).toBeVisible({ timeout: 15_000 });
-    await expect(entries.filter({ hasText: 'أخفق' })).toHaveCount(0);
-  });
-
-  test('§4C.8 — every action renders as Arabic, never as a raw code', async () => {
-    /*
-     * The regression that hid for a whole sub-phase: `auditAction` was added as
-     * a column label and overwrote the *namespace* of the same name, so every
-     * ADMIN_* action fell through to its raw code, and next-intl's fallback made
-     * it look deliberate (D-084). A screen assertion, because that is where it
-     * was visible and where nobody noticed.
-     *
-     * The action line only — the detail line beside it carries enumerated
-     * reason codes on purpose, and those are Latin by design.
-     */
-    const entries = page.getByRole('list', { name: 'سجل العمليات' }).getByRole('listitem');
-
-    for (const entry of await entries.all()) {
-      await expect(entry.locator('p').first()).toHaveText(/[؀-ۿ]/);
-    }
-  });
-
   test('§4C.8 — there is no way to write, edit or delete an audit entry', async () => {
     await expect(page.getByRole('button', { name: /حذف|تعديل/ })).toHaveCount(0);
 
@@ -476,49 +426,6 @@ test.describe('Phase 5 — the administered surface', () => {
       });
       expect(response.status()).toBe(404);
     }
-  });
-
-  test('§4C.8 — the reports export opens as Arabic, not as mojibake', async () => {
-    const response = await page.request.get('http://localhost:4000/api/admin/reports.csv');
-
-    expect(response.ok()).toBe(true);
-    expect(response.headers()['content-type']).toContain('text/csv');
-
-    /* The three bytes between a report the ministry can use and a column of
-       question marks in Excel (D-076). */
-    const body = await response.body();
-    expect([body[0], body[1], body[2]]).toEqual([0xef, 0xbb, 0xbf]);
-  });
-
-  test('§4C.8 — the trail exports in the words the screen shows', async () => {
-    await page.getByRole('tab', { name: 'سجل العمليات' }).click();
-
-    /* Built in the browser, because every column of it is Arabic copy and that
-       copy lives in the message catalogue (TAM-138). The file used to come from
-       the API carrying `ADMIN_SETTING_CHANGED,SUCCESS,setting` — saying
-       something different from the screen it was exported from. */
-    const downloading = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'تصدير البيانات' }).click();
-    const download = await downloading;
-
-    expect(download.suggestedFilename()).toBe('tamkeen-audit.csv');
-
-    const stream = await download.createReadStream();
-    const chunks: Buffer[] = [];
-
-    for await (const chunk of stream) {
-      chunks.push(Buffer.from(chunk));
-    }
-
-    const body = Buffer.concat(chunks);
-
-    expect([body[0], body[1], body[2]]).toEqual([0xef, 0xbb, 0xbf]);
-
-    const text = body.toString('utf8');
-
-    expect(text).toContain('الإجراء');
-    /* The raw vocabulary is what this export exists to stop showing. */
-    expect(text).not.toContain('AUTH_LOGIN_SUCCEEDED');
   });
 
   test('an employee reaches none of it, by URL or by API', async ({ browser }) => {

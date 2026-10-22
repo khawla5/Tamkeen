@@ -36,6 +36,8 @@ const api = vi.hoisted(() => ({
   updatePath: vi.fn(),
   deletePath: vi.fn(),
   detachPathCourse: vi.fn(),
+  attachableCourses: vi.fn(),
+  attachPathCourse: vi.fn(),
   placeCourse: vi.fn(),
   createLevel: vi.fn(),
   deleteLevel: vi.fn(),
@@ -135,6 +137,16 @@ function detail(overrides: Partial<AdminPathDetail> = {}): AdminPathDetail {
 beforeEach(() => {
   vi.clearAllMocks();
   api.getPath.mockResolvedValue(detail());
+  api.attachableCourses.mockResolvedValue([
+    { id: 'c9', moodleCourseId: 9, title: 'أمن الطرق', status: 'DRAFT', ownerEntityName: 'السجون' },
+    {
+      id: 'c10',
+      moodleCourseId: 10,
+      title: 'الإسعافات الأولية',
+      status: 'AVAILABLE',
+      ownerEntityName: null,
+    },
+  ]);
 });
 
 /** Renders the screen and waits for the path to arrive. */
@@ -241,6 +253,53 @@ describe('Admin path editor — the work queue (§4C.4, D-134)', () => {
     await open();
 
     expect(screen.getByLabelText('المستوى')).toBeDisabled();
+  });
+});
+
+describe('Admin path editor — adding a course (§4C.4, D-134)', () => {
+  it('lists every course that is not in the path yet, in a drop-down', async () => {
+    await open();
+
+    expect(api.attachableCourses).toHaveBeenCalledWith('p1');
+    const list = await screen.findByLabelText('إضافة دورة إلى المسار');
+    expect(list.tagName).toBe('SELECT');
+    /* Name and owner, so two courses of the same title can be told apart. */
+    expect(await screen.findByRole('option', { name: 'أمن الطرق — السجون' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'الإسعافات الأولية' })).toBeInTheDocument();
+  });
+
+  it('offers the button only once a course is chosen', async () => {
+    const user = await open();
+
+    expect(screen.queryByRole('button', { name: 'إضافة الدورة' })).not.toBeInTheDocument();
+
+    await screen.findByRole('option', { name: 'أمن الطرق — السجون' });
+    await user.selectOptions(screen.getByLabelText('إضافة دورة إلى المسار'), 'c9');
+
+    expect(await screen.findByRole('button', { name: 'إضافة الدورة' })).toBeInTheDocument();
+  });
+
+  it('adds the chosen course and says it still needs a rung', async () => {
+    api.attachPathCourse.mockResolvedValue(detail());
+    const user = await open();
+
+    await screen.findByRole('option', { name: 'الإسعافات الأولية' });
+    await user.selectOptions(screen.getByLabelText('إضافة دورة إلى المسار'), 'c10');
+    await user.click(await screen.findByRole('button', { name: 'إضافة الدورة' }));
+
+    await waitFor(() => expect(api.attachPathCourse).toHaveBeenCalledWith('p1', 'c10'));
+    expect(
+      await screen.findByText('أُضيفت الدورة إلى المسار. ضعها الآن على مستوى.'),
+    ).toBeInTheDocument();
+  });
+
+  it('says so when there is nothing left to add', async () => {
+    api.attachableCourses.mockResolvedValue([]);
+    await open();
+
+    expect(
+      await screen.findByRole('option', { name: 'لا توجد دورات متاحة للإضافة.' }),
+    ).toBeInTheDocument();
   });
 });
 

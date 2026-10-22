@@ -27,7 +27,8 @@ const api = vi.hoisted(() => ({
   createUser: vi.fn(),
   reinvite: vi.fn(),
   setUserStatus: vi.fn(),
-  setUserRole: vi.fn(),
+  setUserDepartment: vi.fn(),
+  deleteUser: vi.fn(),
   listEntities: vi.fn(),
   createEntity: vi.fn(),
   updateEntity: vi.fn(),
@@ -183,6 +184,76 @@ const PATH_ROWS = [
   },
 ];
 
+describe('Admin users — each kind of account marked off inside one table', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const MIXED = page([
+    row({
+      id: 'o1',
+      fullName: 'مسؤول الجهة التدريبية',
+      email: 'entity@authority.gov.example',
+      role: 'ENTITY',
+      entity: { id: 'en1', name: 'الهيئة الوطنية للتدريب' },
+    }),
+    row({
+      id: 'a1',
+      fullName: 'مدير النظام',
+      email: 'admin@ministry.gov.example',
+      role: 'SUPER_ADMIN',
+    }),
+    row({ id: 'e1', fullName: 'سارة العتيبي', email: 'sara@ministry.gov.example' }),
+    row({ id: 'e2', fullName: 'خالد الشهري', email: 'khalid@ministry.gov.example' }),
+  ]);
+
+  it('is still ONE table, with a band for each kind in it', async () => {
+    api.listUsers.mockResolvedValue(MIXED);
+    renderWithProviders(<AdminUsersPage />);
+
+    await screen.findByRole('table');
+    expect(screen.getAllByRole('table')).toHaveLength(1);
+
+    const bands = screen.getAllByRole('rowheader');
+    expect(bands.map((band) => band.textContent)).toEqual(['الجهات1', 'المشرفون1', 'الموظفون2']);
+  });
+
+  it('puts each account under its own kind’s band, in the order entities, administrators, employees', async () => {
+    api.listUsers.mockResolvedValue(MIXED);
+    renderWithProviders(<AdminUsersPage />);
+
+    const rows = within(await screen.findByRole('table')).getAllByRole('row');
+    const text = rows.map((r) => r.textContent ?? '');
+
+    const at = (needle: string) => text.findIndex((line) => line.includes(needle));
+
+    expect(at('الجهات')).toBeLessThan(at('مسؤول الجهة التدريبية'));
+    expect(at('مسؤول الجهة التدريبية')).toBeLessThan(at('المشرفون'));
+    expect(at('المشرفون')).toBeLessThan(at('مدير النظام'));
+    expect(at('مدير النظام')).toBeLessThan(at('الموظفون'));
+    expect(at('الموظفون')).toBeLessThan(at('سارة العتيبي'));
+    expect(at('سارة العتيبي')).toBeLessThan(at('خالد الشهري'));
+  });
+
+  it('paints the band green with white text', async () => {
+    api.listUsers.mockResolvedValue(MIXED);
+    renderWithProviders(<AdminUsersPage />);
+
+    const [band] = await screen.findAllByRole('rowheader');
+
+    expect(band).toHaveClass('bg-success');
+    expect(band).toHaveClass('text-white');
+  });
+
+  it('draws no band for a kind with nobody on the page', async () => {
+    api.listUsers.mockResolvedValue(page([row({ id: 'e1' })]));
+    renderWithProviders(<AdminUsersPage />);
+
+    await screen.findByRole('table');
+    expect(screen.getAllByRole('rowheader').map((band) => band.textContent)).toEqual(['الموظفون1']);
+  });
+});
+
 describe('Admin users (§4C.2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -322,6 +393,124 @@ describe('Admin users (§4C.2)', () => {
       /* Otherwise the administrator meets an empty dropdown and has to guess
          that the organisation is created on the other tab. */
       expect(await screen.findByText(/أنشئ الجهة أولًا/)).toBeInTheDocument();
+    });
+  });
+
+  describe('managing an employee: the department, not the role', () => {
+    it('offers no role control for an employee — they stay an employee', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByLabelText('الإدارة');
+
+      expect(screen.queryByRole('button', { name: 'تطبيق الدور' })).not.toBeInTheDocument();
+      /* The role field of the create form is a different screen; in this panel
+         there is none. */
+      expect(
+        within(document.querySelector('dialog')!).queryByLabelText('الدور'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('offers the department as a drop-down of the ministry’s list', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      const select = await screen.findByLabelText('الإدارة');
+
+      expect(select.tagName).toBe('SELECT');
+      expect(
+        within(select).getByRole('option', { name: 'المديرية العامة للجوازات' }),
+      ).toBeInTheDocument();
+      /* The account's own department predates the list; it is kept so the select
+         never claims the person is somewhere they are not. */
+      expect(within(select).getByRole('option', { name: 'تقنية المعلومات' })).toBeInTheDocument();
+    });
+
+    it('shows the save button only once the department has changed, and saves it', async () => {
+      api.setUserDepartment.mockResolvedValue(row());
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      const select = await screen.findByLabelText('الإدارة');
+      expect(screen.queryByRole('button', { name: 'حفظ الإدارة' })).not.toBeInTheDocument();
+
+      await user.selectOptions(select, 'المديرية العامة للجوازات');
+      await user.click(await screen.findByRole('button', { name: 'حفظ الإدارة' }));
+
+      await waitFor(() =>
+        expect(api.setUserDepartment).toHaveBeenCalledWith('u1', 'المديرية العامة للجوازات'),
+      );
+      expect(await screen.findByText('تم تغيير الإدارة.')).toBeInTheDocument();
+    });
+
+    it('offers no role control for anybody — the role is decided at creation', async () => {
+      api.listUsers.mockResolvedValue(page([row({ id: 'a1', role: 'SUPER_ADMIN' })]));
+      api.getUser.mockResolvedValue({ ...DETAIL, id: 'a1', role: 'SUPER_ADMIN', paths: [] });
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      /* The status controls are there; the role control is not, for an
+         administrator any more than for an employee. */
+      expect(await screen.findByRole('button', { name: 'إيقاف الحساب' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'تطبيق الدور' })).not.toBeInTheDocument();
+      expect(
+        within(document.querySelector('dialog')!).queryByLabelText('الدور'),
+      ).not.toBeInTheDocument();
+      /* The department is an employee's edit; an administrator has none here. */
+      expect(screen.queryByLabelText('الإدارة')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('deleting an account, beyond suspending it', () => {
+    async function openPanel() {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByLabelText('الإدارة');
+      return user;
+    }
+
+    it('offers the delete next to suspending, behind a confirmation', async () => {
+      const user = await openPanel();
+
+      expect(screen.getByRole('button', { name: 'إيقاف الحساب' })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'حذف الحساب' }));
+
+      /* Nothing is deleted by the first click. */
+      expect(await screen.findByText('حذف هذا الحساب نهائيًا؟')).toBeInTheDocument();
+      expect(api.deleteUser).not.toHaveBeenCalled();
+      /* And it says what the alternative is. */
+      expect(screen.getByText(/فاستخدم «إيقاف الحساب»/)).toBeInTheDocument();
+    });
+
+    it('deletes on confirmation and closes the panel', async () => {
+      api.deleteUser.mockResolvedValue(undefined);
+      const user = await openPanel();
+
+      await user.click(screen.getByRole('button', { name: 'حذف الحساب' }));
+      await user.click(await screen.findByRole('button', { name: 'حذف نهائي' }));
+
+      await waitFor(() => expect(api.deleteUser).toHaveBeenCalledWith('u1'));
+      /* The panel has no subject any more, and the list behind it was refreshed. */
+      await waitFor(() => expect(screen.queryByLabelText('الإدارة')).not.toBeInTheDocument());
+      expect(api.listUsers.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it('says why when the server refuses, and leaves the account in place', async () => {
+      const { ApiError } = await import('@/lib/api-client');
+      api.deleteUser.mockRejectedValue(new ApiError('ACCOUNT_HOLDS_CERTIFICATES', 409));
+      const user = await openPanel();
+
+      await user.click(screen.getByRole('button', { name: 'حذف الحساب' }));
+      await user.click(await screen.findByRole('button', { name: 'حذف نهائي' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/يحمل شهادات صادرة/);
+      expect(screen.getByLabelText('الإدارة')).toBeInTheDocument();
     });
   });
 

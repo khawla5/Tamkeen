@@ -152,9 +152,7 @@ export function AppShell({
               the auth footer. */}
           <footer className="border-t border-border bg-card px-4 py-3 sm:px-6">
             <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                {t('ministry')} · {tLanding('footerDirectorate')}
-              </span>
+              <span>{t('ministry')}</span>
               <span>{tLanding('footerClassification')}</span>
             </div>
           </footer>

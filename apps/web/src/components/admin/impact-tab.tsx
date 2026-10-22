@@ -7,6 +7,7 @@ import { toCsv, type AdminImpactCount, type AdminImpactView } from '@tamkeen/typ
 
 import { DataView } from '@/components/states';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -424,76 +425,206 @@ function Learning({ view }: { view: AdminImpactView }) {
 }
 
 /**
- * Twelve months of passes and certificates.
+ * Twelve months of passes and certificates, as columns along a time axis.
  *
- * Bars on the existing token palette — `bg-primary-600` and `bg-primary-800` on
- * `bg-neutral-200`, the same treatment the results screen uses — rather than a
- * charting dependency: the repo does not take one for a bar, and a government
- * build has to review and patch everything it ships. Each bar carries its
- * number in words beside it, so the row is readable with the colours gone
- * (WCAG 1.4.1).
+ * **Months run across, so the eye reads them as time.** The first version stacked
+ * twelve rows of two thin bars, which made the months a list to read rather than
+ * a shape to see; here each month is a column, the oldest at the start edge, with
+ * two bars rising from a shared baseline — passes and certificates side by side —
+ * so a quiet month and a busy one differ by height at a glance.
+ *
+ * Built on the existing token palette — `bg-primary-600` and `bg-primary-800` —
+ * rather than a charting dependency: the repo does not take one for a bar, and a
+ * government build has to review and patch everything it ships. **Each column
+ * carries its numbers twice:** printed above its bars, and in words for a screen
+ * reader (`sr-only`), so the chart survives a printer that drops background
+ * colours and a reader that cannot see them (WCAG 1.4.1). The bars themselves are
+ * decoration.
+ *
+ * Narrow screens scroll the chart sideways rather than squeezing twelve columns
+ * into a phone's width, where the numbers would collide.
  */
-function Trend({ points }: { points: AdminImpactView['trend'] }) {
+/**
+ * Twelve invented months, drawn only when the real twelve are all zero.
+ *
+ * A chart of twelve empty columns says nothing about what it will look like, so
+ * until the first pass is recorded it shows a plausible rise instead — clearly
+ * tagged «أرقام تجريبية» beside the title and again under the chart, the same
+ * convention the readiness blocks on this page use. The moment any month holds a
+ * real figure, the real series replaces it whole: the two are never mixed.
+ */
+const SAMPLE_TREND: Array<{ passed: number; certificates: number }> = [
+  { passed: 4, certificates: 2 },
+  { passed: 6, certificates: 3 },
+  { passed: 5, certificates: 3 },
+  { passed: 9, certificates: 5 },
+  { passed: 12, certificates: 6 },
+  { passed: 10, certificates: 6 },
+  { passed: 14, certificates: 8 },
+  { passed: 18, certificates: 10 },
+  { passed: 16, certificates: 9 },
+  { passed: 21, certificates: 12 },
+  { passed: 19, certificates: 11 },
+  { passed: 24, certificates: 14 },
+];
+
+function Trend({ points: real }: { points: AdminImpactView['trend'] }) {
   const t = useTranslations('admin');
   const format = useFormat();
 
+  const realTotal = real.reduce((sum, point) => sum + point.coursesPassed + point.certificates, 0);
+  const sample = realTotal === 0;
+  const points = sample
+    ? real.map((point, index) => ({
+        ...point,
+        coursesPassed: SAMPLE_TREND[index]?.passed ?? 0,
+        certificates: SAMPLE_TREND[index]?.certificates ?? 0,
+      }))
+    : real;
+
+  /* Scaled against the busiest month rather than the total: twelve months against
+     a year's total are all indistinguishable slivers. */
   const largest = points.reduce(
     (max, point) => Math.max(max, point.coursesPassed, point.certificates),
     0,
   );
 
+  const totalPassed = points.reduce((sum, point) => sum + point.coursesPassed, 0);
+  const totalCertificates = points.reduce((sum, point) => sum + point.certificates, 0);
+  const nothingYet = sample;
+
+  /* The busiest month by everything it recorded; the first one wins a tie, so
+     the answer does not jump around between renders. */
+  const busiest = nothingYet
+    ? null
+    : points.reduce((best, point) =>
+        point.coursesPassed + point.certificates > best.coursesPassed + best.certificates
+          ? point
+          : best,
+      );
+
   return (
     <Card className="p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 className="text-base font-semibold text-foreground">{t('impactTrend')}</h3>
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="text-base font-semibold text-foreground">{t('impactTrend')}</h3>
+          {sample ? <Badge variant="dark">{t('impactSampleShort')}</Badge> : null}
+        </div>
         <p className="text-sm text-muted-foreground">{t('impactTrendHint')}</p>
       </div>
 
       <p className="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-2">
-          <span aria-hidden="true" className="h-2 w-6 rounded-full bg-primary-600" />
+          <span aria-hidden="true" className="size-3 rounded-sm bg-primary-600" />
           {t('impactLegendPasses')}
         </span>
         <span className="flex items-center gap-2">
-          <span aria-hidden="true" className="h-2 w-6 rounded-full bg-primary-800" />
+          <span aria-hidden="true" className="size-3 rounded-sm bg-primary-800" />
           {t('impactLegendCertificates')}
         </span>
       </p>
+      <p className="mt-1 text-xs text-muted-foreground">{t('impactTrendHow')}</p>
 
-      <ul className="mt-4 space-y-3">
-        {points.map((point) => (
-          <li key={point.month} className="grid gap-1">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="text-sm font-medium text-foreground">
-                {format.monthYear(point.month)}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {t('impactTrendCounts', {
-                  passed: format.number(point.coursesPassed),
-                  certificates: format.number(point.certificates),
-                })}
-              </span>
-            </div>
+      <div className="mt-4 overflow-x-auto pb-1">
+        <ul className="flex min-w-[42rem] items-stretch gap-1.5">
+          {points.map((point) => {
+            /* «أغسطس 2026» → the month on one line and the year under it, so
+               twelve of them fit along an axis. The whole string is still read. */
+            const [monthName, ...rest] = format.monthYear(point.month).split(' ');
+            const year = rest.join(' ');
 
-            <span aria-hidden="true" className="flex flex-col gap-1">
-              <Bar value={point.coursesPassed} largest={largest} className="bg-primary-600" />
-              <Bar value={point.certificates} largest={largest} className="bg-primary-800" />
-            </span>
-          </li>
-        ))}
-      </ul>
+            return (
+              <li
+                key={point.month}
+                className="flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-md px-1 py-2 hover:bg-neutral-100"
+              >
+                <span className="sr-only">{format.monthYear(point.month)}</span>
+                <span className="sr-only">
+                  {t('impactTrendCounts', {
+                    passed: format.number(point.coursesPassed),
+                    certificates: format.number(point.certificates),
+                  })}
+                </span>
+
+                {/* The bars share a baseline; each number sits on top of its own. */}
+                <span
+                  aria-hidden="true"
+                  className="flex h-40 w-full items-end justify-center gap-1 border-b border-border"
+                  /* Faint rules at every quarter of the plot, so a month with
+                     nothing in it still reads as a column on a scale. */
+                  style={{
+                    backgroundImage:
+                      'linear-gradient(to bottom, var(--border) 1px, transparent 1px)',
+                    backgroundSize: '100% 25%',
+                  }}
+                >
+                  <Column
+                    value={point.coursesPassed}
+                    largest={largest}
+                    format={format.number}
+                    className="bg-primary-600"
+                  />
+                  <Column
+                    value={point.certificates}
+                    largest={largest}
+                    format={format.number}
+                    className="bg-primary-800"
+                  />
+                </span>
+
+                <span aria-hidden="true" className="text-center text-xs leading-tight">
+                  <span className="block font-medium text-foreground">{monthName}</span>
+                  {year ? <span className="block text-muted-foreground">{year}</span> : null}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {nothingYet ? (
+        <p className="mt-3 rounded-lg bg-neutral-100 px-3 py-2 text-sm text-muted-foreground">
+          {t('impactTrendSampleNote')}
+        </p>
+      ) : (
+        <p className="mt-3 flex flex-wrap gap-x-6 gap-y-1 rounded-lg bg-neutral-100 px-3 py-2 text-sm text-foreground">
+          <span>
+            {t('impactTrendTotal', {
+              passed: format.number(totalPassed),
+              certificates: format.number(totalCertificates),
+            })}
+          </span>
+          {busiest ? (
+            <span>{t('impactTrendBusiest', { month: format.monthYear(busiest.month) })}</span>
+          ) : null}
+        </p>
+      )}
     </Card>
   );
 }
 
-function Bar({ value, largest, className }: { value: number; largest: number; className: string }) {
+/** One bar, rising from the baseline, with its number above it. */
+function Column({
+  value,
+  largest,
+  format,
+  className,
+}: {
+  value: number;
+  largest: number;
+  format: (value: number) => string;
+  className: string;
+}) {
+  /* A month with anything in it never rounds to an invisible bar. */
+  const height = largest === 0 || value === 0 ? 0 : Math.max(4, (value / largest) * 100);
+
   return (
-    <span className="block h-2 overflow-hidden rounded-full bg-neutral-200">
+    <span className="flex h-full w-1/2 max-w-6 flex-col items-center justify-end gap-0.5">
+      <span className="text-[11px] leading-none text-muted-foreground">{format(value)}</span>
       <span
-        className={`block h-full rounded-full ${className}`}
-        /* Scaled against the busiest month rather than the total: twelve months
-           against a year's total are all indistinguishable slivers. */
-        style={{ width: largest === 0 ? '0%' : `${(value / largest) * 100}%` }}
+        className={`block w-full rounded-t ${value === 0 ? 'bg-neutral-200' : className}`}
+        /* Four fifths of the plot, leaving the number room above the tallest bar. */
+        style={{ height: value === 0 ? '2px' : `${height * 0.8}%` }}
       />
     </span>
   );

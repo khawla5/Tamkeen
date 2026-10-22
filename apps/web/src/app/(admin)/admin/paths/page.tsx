@@ -1,5 +1,6 @@
 'use client';
 
+import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -7,6 +8,7 @@ import { useState } from 'react';
 import type { AdminPathRow } from '@tamkeen/types';
 
 import { useErrorMessage } from '@/components/auth/use-error-message';
+import { PathRoadmap } from '@/components/admin/path-roadmap';
 import { AdminPage } from '@/components/layout/admin-page';
 import { DataView } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
@@ -116,39 +118,70 @@ export default function AdminPathsPage() {
 function PathCard({ path }: { path: AdminPathRow }) {
   const t = useTranslations('admin');
   const format = useFormat();
+  const [open, setOpen] = useState(false);
+
+  const panelId = `path-road-${path.id}`;
 
   return (
-    <Card className="flex flex-wrap items-start justify-between gap-4 p-5">
-      <div className="min-w-0">
-        <p className="flex flex-wrap items-center gap-2 font-medium text-foreground">
-          {path.name}
-          {path.status === 'PUBLISHED' ? null : <Badge variant="soft">{t('pathDraft')}</Badge>}
-          {/* The work queue, on the list: memberships nobody has placed reach no
-              learner, and nothing else on this screen would say so. */}
-          {path.unassignedCourseCount > 0 ? (
-            <Badge variant="warning">
-              {t('pathUnassigned', { count: format.number(path.unassignedCourseCount) })}
-            </Badge>
-          ) : null}
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t('pathSummary', {
-            levels: format.number(path.levelCount),
-            courses: format.number(path.placedCourseCount),
-            learners: format.number(path.assignedLearners),
-          })}
-        </p>
+    <Card className="p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          {/* The name opens the road of the path's courses beneath it. A button, not a
+              link: it changes what this card shows, and the ladder editor stays one
+              click away on «إدارة» exactly as before. */}
+          <p className="flex flex-wrap items-center gap-2 font-medium text-foreground">
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={panelId}
+              onClick={() => setOpen((value) => !value)}
+              className="inline-flex items-center gap-1.5 rounded-md text-start outline-none hover:text-primary-700 focus-visible:ring-[3px] focus-visible:ring-primary-600/50"
+            >
+              {path.name}
+              <ChevronDown
+                aria-hidden="true"
+                className={cn(
+                  'size-4 shrink-0 text-neutral-500 transition-transform',
+                  open && 'rotate-180',
+                )}
+              />
+            </button>
+            {path.status === 'PUBLISHED' ? null : <Badge variant="soft">{t('pathDraft')}</Badge>}
+            {/* The work queue, on the list: memberships nobody has placed reach no
+                learner, and nothing else on this screen would say so. */}
+            {path.unassignedCourseCount > 0 ? (
+              <Badge variant="warning">
+                {t('pathUnassigned', { count: format.number(path.unassignedCourseCount) })}
+              </Badge>
+            ) : null}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t('pathSummary', {
+              levels: format.number(path.levelCount),
+              courses: format.number(path.placedCourseCount),
+              learners: format.number(path.assignedLearners),
+            })}
+          </p>
+        </div>
+
+        {/* A link, not a button: the ladder has an address now, so it can be
+            opened in a new tab, bookmarked, and linked to from the dashboard's
+            stuck-paths list. */}
+        <Link
+          href={`/admin/paths/${path.id}`}
+          className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0')}
+        >
+          {t('manage')}
+        </Link>
       </div>
 
-      {/* A link, not a button: the ladder has an address now, so it can be
-          opened in a new tab, bookmarked, and linked to from the dashboard's
-          stuck-paths list. */}
-      <Link
-        href={`/admin/paths/${path.id}`}
-        className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0')}
-      >
-        {t('manage')}
-      </Link>
+      {/* Loaded only once opened, and again each time — the road is a view of the
+          ladder, which the administrator may have changed since. */}
+      {open ? (
+        <div id={panelId} className="mt-4 border-t border-border pt-4">
+          <PathRoadmap pathId={path.id} />
+        </div>
+      ) : null}
     </Card>
   );
 }

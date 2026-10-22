@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -15,6 +15,7 @@ import { AdminDialog } from '@/components/admin/admin-dialog';
 import { BandEditor } from '@/components/admin/band-editor';
 import { BankReadinessPanel } from '@/components/admin/bank-readiness-panel';
 import { useErrorMessage } from '@/components/auth/use-error-message';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -23,6 +24,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useFormat } from '@/i18n/format-provider';
 import { adminApi } from '@/lib/api-client';
+import { cn } from '@/lib/utils';
 
 /**
  * §4C.3 — the draft editor for one path's placement assessment (D-134).
@@ -38,6 +40,10 @@ import { adminApi } from '@/lib/api-client';
  * administrator untick before ticking would leave the bank invalid between the
  * two requests — with the readiness panel flashing a blocker at them for it.
  */
+/** One soft ground per rung, cycling if a path has more than three — the palette's own
+ *  status tints (mint, cream, light blue), never a state colour carrying meaning. */
+const RUNG_TINTS = ['bg-primary-50', 'bg-warning-50', 'bg-info-50'];
+
 export function AssessmentEditor({
   pathId,
   draft,
@@ -55,7 +61,8 @@ export function AssessmentEditor({
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  /* `null` is closed; otherwise the rung the new question starts on ('' for none). */
+  const [adding, setAdding] = useState<string | null>(null);
   const [confirmingPublish, setConfirmingPublish] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
@@ -102,46 +109,77 @@ export function AssessmentEditor({
     }
   }
 
-  function move(index: number, direction: -1 | 1) {
+  /**
+   * Moves a question up or down **within its own rung's column**.
+   *
+   * The order is still one order for the whole bank (that is what the learner is
+   * asked in), so a move swaps with the nearest neighbour *of the same rung* and
+   * leaves every other question where it was. Swapping with the adjacent question
+   * in the bank would be right in one long list and wrong here, where that
+   * neighbour may be in another column.
+   */
+  function move(globalIndex: number, groupIndexes: number[], position: number, direction: -1 | 1) {
+    const neighbour = groupIndexes[position + direction];
+
+    if (neighbour === undefined) return;
+
     const ids = draft.questions.map((question) => question.id);
-    const target = index + direction;
 
-    if (target < 0 || target >= ids.length) return;
-
-    [ids[index], ids[target]] = [ids[target]!, ids[index]!];
+    [ids[globalIndex], ids[neighbour]] = [ids[neighbour]!, ids[globalIndex]!];
 
     return run(() => adminApi.reorderDraft(pathId, ids));
   }
 
+  /* One column for each rung, in path order, plus one for questions aimed at none. */
+  const columns = [
+    ...draft.levels.map((level) => ({ id: level.id, name: level.name as string | null })),
+    ...(draft.questions.some((question) => question.levelId === null) || draft.levels.length === 0
+      ? [{ id: '', name: null as string | null }]
+      : []),
+  ].map((column) => ({
+    ...column,
+    /* Indexes into the whole bank, so the number shown and the order saved stay the
+       bank's own however the columns are cut. */
+    indexes: draft.questions.flatMap((question, index) =>
+      (question.levelId ?? '') === column.id ? [index] : [],
+    ),
+  }));
+
   return (
     <div className="space-y-6">
-      <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
-        <div>
-          <p className="font-medium text-foreground">
-            {t('draftHeading', { version: format.number(draft.version) })}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
+      {/* The instrument's header beside its readiness: what this version is and what
+          can be done with it on one side, why it can or cannot be published on the
+          other. */}
+      <div className="grid items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <Card className="space-y-4 p-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-xl font-semibold text-foreground">
+              {t('draftHeading', { version: format.number(draft.version) })}
+            </h2>
+            <Badge variant="soft">{t('versionStatus.DRAFT')}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
             {t('draftCount', { count: format.number(draft.questions.length) })}
           </p>
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={busy} onClick={() => setAdding(true)}>
-            {t('addQuestion')}
-          </Button>
-          <Button
-            disabled={busy || draft.readiness.blockers.length > 0}
-            onClick={() => setConfirmingPublish(true)}
-          >
-            {t('publishVersion')}
-          </Button>
-          <Button variant="ghost" disabled={busy} onClick={() => setConfirmingDiscard(true)}>
-            {t('discardDraft')}
-          </Button>
-        </div>
-      </Card>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" disabled={busy} onClick={() => setAdding('')}>
+              {t('addQuestion')}
+            </Button>
+            <Button
+              disabled={busy || draft.readiness.blockers.length > 0}
+              onClick={() => setConfirmingPublish(true)}
+            >
+              {t('publishVersion')}
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => setConfirmingDiscard(true)}>
+              {t('discardDraft')}
+            </Button>
+          </div>
+        </Card>
 
-      <BankReadinessPanel readiness={draft.readiness} levels={draft.levels} />
+        <BankReadinessPanel readiness={draft.readiness} levels={draft.levels} />
+      </div>
 
       <BandEditor
         levels={draft.levels}
@@ -160,35 +198,86 @@ export function AssessmentEditor({
         </p>
       ) : null}
 
-      <ol className="space-y-3">
-        {draft.questions.map((question, index) => (
-          <li key={question.id}>
-            <QuestionCard
-              question={question}
-              levels={draft.levels}
-              index={index}
-              total={draft.questions.length}
-              busy={busy}
-              onMove={(direction) => void move(index, direction)}
-              onSave={(patch) =>
-                void run(() => adminApi.updateDraftQuestion(pathId, question.id, patch))
-              }
-              onRemove={() => void run(() => adminApi.removeDraftQuestion(pathId, question.id))}
-              onOption={(optionId, patch) =>
-                void run(() => adminApi.updateDraftOption(pathId, optionId, patch))
-              }
-            />
-          </li>
-        ))}
-      </ol>
+      {/* One tinted column per rung, as the proposal draws it: the rung's name, how many
+          questions aim at it and a + that adds one already aimed there. Every
+          question keeps its full editor inside its column. */}
+      <div className="grid items-start gap-4 lg:grid-cols-3">
+        {columns.map((column, columnIndex) => (
+          <section
+            key={column.id || 'none'}
+            aria-labelledby={`rung-${column.id || 'none'}`}
+            className={cn('space-y-3 rounded-2xl p-4', RUNG_TINTS[columnIndex % RUNG_TINTS.length])}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3
+                id={`rung-${column.id || 'none'}`}
+                className="flex items-center gap-2 font-semibold text-foreground"
+              >
+                {column.name ?? t('questionLevelNone')}
+                <span className="rounded-full bg-white/70 px-2 text-xs font-medium text-muted-foreground">
+                  {format.number(column.indexes.length)}
+                </span>
+              </h3>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                aria-label={`${t('addQuestion')} — ${column.name ?? t('questionLevelNone')}`}
+                onClick={() => setAdding(column.id)}
+              >
+                <Plus aria-hidden="true" />
+              </Button>
+            </div>
 
-      {adding ? (
+            {column.indexes.length === 0 ? (
+              <p className="rounded-xl bg-white/60 p-4 text-sm text-muted-foreground">
+                {t('rungEmpty')}
+              </p>
+            ) : (
+              <ol className="space-y-3">
+                {column.indexes.map((index, position) => {
+                  const question = draft.questions[index]!;
+
+                  return (
+                    <li key={question.id}>
+                      <QuestionCard
+                        question={question}
+                        levels={draft.levels}
+                        index={index}
+                        position={position}
+                        groupSize={column.indexes.length}
+                        busy={busy}
+                        onMove={(direction) =>
+                          void move(index, column.indexes, position, direction)
+                        }
+                        onSave={(patch) =>
+                          void run(() => adminApi.updateDraftQuestion(pathId, question.id, patch))
+                        }
+                        onRemove={() =>
+                          void run(() => adminApi.removeDraftQuestion(pathId, question.id))
+                        }
+                        onOption={(optionId, patch) =>
+                          void run(() => adminApi.updateDraftOption(pathId, optionId, patch))
+                        }
+                      />
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </section>
+        ))}
+      </div>
+
+      {adding !== null ? (
         <AddQuestionDialog
           levels={draft.levels}
-          onClose={() => setAdding(false)}
+          initialLevelId={adding}
+          onClose={() => setAdding(null)}
           onAdd={async (input) => {
             await run(() => adminApi.addDraftQuestion(pathId, input));
-            setAdding(false);
+            setAdding(null);
           }}
         />
       ) : null}
@@ -237,7 +326,8 @@ function QuestionCard({
   question,
   levels,
   index,
-  total,
+  position,
+  groupSize,
   busy,
   onMove,
   onSave,
@@ -246,8 +336,11 @@ function QuestionCard({
 }: {
   question: AdminAssessmentQuestion;
   levels: LevelRef[];
+  /** Its place in the whole bank — the number printed and the order saved. */
   index: number;
-  total: number;
+  /** Its place among the questions of its own rung, which the arrows move within. */
+  position: number;
+  groupSize: number;
   busy: boolean;
   onMove: (direction: -1 | 1) => void;
   onSave: (patch: { text?: string; marks?: number; levelId?: string | null }) => void;
@@ -331,7 +424,7 @@ function QuestionCard({
           <Button
             variant="ghost"
             size="sm"
-            disabled={busy || index === 0}
+            disabled={busy || position === 0}
             aria-label={t('moveUp')}
             onClick={() => onMove(-1)}
           >
@@ -340,7 +433,7 @@ function QuestionCard({
           <Button
             variant="ghost"
             size="sm"
-            disabled={busy || index === total - 1}
+            disabled={busy || position === groupSize - 1}
             aria-label={t('moveDown')}
             onClick={() => onMove(1)}
           >
@@ -446,17 +539,20 @@ function OptionRow({
 
 function AddQuestionDialog({
   levels,
+  initialLevelId,
   onClose,
   onAdd,
 }: {
   levels: LevelRef[];
+  /** The rung the + was pressed on; empty for the header button. */
+  initialLevelId: string;
   onClose: () => void;
   onAdd: (input: { text: string; marks: number; levelId: string | null }) => Promise<void>;
 }) {
   const t = useTranslations('admin');
   const [text, setText] = useState('');
   const [marks, setMarks] = useState('1');
-  const [levelId, setLevelId] = useState('');
+  const [levelId, setLevelId] = useState(initialLevelId);
 
   return (
     <AdminDialog

@@ -24,7 +24,6 @@ import type {
   AdminAttachableCourse,
   AdminCoursePage,
   AdminCourseRow,
-  AdminAuditPage,
   AdminCertificateTemplateView,
   AdminImpactView,
   AdminReports,
@@ -591,8 +590,10 @@ export const adminApi = {
   setUserStatus: (userId: string, status: 'ACTIVE' | 'SUSPENDED') =>
     api.patch<AdminUserRow>(`/api/admin/users/${userId}/status`, { status }),
 
-  setUserRole: (userId: string, role: UserRole, entityId?: string) =>
-    api.patch<AdminUserRow>(`/api/admin/users/${userId}/role`, { role, entityId }),
+  deleteUser: (userId: string) => api.delete<void>(`/api/admin/users/${userId}`),
+
+  setUserDepartment: (userId: string, department: string) =>
+    api.patch<AdminUserRow>(`/api/admin/users/${userId}/department`, { department }),
 
   registrationPolicy: () => api.get<AdminRegistrationPolicyView>('/api/admin/registration-policy'),
 
@@ -861,37 +862,26 @@ export const adminApi = {
    * Read-only: the signature block is three settings, and `updateSetting` above
    * is the one writer for those rows (D-072).
    */
-  certificateTemplate: () =>
-    api.get<AdminCertificateTemplateView>('/api/admin/certificate-template'),
-
-  // §4C.8 — audit and reports
-  auditLog: (
-    filters: {
-      action?: string;
-      outcome?: 'SUCCESS' | 'FAILURE';
-      /** Inclusive dates, as the `<input type="date">` values the screen holds. */
-      from?: string;
-      to?: string;
-      before?: string;
-      pageSize?: number;
-    } = {},
-  ) => {
+  /**
+   * With `userId` / `pathId` the preview is drawn for that real employee and path;
+   * left out, it stays the sample. Only what is set goes in the query — the API
+   * rejects malformed parameters, so an empty one would be a 400.
+   */
+  certificateTemplate: (subject: { userId?: string; pathId?: string } = {}) => {
     const query = new URLSearchParams();
 
-    if (filters.action) query.set('action', filters.action);
-    if (filters.outcome) query.set('outcome', filters.outcome);
-    /* A day, not an instant: `to=2026-08-26` alone means midnight, which would
-       drop everything that happened on the day the administrator asked for. */
-    if (filters.from) query.set('from', `${filters.from}T00:00:00.000`);
-    if (filters.to) query.set('to', `${filters.to}T23:59:59.999`);
-    if (filters.before) query.set('before', filters.before);
-    if (filters.pageSize) query.set('pageSize', String(filters.pageSize));
+    if (subject.userId) query.set('userId', subject.userId);
+    if (subject.pathId) query.set('pathId', subject.pathId);
 
     const suffix = query.toString();
 
-    return api.get<AdminAuditPage>(`/api/admin/audit${suffix ? `?${suffix}` : ''}`);
+    return api.get<AdminCertificateTemplateView>(
+      `/api/admin/certificate-template${suffix ? `?${suffix}` : ''}`,
+    );
   },
 
+  // §4C.8 — the impact figures. (The audit trail has no screen any more; the API still
+  // records and serves it.)
   reports: () => api.get<AdminReports>('/api/admin/reports'),
 
   /**

@@ -1,8 +1,9 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 
 import type { AdminCertificateTemplateView } from '@tamkeen/types';
 
 import { Roles } from '../auth/auth.decorators';
+import { AdminTemplatePreviewQueryDto } from './admin.dto';
 import { AdminTemplatesService } from './admin-templates.service';
 
 /**
@@ -14,7 +15,8 @@ import { AdminTemplatesService } from './admin-templates.service';
  * divergence D-072 exists to prevent. What this adds is the thing settings
  * cannot give: a rendered preview of what the next certificate will look like.
  *
- * The preview is the real template with sample content, not a mock-up. A preview
+ * The preview is the real template, not a mock-up — with sample content, or with
+ * the employee and path the administrator picked. A preview
  * drawn separately from the renderer is a preview that eventually lies.
  */
 @Controller('admin/certificate-template')
@@ -23,7 +25,7 @@ export class AdminTemplatesController {
   constructor(private readonly templates: AdminTemplatesService) {}
 
   @Get()
-  view(): Promise<AdminCertificateTemplateView> {
-    return this.templates.view();
+  view(@Query() query: AdminTemplatePreviewQueryDto): Promise<AdminCertificateTemplateView> {
+    return this.templates.view(query);
   }
 }

@@ -76,7 +76,17 @@ export class AdminCoursesService {
     const [rows, total, unownedTotal] = await Promise.all([
       this.prisma.course.findMany({
         where,
-        orderBy: [{ title: 'asc' }],
+        /* The screen sets the courses out by supplier and, inside each, those in a
+           path before those in none — so the order the page needs is the order it
+           is paged in, and a supplier's block does not split across pages out of
+           turn. Courses nobody supplies sort last (a missing relation sorts after
+           every name), and the count of paths puts "in some path" ahead of "in
+           none" without having to know how many. */
+        orderBy: [
+          { ownerEntity: { name: 'asc' } },
+          { pathCourses: { _count: 'desc' } },
+          { title: 'asc' },
+        ],
         skip: (page - 1) * pageSize,
         take: pageSize,
         select: COURSE_SELECT,
@@ -299,7 +309,7 @@ export class AdminCoursesService {
    * `courses` row is a mirror of what the LMS holds (§1), so deleting only our
    * side would have the next catalogue sync rediscover the course and re-enter
    * it as an unowned draft. If the LMS refuses — most likely because the
-   * integration role has not been granted `moodle/course:delete` — nothing is
+   * integration role has not been granted `moodle/course:delete` (D-135) — nothing is
    * deleted here either, and the administrator gets a refusal rather than a
    * catalogue and an LMS that disagree.
    */
@@ -350,10 +360,17 @@ export class AdminCoursesService {
 
       /* Told apart deliberately: an LMS that is down is a "try again shortly",
          while a rejection is a capability the integration role does not have and
-         retrying will never fix. */
-      throw new ConflictException(
-        error instanceof LmsUnavailableError ? 'LMS_UNAVAILABLE' : 'COURSE_LMS_DELETE_FAILED',
-      );
+         retrying will never fix.
+
+         The transport reports Moodle's refusal (`accessexception`, `nopermissions`,
+         an invalid token) as `LmsUnavailableError('UNAUTHORISED')`, because to every
+         other caller "the integration may not do this" and "the LMS is down" are
+         the same dead end. Here they are not: telling an administrator the platform
+         is *unreachable* when Moodle answered "not allowed" sends them to wait for
+         an outage that is not happening, and the missing grant never gets fixed. */
+      const outage = error instanceof LmsUnavailableError && error.failureCode !== 'UNAUTHORISED';
+
+      throw new ConflictException(outage ? 'LMS_UNAVAILABLE' : 'COURSE_LMS_DELETE_FAILED');
     }
 
     try {

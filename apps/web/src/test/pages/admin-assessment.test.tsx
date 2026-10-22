@@ -291,6 +291,64 @@ describe('Admin assessment — the answer key (§4C.3)', () => {
   });
 });
 
+describe('Admin assessment — one column per rung', () => {
+  it('sets the questions out in a column for each rung, with its count', async () => {
+    api.assessmentDraft.mockResolvedValue(
+      draft({ questions: [question(1), question(2), question(3, 'l2')] }),
+    );
+    api.createAssessmentDraft.mockResolvedValue(
+      draft({ questions: [question(1), question(2), question(3, 'l2')] }),
+    );
+    await openEditor();
+
+    const first = within(screen.getByRole('region', { name: /تأسيسي/ }));
+    const second = within(screen.getByRole('region', { name: /متقدم/ }));
+
+    expect(first.getByDisplayValue('السؤال رقم 1')).toBeInTheDocument();
+    expect(first.getByDisplayValue('السؤال رقم 2')).toBeInTheDocument();
+    expect(first.queryByDisplayValue('السؤال رقم 3')).not.toBeInTheDocument();
+    expect(second.getByDisplayValue('السؤال رقم 3')).toBeInTheDocument();
+  });
+
+  it('says so in a column that has no question aimed at it', async () => {
+    api.createAssessmentDraft.mockResolvedValue(draft({ questions: [question(1)] }));
+    api.assessmentDraft.mockResolvedValue(draft({ questions: [question(1)] }));
+    await openEditor();
+
+    expect(
+      within(screen.getByRole('region', { name: /متقدم/ })).getByText(
+        'لا أسئلة موجّهة لهذا المستوى بعد.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('adds a question already aimed at the rung whose + was pressed', async () => {
+    const user = await openEditor();
+
+    await user.click(screen.getByRole('button', { name: /إضافة سؤال — متقدم/ }));
+
+    const dialog = within(document.querySelector('dialog')!);
+    expect((dialog.getByLabelText('المستوى المستهدف') as HTMLSelectElement).value).toBe('l2');
+  });
+
+  it('moves a question only among the questions of its own rung', async () => {
+    const questions = [question(1), question(2, 'l2'), question(3), question(4, 'l2')];
+    api.createAssessmentDraft.mockResolvedValue(draft({ questions }));
+    api.assessmentDraft.mockResolvedValue(draft({ questions }));
+    api.reorderDraft.mockResolvedValue(draft({ questions }));
+    const user = await openEditor();
+
+    /* q3 is the second of the first column; moving it up swaps it with q1 — not with
+       q2, which sits between them in the bank but in the other column. */
+    const column = within(screen.getByRole('region', { name: /تأسيسي/ }));
+    await user.click(column.getAllByRole('button', { name: 'تحريك لأعلى' })[1]!);
+
+    await waitFor(() =>
+      expect(api.reorderDraft).toHaveBeenCalledWith('path-1', ['q3', 'q2', 'q1', 'q4']),
+    );
+  });
+});
+
 describe('Admin assessment — readiness and publishing (§4C.3)', () => {
   it('refuses publication and lists why, rather than only disabling the button', async () => {
     api.assessmentDraft.mockResolvedValue(

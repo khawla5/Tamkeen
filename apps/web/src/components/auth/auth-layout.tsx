@@ -116,9 +116,7 @@ export function AuthLayout({
 
       <footer className="relative border-t border-border bg-surface/90">
         <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <span>
-            {t('ministry')} · {tLanding('footerDirectorate')}
-          </span>
+          <span>{t('ministry')}</span>
           <span>{tLanding('footerClassification')}</span>
         </div>
       </footer>

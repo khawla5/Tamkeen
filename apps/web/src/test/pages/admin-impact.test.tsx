@@ -240,6 +240,51 @@ describe('Admin impact tab (§4C.8, TAM-149)', () => {
     expect(screen.getByText('130 دورة · 110 شهادة')).toBeInTheDocument();
   });
 
+  it('tells the reader how to read the monthly chart', async () => {
+    renderWithProviders(<ImpactTab />);
+
+    expect(await screen.findByText(/لكل شهر عمودان: الأول للدورات المجتازة/)).toBeInTheDocument();
+  });
+
+  it('adds the twelve months up and names the busiest one', async () => {
+    renderWithProviders(<ImpactTab />);
+
+    /* 100 + 130 passes and 90 + 110 certificates; August recorded the most. */
+    expect(
+      await screen.findByText('الإجمالي في الأشهر الاثني عشر: 230 دورة مجتازة · 200 شهادة'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('أكثر الأشهر نشاطًا: أغسطس 2026')).toBeInTheDocument();
+  });
+
+  it('draws a tagged sample while every month is empty, and says it is one', async () => {
+    api.impact.mockResolvedValue(
+      view({
+        trend: [
+          { month: '2026-07', coursesPassed: 0, certificates: 0 },
+          { month: '2026-08', coursesPassed: 0, certificates: 0 },
+        ],
+      }),
+    );
+    renderWithProviders(<ImpactTab />);
+
+    /* A chart of empty columns shows nothing of what it will look like, so it
+       borrows a plausible rise — never untagged. */
+    expect(
+      await screen.findByText(/الأعمدة أعلاه أرقام تجريبية لتوضيح شكل المخطط/),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('أرقام تجريبية').length).toBeGreaterThan(0);
+    /* No real totals are claimed for invented numbers. */
+    expect(screen.queryByText(/الإجمالي في الأشهر الاثني عشر/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/أكثر الأشهر نشاطًا/)).not.toBeInTheDocument();
+  });
+
+  it('never mixes the sample with real figures: one real month replaces it whole', async () => {
+    renderWithProviders(<ImpactTab />);
+
+    await screen.findByText('أغسطس 2026');
+    expect(screen.queryByText(/الأعمدة أعلاه أرقام تجريبية/)).not.toBeInTheDocument();
+  });
+
   it('names each path and rung the period’s assessments placed people on', async () => {
     /* D-134 replaced the career-type share, which described inclination rather
        than capability. This is a fact about the period like every other figure

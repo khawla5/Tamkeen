@@ -149,7 +149,6 @@ export const ADMIN_NAV_KEYS = [
   'adminCourses',
   'adminSettings',
   'adminTemplates',
-  'adminAudit',
 ] as const;
 
 export type AdminNavKey = (typeof ADMIN_NAV_KEYS)[number];

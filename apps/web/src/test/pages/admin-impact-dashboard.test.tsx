@@ -7,13 +7,14 @@ import type { AdminDashboardView, AdminImpactView, AdminReports } from '@tamkeen
 import { renderWithProviders } from '@/test/render';
 
 /**
- * The head of «قياس الأثر»: the Kingdom, four totals, and the programmes people
- * joined most.
+ * The head of «قياس الأثر»: has the need been met (illustrative), and what is the
+ * platform itself doing (real).
  *
- * What is worth asserting is where each number *comes from* — a total that read
- * the wrong field would still render something plausible — that the ranking is
- * by how many joined and not in the reports' own worst-pass-rate order, and that
- * choosing a region says honestly that nothing is broken down by region yet.
+ * What is worth asserting is where each *real* number comes from — a total that
+ * read the wrong field would still render something plausible — that the
+ * ranking is by how many joined and not in the reports' own worst-pass-rate
+ * order, and that the illustrative half says it is illustrative and keeps
+ * working when the real half cannot load.
  */
 
 const api = vi.hoisted(() => ({ dashboard: vi.fn(), reports: vi.fn(), impact: vi.fn() }));
@@ -25,6 +26,7 @@ vi.mock('@/lib/api-client', async () => {
 });
 
 const { ImpactDashboard } = await import('@/components/admin/impact-dashboard');
+const { ImpactReadiness } = await import('@/components/admin/impact-readiness');
 
 const DASHBOARD = {
   users: { employees: 40, entityAccounts: 6, admins: 2, suspended: 0, unverified: 0 },
@@ -58,28 +60,6 @@ function reports(
       certificatesIssued: 51,
     },
     certificates: { course: 48, path: 3, total: 51 },
-    pathPopularity: [
-      { pathId: 'p1', name: 'خدمة المتعاملين', assigned: 14, completed: 2 },
-      { pathId: 'p2', name: 'الحوكمة', assigned: 6, completed: 1 },
-    ],
-    placementDistribution: [
-      {
-        pathId: 'p1',
-        pathName: 'خدمة المتعاملين',
-        levelId: 'l1',
-        levelName: 'تأسيسي',
-        position: 1,
-        employees: 8,
-      },
-      {
-        pathId: 'p1',
-        pathName: 'خدمة المتعاملين',
-        levelId: 'l2',
-        levelName: 'متقدم',
-        position: 2,
-        employees: 4,
-      },
-    ],
     courseOutcomes: rows.map(([title, enrolled], index) => ({
       courseId: `c${index}`,
       title,
@@ -91,7 +71,7 @@ function reports(
   } as unknown as AdminReports;
 }
 
-describe('Impact dashboard', () => {
+describe('Impact dashboard — platform activity (real numbers)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.dashboard.mockResolvedValue(DASHBOARD);
@@ -129,6 +109,14 @@ describe('Impact dashboard', () => {
     );
   });
 
+  it('marks this half as real and the other as illustrative', async () => {
+    renderWithProviders(<ImpactDashboard />);
+
+    expect(await screen.findByText('أرقام حقيقية')).toBeInTheDocument();
+    expect(screen.getAllByText('أرقام تجريبية').length).toBeGreaterThan(0);
+    expect(screen.getByText('أرقام تجريبية توضيحية')).toBeInTheDocument();
+  });
+
   it('ranks the programmes by how many joined, most first', async () => {
     renderWithProviders(<ImpactDashboard />);
 
@@ -149,88 +137,255 @@ describe('Impact dashboard', () => {
     expect(screen.queryByRole('list', { name: 'أكثر البرامج انضمامًا' })).not.toBeInTheDocument();
   });
 
-  describe('where the trainees have got to', () => {
-    it('counts the people at each stage, with the denominator beside the number', async () => {
-      renderWithProviders(<ImpactDashboard />);
-
-      const stages = await screen.findByRole('list', { name: 'أين وصل المتدربون' });
-
-      expect(within(stages).getByText('20 من 20 مُسنَد إليهم')).toBeInTheDocument();
-      expect(within(stages).getByText('12 من 20 مُسنَد إليهم')).toBeInTheDocument();
-      expect(within(stages).getByText('3 من 20 مُسنَد إليهم')).toBeInTheDocument();
-    });
-
-    it('prints an em dash, not 0%, when nobody has been assigned a path', async () => {
-      api.reports.mockResolvedValue(
-        reports([], {
-          journey: {
-            assigned: 0,
-            placed: 0,
-            completed: 0,
-            pathCompletionRate: null,
-            coursesPassed: 0,
-            certificatesIssued: 0,
-          },
-          pathPopularity: [],
-          placementDistribution: [],
-        }),
-      );
-      renderWithProviders(<ImpactDashboard />);
-
-      const stages = await screen.findByRole('list', { name: 'أين وصل المتدربون' });
-
-      expect(within(stages).getAllByText('—')).toHaveLength(3);
-      expect(screen.queryByText(/من 0 مُسنَد إليهم/)).not.toBeInTheDocument();
-    });
-
-    it('shows what they have earned: courses passed and both kinds of certificate', async () => {
-      renderWithProviders(<ImpactDashboard />);
-
-      const section = await screen.findByRole('region', { name: 'الإنجازات' });
-
-      expect(within(section).getByText('دورات مجتازة').nextSibling).toHaveTextContent('48');
-      expect(within(section).getByText('شهادات دورات').nextSibling).toHaveTextContent('48');
-      expect(within(section).getByText('مسارات مكتملة').nextSibling).toHaveTextContent('3');
-    });
-
-    it('shows each path’s own progress and the levels people were placed on', async () => {
-      renderWithProviders(<ImpactDashboard />);
-
-      const paths = await screen.findByRole('list', { name: 'التقدّم في كل مسار' });
-
-      expect(within(paths).getByText('خدمة المتعاملين')).toBeInTheDocument();
-      expect(within(paths).getByText('أُسند إليه 14 · أكمله 2')).toBeInTheDocument();
-      expect(within(paths).getByText('المستويات: تأسيسي: 8 · متقدم: 4')).toBeInTheDocument();
-
-      /* A path nobody was placed on has no levels line rather than an empty one. */
-      expect(within(paths).getAllByText(/^المستويات:/)).toHaveLength(1);
-    });
-  });
-
-  it('offers a retry when any of the three reads fails', async () => {
+  it('offers a retry when any of the three reads fails — and the readiness half still shows', async () => {
     api.reports.mockRejectedValue(new Error('down'));
     renderWithProviders(<ImpactDashboard />);
 
     expect(await screen.findByRole('button', { name: /إعادة/ })).toBeInTheDocument();
+    /* Illustrative, and independent of the network: one failing request must not
+       blank the whole page. */
+    expect(screen.getByText('نسبة سدّ الاحتياج')).toBeInTheDocument();
   });
 
-  it('swaps the totals for the chosen region’s card, says there is nothing per region yet, and goes back', async () => {
+  it('counts the people at each stage, with the denominator beside the number', async () => {
     renderWithProviders(<ImpactDashboard />);
+
+    const stages = await screen.findByRole('list', { name: 'أين وصل المتدربون' });
+
+    expect(within(stages).getByText('20 من 20 مُسنَد إليهم')).toBeInTheDocument();
+    expect(within(stages).getByText('12 من 20 مُسنَد إليهم')).toBeInTheDocument();
+    expect(within(stages).getByText('3 من 20 مُسنَد إليهم')).toBeInTheDocument();
+  });
+
+  it('prints an em dash, not 0%, when nobody has been assigned a path', async () => {
+    api.reports.mockResolvedValue(
+      reports([], {
+        journey: {
+          assigned: 0,
+          placed: 0,
+          completed: 0,
+          pathCompletionRate: null,
+          coursesPassed: 0,
+          certificatesIssued: 0,
+        },
+      }),
+    );
+    renderWithProviders(<ImpactDashboard />);
+
+    const stages = await screen.findByRole('list', { name: 'أين وصل المتدربون' });
+
+    expect(within(stages).getAllByText('—')).toHaveLength(3);
+    expect(screen.queryByText(/من 0 مُسنَد إليهم/)).not.toBeInTheDocument();
+  });
+
+  it('shows what they have earned: courses passed and both kinds of certificate', async () => {
+    renderWithProviders(<ImpactDashboard />);
+
+    const section = await screen.findByRole('region', { name: 'الإنجازات' });
+
+    expect(within(section).getByText('دورات مجتازة').nextSibling).toHaveTextContent('48');
+    expect(within(section).getByText('شهادات دورات').nextSibling).toHaveTextContent('48');
+    expect(within(section).getByText('مسارات مكتملة').nextSibling).toHaveTextContent('3');
+  });
+});
+
+describe('Impact readiness (illustrative)', () => {
+  /* A fixed clock: the days left and the pace are functions of "today". */
+  const NOW = new Date('2026-10-04T12:00:00Z');
+
+  it('states the target, its path, its date and the headcount it asks for', () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+
+    expect(
+      screen.getByRole('heading', {
+        name: /المستهدف: منسوبو الدفاع المدني المؤهّلون للاستجابة للحوادث الكبرى/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/مسار «الاستجابة للحوادث الكبرى»/)).toBeInTheDocument();
+    expect(screen.getByText(/العدد المطلوب: 2,900 موظفًا/)).toBeInTheDocument();
+  });
+
+  it('answers «هل سُدّ الاحتياج؟» in four numbers', () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+
+    const kpis = screen.getByRole('region', { name: 'مؤشرات الجاهزية' });
+
+    expect(within(kpis).getByText('نسبة سدّ الاحتياج').nextSibling).toHaveTextContent('66');
+    expect(within(kpis).getByText('تأهّل 1,920 من 2,900 موظفًا')).toBeInTheDocument();
+    expect(within(kpis).getByText('الفجوة المتبقية').nextSibling).toHaveTextContent('980');
+    expect(within(kpis).getByText('الزمن حتى الجاهزية').nextSibling).toHaveTextContent('178 يومًا');
+    expect(within(kpis).getByText(/^متقدّم \d+ يومًا$/)).toBeInTheDocument();
+  });
+
+  it('prints each region’s readiness on the map, so the shading is never the only carrier', () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+
+    expect(screen.getByRole('button', { name: /^نجران، 36/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^القصيم، 90/ })).toBeInTheDocument();
+  });
+
+  /** A region has two handles — its shape on the map and its row in the ranking. */
+  const onMap = () => screen.getByRole('group', { name: 'خريطة جاهزية مناطق المملكة' });
+  const inRanking = () => screen.getByRole('list', { name: 'أولويات سدّ الفجوة' });
+
+  it('opens a region’s own units and their shares when it is chosen', async () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
     const user = userEvent.setup();
 
-    /* Nothing to go back from until a region is chosen. */
-    await screen.findByRole('region', { name: 'إجماليات المنصة' });
-    expect(screen.queryByRole('button', { name: 'عرض كل المناطق' })).not.toBeInTheDocument();
+    expect(
+      screen.getByText('اختر منطقة من الخريطة لعرض مراكزها ونسبة جاهزيتها.'),
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'الرياض' }));
+    await user.click(within(onMap()).getByRole('button', { name: /^نجران/ }));
 
-    expect(screen.getByRole('heading', { name: 'منطقة الرياض' })).toBeInTheDocument();
-    expect(screen.getByText(/لا تتوفر أرقام موزّعة على المناطق بعد/)).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'إجماليات المنصة' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'منطقة نجران' })).toBeInTheDocument();
+    expect(screen.getByText(/تأهّل 40 من 110، والفجوة 70/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'مراكز الإنقاذ والاستجابة' })).toHaveAttribute(
+      'aria-valuenow',
+      '37',
+    );
+
+    /* Choosing it again clears it. */
+    await user.click(within(onMap()).getByRole('button', { name: /^نجران/ }));
+    expect(screen.queryByRole('heading', { name: 'منطقة نجران' })).not.toBeInTheDocument();
+  });
+
+  it('selects the same region from its row in the ranking, and offers a way back out', async () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+    const user = userEvent.setup();
+
+    await user.click(within(inRanking()).getByRole('button', { name: /^نجران/ }));
+
+    expect(screen.getByRole('heading', { name: 'منطقة نجران' })).toBeInTheDocument();
+    /* The map and the list agree about what is chosen. */
+    expect(within(onMap()).getByRole('button', { name: /^نجران/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(inRanking()).getByRole('button', { name: /^نجران/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
 
     await user.click(screen.getByRole('button', { name: 'عرض كل المناطق' }));
 
-    expect(screen.queryByRole('heading', { name: 'منطقة الرياض' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'إجماليات المنصة' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'منطقة نجران' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'عرض كل المناطق' })).not.toBeInTheDocument();
+  });
+
+  it('lights the region on the map when its row is hovered, and lets go when it is not', async () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+    const user = userEvent.setup();
+
+    const najran = () => within(onMap()).getByRole('button', { name: /^نجران/ });
+    const before = najran().getAttribute('class');
+
+    await user.hover(within(inRanking()).getByRole('button', { name: /^نجران/ }));
+    expect(najran().getAttribute('class')).not.toBe(before);
+    expect(najran()).toHaveAttribute('filter', 'url(#region-lift)');
+
+    await user.unhover(within(inRanking()).getByRole('button', { name: /^نجران/ }));
+    expect(najran().getAttribute('class')).toBe(before);
+  });
+
+  it('tells you the numbers on hover, not just the name', async () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+    const user = userEvent.setup();
+
+    await user.hover(within(onMap()).getByRole('button', { name: /^نجران/ }));
+
+    /* Decorative for assistive technology (the region's own name already carries
+       the same words), so it is found by its place rather than by a role — and
+       its numbers are asserted *inside* it, because the ranking repeats them. */
+    const tooltip = document.querySelector('[aria-hidden="true"].z-10');
+
+    expect(tooltip).not.toBeNull();
+    expect(tooltip).toHaveTextContent('نجران');
+    expect(tooltip).toHaveTextContent('40 من 110');
+    expect(tooltip).toHaveTextContent('الفجوة 70 · أولوية عالية');
+
+    await user.unhover(within(onMap()).getByRole('button', { name: /^نجران/ }));
+    expect(document.querySelector('[aria-hidden="true"].z-10')).toBeNull();
+  });
+
+  it('filters by band from the legend: fades the others, narrows the ranking, and lifts again', async () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+    const user = userEvent.setup();
+
+    const rows = () => within(inRanking()).getAllByRole('listitem');
+    const all = rows().length;
+    expect(all).toBe(13);
+
+    const low = screen.getByRole('button', { name: /^أقل من/ });
+    await user.click(low);
+
+    expect(low).toHaveAttribute('aria-pressed', 'true');
+    /* Najran (36%) and the Northern Borders (40%) are the only two below half. */
+    expect(rows()).toHaveLength(2);
+    expect(within(inRanking()).queryByText('الرياض')).not.toBeInTheDocument();
+
+    /* The other regions stay on the map, faded, so their place is not lost. */
+    const faded = within(onMap())
+      .getByRole('button', { name: /^الرياض/ })
+      .closest('g');
+    expect(faded).toHaveClass('opacity-25');
+    expect(
+      within(onMap())
+        .getByRole('button', { name: /^نجران/ })
+        .closest('g'),
+    ).not.toHaveClass('opacity-25');
+
+    await user.click(low);
+    expect(low).toHaveAttribute('aria-pressed', 'false');
+    expect(rows()).toHaveLength(all);
+  });
+
+  it('ranks the regions to act on by the size of the gap, and names the priority in words', () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+
+    const list = screen.getByRole('list', { name: 'أولويات سدّ الفجوة' });
+    const first = within(list).getAllByRole('listitem')[0]!;
+
+    expect(within(first).getByText('مكة المكرمة')).toBeInTheDocument();
+    expect(within(first).getByText('أولوية متوسطة')).toBeInTheDocument();
+    /* More than one region is below half, so the word appears more than once. */
+    expect(within(list).getAllByText('أولوية عالية').length).toBeGreaterThan(1);
+  });
+
+  it('shows the share met in each job', () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+
+    const jobs = screen.getByRole('list', { name: 'نسبة سدّ الاحتياج لكل وظيفة ومهمة' });
+
+    expect(within(jobs).getByText(/70.*840 من 1,200/)).toBeInTheDocument();
+  });
+
+  it('places the plan and the achievement on one timeline, and says which is ahead', () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+
+    expect(
+      screen.getByRole('img', { name: /مرّ 60.*من المدة، وتحقّق 66.*من المستهدف/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/بالوتيرة الحالية تتحقق الجاهزية قبل الموعد بنحو \d+ يومًا\./),
+    ).toBeInTheDocument();
+  });
+
+  it('reports the indicators in points when the metric is itself a percentage', () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+
+    /* One card per indicator, in a labelled list; it was a table. */
+    const list = screen.getByRole('list', { name: 'الأثر في الأداء' });
+
+    expect(within(list).getByText(/14 نقاط/)).toBeInTheDocument();
+    expect(within(list).getAllByText(/\(تحسّن\)/)).toHaveLength(4);
+    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
+  });
+
+  it('tags every block as illustrative', () => {
+    renderWithProviders(<ImpactReadiness now={NOW} />);
+
+    /* The target, the map, the jobs, the timeline and the indicators. */
+    expect(screen.getAllByText(/^أرقام تجريبية/)).toHaveLength(5);
   });
 });

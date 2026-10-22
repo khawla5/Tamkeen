@@ -83,29 +83,32 @@ function Body({
   }
 
   return (
-    <div className="space-y-6">
-      {overview.active ? (
-        <VersionCard version={overview.active} highlight />
-      ) : (
-        <Card className="p-6 text-sm text-muted-foreground">{t('assessmentMissing')}</Card>
-      )}
+    <div className="grid items-start gap-4 lg:grid-cols-[1.6fr_1fr]">
+      {/* What is live, and the decision to change it — the notice before the button. */}
+      <div className="space-y-4">
+        {overview.active ? (
+          <VersionCard version={overview.active} highlight />
+        ) : (
+          <Card className="p-6 text-sm text-muted-foreground">{t('assessmentMissing')}</Card>
+        )}
 
-      <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
-        <div className="min-w-0">
-          <p className="font-medium text-foreground">{t('editHeading')}</p>
-          {/* Said before the decision, not after it. */}
-          <p className="mt-1 text-sm text-muted-foreground">{t('editFrozenNotice')}</p>
-        </div>
-        {/* Enabled with no active version too: a path with no assessment at
-            all is exactly the case this screen has to be able to fix, and a
-            disabled button would leave the administrator with no way in. */}
-        <Button onClick={onEnterEditor}>
-          {overview.active === null ? t('startFirstEdit') : t('startEdit')}
-        </Button>
-      </Card>
+        <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
+          <div className="min-w-0">
+            <p className="font-medium text-foreground">{t('editHeading')}</p>
+            {/* Said before the decision, not after it. */}
+            <p className="mt-1 text-sm text-muted-foreground">{t('editFrozenNotice')}</p>
+          </div>
+          {/* Enabled with no active version too: a path with no assessment at
+              all is exactly the case this screen has to be able to fix, and a
+              disabled button would leave the administrator with no way in. */}
+          <Button onClick={onEnterEditor}>
+            {overview.active === null ? t('startFirstEdit') : t('startEdit')}
+          </Button>
+        </Card>
+      </div>
 
       {overview.history.length > 0 ? (
-        <section aria-labelledby="assessment-history">
+        <section aria-labelledby="assessment-history" className="rounded-2xl bg-neutral-100 p-4">
           <h2 id="assessment-history" className="mb-3 text-lg font-semibold text-foreground">
             {t('historyHeading')}
           </h2>

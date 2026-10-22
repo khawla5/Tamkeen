@@ -50,6 +50,20 @@ describe('certificate template', () => {
     expect(html).toContain('6 ربيع الأول 1448 هـ');
   });
 
+  it('prints the Hijri era mark once, and the Gregorian one once', () => {
+    /* `toContain('… 1448 هـ')` alone is satisfied by «… 1448 هـ هـ», which is what
+       shipped: current ICU already ends a Hijri date with the mark and the
+       template appended a second. Asserted on the date values themselves. */
+    const html = renderCertificateHtml(BASE);
+
+    const dates = [...html.matchAll(/<div class="date-value">([^<]*)<\/div>/g)].map((m) => m[1]);
+
+    expect(dates).toHaveLength(2);
+    expect(dates[0]!.match(/هـ/g)).toHaveLength(1);
+    expect(dates[0]).not.toMatch(/هـ\s*هـ/);
+    expect(dates[1]!.match(/م/g)).toHaveLength(1);
+  });
+
   it('shows no grade anywhere', () => {
     /* A certificate states that a standard was met, not by how much. The grade
        stays in My Path, where it can be read in context.
@@ -119,6 +133,19 @@ describe('certificate template', () => {
     it('sites a course inside its path, and a path by the courses it took', () => {
       expect(course).toContain('ضمن مسار القيادة الإدارية');
       expect(path).toContain('باجتياز 7 دورات ضمن المسار');
+    });
+
+    it('puts the noun in the right form for the number of courses', () => {
+      /* Three to ten take the plural; from eleven the noun is singular again. */
+      const phrase = (courseCount: number) =>
+        visibleText(renderCertificateHtml({ ...BASE, type: 'PATH', pathName: null, courseCount }));
+
+      expect(phrase(1)).toContain('باجتياز دورة واحدة ضمن المسار');
+      expect(phrase(2)).toContain('باجتياز دورتين ضمن المسار');
+      expect(phrase(10)).toContain('باجتياز 10 دورات ضمن المسار');
+      expect(phrase(11)).toContain('باجتياز 11 دورة ضمن المسار');
+      expect(phrase(26)).toContain('باجتياز 26 دورة ضمن المسار');
+      expect(phrase(26)).not.toContain('26 دورات');
     });
 
     it('omits the context line rather than printing an empty one', () => {
