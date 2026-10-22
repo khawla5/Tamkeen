@@ -26,11 +26,15 @@ import type { AssignPathDto } from './admin.dto';
  * is what that panel calls, and it takes a path with many employees because that
  * is how the work actually arrives — a directorate is put on a path together.
  *
- * **Revoking is refused once the learner has been placed.** A placement is the
- * record of an assessment they sat; removing the assignment under it would leave
- * a result pointing at a path the person was never on. Before placement there is
- * nothing to preserve, so the row simply goes — the audit log is the history, as
- * everywhere else.
+ * **Revoking after placement moves the row to REVOKED rather than deleting it.**
+ * A placement is the record of an assessment the learner sat, and completions and
+ * certificates can point at courses on this path — deleting the row would strand
+ * them. Before placement there is nothing to preserve, so the row is simply
+ * removed. Either way the audit log is the history of the decision itself.
+ * Assigning the same path again after a revoke reactivates that row (back to
+ * ACTIVE) rather than creating a second one — `@@unique([userId, pathId])`
+ * allows only one, and the learner's old placement/progress under it is real
+ * and picks back up rather than starting over.
  */
 @Injectable()
 export class AdminPathAssignmentsService {
@@ -82,11 +86,18 @@ export class AdminPathAssignmentsService {
 
     const existing = await this.prisma.userPath.findMany({
       where: { pathId: path.id, userId: { in: employees.map((row) => row.id) } },
-      select: { userId: true },
+      select: { userId: true, status: true },
     });
 
-    const already = new Set(existing.map((row) => row.userId));
-    const toCreate = employees.filter((row) => !already.has(row.id));
+    const existingByUser = new Map(existing.map((row) => [row.userId, row.status]));
+    /* A REVOKED row is a past decision, not a current hold — reassigning
+       reactivates the same row (the unique pair allows no other way) rather
+       than being told the path is "already assigned". */
+    const toReactivate = employees.filter(
+      (row) => existingByUser.get(row.id) === 'REVOKED',
+    );
+    const toCreate = employees.filter((row) => !existingByUser.has(row.id));
+    const alreadyHeld = employees.length - toReactivate.length - toCreate.length;
 
     for (const employee of toCreate) {
       await this.prisma.userPath.create({
@@ -106,10 +117,33 @@ export class AdminPathAssignmentsService {
       });
     }
 
-    return { created: toCreate.length, alreadyAssigned: already.size };
+    for (const employee of toReactivate) {
+      await this.prisma.userPath.update({
+        where: { userId_pathId: { userId: employee.id, pathId: path.id } },
+        data: { status: 'ACTIVE', assignedById: actorId, assignedAt: new Date() },
+      });
+
+      await this.audit.record({
+        action: AuditAction.ADMIN_PATH_ASSIGNED,
+        outcome: 'SUCCESS',
+        actorUserId: actorId,
+        ipAddress,
+        targetType: 'user',
+        targetId: employee.id,
+        detail: { path: path.name, reactivated: true },
+      });
+    }
+
+    return { created: toCreate.length + toReactivate.length, alreadyAssigned: alreadyHeld };
   }
 
-  /** Revokes an assignment, unless the learner has already been placed. */
+  /**
+   * Revokes an assignment. Before placement the row is simply removed —
+   * nothing under it to preserve. After placement it moves to REVOKED
+   * instead: the placement, any enrolments, completions and certificates
+   * stay real and attributable, and the row itself is what a later
+   * reassignment reactivates.
+   */
   async revoke(
     userId: string,
     pathId: string,
@@ -118,10 +152,10 @@ export class AdminPathAssignmentsService {
   ): Promise<void> {
     const assignment = await this.prisma.userPath.findUnique({
       where: { userId_pathId: { userId, pathId } },
-      select: { id: true, path: { select: { name: true } } },
+      select: { id: true, status: true, path: { select: { name: true } } },
     });
 
-    if (!assignment) {
+    if (!assignment || assignment.status === 'REVOKED') {
       throw new NotFoundException('PATH_NOT_ASSIGNED');
     }
 
@@ -131,18 +165,22 @@ export class AdminPathAssignmentsService {
     });
 
     if (placed) {
+      await this.prisma.userPath.update({
+        where: { id: assignment.id },
+        data: { status: 'REVOKED' },
+      });
+
       await this.audit.record({
         action: AuditAction.ADMIN_PATH_UNASSIGNED,
-        outcome: 'FAILURE',
+        outcome: 'SUCCESS',
         actorUserId: actorId,
         ipAddress,
         targetType: 'user',
         targetId: userId,
-        reason: AuditReason.ASSIGNMENT_ALREADY_STARTED,
-        detail: { path: assignment.path.name },
+        detail: { path: assignment.path.name, hadProgress: true },
       });
 
-      throw new ConflictException('ASSIGNMENT_ALREADY_STARTED');
+      return;
     }
 
     await this.prisma.userPath.delete({ where: { id: assignment.id } });

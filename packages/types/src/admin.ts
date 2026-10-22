@@ -265,7 +265,11 @@ export interface AdminUserDetail extends AdminUserRow {
     userPathId: string;
     pathId: string;
     name: string;
-    status: 'ACTIVE' | 'COMPLETED';
+    /** REVOKED is history: an admin unassigned it after the learner was
+     *  already placed, so the row (and their progress under it) is kept
+     *  rather than deleted. Never shown to the learner themselves — only
+     *  this admin view. */
+    status: 'ACTIVE' | 'COMPLETED' | 'REVOKED';
     assignedAt: string;
     placedLevel: LevelRef | null;
     coursesPassed: number;

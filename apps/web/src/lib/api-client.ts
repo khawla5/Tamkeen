@@ -17,9 +17,9 @@
 
 import type {
   AdminAssessmentAssignmentRow,
-  AdminAssessmentDraft,
   AdminAssessmentGroupRow,
   AdminAssessmentKeyOption,
+  AdminAssessmentDraft,
   AdminAssignResult,
   AdminAttachableCourse,
   AdminCoursePage,

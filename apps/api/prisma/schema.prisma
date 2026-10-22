@@ -346,6 +346,13 @@ enum EntityStatus {
 enum UserPathStatus {
   ACTIVE
   COMPLETED
+  /// Unassigned by an administrator after the learner had already been
+  /// placed. The row and everything under it (placement, enrolments,
+  /// completions, certificates) is kept as history rather than deleted —
+  /// only `ACTIVE`/`COMPLETED` paths are ever shown to the learner
+  /// themselves (D-134's "absence, not a disabled control"), but an
+  /// administrator's own view of the account still lists it.
+  REVOKED
 }
 
 /// Whether a path is offered to the ministry at all (D-134).

@@ -141,18 +141,25 @@ describe('LandingPage', () => {
     expect(container.querySelector('section dl')).toBeNull();
   });
 
-  it('hero: no longer carries its own emblem — the Kingdom map is the whole visual', () => {
-    /* The emblem used to sit above the map inside the hero's own box. It
-       moved out to `BrandCorner`, fixed at the page's true top-right corner
-       and shared by every page of the site, not just this one — so the hero
-       box should have no `/brand/MOI.svg` image of its own left behind. */
+  it('hero: no longer carries its own identifying emblem — the Kingdom map is the whole visual', () => {
+    /* The identifying emblem used to sit above the map inside the hero's own
+       box. It moved out to `BrandCorner`, fixed at the page's true top-right
+       corner and shared by every page of the site, not just this one — so
+       the hero box should carry no *second* `/brand/MOI.svg`. The hero
+       itself carries no decorative watermark either (tried, dropped —
+       a photo backdrop is not where `PageWatermark` belongs); `AboutSection`
+       below it does, distinguished generally by its `aria-hidden="true"`
+       wrapper — the stable trait any such instance shares, exactly because
+       it is never the accessible, identifying mark. */
     const { container } = renderWithProviders(<LandingPage />);
 
     const hero = container.querySelector('section');
-    const emblem = Array.from(hero?.querySelectorAll('img') ?? []).find((img) =>
-      decodeURIComponent(img.getAttribute('src') ?? '').includes('/brand/MOI.svg'),
-    );
-    expect(emblem).toBeUndefined();
+    const emblems = Array.from(hero?.querySelectorAll('img') ?? []).filter((img) => {
+      const isMoi = decodeURIComponent(img.getAttribute('src') ?? '').includes('/brand/MOI.svg');
+      const isWatermark = img.closest('[aria-hidden="true"]') !== null;
+      return isMoi && !isWatermark;
+    });
+    expect(emblems).toHaveLength(0);
   });
 
   it('hero: the emblem sits over the Kingdom map, all thirteen regions present', () => {

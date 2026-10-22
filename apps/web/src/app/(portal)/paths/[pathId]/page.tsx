@@ -148,8 +148,9 @@ function Ladder({ path }: { path: PathDetail }) {
                     <CourseCheckpoint
                       key={course.id}
                       course={course}
-                      startable={placed && level.standing !== 'BELOW'}
+                      startable={placed && level.standing === 'PLACED'}
                       below={level.standing === 'BELOW'}
+                      placed={placed}
                     />
                   ))
                 )
@@ -244,10 +245,12 @@ function CourseCheckpoint({
   course,
   startable,
   below,
+  placed,
 }: {
   course: CourseSummary;
   startable: boolean;
   below: boolean;
+  placed: boolean;
 }) {
   const t = useTranslations('path');
   const format = useFormat();
@@ -306,6 +309,8 @@ function CourseCheckpoint({
             <Badge variant="soft">{t('coveredAlready')}</Badge>
           ) : startable ? (
             <CourseStatusChip status="IN_PATH" />
+          ) : placed ? (
+            <Badge variant="soft">{t('lockedAboveLevel')}</Badge>
           ) : (
             <Badge variant="soft">{t('lockedUntilPlaced')}</Badge>
           )}
