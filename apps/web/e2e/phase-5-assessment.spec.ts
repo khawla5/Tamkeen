@@ -103,7 +103,7 @@ test.describe('Phase 5 — assessment management (D-134)', () => {
   });
 
   test('a newly added question blocks publish, in Arabic, until it has an answer', async () => {
-    await adminPage.getByRole('button', { name: 'إضافة سؤال' }).click();
+    await adminPage.getByRole('button', { name: 'إضافة سؤال', exact: true }).click();
 
     const dialog = adminPage.locator('dialog');
     await dialog.getByLabel('نص السؤال').fill('ما هي الخطوة الأولى عند استلام شكوى من متعامل؟');
