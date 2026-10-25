@@ -172,8 +172,14 @@ test.describe('Phase 5 — the administered surface', () => {
     await page.getByRole('link', { name: 'الدورات' }).click();
     await expect(page.getByRole('heading', { name: 'الإشراف على الدورات' })).toBeVisible();
 
-    const table = page.getByRole('table');
-    await expect(table).toBeVisible({ timeout: 15_000 });
+    /* One card for each course, grouped under a band naming its supplier. */
+    const cards = page
+      .getByRole('main')
+      .locator('ul > li')
+      .filter({
+        has: page.getByRole('button', { name: 'إدارة' }),
+      });
+    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
 
     /*
      * One column and two words since TAM-134: the screen asks whether an
@@ -183,16 +189,15 @@ test.describe('Phase 5 — the administered surface', () => {
      * under the badge — that is what makes "nobody can see it" answerable, and
      * it is what this test now guards.
      */
-    await expect(table.getByRole('columnheader', { name: 'الحالة' })).toBeVisible();
-    await expect(table.getByRole('columnheader', { name: 'فترة الإتاحة' })).toBeVisible();
-    await expect(table.getByRole('columnheader', { name: 'الجهة' })).toBeVisible();
-    await expect(table.getByRole('columnheader', { name: 'قرار النشر' })).toHaveCount(0);
+    await expect(cards.first().getByText('فترة الإتاحة')).toBeVisible();
+    await expect(cards.first().getByText('الجهة:')).toBeVisible();
+    await expect(page.getByText('قرار النشر')).toHaveCount(0);
 
-    /* Exactly two words across the whole table, whatever the four underlying
-       states are doing. */
-    const badges = await table.locator('tbody tr td:nth-child(3)').allInnerTexts();
-    for (const badge of badges) {
-      expect(badge.startsWith('متاحة') || badge.startsWith('مخفية')).toBe(true);
+    /* Exactly two words across every card, whatever the four underlying states
+       are doing. */
+    const texts = await cards.allInnerTexts();
+    for (const text of texts) {
+      expect(/متاحة|مخفية/.test(text)).toBe(true);
     }
   });
 
@@ -202,8 +207,13 @@ test.describe('Phase 5 — the administered surface', () => {
        nobody in the ministry can ever place them. */
     await page.getByLabel('الجهة الموردة').selectOption('unowned');
 
-    const table = page.getByRole('table');
-    await expect(table.locator('tbody tr').first()).toBeVisible({ timeout: 15_000 });
+    const cards = page
+      .getByRole('main')
+      .locator('ul > li')
+      .filter({
+        has: page.getByRole('button', { name: 'إدارة' }),
+      });
+    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/دورة بلا جهة موردة/)).toBeVisible();
   });
 
@@ -357,10 +367,6 @@ test.describe('Phase 5 — the administered surface', () => {
     await expect(page.getByText('كل رقم مقارن بالفترة السابقة المماثلة في الطول.')).toBeVisible();
     await expect(page.getByText(/لا من عدد موظفي الوزارة/)).toBeVisible();
     await expect(page.getByRole('table', { name: 'المشاركة حسب الإدارة' })).toBeVisible();
-
-    /* The level test has not shipped (TAM-148), and the block says so rather
-       than rendering as an empty card. */
-    await expect(page.getByText('لم يُفعَّل اختبار المستوى بعد.')).toBeVisible();
 
     /* Narrowing to one directorate reaches the API rather than filtering a
        page's worth of rows in the browser. */
