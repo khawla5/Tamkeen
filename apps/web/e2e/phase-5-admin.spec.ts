@@ -48,13 +48,11 @@ test.describe('Phase 5 — the administered surface', () => {
 
   const stamp = Date.now().toString(36);
   const pathName = `مسار الاختبار ${stamp}`;
-  let pathKey: string;
 
   test.beforeAll(async ({ browser }) => {
     test.setTimeout(120_000);
 
     admin = await seedAdmin();
-    pathKey = `${admin.prefix}-path`;
 
     page = await browser.newPage();
 
@@ -126,81 +124,48 @@ test.describe('Phase 5 — the administered surface', () => {
     await expect(nav.getByRole('link', { name: 'المتدربون' })).toHaveCount(0);
   });
 
-  test('§4C.4 — a path is created empty, and is not offered to anyone yet', async () => {
+  test('§4C.4 — a path is created empty from one button, and is not offered to anyone yet', async () => {
     await page.getByRole('link', { name: 'المسارات' }).click();
     await expect(page.getByRole('heading', { name: 'إدارة المسارات' })).toBeVisible();
 
+    /* One click, no form: the path is made as a placeholder and the administrator
+       lands on its own screen, where the name, the levels and the courses are
+       filled in (D-134). */
     await page.getByRole('button', { name: 'إنشاء مسار' }).click();
+    await expect(page).toHaveURL(/\/admin\/paths\/[^/]+$/, { timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'إدارة المسار' })).toBeVisible();
 
-    const dialog = page.getByRole('dialog');
-    /* Labels, not CSS selectors: a label `getByLabel` cannot find is a field no
-       screen reader can announce, so these locators double as an accessibility
-       assertion. */
-    await dialog.getByLabel('اسم المسار').fill(pathName);
-    await dialog.getByLabel('المعرّف').fill(pathKey);
-    await dialog.getByLabel('وصف المسار').fill('مسار أُنشئ من اختبار المتصفح.');
-    await dialog.getByLabel('النمط المهني').selectOption('S');
-    await dialog.getByRole('button', { name: 'إنشاء', exact: true }).click();
-
-    /* Straight into the detail panel, because a path created empty cannot be
-       offered until it has courses and the next step is always the same one. */
-    const panel = page.getByRole('dialog');
-    await expect(panel.getByRole('heading', { name: 'إدارة المسار' })).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(panel.getByLabel('اسم المسار')).toHaveValue(pathName);
-
-    /* And the panel says why it cannot be offered yet, rather than only
-       refusing: an empty path is below the five-course floor a learner needs to
-       confirm anything at all (D-081). */
-    await expect(panel.getByText(/أقل من الحد الأدنى/)).toBeVisible();
-
-    await page.keyboard.press('Escape');
+    await page.getByLabel('اسم المسار').fill(pathName);
+    await page.getByRole('button', { name: 'حفظ التعديلات' }).first().click();
+    await expect(page.getByText('حُفظت تعديلات المسار.')).toBeVisible({ timeout: 15_000 });
 
     /*
      * And it arrives *not offered*. Publishing a path the moment it exists
      * would put a dead end in front of a learner making the one irreversible
      * choice the product asks of them (D-081).
      */
-    const card = page.getByRole('listitem').filter({ hasText: pathName });
-    await expect(card).toBeVisible({ timeout: 15_000 });
-    await expect(card).toContainText('غير معروض');
+    await expect(page.getByText(/المسار غير معروض/)).toBeVisible();
   });
 
   test('§4C.4 — hiding and deleting are different words, and the empty path can be deleted', async () => {
-    const card = page.getByRole('listitem').filter({ hasText: pathName });
-    await card.getByRole('button', { name: 'إدارة' }).click();
-
-    const panel = page.getByRole('dialog');
-    await expect(panel.getByRole('heading', { name: 'إدارة المسار' })).toBeVisible({
-      timeout: 15_000,
-    });
-
-    /* Two removals, two sections, two words — and the estimate field and the
-       add-course button are gone from the form (TAM-133). */
-    await expect(panel.getByRole('heading', { name: 'عرض المسار على الموظفين' })).toBeVisible();
-    await expect(panel.getByRole('heading', { name: 'حذف المسار' })).toBeVisible();
-    await expect(panel.getByLabel(/المدة/)).toHaveCount(0);
-    await expect(panel.getByRole('button', { name: 'إضافة دورة' })).toHaveCount(0);
+    /* Still on the path's own screen from the step above. */
+    await expect(page.getByRole('heading', { name: 'عرض المسار على الموظفين' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'حذف المسار' })).toBeVisible();
 
     /* Nobody has ever chosen this one, so the irreversible option is available
        — and it asks once more, naming the path and offering the reversible
        alternative, before it goes. */
-    await panel.getByRole('button', { name: 'حذف نهائي' }).click();
+    await page.getByRole('button', { name: 'حذف نهائي' }).click();
 
     const confirm = page.getByRole('dialog').last();
     await expect(confirm.getByText(new RegExp(pathName))).toBeVisible();
     await expect(confirm.getByText(/إن أردت إخفاءه مع الاحتفاظ به/)).toBeVisible();
     await confirm.getByRole('button', { name: 'حذف نهائي' }).click();
 
-    await expect(page.getByText('حُذف المسار نهائيًا.')).toBeVisible({ timeout: 15_000 });
-    await expect(card).toHaveCount(0);
-  });
-
-  test('§4C.4 — the 5-10 bounds are stated on the screen that builds paths', async () => {
-    /* Shown where the rule bites, not only in Settings: somebody adding a sixth
-       course needs the bound in front of them (D-074). */
-    await expect(page.getByText(/5[^0-9]{0,3}10|٥[^٠-٩]{0,3}١٠/)).toBeVisible();
+    /* The path has no subject any more, so the list is where the administrator
+       is sent — and it is no longer on it. */
+    await expect(page).toHaveURL(/\/admin\/paths$/, { timeout: 15_000 });
+    await expect(page.getByRole('listitem').filter({ hasText: pathName })).toHaveCount(0);
   });
 
   test('§4C.5 — oversight names why nobody can see a course, not only that they cannot', async () => {

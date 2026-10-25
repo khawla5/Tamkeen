@@ -129,7 +129,12 @@ test.describe('Phase 5 — assessment management (D-134)', () => {
     const lastQuestion = adminPage.locator('ol > li').last();
     await lastQuestion.getByRole('button', { name: 'عرض الخيارات' }).click();
 
-    await lastQuestion.getByRole('radio', { name: 'الإجابة الصحيحة' }).first().check();
+    /* `check()` insists the box changes state the instant it is clicked; this
+       radio is controlled by the saved draft, so it changes when the server has
+       answered. Click, then wait for it. */
+    const correct = lastQuestion.getByRole('radio', { name: 'الإجابة الصحيحة' }).first();
+    await correct.click();
+    await expect(correct).toBeChecked();
 
     await expect(adminPage.getByText('البنك متوازن وجاهز للنشر.')).toBeVisible();
     await expect(adminPage.getByRole('button', { name: 'نشر الإصدار' })).toBeEnabled();
