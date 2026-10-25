@@ -104,11 +104,17 @@ function Road({ path }: { path: AdminPathDetail }) {
                   ) : null}
 
                   {/* The road itself: a line through the stretch, and — unless this is
-                      the last — the turn that carries it down to the next. */}
+                      the last — the turn that carries it down to the next. The turn is
+                      one square-cornered bar, and the line stops where the bar begins,
+                      so no stroke is drawn over another (the road is translucent and
+                      would show darker where two met). */}
                   <span
                     aria-hidden="true"
-                    className="absolute inset-x-8 h-0.5 bg-success/70"
-                    style={{ top: 'calc(3rem - 1px)' }}
+                    className="absolute h-0.5 bg-success/70"
+                    style={{
+                      top: 'calc(3rem - 1px)',
+                      insetInline: 'calc(1.5rem + 2px)',
+                    }}
                   />
                   {/* Where the road begins: a filled dot on the first stretch's starting
                       edge, named, so the direction of travel has an origin. */}
@@ -131,12 +137,10 @@ function Road({ path }: { path: AdminPathDetail }) {
                     <span
                       aria-hidden="true"
                       className={cn(
-                        'absolute w-10 border-y-2 border-success/70',
-                        returning
-                          ? 'start-6 rounded-s-full border-s-2'
-                          : 'end-6 rounded-e-full border-e-2',
+                        'absolute w-0.5 bg-success/70',
+                        returning ? 'start-6' : 'end-6',
                       )}
-                      style={{ top: 'calc(3rem - 1px)', height: PITCH }}
+                      style={{ top: 'calc(3rem - 1px)', height: 'calc(' + PITCH + ' + 2px)' }}
                     />
                   ) : null}
 
