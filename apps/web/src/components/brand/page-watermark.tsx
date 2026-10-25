@@ -15,7 +15,11 @@ import { cn } from '@/lib/utils';
  * landing hero was tried and dropped, user-directed): a busy backdrop needs
  * either a much stronger mark or none at all, and none read better.
  */
-export function PageWatermark({ opacityClassName = 'opacity-[0.035]' }: { opacityClassName?: string }) {
+export function PageWatermark({
+  opacityClassName = 'opacity-[0.035]',
+}: {
+  opacityClassName?: string;
+}) {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
       {/* Centring is symmetric, so plain physical offsets are fine here even

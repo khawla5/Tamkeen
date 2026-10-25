@@ -5,6 +5,46 @@
 
 ---
 
+### 2026-10-08 — Dev data: real English programmes placed in the English path (dev DB only, no code)
+
+«أكثر البرامج انضمامًا» printed generated titles (`دورة 0d8d88`…), because every enrolment of the demo student was in e2e-leftover courses and the 54 real-named courses were unpublished drafts. Through the **admin API** (so every rule and audit entry applies): 16 real, already-authored courses were published (`PATCH /admin/courses/:id`), attached to مسار اللغة الإنجليزية, and placed on its rungs — **6 on مبتدئ (A1–A2), 5 on متوسط (B1–B2), 5 on متقدم (C1)**; placing a course is what enrols the learners already placed (`syncEnrolments`), so `student@ministry.gov.example` is now enrolled in all 16, all landed in Moodle. The card now reads real names (e.g. «الاستماع لمحتوى متقدم»). **Consequences:** the English path has the 16 real courses beside the generated ones; a course a learner holds cannot simply be detached again (refused by design), so undoing this is a DB reset/reseed, not a click. All counts are 1 — only one employee is placed on a path; placing `employee-demo` would vary them. The 172 generated `دورة xxxxxx` courses are untouched. Script: kept out of the repo (scratch only).
+
+### 2026-10-08 — Landing footer drops «الإدارة العامة للتدريب» (uncommitted, branch `feature/admin-impact-measurement`)
+
+The dark-green landing footer named «وزارة الداخلية» and, under it, «الإدارة العامة للتدريب»; the second line is gone (`site-footer.tsx`), the now-unused `landing.footerDirectorate` message removed, and the landing test asserts the ministry is named and the directorate is not. Together with 2026-10-06's change this means no portal, auth or landing footer names the directorate. **Open, data not code:** «أكثر البرامج انضمامًا» prints stored titles, and 172 of the dev DB's 226 courses are generated test titles (`دورة xxxxxx`, e2e leftovers); all 10 of the demo student's enrolments are in those, and the 54 real-named courses are all DRAFT — so no real name can appear there until real courses are published, placed and enrolled in (or the generated ones are cleaned out). Needs a decision.
+
+### 2026-10-06 — Landing hero title now names impact measurement (uncommitted, branch `feature/admin-impact-measurement`)
+
+`landing.heroTitle` «منصة تمكين للتدريب والتطوير المهني» → **«منصة تمكين للتدريب والتطوير المهني وقياس الأثر»** (the sentence the user pointed at; the landing test follows). A first reading of the request as the portal footer was wrong and was **reverted** — the footer stays «وزارة الداخلية» alone. The hero body paragraph is unchanged and still tells the assigned-path model; if the title is to promise measurement, that paragraph may want one clause about it, which is the directorate's copy to sign off.
+
+### 2026-10-06 — «قياس الأثر» in one green; portal footer drops «الإدارة العامة للتدريب» (uncommitted, branch `feature/admin-impact-measurement`)
+
+At the user's request the readiness screen no longer uses red / amber / green for its three bands: **one green (`primary-600`), three depths** — the less ready, the paler — across the map fills (`/15 /40 /75`), the meters (`primary-200` with a hairline ring, `primary-600`, `primary-800`), the legend swatches and the priority tags (deepest = most urgent). The words (priority tag, the % printed on every region and beside every bar) still carry the meaning (WCAG 1.4.1); the «أرقام تجريبية» tag moved from `warning` to the inverse chip, and the "behind plan" / "worse" figures are neutral text instead of red. Verified live: the three bar colours are 27/131/84, 20/87/58 and 184/234/203, the map is one fill colour at three opacities. Also: the strip every portal and auth page ends on read «وزارة الداخلية · الإدارة العامة للتدريب»; it now reads **«وزارة الداخلية»** (`app-shell.tsx` and `auth-layout.tsx` together — the shell's own comment says they are the same strip). The landing page's footer, which names the directorate as the page's owner, is unchanged. Web suite 875/875.
+
+### 2026-10-06 — Admin course delete: a Moodle refusal no longer reads as «the platform is unreachable» (uncommitted, branch `feature/admin-impact-measurement`)
+
+Reported: deleting a course as admin showed «تعذّر الوصول إلى منصة التعلّم حاليًا». **Cause, verified against the live Moodle:** the integration token's external service exposes 11 functions and `core_course_delete_courses` is not one of them (`infra/moodle/moodle-setup.php` grants neither it nor `moodle/course:delete` — least privilege by design). Moodle answers `accessexception`; the transport maps that to `LmsUnavailableError('UNAUTHORISED')`, and `AdminCoursesService.remove` turned every `LmsUnavailableError` into `LMS_UNAVAILABLE` — Moodle was up and had said "no". **Fix:** `UNAUTHORISED` now becomes `COURSE_LMS_DELETE_FAILED` (a real outage — `UNREACHABLE` / `UNEXPECTED_RESPONSE` — still `LMS_UNAVAILABLE`); `COURSE_LMS_DELETE_FAILED` had **no Arabic message**, added to `ar.json` (points the admin to «سحب الدورة»). New `admin-courses.service.spec.ts` (7: LMS first / row second, refusal vs outage wording, audit, learner-held course never reaches the LMS). Live: `DELETE /api/admin/courses/:id` → 409 `COURSE_LMS_DELETE_FAILED`, course untouched. **Not done, needs a decision:** actually enabling deletion means adding `core_course_delete_courses` + `moodle/course:delete` to `moodle-setup.php` (widens the integration role) — and note deletion exists on the **admin** side only; the entity portal has no delete at all (publish / unpublish only).
+
+### 2026-10-04 — Admin sidebar: «قياس الأثر» under «الرئيسية» — branch `feature/admin-impact-measurement`
+
+The super-admin rail gains a ninth item, **«قياس الأثر»** (`/admin/impact`, `TrendingUp` icon), directly beneath «الرئيسية». The page renders the existing `ImpactTab` unchanged (participation and learning by period and department, TAM-149), so the **«الأثر» tab was removed from `/admin/audit`** rather than shown in two places (§3: no redundant UI) — the audit page now opens on «التقارير» and has two tabs (reports, trail). New `impact` nav icon; messages `nav.adminImpact`, `admin.impactTitle` added, `admin.auditTabImpact` removed.
+
+**Then reshaped like the dashboard (same day, at the user's direction).** `/admin/impact` now opens with `ImpactDashboard`: an **interactive Kingdom map** (new `InteractiveSaudiMap`, ported in spirit from the MOIA project's `BranchesMapPanel` — hover lifts a region, click/Enter/Space selects it, click again clears; each region is a real `button` with `aria-pressed`), **four totals** (users = employees + entity + admin accounts; published courses as «البرامج التدريبية»; all-time training hours via `adminApi.impact` over `2000-01-01…today`; entities total), and **«أكثر البرامج انضمامًا»** — top six courses by enrolments as proportional bars, from `reports.courseOutcomes`. The detailed TAM-149 analysis follows unchanged under «التحليل التفصيلي» with its own filters. No API change: composed from `dashboard`, `reports` and `impact`. **The map carries no regional figures** — nothing in the schema records a region (users have a directorate), so a selection names the region and says so; per-region numbers need a region on accounts first. `LABEL_PLACEMENT`/`LABEL_SIZE` exported from `saudi-map.tsx` to share label positions. Interpretation calls to confirm: «برامج» = published courses, «خطوط» = ranked bars rather than a time-series line chart.
+
+**Map rebuilt to match MOIA's panel** (same session): one card with a header («عرض كل المناطق» appears only once a region is chosen), the map with a cursor-following name tooltip, hover lift/shadow and a larger selected label, and a right-hand column that shows the four totals until a region is chosen and that region's gradient card after it. MOIA's region descriptions and branch links are *not* copied — they describe another ministry's mosques/dawah branches; the card names the region and says there are no per-region figures yet.
+
+**«أين وصل المتدربون»** (new `TraineeProgress`, below the programme bars, from `reports` — no API change): the journey funnel (assigned → placed → finished a path, each «N من M مُسنَد إليهم», em dash over an empty denominator), the achievements (courses passed, course certificates, paths completed) and per-path progress with the levels people were placed on. **Not built — needs a decision:** post-programme *outcomes* (where graduates went on to work, including abroad). Nothing in the schema records a destination, so any such section would be new data capture, not a report.
+
+**Page rebuilt to the proposal-deck layout (2026-10-06).** The top of `/admin/impact` is now the HTML mock-up the user supplied (slide 6 of «منصة تمكين — قياس الأثر»), in the platform's tokens: the **readiness view** (`ImpactReadiness`) — the target card, four KPIs (need met, gap, days left, pace vs plan), a **map shaded by readiness band** with each region's % printed on it, a priority ranking by gap size, need-met per job, a timeline (plan vs achieved, projected date) and the before/after performance indicators — followed by **«نشاط المنصة»** (real numbers: totals, most-joined programmes, journey funnel + achievements). The earlier MOIA-style region card and the per-path progress list are gone (the mock-up has neither). The TAM-149 analysis still follows under «التحليل التفصيلي». **The readiness half is illustrative**: it renders `SAMPLE_READINESS` (Civil Defense, invented figures) and every block is tagged «أرقام تجريبية» — the platform records no targets, no region/unit on an account and no field indicators yet (`apps/web/src/lib/impact-readiness.ts` holds the model and the pure calculations; swapping the sample for an API is the one seam). Dark KPI tile and amber/orange of the mock-up replaced by the card `edge` and status tokens (§3: dark neutral is the landing footer only). Catalogue rule honoured: legend thresholds are interpolated, never digits in `ar.json`.
+
+**Map made more interactive (2026-10-06).** `InteractiveSaudiMap` gains, as optional props the caller drives: a **rich tooltip** (`tooltip`, here: readiness %, qualified/target, gap, priority — no longer just the name, and shown on the selected region too), **linked hover** with the list beside it (`highlightId` / `onHoverChange`, so a hovered ranking row lights its region and the reverse, with keyboard focus treated like the pointer), **band filter** (`dimmed`) and **animated zoom to the selected region** (`zoomToSelected` + `resetLabel`: the viewBox glides to the region's `getBBox` framed in the map's own aspect ratio, never closer than 300 units, clipped only while zoomed, instant under `prefers-reduced-motion`, and a no-op where `getBBox` is absent). In the readiness card the ranking rows became buttons (hover lights, click selects and zooms) and the legend became a filter (choose a band → others fade, ranking narrows to it; again → lifts). Verified live: tooltip text, row→map highlight, select→zoom (Riyadh ≈ 662-wide frame, Al Bahah at the 300 minimum), reset, and the filter (11 regions faded, 2 rows left). The zoom animation uses `requestAnimationFrame`, which a hidden tab does not fire — it resumes on show; I verified the maths with a timer shim in the hidden Browser pane.
+
+**Verified:** typecheck + eslint + prettier clean; `admin-audit` + `admin-impact` + `admin-impact-dashboard` (10) + `interactive-saudi-map` (4) tests pass; live as admin — tiles, region selection and the progress section render. Earlier: `admin-audit` + `admin-impact` unit tests pass (47); full web unit suite 826/827 — the one failure (`entity-course-content`, D-115 resync) passes alone and on a clean HEAD, a timing flake. Live in the browser as admin: item second in the rail, page renders, no console errors beyond the pre-login 401s. `e2e/phase-5-admin.spec.ts` updated (nine destinations + order, impact via the new link, reports via the audit link) but **not run**.
+
+**Noticed, not fixed:** `admin.reportPathCounts` in `ar.json` interpolates `{chosen}`, but `audit/page.tsx` passes `assigned`, so each row of «المسارات الأكثر اختيارًا» logs an `IntlError` and shows the fallback. Pre-existing (D-134 renamed the field, the string was missed).
+
+**Dev environment:** Docker Desktop was off and was started; `.env` `RATE_LIMIT_ENABLED=false` added (gitignored) because dev-mode double-fired requests exceeded 120/min and every page showed «تعذّر تحميل البيانات» (429).
+
 ### 2026-09-17 (latest) — Landing page watermark: iterated on size live, then removed entirely
 
 Following straight on from the watermark fix below: once it actually rendered, walked through several size/opacity rounds live in the browser (0.12/85vmin default → 0.06/55vmin → 0.05/28vmin → 0.05/14vmin → 0.05/40vmin → 0.05/50vmin → 0.05/65vmin), each requiring its own `npm run build` + server restart since this app runs via `next start`, not `next dev`. User's final call: remove it from the landing page entirely. `AboutSection` no longer imports or renders `PageWatermark` and its `section#about` lost the `relative isolate overflow-hidden` classes that existed only to contain it — back to a plain section. `PageWatermark` itself lost the `sizeClassName` prop added for this experiment (now unused anywhere); kept `opacityClassName`, which predates this session. The mark still exists globally (mounted once in `app/layout.tsx`, unaffected) and still shows correctly on auth pages — only the landing page's `AboutSection` usage was reverted. **If a watermark is ever wanted on the landing page again, the stacking-context bug and its `isolate` fix documented in the entry below still apply** — re-add `<PageWatermark />` inside a section carrying `relative isolate` and it will render correctly from the first try.
@@ -1313,3 +1353,159 @@ that borrowed a seeded published path now build their own, because borrowing one
 made their ordering decide whether the journey suite passed.
 
 **Next:** the user's test → PR (never merge).
+
+---
+
+## Certificate: the Hijri date printed «هـ» twice
+
+The issue date read «27 ربيع الآخر 1448 هـ هـ». `Intl` (ICU 76) already ends an
+Arabic Hijri date with «هـ», and the template appended a second one. The
+Gregorian side was never affected: its formatter adds no era, so the «م» is ours.
+
+`certificate-template.ts` now passes the Hijri string through `withHijriEra`,
+which strips a trailing «هـ» if present and adds exactly one — right on ICU
+builds that emit the era and on older ones that do not. The spec gains a test on
+the two `date-value` lines themselves (one «هـ», one «م»); the old
+`toContain('… 1448 هـ')` assertion was satisfied by the duplicate.
+
+**Already-issued certificates keep the duplicate** — their bytes are stored
+immutably (D-052). Only certificates issued from now on are fixed.
+
+---
+
+## Admin course deletion works against the real Moodle (D-135)
+
+The delete dialog's refusal («لم تُحذف الدورة: … لا يملك صلاحية حذف الدورات») was
+the integration role lacking `moodle/course:delete` and the service lacking
+`core_course_delete_courses`. Both added to `infra/moodle/moodle-setup.php` and applied
+to the local container by re-running it (36 capabilities, 12 functions; token reused,
+nothing printed). Probe with a non-existent id now answers with Moodle's
+`unknowncourseidnumber` warning instead of an access exception — the adapter treats
+that as an idempotent success. **Not exercised on a real course** (that would delete
+one). Other environments must re-run the setup script.
+
+---
+
+## Certificate preview for a real employee and path; audit-report line fixed (2026-10-11)
+
+**Preview.** `/admin/templates` gains a search-and-pick for an employee and a pick for a path above the
+preview; `GET /api/admin/certificate-template?userId=&pathId=` (UUIDs, both optional, 400 on a malformed one,
+404 on an unknown one) renders the real template for them, otherwise the sample. Only the name is read from
+the account. Nothing is stored, issued or sent — the hint says so. Reverses the old «sample data only» comment on
+the preview, by the user's choice (picking real employee + path, not free text).
+
+**Plural form.** The path certificate printed «٢٦ دورات»; the noun now follows the Arabic rule (1 دورة واحدة,
+2 دورتين, 3-10 دورات, 11+ دورة) — assigned paths are fixed sets of any size, no longer 5-10.
+
+**Audit report.** `reportPathCounts` asked for `{chosen}` but the page passes `assigned` → next-intl
+FORMATTING_ERROR and a blank row. Message is now «أُسند إلى {assigned} · أكمله {completed}», with a test on the text.
+
+**Incident, recorded for honesty.** While running a check I ran `git checkout -- messages/ar.json`, which discarded
+the file's uncommitted edits (readiness/live-platform messages, the delete-refusal message, the hero title with
+«وقياس الأثر», the footer-line removals, «بيانات التوقيع»). Restored by replaying every ar.json edit recorded in
+the session transcript since commit b913f58; full web suite 876/876 and typecheck clean afterwards. Anything the
+user typed into ar.json by hand in that window, outside this session, could not be replayed.
+
+---
+
+## Empty date fields no longer print a garbled placeholder (2026-10-18)
+
+Chrome draws an empty native date field's placeholder in an Arabic page with each word's letters reversed and the order flipped
+(«ةنس/رهش/موي»). One rule in `globals.css` makes the text transparent while a date input is empty and not focused
+(`input[type='date'][value='']:not(:focus)::-webkit-datetime-edit`); the calendar icon and the label stay, and a chosen date
+or a focused field draws normally. Covers every date input (audit, courses, impact). Checked in the browser with an injected field.
+
+---
+
+## Generated «دورة <hex>» courses removed; sector paths added (2026-10-18)
+
+Deleted all 172 generated «دورة xxxxxx» courses and the three «دورة الاختبار NNNNNN» drafts through the admin API (LMS first, row second).
+150 went straight; 22 were refused (COURSE_IN_USE) because the test student (student@ministry.gov.example) held an empty completion
+row on each (none passed/completed/graded) and 10 enrolments — those 22 completion rows and 10 enrolments were deleted directly in one
+transaction, then the courses deleted through the API. Courses left: 57, none with Latin letters or digits in the title.
+
+Added (all DRAFT except the last): paths «الأمن العام والمرور», «حرس الحدود», «الخدمات الحكومية» (3 courses each, unplaced, no levels/assessment);
+entity «السجون» with path «إدارة المرافق والتأهيل» (3 courses owned by it, levels + assessment already in place) — its courses and the path were published
+so it can be assigned. Course/path descriptions are placeholders. Still junk-looking but kept (not matching the request): «دورة الحد» ×4,
+«دورة متزامنة» ×4, «دورة تجريبية لالتقاط لقطات الدليل», «للمسار التجريبي بعد التعديل».
+
+---
+
+## Admin can add a course to a path from the path screen (2026-10-18)
+
+The admin path editor (D-134) had no way to put a course INTO a path — the picker went when attach moved to the entity — so a path whose
+courses an admin wanted to add could only be fed by an entity or the API. `AddCourseControl` (path-editor.tsx) is one field with suggestions
+(API `attachableCourses`, debounced) + «إضافة الدورة» shown only once a suggestion is chosen; it calls `attachPathCourse` and the course lands
+UNASSIGNED in the amber work queue, where the existing rung selector places it. No API change. 3 new tests in admin-path-editor.test.tsx.
+
+Also: the employee picker in the certificate preview is now ONE field with suggestions (was a search box beside a list).
+
+---
+
+## Admin dashboard: the proposal's layout over the SAME information (2026-10-21)
+
+`/admin` now follows admin_dashboard_redesign_proposal.html in presentation only: the platform status line sits in the title row (AdminPage `action`),
+then a «يحتاج إجراءً منك» box (courses on no level, employees with no path, paths with no published assessment — each with the screen that clears it;
+not drawn when nothing waits), four tiles with icons (employees + suspended note, active entities, active paths, published courses + drafts note), and
+«مسار الموظفين» as bars. NOTHING was removed: the per-path picture, the activity list and the full «حالة التكامل» (name, address, both sync times) follow
+unchanged. Only `apps/web/src/app/(admin)/admin/page.tsx`, the dashboard test, the ICU-aware check in `i18n/messages.test.ts` and the new messages changed.
+
+An earlier attempt dropped those three sections and was reverted at the user's request; the first redesign pass also briefly changed wording «التعلّم»,
+which is back to the original «التعلم».
+
+---
+
+## «قياس الأثر»: two blocks re-presented, same information (2026-10-21)
+
+- **الاتجاه الشهري** (`impact-tab.tsx`): twelve rows of thin bars became a column chart — months along the axis (oldest at the start edge), passes and certificates
+  as two columns per month on a shared baseline, faint quarter rules, numbers above each bar and again in words for screen readers; scrolls sideways on narrow screens.
+- **الأثر في الأداء** (`impact-readiness.tsx`): the table became one card per indicator — before → after side by side, both drawn as bars on one scale, and the change
+  as a pill with its sign and its word (تحسّن / تراجع). The test now reads a labelled list instead of a table.
+No figure was removed from either.
+
+- **الاتجاه الشهري** now draws a plausible twelve-month rise (`SAMPLE_TREND` in impact-tab.tsx) while every real month is zero, tagged «أرقام تجريبية» beside the title and
+  explained under the chart; any real figure replaces it whole (never mixed), and no totals or «busiest month» are claimed for invented numbers. Notes added under the legend
+  («how to read») and, with real data, the twelve-month total and the busiest month.
+
+---
+
+## «الحسابات»: each kind of account in its own section (2026-10-21)
+
+`/admin/users` now draws three sections — «الموظفون», «الجهات», «المشرفون» — each with its icon, a count badge and its own table (a kind with nobody on the page is not drawn).
+`GET /api/admin/users` orders by role then newest first (`orderBy: [{ role: 'asc' }, { createdAt: 'desc' }]`; the enum is declared EMPLOYEE, ENTITY, SUPER_ADMIN), so a group does not
+split across pages out of order. The count on a heading is that kind's rows on the CURRENT page, not its total. No column or filter was removed. 3 new tests in admin-users.test.tsx.
+
+- **Order changed at the user's request:** «الجهات» first, then «المشرفون», then «الموظفون». The API no longer sorts by the role column (enum order is EMPLOYEE, ENTITY, SUPER_ADMIN);
+  `AdminUsersService.list` counts each kind (`KIND_ORDER`) and cuts the page from the three kinds laid end to end, newest first inside each. Checked live with pageSize=3 across four pages.
+
+- **Revised on the user's direction:** the kinds are no longer three tables. «الحسابات» is ONE table again, with a full-width band row per kind (الجهات ← المشرفون ← الموظفون) — green `#067647`
+  (the `success` token, the swatch the user supplied) with white text, slim (`py-1`), the kind's icon and its row count on the page. Each band is a `th scope="rowgroup"` so a screen reader names the kind.
+
+---
+
+## «الدورات» by supplier and path state; «الحسابات»: department, no role change for an employee, delete (2026-10-21)
+
+- **Courses (`/admin/courses`)**: still one table. A green band (`bg-success`, white text) names each supplier with its count; under it a quieter band says «مُسندة إلى مسار» or
+  «غير مُسندة إلى مسار» (the second is the work queue). `AdminCoursesService.list` orders by supplier name (unowned last), then courses in a path before those in none, then title.
+- **Employee in the manage panel**: no role control (an employee stays an employee). The department is a drop-down of `DEPARTMENTS` (+ the account's own value if it predates the list) with «حفظ الإدارة»
+  shown only once changed → new `PATCH /api/admin/users/:id/department` (audited `ADMIN_USER_DEPARTMENT_CHANGED`, from/to). Entity and administrator accounts keep the role control.
+- **Delete an account** (`DELETE /api/admin/users/:id`, button «حذف الحساب» beside «إيقاف الحساب», behind a confirmation): refused for yourself, the last active administrator, and any account that holds certificates
+  (they cascade — a credential must not vanish; `refuseDeletion`, 7 tests). Everything else cascades. Audited `ADMIN_USER_DELETED` (role only, no personal data). The LMS account is NOT deleted (no capability).
+  New shared audit vocabulary rebuilt into `packages/types/dist` (the API reads the built package).
+
+---
+
+## Admin: role removed from «إدارة»; «السجل والتقارير» removed; «التقييم» re-laid-out (2026-10-21)
+
+- **Role** is decided only when an account is created: the manage panel no longer has a role/entity control for ANY account, and the API's `PATCH /admin/users/:id/role`, `AdminUsersService.setRole`,
+  `refuseRoleChange` (+ its tests and the 3 e2e tests) are gone. History keeps `ADMIN_USER_ROLE_CHANGED` in the vocabulary so old audit rows still read.
+- **«السجل والتقارير»** is gone from the admin sidebar and the page `/admin/audit` + its test and the browser tests that walked it were deleted. The audit log itself is untouched:
+  every action is still recorded and `GET /api/admin/audit`, `/reports` and the CSV endpoints still exist (the impact page still reads `/reports`).
+  CLAUDE.md §4C.8 still lists an Audit & Reports screen — revisit if the ministry wants a way to read the trail.
+- **«التقييم»** (presentation only; every figure, control and rule kept): the editor shows its header beside the readiness panel, then ONE TINTED COLUMN PER RUNG with a count and a + that adds a question
+  already aimed at that rung (a final column holds questions aimed at none). Each question keeps its full editor; the arrows move it among its own rung's questions (the bank order stays one order).
+  The overview shows the live version and the edit decision beside the retired versions' history.
+- **«التقييمات» shelf** (`/admin/assessment`) is a grid of cards: an icon, the path's name large, its two small state badges, and a band at the foot saying whether it has a published assessment (warning band + words when it does not).
+
+- **«المسارات» — the road of a path's courses**: pressing a path's NAME opens a winding road beneath its card (`components/admin/path-roadmap.tsx`) — the levels in order, each level's courses in the order an employee meets them, four to a stretch, the stretches turning back on one another. A filled start dot («البداية») opens the road and small chevrons between the courses point the way it runs (RTL: left on the first stretch, right on the returning one). Courses in the path but on no level are named underneath. The list and «إدارة» are unchanged; the path is fetched with `getPath` only once opened. Tests in `admin-paths.test.tsx`.
+- **«الدورات» (§4C.5)** is now a grid of cards in the assessment shelf's shape (icon, name large, paths, status badge + reason, availability, held count, and a foot band reading «الجهة: <name>» with «إدارة»); the green supplier bands and the in-path / in-none labels stay. The dashboard's «يحتاج إجراءً منك» box moved to `components/admin/needs-action.tsx` and is shown at the top of this page as well (same figures from `adminApi.dashboard()`; absent when nothing waits or the figures cannot be had).

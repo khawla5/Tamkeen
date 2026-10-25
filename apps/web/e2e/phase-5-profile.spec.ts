@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { PASSWORD, signedInEmployee, type Account } from './account';
+import { assignSeededPath } from './admin-fixtures';
+import { seedPassedCourseCertificate } from './certificate-fixtures';
+import { completeAssessment } from './journey';
 import { assertMailpitReachable, tokenFromEmail } from './mailpit';
 
 /**
@@ -38,6 +41,17 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
 
     here = await browser.newPage();
     account = await signedInEmployee(here, 'profile');
+
+    /* A number to look at. A fresh employee's screens carry none (D-134 moved the
+       counters onto a placed learner's own path), so the account is given a path,
+       placed, and one earned certificate — whose issue date is the number the
+       digits tests below read on the certificates page. */
+    await assignSeededPath(account.email);
+    await here.goto('/');
+    await here.getByRole('link', { name: 'ابدأ التقييم' }).click();
+    await completeAssessment(here);
+    await expect(here).toHaveURL(/\/paths\/[0-9a-f-]+$/, { timeout: 15_000 });
+    await seedPassedCourseCertificate(account.email);
     movedEmail = account.email.replace('@', '-moved@');
 
     /* A second context, not a second tab: separate cookie jars are what make
@@ -170,15 +184,18 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
 
     /*
      * The proof that the preference reaches rendering rather than merely being
-     * stored. The assessment counter is a long way from the control that set
-     * it, and it goes through D-018's switch point like every other number.
+     * stored. The certificate's issue date is a long way from the control that
+     * set it, and it goes through D-018's switch point like every other number.
      *
      * This is also the assertion that would have caught the `'arabic'` /
      * `'arabic-indic'` drift from a browser: the save returned 400 and the page
      * would have kept rendering Western digits.
      */
-    await here.goto('/assessment');
-    await expect(here.getByText('السؤال ١ من ٣٠')).toBeVisible({ timeout: 15_000 });
+    await here.goto('/certificates');
+    const issued = here.getByText(/^صدرت في /);
+    await expect(issued).toBeVisible({ timeout: 15_000 });
+    await expect(issued).toHaveText(/[٠-٩]/);
+    await expect(issued).not.toHaveText(/[0-9]/);
   });
 
   test('and going back to the system default restores them', async () => {
@@ -190,8 +207,11 @@ test.describe('Phase 5 — the profile (§4.12)', () => {
     /* "Follow the system" is a real third option, not a null dressed up: it
        means whatever §4C.6 has set applies, so somebody who never expressed a
        preference is not pinned to the default of the day they registered. */
-    await here.goto('/assessment');
-    await expect(here.getByText('السؤال 1 من 30')).toBeVisible({ timeout: 15_000 });
+    await here.goto('/certificates');
+    const issued = here.getByText(/^صدرت في /);
+    await expect(issued).toBeVisible({ timeout: 15_000 });
+    await expect(issued).toHaveText(/[0-9]/);
+    await expect(issued).not.toHaveText(/[٠-٩]/);
   });
 
   test('§4.12 — asking to change the address changes nothing yet', async () => {

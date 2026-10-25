@@ -103,7 +103,7 @@ test.describe('Phase 5 — assessment management (D-134)', () => {
   });
 
   test('a newly added question blocks publish, in Arabic, until it has an answer', async () => {
-    await adminPage.getByRole('button', { name: 'إضافة سؤال' }).click();
+    await adminPage.getByRole('button', { name: 'إضافة سؤال', exact: true }).click();
 
     const dialog = adminPage.locator('dialog');
     await dialog.getByLabel('نص السؤال').fill('ما هي الخطوة الأولى عند استلام شكوى من متعامل؟');
@@ -129,7 +129,12 @@ test.describe('Phase 5 — assessment management (D-134)', () => {
     const lastQuestion = adminPage.locator('ol > li').last();
     await lastQuestion.getByRole('button', { name: 'عرض الخيارات' }).click();
 
-    await lastQuestion.getByRole('radio', { name: 'الإجابة الصحيحة' }).first().check();
+    /* `check()` insists the box changes state the instant it is clicked; this
+       radio is controlled by the saved draft, so it changes when the server has
+       answered. Click, then wait for it. */
+    const correct = lastQuestion.getByRole('radio', { name: 'الإجابة الصحيحة' }).first();
+    await correct.click();
+    await expect(correct).toBeChecked();
 
     await expect(adminPage.getByText('البنك متوازن وجاهز للنشر.')).toBeVisible();
     await expect(adminPage.getByRole('button', { name: 'نشر الإصدار' })).toBeEnabled();

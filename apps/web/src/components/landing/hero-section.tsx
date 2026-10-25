@@ -16,6 +16,13 @@ const BACKGROUND_PHOTOS = [
 
 const ROTATION_MS = 8000;
 
+/** How wide the copy may be. It keeps the 42rem measure it was written for, but
+ *  from `lg` never more than what is left beside the map — a fixed 42rem ran
+ *  under the map on a 1024–1400px screen, and a region label printed over a
+ *  word of the paragraph. `30rem` is the map's column plus the gap and the
+ *  page's own padding. */
+const COPY_WIDTH = 'max-w-2xl lg:max-w-[min(42rem,calc(100vw-30rem))]';
+
 /**
  * The hero of a government front page: who this is for and what it does —
  * one sentence in the ministry's own register, telling the assigned-path
@@ -59,7 +66,7 @@ export function HeroSection() {
   }, []);
 
   return (
-    <section className="relative overflow-hidden bg-primary-deep text-surface lg:min-h-[24rem]">
+    <section className="relative overflow-hidden bg-primary-deep text-surface lg:min-h-[26rem]">
       {/* The ministry headquarters, behind a dark tint that keeps the white
           text at the contrast ratio D-069's palette work already measured —
           the photo reads as texture, not as a background the copy competes
@@ -89,8 +96,8 @@ export function HeroSection() {
           ON so the regions' hover treatment (globals.css `.map-region`)
           actually fires; the text overlay above is made click-through
           instead. */}
-      <div className="absolute inset-y-0 end-0 hidden w-[32rem] items-center justify-end lg:flex">
-        <div className="flex w-full max-w-md flex-col items-center rounded-2xl p-6">
+      <div className="absolute inset-y-0 end-0 hidden w-[28rem] items-center justify-end lg:flex xl:w-[32rem]">
+        <div className="flex w-full max-w-sm flex-col items-center rounded-2xl p-6 xl:max-w-md">
           <SaudiMap />
         </div>
       </div>
@@ -105,11 +112,15 @@ export function HeroSection() {
           it spans the map too, so it goes `lg:pointer-events-none` (the map's
           hover lives beneath it) while the text itself stays selectable. */}
       <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start px-4 py-16 text-start sm:px-6 sm:py-20 lg:pointer-events-none lg:absolute lg:inset-0 lg:justify-center lg:py-0">
-        <h1 className="pointer-events-auto max-w-2xl text-5xl font-extrabold leading-tight text-surface sm:text-6xl">
+        <h1
+          className={`pointer-events-auto ${COPY_WIDTH} text-5xl font-extrabold leading-tight text-surface sm:text-6xl lg:text-5xl xl:text-6xl`}
+        >
           {t('heroTitle')}
         </h1>
 
-        <p className="pointer-events-auto mt-6 max-w-2xl text-xl leading-relaxed text-primary-50">
+        <p
+          className={`pointer-events-auto mt-6 ${COPY_WIDTH} text-xl leading-relaxed text-primary-50`}
+        >
           {t('heroBody')}
         </p>
       </div>

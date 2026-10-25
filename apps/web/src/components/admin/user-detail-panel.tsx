@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import { type AdminUserDetail, type UserRole } from '@tamkeen/types';
+import { type AdminUserDetail } from '@tamkeen/types';
 
 import { AdminDialog } from '@/components/admin/admin-dialog';
 import { useErrorMessage } from '@/components/auth/use-error-message';
@@ -13,10 +13,11 @@ import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { useFormat } from '@/i18n/format-provider';
 import { adminApi } from '@/lib/api-client';
+import { DEPARTMENTS } from '@/lib/auth-constants';
 import { useApiQuery } from '@/lib/use-api';
 
 /**
- * §4C.2 — one account: where they are, and the two decisions available.
+ * §4C.2 — one account: where they are, and what can be done with it.
  *
  * **The journey is a summary, not a copy of the learner's screens.** The Holland
  * Code without the six scores, progress without the course list, a certificate
@@ -25,12 +26,17 @@ import { useApiQuery } from '@/lib/use-api';
  * implementations of what "complete" means and would put a colleague's training
  * record on a screen that did not need it.
  *
- * Both decisions can be refused by the server — an administrator cannot change
- * their own role, cannot remove the last active administrator, and cannot
- * convert a learner who already holds a result or a certificate. The refusal is
- * shown as it is returned rather than pre-empted by hiding the control: a
- * disabled button with no explanation teaches nothing, and the rules are the
- * server's to enforce in any case.
+ * **The role is not here, and that is deliberate.** An account's role is decided
+ * once, when it is created; changing it afterwards is not a thing this screen
+ * does for anybody. What it offers is an employee's department, suspending and
+ * reactivating, re-sending an invitation, and deleting.
+ *
+ * Suspending and deleting can be refused by the server — an administrator cannot
+ * act on their own account, cannot remove the last active administrator, and
+ * cannot delete an account that holds certificates. The refusal is shown as it is
+ * returned rather than pre-empted by hiding the control: a disabled button with
+ * no explanation teaches nothing, and the rules are the server's to enforce in
+ * any case.
  */
 export function UserDetailPanel({
   userId,
@@ -54,6 +60,12 @@ export function UserDetailPanel({
               detail.refetch();
               onChanged();
             }}
+            onDeleted={() => {
+              /* The list behind the panel is stale, and the panel has no subject
+                 any more — so refresh the one and close the other. */
+              onChanged();
+              onClose();
+            }}
           />
         ) : null}
       </DataView>
@@ -61,21 +73,33 @@ export function UserDetailPanel({
   );
 }
 
-function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => void }) {
+function Body({
+  user,
+  onChanged,
+  onDeleted,
+}: {
+  user: AdminUserDetail;
+  onChanged: () => void;
+  onDeleted: () => void;
+}) {
   const t = useTranslations('admin');
   const format = useFormat();
   const translateError = useErrorMessage();
 
-  const [role, setRole] = useState<UserRole>(user.role);
-  const [entityId, setEntityId] = useState(user.entity?.id ?? '');
+  /* An employee's one editable fact is where they work, so the department is the
+     decision this section makes for them. */
+  const isEmployee = user.role === 'EMPLOYEE';
+  const [department, setDepartment] = useState(user.department);
+  /* The list the registration form offers, plus the account's own department if it
+     predates the list — dropping it would make the select lie about where the
+     person is. */
+  const departments = DEPARTMENTS.includes(user.department)
+    ? DEPARTMENTS
+    : [user.department, ...DEPARTMENTS];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
-
-  const entities = useApiQuery(
-    () => (role === 'ENTITY' ? adminApi.listEntities() : Promise.resolve([])),
-    [role],
-  );
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   async function run(action: () => Promise<unknown>, message: string) {
     setError(null);
@@ -130,65 +154,52 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
       {user.role === 'EMPLOYEE' ? <AssignmentsSection user={user} busy={busy} run={run} /> : null}
 
       <section className="flex flex-col gap-3 rounded-md border border-border p-4">
-        <h3 className="text-sm font-semibold text-foreground">{t('roleHeading')}</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          {isEmployee ? t('departmentHeading') : t('accountStatusHeading')}
+        </h3>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field id="detail-role" label={t('columnRole')}>
-            {(field) => (
-              <select
-                {...field}
-                value={role}
-                onChange={(event) => setRole(event.target.value as UserRole)}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="EMPLOYEE">{t('roleEmployee')}</option>
-                <option value="ENTITY">{t('roleEntity')}</option>
-                <option value="SUPER_ADMIN">{t('roleAdmin')}</option>
-              </select>
-            )}
-          </Field>
-
-          {role === 'ENTITY' ? (
-            <Field id="detail-entity" label={t('columnEntity')}>
+        {isEmployee ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field id="detail-department" label={t('columnDepartment')}>
               {(field) => (
                 <select
                   {...field}
-                  value={entityId}
-                  onChange={(event) => setEntityId(event.target.value)}
+                  value={department}
+                  onChange={(event) => setDepartment(event.target.value)}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  <option value="">{t('chooseEntity')}</option>
-                  {(entities.data ?? []).map((entity) => (
-                    <option key={entity.id} value={entity.id}>
-                      {entity.name}
+                  {departments.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
                     </option>
                   ))}
                 </select>
               )}
             </Field>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              run(
-                () => adminApi.setUserRole(user.id, role, role === 'ENTITY' ? entityId : undefined),
-                t('roleChanged'),
-              )
-            }
-          >
-            {t('applyRole')}
-          </Button>
+          {/* Offered only once the department has been changed (§3). */}
+          {isEmployee && department !== user.department ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                run(() => adminApi.setUserDepartment(user.id, department), t('departmentChanged'))
+              }
+            >
+              {t('applyDepartment')}
+            </Button>
+          ) : null}
 
           {user.status === 'ACTIVE' ? (
             <Button
               type="button"
-              variant="destructive"
+              variant="outline"
               disabled={busy}
+              className="border-danger text-danger hover:bg-danger-50"
               onClick={() =>
                 run(() => adminApi.setUserStatus(user.id, 'SUSPENDED'), t('accountSuspended'))
               }
@@ -207,6 +218,20 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
               {t('reactivateAccount')}
             </Button>
           )}
+
+          {/* The solid red is the one that cannot be undone: the account and its
+              records are removed (suspending is the outlined red beside it, and
+              reversible). The step beyond suspending.
+              A confirmation stands in front of it, and the server refuses what must
+              not go (yourself, the last administrator, a holder of certificates). */}
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={busy}
+            onClick={() => setConfirmingDelete(true)}
+          >
+            {t('deleteAccount')}
+          </Button>
 
           {/* Only for an account that has never been activated. Re-inviting one
               that has is a password reset, and the server refuses it as such. */}
@@ -233,7 +258,70 @@ function Body({ user, onChanged }: { user: AdminUserDetail; onChanged: () => voi
           </p>
         ) : null}
       </section>
+
+      {confirmingDelete ? (
+        <ConfirmDeleteAccountDialog
+          user={user}
+          onClose={() => setConfirmingDelete(false)}
+          onDeleted={onDeleted}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function ConfirmDeleteAccountDialog({
+  user,
+  onClose,
+  onDeleted,
+}: {
+  user: AdminUserDetail;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const t = useTranslations('admin');
+  const translateError = useErrorMessage();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setError(null);
+    setBusy(true);
+
+    try {
+      await adminApi.deleteUser(user.id);
+      onDeleted();
+    } catch (caught) {
+      /* Shown here rather than swallowed: the likeliest refusals are the ones the
+         server exists to make — yourself, the last administrator, an account
+         that holds certificates — and its answer names which. */
+      setError(translateError(caught));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AdminDialog
+      title={t('deleteAccountTitle')}
+      description={user.fullName}
+      onClose={onClose}
+      footer={
+        <Button type="button" variant="destructive" disabled={busy} onClick={() => void submit()}>
+          {t('deleteAccountConfirm')}
+        </Button>
+      }
+    >
+      <p className="text-sm text-muted-foreground">{t('deleteAccountBody')}</p>
+      {user.hasLmsAccount ? (
+        <p className="text-sm text-muted-foreground">{t('deleteAccountLms')}</p>
+      ) : null}
+
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </AdminDialog>
   );
 }
 

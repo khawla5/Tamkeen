@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -29,7 +32,7 @@ import {
   AdminUserQueryDto,
   CreateAdminEntityDto,
   CreateAdminUserDto,
-  SetUserRoleDto,
+  SetUserDepartmentDto,
   SetUserStatusDto,
   UpdateAdminEntityDto,
 } from './admin.dto';
@@ -110,14 +113,26 @@ export class AdminUsersController {
     return this.users.setStatus(userId, dto.status, actor.id, request.ip ?? null);
   }
 
-  @Patch('users/:id/role')
-  setRole(
+  /** Deletes the account for good; suspending is the reversible alternative. */
+  @Delete('users/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeUser(
     @CurrentUser() actor: AuthenticatedUser,
     @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) userId: string,
-    @Body() dto: SetUserRoleDto,
+    @Req() request: Request,
+  ): Promise<void> {
+    return this.users.remove(userId, actor.id, request.ip ?? null);
+  }
+
+  /** An account's department, and nothing else about it. */
+  @Patch('users/:id/department')
+  setDepartment(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) userId: string,
+    @Body() dto: SetUserDepartmentDto,
     @Req() request: Request,
   ): Promise<AdminUserRow> {
-    return this.users.setRole(userId, dto.role, dto.entityId ?? null, actor.id, request.ip ?? null);
+    return this.users.setDepartment(userId, dto.department.trim(), actor.id, request.ip ?? null);
   }
 
   @Get('entities')

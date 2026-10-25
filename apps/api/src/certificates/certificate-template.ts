@@ -36,6 +36,34 @@ const MUTED = '#6C727E';
 
 const HIJRI: FormatContext = { ...DEFAULT_FORMAT_CONTEXT, calendar: 'islamic-umalqura' };
 
+/**
+ * The Hijri date with «هـ» exactly once.
+ *
+ * Current ICU ends an Arabic Hijri date with «هـ» itself (`27 ربيع الآخر 1448 هـ`)
+ * and older builds do not, so a template that always appended the mark printed
+ * «هـ هـ» on one runtime and the right thing on the other. The mark is stripped
+ * if present and added back, which is correct on both. The Gregorian side needs
+ * no such care: its formatter never adds an era, and «م» is ours to append.
+ */
+function withHijriEra(formatted: string): string {
+  return `${formatted.replace(/\s*هـ\s*$/u, '')} هـ`;
+}
+
+/**
+ * «دورة واحدة» · «دورتين» · «٣ دورات» … «١٠ دورات» · «١١ دورة».
+ *
+ * The noun follows the number in Arabic: three to ten take the plural, and from
+ * eleven it returns to the singular. A path used to be five to ten courses, so
+ * «دورات» was always right; assigned paths are fixed sets of any size, and
+ * «٢٦ دورات» on a credential is an error a reader will see.
+ */
+function coursesPhrase(count: number): string {
+  if (count === 1) return 'دورة واحدة';
+  if (count === 2) return 'دورتين';
+
+  return count >= 3 && count <= 10 ? `${formatNumber(count)} دورات` : `${formatNumber(count)} دورة`;
+}
+
 export interface CertificateTemplateInput {
   type: 'COURSE' | 'PATH';
   holderName: string;
@@ -98,7 +126,7 @@ export function renderCertificateHtml(input: CertificateTemplateInput): string {
 
   const context = isPath
     ? input.courseCount !== null
-      ? `باجتياز ${formatNumber(input.courseCount)} دورات ضمن المسار`
+      ? `باجتياز ${coursesPhrase(input.courseCount)} ضمن المسار`
       : ''
     : input.pathName !== null
       ? `ضمن ${escapeHtml(input.pathName)}`
@@ -216,7 +244,7 @@ html, body {
       <div>
         <div class="date-label">تاريخ الإصدار</div>
         <!-- Both calendars on the face (Q3), both from format.ts. -->
-        <div class="date-value">${formatDate(input.issuedAt, HIJRI)} هـ</div>
+        <div class="date-value">${withHijriEra(formatDate(input.issuedAt, HIJRI))}</div>
         <div class="date-value">${formatDate(input.issuedAt)} م</div>
       </div>
 

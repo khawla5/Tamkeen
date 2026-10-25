@@ -93,9 +93,7 @@ export class AdminPathAssignmentsService {
     /* A REVOKED row is a past decision, not a current hold — reassigning
        reactivates the same row (the unique pair allows no other way) rather
        than being told the path is "already assigned". */
-    const toReactivate = employees.filter(
-      (row) => existingByUser.get(row.id) === 'REVOKED',
-    );
+    const toReactivate = employees.filter((row) => existingByUser.get(row.id) === 'REVOKED');
     const toCreate = employees.filter((row) => !existingByUser.has(row.id));
     const alreadyHeld = employees.length - toReactivate.length - toCreate.length;
 

@@ -142,6 +142,18 @@
   }
 
   /*
+   * An empty native date field prints its own placeholder («يوم/شهر/سنة»), and in
+   * an Arabic page Chrome draws it with each word's letters reversed and the
+   * order flipped — it reads as garbage. While the field is empty and not being
+   * edited the text is made transparent (the label above names the field and the
+   * calendar icon stays); the moment it is focused or holds a date, it is drawn
+   * normally. Applies to every date input, so no screen has to remember it.
+   */
+  input[type='date'][value='']:not(:focus)::-webkit-datetime-edit {
+    color: transparent;
+  }
+
+  /*
    * Native <select> popups on Windows Chrome are drawn outside the page's
    * renderer, where a page-loaded web font does not exist — options set in
    * the self-hosted Plex Arabic rendered as blank rows. A system stack the

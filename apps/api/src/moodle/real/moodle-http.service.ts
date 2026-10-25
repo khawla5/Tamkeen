@@ -528,9 +528,11 @@ export class MoodleHttpService implements LmsPort {
   /**
    * Deletes a course (§4C.5, TAM-134).
    *
-   * **`core_course_delete_courses` needs `moodle/course:delete` on the
-   * integration role** — a capability the least-privilege role of §5.1 does not
-   * have today. Until it is granted the call fails and the administrator sees
+   * **`core_course_delete_courses` needs both the function on the external
+   * service and `moodle/course:delete` on the integration role** — the
+   * least-privilege role of §5.1 was widened by exactly these two for the
+   * administrator's delete (infra/moodle/moodle-setup.php, D-135). On an
+   * environment set up before that, the call fails and the administrator sees
    * the refusal rather than a half-done deletion, which is the right way round:
    * our row is only removed after this resolves.
    *

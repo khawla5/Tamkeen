@@ -34,7 +34,6 @@ export function SiteFooter() {
           </div>
           <div className="text-sm leading-relaxed">
             <p className="font-semibold text-surface">{tApp('ministry')}</p>
-            <p>{t('footerDirectorate')}</p>
             <p className="mt-2 text-primary-100">{t('footerAbout')}</p>
           </div>
         </div>

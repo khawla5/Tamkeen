@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AdminPathRow } from '@tamkeen/types';
+import type { AdminPathCourseRow, AdminPathDetail, AdminPathRow } from '@tamkeen/types';
 
 import { renderWithProviders } from '@/test/render';
 
@@ -27,6 +27,7 @@ import { renderWithProviders } from '@/test/render';
 const api = vi.hoisted(() => ({
   listPaths: vi.fn(),
   createPath: vi.fn(),
+  getPath: vi.fn(),
 }));
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
@@ -79,6 +80,172 @@ function row(overrides: Partial<AdminPathRow> = {}): AdminPathRow {
 beforeEach(() => {
   vi.clearAllMocks();
   api.listPaths.mockResolvedValue([row()]);
+});
+
+function pathCourse(
+  id: string,
+  title: string,
+  overrides: Partial<AdminPathCourseRow> = {},
+): AdminPathCourseRow {
+  return {
+    id,
+    courseId: `c-${id}`,
+    moodleCourseId: 1,
+    title,
+    status: 'AVAILABLE',
+    placement: 'PLACED',
+    levelId: 'l1',
+    position: 1,
+    ownerEntityName: null,
+    assignedByEntityName: null,
+    assignedAt: '2026-08-01T00:00:00.000Z',
+    learnersStarted: 3,
+    ...overrides,
+  } as AdminPathCourseRow;
+}
+
+function detail(overrides: Partial<AdminPathDetail> = {}): AdminPathDetail {
+  return {
+    ...row(),
+    description: 'وصف',
+    skillOutcomes: [],
+    typicalDurationMinutes: null,
+    levels: [
+      {
+        id: 'l1',
+        name: 'مبتدئ',
+        position: 1,
+        hasPlacedLearners: false,
+        courses: [
+          pathCourse('a', 'الحروف والنطق', { position: 1 }),
+          pathCourse('b', 'المفردات الأساسية', { position: 2 }),
+        ],
+      },
+      { id: 'l2', name: 'متوسط', position: 2, hasPlacedLearners: false, courses: [] },
+    ],
+    unassignedCourses: [],
+    learners: { awaitingPlacement: 0, active: 0, completed: 0 },
+    blockers: [],
+    selectableCourses: 2,
+    certificateCount: 0,
+    canDelete: true,
+    ...overrides,
+  } as AdminPathDetail;
+}
+
+describe('Admin paths — the road of a path’s courses', () => {
+  beforeEach(() => {
+    api.getPath.mockResolvedValue(detail());
+  });
+
+  it('shows nothing of the road until the name is pressed, and asks for the path then', async () => {
+    renderWithProviders(<AdminPathsPage />);
+
+    await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ });
+    expect(api.getPath).not.toHaveBeenCalled();
+    expect(screen.queryByText('الحروف والنطق')).not.toBeInTheDocument();
+  });
+
+  it('opens the courses on the name, grouped by the level they are placed on', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    const name = await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ });
+    await user.click(name);
+
+    expect(name).toHaveAttribute('aria-expanded', 'true');
+    expect(api.getPath).toHaveBeenCalledWith('p1');
+    expect(await screen.findByText('الحروف والنطق')).toBeInTheDocument();
+    expect(screen.getByText('المفردات الأساسية')).toBeInTheDocument();
+    /* The levels, in order, each with its own stretch — the empty one marked. */
+    expect(screen.getByText('مبتدئ')).toBeInTheDocument();
+    expect(screen.getByText('متوسط')).toBeInTheDocument();
+    expect(screen.getByText('لا دورات في هذا المستوى')).toBeInTheDocument();
+  });
+
+  it('puts the courses in the order an employee meets them, within each level', async () => {
+    api.getPath.mockResolvedValue(
+      detail({
+        levels: [
+          {
+            id: 'l1',
+            name: 'مبتدئ',
+            position: 1,
+            hasPlacedLearners: false,
+            courses: [
+              pathCourse('b', 'الثانية', { position: 2 }),
+              pathCourse('a', 'الأولى', { position: 1 }),
+            ],
+          },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    await user.click(await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ }));
+
+    const pills = (await screen.findAllByText(/^(الأولى|الثانية)$/)).map(
+      (node) => node.textContent,
+    );
+    expect(pills).toEqual(['الأولى', 'الثانية']);
+  });
+
+  it('says in words that a hidden course cannot be reached', async () => {
+    api.getPath.mockResolvedValue(
+      detail({
+        levels: [
+          {
+            id: 'l1',
+            name: 'مبتدئ',
+            position: 1,
+            hasPlacedLearners: false,
+            courses: [pathCourse('a', 'دورة مخفية', { status: 'DRAFT' })],
+          },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    await user.click(await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ }));
+
+    expect(await screen.findByText('مخفية')).toBeInTheDocument();
+  });
+
+  it('names the courses that are in the path but on no level, off the road', async () => {
+    api.getPath.mockResolvedValue(
+      detail({
+        unassignedCourses: [
+          pathCourse('u', 'دورة بلا مستوى', {
+            placement: 'UNASSIGNED',
+            levelId: null,
+            position: null,
+          }),
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    await user.click(await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ }));
+
+    expect(await screen.findByText('دورة بلا مستوى')).toBeInTheDocument();
+    expect(screen.getByText(/دورات بانتظار الإسناد/)).toBeInTheDocument();
+  });
+
+  it('closes again, and keeps the manage link exactly as it was', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    const name = await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ });
+    await user.click(name);
+    await screen.findByText('الحروف والنطق');
+    await user.click(name);
+
+    expect(screen.queryByText('الحروف والنطق')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'إدارة' })).toHaveAttribute('href', '/admin/paths/p1');
+  });
 });
 
 describe('Admin paths (§4C.4)', () => {

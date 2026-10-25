@@ -214,6 +214,14 @@ function Body({
           {t('pathUnassignedHeading', { count: format.number(path.unassignedCourses.length) })}
         </h3>
 
+        <AddCourseControl
+          path={path}
+          busy={busy}
+          onAttach={(courseId) =>
+            void run(() => adminApi.attachPathCourse(path.id, courseId), t('pathCourseAdded'))
+          }
+        />
+
         {path.unassignedCourses.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('pathUnassignedEmpty')}</p>
         ) : (
@@ -558,6 +566,85 @@ function LevelBlock({
  * decision, and a screen with «ضع» «انقل» «أزل من المستوى» beside every course
  * would be exactly the redundant UI §3 forbids.
  */
+/**
+ * Adds a course to the path — the administrator's own way in, beside the
+ * entity's (D-134).
+ *
+ * A drop-down of every course that is not already in the path, drafts and hidden
+ * ones included (that is what `attachableCourses` returns), so the administrator
+ * chooses from what exists rather than having to remember a name. It lands
+ * **unassigned**, always: membership alone reaches nobody, and the rung is the
+ * separate decision made on the row it creates.
+ */
+function AddCourseControl({
+  path,
+  busy,
+  onAttach,
+}: {
+  path: AdminPathDetail;
+  busy: boolean;
+  onAttach: (courseId: string) => void;
+}) {
+  const t = useTranslations('admin');
+
+  const [courseId, setCourseId] = useState('');
+
+  /* Refetched whenever the path's membership changes, so a course just added
+     stops being offered. */
+  const membership = path.placedCourseCount + path.unassignedCourses.length;
+  const options = useApiQuery(() => adminApi.attachableCourses(path.id), [path.id, membership]);
+
+  const courses = options.data ?? [];
+
+  return (
+    <div className="flex flex-wrap items-end gap-3 border-b border-warning-600/30 pb-3">
+      <div className="min-w-64 flex-1">
+        <Field
+          id="path-add-course"
+          label={t('pathAddCourse')}
+          hint={t('pathAddCourseHint')}
+          error={options.error ? t('pathAddCourseError') : undefined}
+        >
+          {(field) => (
+            <Select
+              {...field}
+              value={courseId}
+              disabled={busy || options.isLoading}
+              onChange={(event) => setCourseId(event.target.value)}
+            >
+              <option value="">
+                {courses.length === 0 && !options.isLoading
+                  ? t('pathAddCourseNone')
+                  : t('pathAddCoursePlaceholder')}
+              </option>
+              {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.ownerEntityName
+                    ? `${course.title} — ${course.ownerEntityName}`
+                    : course.title}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      </div>
+
+      {/* Offered only once a course is chosen (§3). */}
+      {courseId !== '' ? (
+        <Button
+          disabled={busy}
+          onClick={() => {
+            onAttach(courseId);
+            setCourseId('');
+          }}
+        >
+          {t('pathAddCourseButton')}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 function PlaceControl({
   path,
   pathCourseId,

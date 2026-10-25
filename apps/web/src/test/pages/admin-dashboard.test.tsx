@@ -114,8 +114,10 @@ describe('Admin dashboard (§4C.1)', () => {
 
     /* WCAG 1.4.1: the dot is decorative and the state is carried by text, which
        is what a screen reader and a colour-blind operator both get. */
-    expect(await screen.findByText('منصة التعلم متصلة')).toBeInTheDocument();
+    expect(await screen.findAllByText('منصة التعلم متصلة')).toHaveLength(2);
     expect(screen.getByText('منصة تمكين')).toBeInTheDocument();
+    /* The title-row line answers «آخر مزامنة» with one time. */
+    expect(screen.getByText(/^· آخر مزامنة /)).toBeInTheDocument();
   });
 
   it('explains WHY the LMS is unreachable rather than only that it is', async () => {
@@ -138,7 +140,7 @@ describe('Admin dashboard (§4C.1)', () => {
 
     /* The failure this exists to catch: Moodle answers, the scheduler is dead,
        and nobody's completion has been recorded for a day. */
-    expect(await screen.findByText('منصة التعلم متصلة')).toBeInTheDocument();
+    expect((await screen.findAllByText('منصة التعلم متصلة')).length).toBeGreaterThan(0);
     expect(screen.getByText('لم تُنفَّذ بعد')).toBeInTheDocument();
   });
 
@@ -148,10 +150,10 @@ describe('Admin dashboard (§4C.1)', () => {
     );
     renderWithProviders(<AdminDashboardPage />);
 
-    await screen.findByText('نسبة إكمال المسارات');
+    const rate = await screen.findByText(/نسبة إكمال المسارات/);
     /* 0% would read as failure; the rate is undefined, not zero. */
-    expect(screen.queryByText('0%')).not.toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(rate).toHaveTextContent('—');
+    expect(rate).not.toHaveTextContent('0%');
   });
 
   it('counts the courses sitting in a path on no rung, which no learner can reach', async () => {
@@ -159,8 +161,89 @@ describe('Admin dashboard (§4C.1)', () => {
        administrator: an entity offered the course, nobody placed it. */
     renderWithProviders(<AdminDashboardPage />);
 
-    expect(await screen.findByText('دورات بانتظار الإسناد إلى مستوى')).toBeInTheDocument();
-    expect(screen.getByText('6')).toBeInTheDocument();
+    expect(await screen.findByText('6 دورات بانتظار الإسناد إلى مستوى')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'إسناد المستويات' })).toHaveAttribute(
+      'href',
+      '/admin/paths',
+    );
+  });
+});
+
+describe("Admin dashboard — the proposal's layout over the same information", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.dashboard.mockResolvedValue(VIEW);
+  });
+
+  it('says what is waiting on the administrator, with the screen that clears each', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('يحتاج إجراءً منك')).toBeInTheDocument();
+    /* 312 employees, 120 of them holding a path. */
+    expect(screen.getByText('192 موظفًا لم يُسند إليهم مسار بعد')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'إسناد مسار' })).toHaveAttribute(
+      'href',
+      '/admin/users',
+    );
+  });
+
+  it('puts the noun in the right form for the number', async () => {
+    api.dashboard.mockResolvedValue(
+      view({
+        users: { ...VIEW.users, employees: 121 },
+        courses: { ...VIEW.courses, unassigned: 1 },
+      }),
+    );
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('دورة واحدة بانتظار الإسناد إلى مستوى')).toBeInTheDocument();
+    expect(screen.getByText('موظف واحد لم يُسند إليه مسار بعد')).toBeInTheDocument();
+  });
+
+  it('is not drawn at all when nothing is waiting', async () => {
+    /* An empty warning box would train the administrator to ignore the one place
+       on this page that is ever urgent. */
+    api.dashboard.mockResolvedValue(
+      view({
+        users: { ...VIEW.users, employees: 120 },
+        courses: { ...VIEW.courses, unassigned: 0 },
+      }),
+    );
+    renderWithProviders(<AdminDashboardPage />);
+
+    await screen.findAllByText('منصة التعلم متصلة');
+    expect(screen.queryByText('يحتاج إجراءً منك')).not.toBeInTheDocument();
+  });
+
+  it('keeps the four totals, each with its one quiet note', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('الموظفون')).toBeInTheDocument();
+    expect(screen.getByText('312')).toBeInTheDocument();
+    expect(screen.getByText('3 حسابات موقوفة')).toBeInTheDocument();
+    expect(screen.getByText('الجهات النشطة')).toBeInTheDocument();
+    expect(screen.getByText('مسارات نشطة')).toBeInTheDocument();
+    expect(screen.getByText('دورات منشورة')).toBeInTheDocument();
+    expect(screen.getByText('4 دورات تحت الإعداد')).toBeInTheDocument();
+  });
+
+  it('draws the journey as bars and keeps every figure it had', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('مسار الموظفين')).toBeInTheDocument();
+    expect(screen.getByText('120 من 312')).toBeInTheDocument();
+    expect(screen.getByText('60 من 120')).toBeInTheDocument();
+    expect(screen.getByText('230')).toBeInTheDocument();
+  });
+
+  it('removes no information: the address, both syncs, the per-path picture and the activity', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('https://moodle.ministry.gov.example')).toBeInTheDocument();
+    expect(screen.getByText('آخر مزامنة للدورات')).toBeInTheDocument();
+    expect(screen.getByText('آخر مزامنة للإنجاز')).toBeInTheDocument();
+    expect(screen.getByText('مسار تحليل البيانات')).toBeInTheDocument();
+    expect(screen.getByText('أحدث النشاط')).toBeInTheDocument();
   });
 });
 
@@ -185,7 +268,7 @@ describe('Admin dashboard — paths nobody can start (§4C.1, D-134)', () => {
        place on this page that is ever urgent. */
     renderWithProviders(<AdminDashboardPage />);
 
-    await screen.findByText('منصة التعلم متصلة');
+    await screen.findAllByText('منصة التعلم متصلة');
     expect(screen.queryByText('مسارات لا يمكن البدء فيها')).not.toBeInTheDocument();
   });
 });

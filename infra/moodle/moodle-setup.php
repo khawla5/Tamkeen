@@ -9,7 +9,7 @@
  *   1. Enables web services + the REST protocol (+ completion tracking).
  *   2. Creates the integration user (never logs in interactively).
  *   3. Creates the least-privilege "Tamkeen Integration" role, assigns the
- *      capability set the adapter's eleven WS functions need — including the
+ *      capability set the adapter's twelve WS functions need — including the
  *      four fixes Phase 2's original list missed (moodle/role:assign, the
  *      allow-assignments matrix rows for student and editingteacher,
  *      gradereport/user:view, and the manual-enrol welcome message off).
@@ -88,6 +88,7 @@ $capabilities = [
     'moodle/course:view',
     'moodle/course:viewhiddencourses',
     'moodle/course:update',
+    'moodle/course:delete',         // admin course deletion (§4C.5, TAM-134)
     'moodle/course:viewparticipants',
     // enrolment: learners at confirm, entities as editingteacher
     'enrol/manual:enrol',
@@ -138,6 +139,7 @@ $functions = [
     'core_course_get_courses_by_field',
     'core_course_get_contents',
     'core_course_create_courses',
+    'core_course_delete_courses',
     'core_enrol_get_users_courses',
     'enrol_manual_enrol_users',
     'core_completion_get_course_completion_status',

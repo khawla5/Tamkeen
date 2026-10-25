@@ -91,11 +91,11 @@ describe('LandingPage', () => {
     expect(screen.getByRole('tabpanel')).not.toHaveTextContent(/موصى به|توصية/);
   });
 
-  it('hero: states who the platform is for (BR-101)', () => {
+  it('hero: states who the platform is for (BR-101), and that it measures what training achieves', () => {
     renderWithProviders(<LandingPage />);
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      'منصة تمكين للتدريب والتطوير المهني',
+      'منصة تمكين للتدريب والتطوير المهني وقياس الأثر',
     );
   });
 
@@ -126,7 +126,9 @@ describe('LandingPage', () => {
     renderWithProviders(<LandingPage />);
 
     const footer = screen.getByRole('contentinfo');
-    expect(within(footer).getByText('الإدارة العامة للتدريب')).toBeInTheDocument();
+    expect(within(footer).getByText('وزارة الداخلية')).toBeInTheDocument();
+    /* The ministry is the identity; the directorate is not named in the footer. */
+    expect(within(footer).queryByText('الإدارة العامة للتدريب')).not.toBeInTheDocument();
     const links = within(footer).getAllByRole('link');
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['#about', '/register', '/login']);
     expect(within(footer).getByText('سياسة الخصوصية').closest('a')).toBeNull();

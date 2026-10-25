@@ -188,6 +188,10 @@ export const AuditAction = {
   ADMIN_USER_STATUS_CHANGED: 'ADMIN_USER_STATUS_CHANGED',
   /** An account's role changed, or an entity account moved organisation. */
   ADMIN_USER_ROLE_CHANGED: 'ADMIN_USER_ROLE_CHANGED',
+  /** An account moved to another department (the administrator's own edit). */
+  ADMIN_USER_DEPARTMENT_CHANGED: 'ADMIN_USER_DEPARTMENT_CHANGED',
+  /** An account was deleted outright (not merely suspended). */
+  ADMIN_USER_DELETED: 'ADMIN_USER_DELETED',
   /** An organisation was created (§4C.2 fills Phase 4's provisioning seam). */
   ADMIN_ENTITY_CREATED: 'ADMIN_ENTITY_CREATED',
   /** An organisation's details or status changed. */
@@ -384,6 +388,8 @@ export const AuditReason = {
   ASSIGNMENT_ALREADY_STARTED: 'ASSIGNMENT_ALREADY_STARTED',
   /** The change would have left the system with no active administrator. */
   LAST_ACTIVE_ADMIN: 'LAST_ACTIVE_ADMIN',
+  /** Deleting would erase a certificate somebody holds. */
+  ACCOUNT_HOLDS_CERTIFICATES: 'ACCOUNT_HOLDS_CERTIFICATES',
   /** An ENTITY account was asked for without an organisation to act for. */
   ENTITY_REQUIRED: 'ENTITY_REQUIRED',
   /** An organisation was supplied for a role that cannot belong to one. */
@@ -507,6 +513,8 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ADMIN_USER_INVITED: 'administration',
   ADMIN_USER_STATUS_CHANGED: 'administration',
   ADMIN_USER_ROLE_CHANGED: 'administration',
+  ADMIN_USER_DEPARTMENT_CHANGED: 'administration',
+  ADMIN_USER_DELETED: 'administration',
   ADMIN_PATH_ASSIGNED: 'administration',
   ADMIN_PATH_UNASSIGNED: 'administration',
   ADMIN_ASSESSMENT_ASSIGNED: 'content',

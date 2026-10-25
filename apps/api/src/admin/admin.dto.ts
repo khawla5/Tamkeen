@@ -134,13 +134,16 @@ export class SetUserStatusDto {
   status!: 'ACTIVE' | 'SUSPENDED';
 }
 
-export class SetUserRoleDto {
-  @IsIn(USER_ROLES)
-  role!: UserRole;
-
-  @IsOptional()
-  @IsUUID()
-  entityId?: string;
+export class SetUserDepartmentDto {
+  /**
+   * Not matched against the closed list the forms offer: like `employeeId` on
+   * provisioning, the list gates what the screen proposes and an existing account
+   * may hold a department that predates it. Bounds only, to stop an accident.
+   */
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  department!: string;
 }
 
 export class AdminEntityQueryDto {
@@ -921,4 +924,21 @@ export class AdminImpactQueryDto {
   @IsString()
   @MaxLength(120)
   department?: string;
+}
+
+/**
+ * §4C.7 — whom the certificate preview is drawn for.
+ *
+ * Both optional: with neither, the preview is the sample certificate; with one
+ * or both, that real name and path are printed on it. UUIDs only, so a query
+ * string cannot become anything but a lookup key.
+ */
+export class AdminTemplatePreviewQueryDto {
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  pathId?: string;
 }

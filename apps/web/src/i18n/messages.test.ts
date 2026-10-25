@@ -30,7 +30,14 @@ const leaves = flatten(messages);
 
 /* ICU placeholders such as {count} are Latin by necessity — strip them before
    checking for stray English copy. */
-const withoutPlaceholders = (value: string) => value.replace(/\{[^}]*\}/g, '');
+const withoutPlaceholders = (value: string) =>
+  value
+    /* ICU plural/select syntax is Latin too: `{n, plural, one {…} few {…}}`. The
+       selector header and each branch keyword go; the Arabic inside the branches
+       stays, so the checks below still read the words a user will see. */
+    .replace(/\{[^{},]+,\s*(?:plural|select|selectordinal),/g, ' ')
+    .replace(/(?:\b(?:zero|one|two|few|many|other)|=\d+)\s*\{/g, ' ')
+    .replace(/\{[^}]*\}/g, '');
 
 const ARABIC_SCRIPT = /[؀-ۿ]/;
 const LATIN_LETTERS = /[A-Za-z]/;

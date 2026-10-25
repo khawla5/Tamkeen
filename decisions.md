@@ -72,6 +72,16 @@ the three banks are engineering-authored and plausible, not directorate content.
 The rule D-134 set stands — the ticket is not done until الإدارة العامة للتدريب
 has signed off a bank per path.
 
+## D-135 — The integration role may delete a course (user-directed, 2026-10-11)
+
+**Decision:** the least-privilege Moodle role of §5.1 gains exactly two things: the capability `moodle/course:delete` and the external-service function `core_course_delete_courses`. Both are in `infra/moodle/moodle-setup.php` (idempotent) and were applied to the local Moodle by re-running it.
+
+**Why:** the administrator's «حذف نهائي» (§4C.5) deleted the LMS course first and our row second, and failed with «حساب الربط لا يملك صلاحية حذف الدورات» because the role could not do the first step. The user asked for the administrator to be able to delete.
+
+**Scope of the widening:** the credential is server-side only and the only caller is `AdminCoursesService.remove`, which is admin-only, audited, and still refuses a course held by any confirmed path (D-015/D-040). Deleting a course in Moodle removes its content, quizzes and grades — it cannot be undone, which is why the dialog says so.
+
+**How to apply:** any other environment (staging, production) must re-run `moodle-setup.php` — until then the delete shows the existing refusal and «سحب الدورة» remains the safe alternative.
+
 ## D-134 — Paths have levels; one assessment per path places the learner; an entity offers a course, an administrator places it
 
 **Decision (2026-09-09, implementing D-130's pivot in full):** the career-path structure is rebuilt around four objects and one rule about who decides what.
