@@ -212,7 +212,7 @@ test.describe('Phase 5 — user management', () => {
      * self-suspension is the screen the administrator just lost.
      */
     await expect(adminPage.locator('dialog').getByRole('alert')).toContainText(
-      'لا يمكنك تغيير دور حسابك',
+      'لا يمكنك إيقاف حسابك أو حذفه بنفسك',
       { timeout: 15_000 },
     );
   });
