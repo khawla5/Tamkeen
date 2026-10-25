@@ -180,7 +180,10 @@ function levelState(level: MyPathLevelView): CheckpointState {
   return 'upcoming';
 }
 
-function courseState(course: MyPathCourseView, levelStanding: MyPathLevelView['standing']): CheckpointState {
+function courseState(
+  course: MyPathCourseView,
+  levelStanding: MyPathLevelView['standing'],
+): CheckpointState {
   if (course.status === 'COMPLETED') return 'done';
   /* Ground below the learner's rung reads as covered, same as the level
      circle above it. A rung above theirs is real work they have not reached
@@ -207,7 +210,11 @@ function PathCheckpoints({ levels }: { levels: MyPathLevelView[] }) {
         <li key={level.id} className="flex flex-col">
           <LevelCheckpoint level={level} />
           {level.courses.map((course) => (
-            <CourseCheckpoint key={course.courseId} course={course} levelStanding={level.standing} />
+            <CourseCheckpoint
+              key={course.courseId}
+              course={course}
+              levelStanding={level.standing}
+            />
           ))}
         </li>
       ))}
