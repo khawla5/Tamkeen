@@ -217,26 +217,24 @@ test.describe('Phase 5 — the administered surface', () => {
     await expect(page.getByText(/دورة بلا جهة موردة/)).toBeVisible();
   });
 
-  test('§4C.6 — the 5-10 bounds and the rate limits are shown, and cannot be written', async () => {
+  test('§4C.6 — the rate limits are shown, and cannot be written', async () => {
     await page.getByRole('link', { name: 'الإعدادات' }).click();
     await expect(page.getByRole('heading', { name: 'إعدادات النظام' })).toBeVisible();
 
     const fixed = page.getByRole('region', { name: 'قواعد ثابتة' });
     await expect(fixed).toBeVisible({ timeout: 15_000 });
 
-    for (const label of [
-      'الحد الأدنى لعدد دورات المسار',
-      'الحد الأقصى لعدد دورات المسار',
-      'الحد الأقصى للطلبات',
-    ]) {
+    /* The 5-10 course bounds are gone from this list: a learner no longer builds a
+       course set of their own (D-134), so there is no bound left to explain. */
+    for (const label of ['الحد الأقصى للطلبات', 'نافذة احتساب الطلبات (بالثواني)']) {
       await expect(fixed.getByText(label)).toBeVisible();
     }
 
     /*
      * The assertion is the *absence* of a control, because that is what the
-     * rule actually is. §2 makes 5-10 non-negotiable and the rate limits are a
-     * security floor; both are shown because an administrator asked to explain
-     * either needs the number, and neither is editable here or anywhere.
+     * rule actually is. The rate limits are a security floor, shown because an
+     * administrator asked to explain one needs the number, and not editable here
+     * or anywhere.
      */
     await expect(fixed.getByRole('textbox')).toHaveCount(0);
     await expect(fixed.getByRole('button')).toHaveCount(0);
