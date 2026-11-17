@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+**/.next
+test-results
+**/test-results
+**/playwright-report
+.storage
+spike
+moodle-plugin
+infra
+docs
+apps/web/*.tmp.*
