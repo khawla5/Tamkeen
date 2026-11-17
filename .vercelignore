@@ -11,5 +11,4 @@ test-results
 spike
 moodle-plugin
 infra
-docs
 apps/web/*.tmp.*
