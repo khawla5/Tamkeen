@@ -5,6 +5,16 @@
 
 ---
 
+### 2026-11-17 — Deployed to Vercel (preview of Phase 7) — branch `phase-7-vercel-deploy`
+
+Live at **https://tamkeen-iota.vercel.app** (Vercel project `tamkeen`, team Khawlah). Root `vercel.json` defines two services — `api` (NestJS) on `/api/*`, `web` (Next.js) on the rest (D-137). Neon Postgres provisioned, every migration applied, seeded with `MOODLE_MODE=mock` (27 courses, 3 paths, the RIASEC bank, the English placement test). Env: `NODE_ENV=production`, `MOODLE_MODE=mock`, `SYNC_SCHEDULER_ENABLED=false`, `CERT_STORAGE_DIR=/tmp/certificates`, `APP_URL`/`API_URL`/`NEXT_PUBLIC_API_URL` = the site URL. `.vercelignore` keeps `.env*`, Moodle plugin, infra and test output out of uploads (`docs/` must ship — `/entity/guide` reads it at build time).
+
+**Fix needed to run on Vercel:** the Prisma client moved into `apps/api/src/generated/prisma` (D-137); five imports updated, nest-cli copies it to `dist/`. Local `nest build`, typecheck and `certificate-issuance.service.spec` (26) pass. Full suites **not** run.
+
+**Verified live:** `/`, `/login`, `/api/auth/csrf`, `/api/public/paths` → 200; super-admin login → 200, `/api/auth/me` = SUPER_ADMIN.
+
+**Open / not done:** Upstash Redis not provisioned (needs a browser checkout step; `REDIS_URL` unset); Moodle, background sync, durable certificate storage and SMTP are not running. **Security:** the seed read the local `.env`, so `entity@authority.gov.example` and `student@ministry.gov.example` exist on the live DB with the local dev passwords — remove or reset them before sharing the URL. The repo copy `khawla5/Tamkeen` was public when last checked. No PR opened (needs the user's approval of the test first).
+
 ### 2026-10-08 — Dev data: real English programmes placed in the English path (dev DB only, no code)
 
 «أكثر البرامج انضمامًا» printed generated titles (`دورة 0d8d88`…), because every enrolment of the demo student was in e2e-leftover courses and the 54 real-named courses were unpublished drafts. Through the **admin API** (so every rule and audit entry applies): 16 real, already-authored courses were published (`PATCH /admin/courses/:id`), attached to مسار اللغة الإنجليزية, and placed on its rungs — **6 on مبتدئ (A1–A2), 5 on متوسط (B1–B2), 5 on متقدم (C1)**; placing a course is what enrols the learners already placed (`syncEnrolments`), so `student@ministry.gov.example` is now enrolled in all 16, all landed in Moodle. The card now reads real names (e.g. «الاستماع لمحتوى متقدم»). **Consequences:** the English path has the 16 real courses beside the generated ones; a course a learner holds cannot simply be detached again (refused by design), so undoing this is a DB reset/reseed, not a click. All counts are 1 — only one employee is placed on a path; placing `employee-demo` would vary them. The 172 generated `دورة xxxxxx` courses are untouched. Script: kept out of the repo (scratch only).

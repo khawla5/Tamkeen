@@ -22,6 +22,7 @@ prisma/*.db
 prisma/migrations/dev.db*
 # Generated Prisma client — regenerated from schema.prisma on every install.
 apps/api/generated/
+apps/api/src/generated/
 
 # Logs
 *.log

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Injectable, Logger } from '@nestjs/common';
 
-import type { Certificate } from '../../generated/prisma';
+import type { Certificate } from '../generated/prisma';
 import { AuditAction } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { generateToken } from '../common/secure-token';

@@ -1,7 +1,7 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 
-import { PrismaClient } from '../../generated/prisma';
+import { PrismaClient } from '../generated/prisma';
 
 /**
  * The database client, tied to the Nest lifecycle so connections open on boot

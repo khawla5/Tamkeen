@@ -31,7 +31,7 @@ loadEnv({ path: ['.env', '../../.env'], quiet: true });
 
 import { PrismaPg } from '@prisma/adapter-pg';
 
-import { PrismaClient } from '../generated/prisma';
+import { PrismaClient } from '../src/generated/prisma';
 import { fieldsForPublishedCourse } from '../src/catalog-sync/catalog-mapping';
 import { MoodleHttpService } from '../src/moodle/real/moodle-http.service';
 import { MoodleWsClient } from '../src/moodle/real/moodle-ws.client';

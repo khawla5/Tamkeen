@@ -7,7 +7,7 @@ import { hashPassword } from '../src/common/password';
 import { MockLmsService } from '../src/moodle/mock/mock-lms.service';
 import { seedProductData } from '../src/seed-data/seed-runner';
 import type { LmsPort } from '../src/moodle/lms.port';
-import { PrismaClient, UserRole, UserStatus } from '../generated/prisma';
+import { PrismaClient, UserRole, UserStatus } from '../src/generated/prisma';
 
 loadEnv({ path: ['../../.env', '.env'], quiet: true });
 
