@@ -1,4 +1,4 @@
-import type { Prisma } from '../../generated/prisma';
+import type { Prisma } from '../generated/prisma';
 
 /**
  * The one place a learner-facing query reaches a course through a path (D-134).

@@ -1,5 +1,5 @@
 import type { LmsPort } from '../moodle/lms.port';
-import type { PrismaClient } from '../../generated/prisma';
+import type { PrismaClient } from '../generated/prisma';
 import { effectiveCourseStatus, fieldsForPublishedCourse } from '../catalog-sync/catalog-mapping';
 import { ASSESSMENT_QUESTIONS, ASSESSMENT_SEED, LIKERT_LEVELS } from './assessment';
 import { SEED_ASSESSMENTS, type SeedAssessment } from './assessments';

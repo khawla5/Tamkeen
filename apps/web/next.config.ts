@@ -17,6 +17,11 @@ const nextConfig: NextConfig = {
      keeps Turbopack/webpack happy in the monorepo. */
   transpilePackages: ['@tamkeen/types'],
   typedRoutes: false,
+  /* On Vercel the web app runs as a Services service, where `/_next/image`
+     answers 404 — every <Image> rendered blank (the hero photos first). Serve
+     the files as they are there; local dev and `next start` keep the optimizer.
+     See D-137. */
+  images: { unoptimized: process.env.VERCEL === '1' },
 };
 
 export default withNextIntl(nextConfig);

@@ -1,4 +1,4 @@
-import type { Certificate } from '../../generated/prisma';
+import type { Certificate } from '../generated/prisma';
 import { AuditAction } from '../audit/audit.actions';
 import type { AuditEntry, AuditService } from '../audit/audit.service';
 import type { AppConfigService } from '../config/app-config.module';

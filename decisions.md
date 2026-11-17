@@ -5,6 +5,33 @@
 
 ---
 
+## D-137 — Vercel deployment as Services; Prisma client generated inside `src/`
+
+**Decision (user-directed, 2026-11-17):** the app deploys to Vercel as one project
+with two services from a root `vercel.json` — `api` (NestJS, `apps/api`, public on
+`/api/*`) and `web` (Next.js, `apps/web`, everything else) — on one domain, so the
+session cookie and CSRF double-submit work same-origin. No bindings: the web app
+calls the API from the browser through `NEXT_PUBLIC_API_URL`, never server-to-server.
+Each service builds `@tamkeen/types` first. The Prisma client is now generated to
+`apps/api/src/generated/prisma` (was `apps/api/generated/prisma`) and copied into
+`dist/` by a nest-cli asset rule; imports moved from `../../generated/prisma` to
+`../generated/prisma`.
+
+**Why:** Vercel's NestJS runtime ships the compiled `dist/` as the function root, so a
+client living beside `dist/` was never deployed (`Cannot find module
+'../../generated/prisma'`). Generating it inside `src/` keeps the import depth the same
+in source, in `dist/`, and on Vercel.
+
+**Rejected:** a wrapper entrypoint loading `dist/main.js` (Vercel validates the
+entrypoint before the build and still flattens `dist/`); switching to the default
+`@prisma/client` output (a wider change to the generator than the deploy needed).
+
+**Limits of this deployment (Phase 7 still open):** `MOODLE_MODE=mock` (Moodle cannot
+run on Vercel), `SYNC_SCHEDULER_ENABLED=false` (BullMQ needs a long-running worker),
+certificates written to `/tmp` (not durable), no SMTP provider yet.
+
+---
+
 ## D-136 — The path ladder is a screen, not a modal
 
 **Decision (user-directed, 2026-09-10):** `/admin/paths/[pathId]` is a route.
