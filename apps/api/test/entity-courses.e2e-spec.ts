@@ -19,6 +19,7 @@ import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
 import { MockLmsService } from '../src/moodle/mock/mock-lms.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * The §4B course lifecycle, over real HTTP against a real database (§2B).
@@ -59,7 +60,7 @@ describe('Entity course lifecycle (e2e)', () => {
   let otherSession: string;
   let employeeSession: string;
   let pathId: string;
-  let pathRiasecLetter: string;
+  let levelId: string;
 
   /** Courses created during the run, torn down at the end. */
   const createdCourseIds: string[] = [];
@@ -104,13 +105,32 @@ describe('Entity course lifecycle (e2e)', () => {
     otherSession = await entityAccount('other', other.id);
     employeeSession = await employeeAccount('learner');
 
-    const path = await prisma.path.findFirstOrThrow({
-      where: { isActive: true },
-      select: { id: true, riasecLetter: true },
+    /*
+     * The suite's own path, not a seeded one.
+     *
+     * Publishing a course here places it on a rung, which changes what that
+     * path offers — and a seeded path is something the journey suite counts.
+     * Borrowing one made this suite's ordering decide whether that one passed,
+     * which is a failure that reads as a defect in the code under test and is
+     * nothing of the kind. Published directly rather than through the gate:
+     * the gate is `admin-paths`' subject, and what is needed here is a real
+     * published path with a rung to place onto.
+     */
+    const path = await prisma.path.create({
+      data: {
+        key: `life-${RUN_ID}`,
+        name: 'مسار اختبار دورات الجهات',
+        description: 'مسار أُنشئ لاختبار دورة حياة دورات الجهة.',
+        displayOrder: 810,
+        riasecLetter: 'R',
+        status: 'PUBLISHED',
+        levels: { create: [{ name: 'المرحلة الأولى', position: 1 }] },
+      },
+      select: { id: true, levels: { orderBy: { position: 'asc' }, select: { id: true } } },
     });
 
     pathId = path.id;
-    pathRiasecLetter = path.riasecLetter;
+    levelId = path.levels[0]!.id;
   }, 120_000);
 
   afterAll(async () => {
@@ -126,8 +146,16 @@ describe('Entity course lifecycle (e2e)', () => {
     }
 
     if (createdCourseIds.length > 0) {
+      await prisma.enrollment.deleteMany({ where: { courseId: { in: createdCourseIds } } });
       await prisma.pathCourse.deleteMany({ where: { courseId: { in: createdCourseIds } } });
       await prisma.course.deleteMany({ where: { id: { in: createdCourseIds } } });
+    }
+
+    if (pathId) {
+      await prisma.pathCourse.deleteMany({ where: { pathId } });
+      await prisma.userPath.deleteMany({ where: { pathId } });
+      await prisma.level.deleteMany({ where: { pathId } });
+      await prisma.path.deleteMany({ where: { id: pathId } });
     }
 
     await prisma.entity.deleteMany({ where: { id: { in: [entityId, otherEntityId] } } });
@@ -185,7 +213,7 @@ describe('Entity course lifecycle (e2e)', () => {
         email,
         passwordHash: await hashPassword(PASSWORD),
         fullName: 'مسؤول الجهة',
-        employeeId: `L-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'قسم',
         role: 'ENTITY',
         entityId: forEntityId,
@@ -203,7 +231,7 @@ describe('Entity course lifecycle (e2e)', () => {
       email,
       password: PASSWORD,
       fullName: 'موظف تجريبي',
-      employeeId: `L-${RUN_ID}-${label}`.slice(0, 20),
+      employeeId: numericEmployeeId(RUN_ID, label),
       department: 'تقنية المعلومات',
     }).expect(202);
 
@@ -230,10 +258,19 @@ describe('Entity course lifecycle (e2e)', () => {
   }
 
   /** Fills in everything the publish gate needs, and simulates the authoring. */
+  /**
+   * Everything the publish gate asks for, including the half an entity cannot do.
+   *
+   * The gate counts *placed* memberships (D-134): an entity offers the course to
+   * a path, and until an administrator puts it on a rung it reaches no learner,
+   * so a course sitting unassigned in three paths is not publishable. The
+   * placement is written directly here because it is the administrator's
+   * decision and `admin-paths` is the suite that proves the endpoint.
+   */
   async function makePublishable(course: EntityCourseDetail): Promise<EntityCourseDetail> {
     lms.simulateAuthoring(course.moodleCourseId);
 
-    const response = await patch(
+    await patch(
       `/api/entity/courses/${course.id}`,
       {
         pathIds: [pathId],
@@ -244,7 +281,27 @@ describe('Entity course lifecycle (e2e)', () => {
       session,
     ).expect(200);
 
-    return response.body as EntityCourseDetail;
+    return place(course.id);
+  }
+
+  /** The administrator's half: put the membership on the path's first rung. */
+  async function place(courseId: string): Promise<EntityCourseDetail> {
+    const membership = await prisma.pathCourse.findFirstOrThrow({
+      where: { pathId, courseId },
+      select: { id: true },
+    });
+    const taken = await prisma.pathCourse.aggregate({
+      where: { levelId },
+      _max: { position: true },
+    });
+
+    await prisma.pathCourse.update({
+      where: { id: membership.id },
+      data: { levelId, position: (taken._max.position ?? 0) + 1, placedAt: new Date() },
+    });
+
+    return (await get(`/api/entity/courses/${courseId}`, session).expect(200))
+      .body as EntityCourseDetail;
   }
 
   describe('creating the shell (§4B.3, D-060)', () => {
@@ -347,19 +404,215 @@ describe('Entity course lifecycle (e2e)', () => {
       expect(updated.durationMinutes).toBe(60);
     });
 
-    it('derives the RIASEC letters from path membership rather than accepting one', async () => {
-      /*
-       * D-066. §3A makes the path the owner of the letter, so a separately
-       * authored one could contradict it — a course tagged "S" sitting in an "E"
-       * path is a state the product has no rule for resolving.
+    describe('path membership: an entity offers, an administrator places (D-134)', () => {
+      /**
+       * Five published paths of this suite's own.
+       *
+       * The seed publishes two — the two with an authored placement bank — and
+       * only published paths are offered to an entity, so the cap of three
+       * cannot be exercised against the catalogue as it ships. Created directly
+       * rather than through the publish gate: the gate is `admin-paths`' subject,
+       * and what is needed here is simply enough attachable paths to have a
+       * fourth.
        */
-      const course = await createCourse();
-      const updated = await makePublishable(course);
+      const extraPathIds: string[] = [];
 
-      expect(updated.riasecLetters).toEqual([pathRiasecLetter]);
+      beforeAll(async () => {
+        for (let index = 0; index < 5; index += 1) {
+          const created = await prisma.path.create({
+            data: {
+              key: `life-cap-${RUN_ID}-${index}`,
+              name: `مسار سعة ${index + 1}`,
+              description: 'مسار أُنشئ لاختبار حد العضويات.',
+              displayOrder: 800 + index,
+              riasecLetter: 'R',
+              status: 'PUBLISHED',
+            },
+            select: { id: true },
+          });
+          extraPathIds.push(created.id);
+        }
+      }, 60_000);
+
+      afterAll(async () => {
+        await prisma.pathCourse.deleteMany({ where: { pathId: { in: extraPathIds } } });
+        await prisma.path.deleteMany({ where: { id: { in: extraPathIds } } });
+      });
+
+      /** Every published path, in display order — this suite's own first. */
+      async function publishedPaths(): Promise<string[]> {
+        const rows = await prisma.path.findMany({
+          where: { status: 'PUBLISHED' },
+          select: { id: true },
+          orderBy: { displayOrder: 'asc' },
+        });
+        const own = rows.filter((row) => extraPathIds.includes(row.id)).map((row) => row.id);
+        const rest = rows.filter((row) => !extraPathIds.includes(row.id)).map((row) => row.id);
+        return [...own, ...rest];
+      }
+
+      /* Criterion 1 — an entity's membership lands unassigned, always. */
+      it('lands every membership unassigned, reaching no learner until placed', async () => {
+        const course = await createCourse();
+        const ids = (await publishedPaths()).slice(0, 2);
+
+        const updated = (
+          await patch(`/api/entity/courses/${course.id}`, { pathIds: ids }, session).expect(200)
+        ).body as {
+          paths: Array<{ placement: string; level: unknown }>;
+          pathRules: { frozen: boolean; maxPaths: number };
+        };
+
+        expect(updated.paths).toHaveLength(ids.length);
+        expect(updated.paths.every((row) => row.placement === 'UNASSIGNED')).toBe(true);
+        expect(updated.paths.every((row) => row.level === null)).toBe(true);
+        expect(updated.pathRules).toMatchObject({ frozen: false, maxPaths: 3 });
+
+        /* And the database agrees: both halves of the placement are null, which
+           is what the CHECK constraint permits and the learner queries skip. */
+        const rows = await prisma.pathCourse.findMany({
+          where: { courseId: course.id },
+          select: { levelId: true, position: true, placedAt: true },
+        });
+        expect(rows).toHaveLength(ids.length);
+        expect(rows.every((row) => row.levelId === null && row.position === null)).toBe(true);
+        expect(rows.every((row) => row.placedAt === null)).toBe(true);
+      });
+
+      /* Criterion 2 — an entity may not choose a level or a position. */
+      it('refuses a levelId outright, with 422 and no membership written', async () => {
+        const course = await createCourse();
+        const ids = (await publishedPaths()).slice(0, 1);
+
+        const refused = await patch(
+          `/api/entity/courses/${course.id}`,
+          { pathIds: ids, levelId },
+          session,
+        ).expect(400);
+
+        expect(refused.body).toBeDefined();
+        expect(await prisma.pathCourse.count({ where: { courseId: course.id } })).toBe(0);
+      });
+
+      it('refuses a position on a membership just as firmly', async () => {
+        const course = await createCourse();
+        const ids = (await publishedPaths()).slice(0, 1);
+
+        await patch(
+          `/api/entity/courses/${course.id}`,
+          { pathIds: ids, position: 1 },
+          session,
+        ).expect(400);
+
+        expect(await prisma.pathCourse.count({ where: { courseId: course.id } })).toBe(0);
+      });
+
+      /* Criterion 3 — an entity may withdraw only while nobody has placed it. */
+      it('lets the entity withdraw a membership nobody has placed', async () => {
+        const course = await createCourse();
+        const ids = (await publishedPaths()).slice(0, 2);
+        await patch(`/api/entity/courses/${course.id}`, { pathIds: ids }, session).expect(200);
+
+        const trimmed = (
+          await patch(
+            `/api/entity/courses/${course.id}`,
+            { pathIds: ids.slice(0, 1) },
+            session,
+          ).expect(200)
+        ).body as { paths: unknown[] };
+
+        expect(trimmed.paths).toHaveLength(1);
+      });
+
+      it('refuses to withdraw a membership the administrator has placed', async () => {
+        /* Removing it would pull a course out from under the learners standing
+           on that rung — the same reason `path_courses` is Restrict beneath. */
+        const course = await createCourse();
+        await patch(`/api/entity/courses/${course.id}`, { pathIds: [pathId] }, session).expect(200);
+
+        const membership = await prisma.pathCourse.findFirstOrThrow({
+          where: { courseId: course.id, pathId },
+          select: { id: true, level: { select: { id: true } } },
+        });
+        const rung = await prisma.level.findFirstOrThrow({
+          where: { pathId },
+          orderBy: { position: 'asc' },
+          select: { id: true },
+        });
+        const taken = await prisma.pathCourse.aggregate({
+          where: { levelId: rung.id },
+          _max: { position: true },
+        });
+        await prisma.pathCourse.update({
+          where: { id: membership.id },
+          data: {
+            levelId: rung.id,
+            position: (taken._max.position ?? 0) + 1,
+            placedAt: new Date(),
+          },
+        });
+
+        const refused = await patch(
+          `/api/entity/courses/${course.id}`,
+          { pathIds: [] },
+          session,
+        ).expect(400);
+        expect(refused.body).toMatchObject({ message: 'MEMBERSHIP_ALREADY_PLACED' });
+
+        /* Nothing was written: the whole update is refused, not half applied. */
+        expect(await prisma.pathCourse.count({ where: { courseId: course.id } })).toBe(1);
+      });
+
+      it('refuses a fourth path', async () => {
+        const course = await createCourse();
+        const ids = (await publishedPaths()).slice(0, 4);
+
+        const response = await patch(
+          `/api/entity/courses/${course.id}`,
+          { pathIds: ids },
+          session,
+        ).expect(400);
+        expect(response.body).toMatchObject({ message: 'PATH_LIMIT_EXCEEDED' });
+      });
+
+      it('lets a grandfathered course remove memberships but not add', async () => {
+        const course = await createCourse();
+        const all = await publishedPaths();
+        const over = all.slice(0, 4);
+        /* Planted directly: rows from before the cap existed. */
+        await prisma.pathCourse.createMany({
+          data: over.map((id) => ({ pathId: id, courseId: course.id })),
+        });
+
+        const detail = (await get(`/api/entity/courses/${course.id}`, session).expect(200))
+          .body as {
+          pathRules: { frozen: boolean };
+        };
+        expect(detail.pathRules.frozen).toBe(true);
+
+        const fresh = all.find((id) => !over.includes(id))!;
+        const refused = await patch(
+          `/api/entity/courses/${course.id}`,
+          { pathIds: [...over.slice(0, 2), fresh] },
+          session,
+        ).expect(400);
+        expect(refused.body).toMatchObject({ message: 'PATH_MEMBERSHIP_FROZEN' });
+
+        const trimmed = (
+          await patch(
+            `/api/entity/courses/${course.id}`,
+            { pathIds: over.slice(0, 2) },
+            session,
+          ).expect(200)
+        ).body as { paths: unknown[]; pathRules: { frozen: boolean } };
+        expect(trimmed.paths).toHaveLength(2);
+        expect(trimmed.pathRules.frozen).toBe(false);
+      });
     });
 
-    it('refuses a riasecLetter field outright', async () => {
+    it('refuses a riasecLetter field outright, since no such thing exists', async () => {
+      /* The instrument that produced letters is retired (D-134); an unknown
+         field is refused rather than ignored, so a stale client learns. */
       const course = await createCourse();
 
       await patch(`/api/entity/courses/${course.id}`, { riasecLetter: 'S' }, session).expect(400);
@@ -578,11 +831,14 @@ describe('Entity course lifecycle (e2e)', () => {
       const course = await createCourse({ language: 'EN' });
       lms.simulateAuthoring(course.moodleCourseId);
 
+      /* The authored language is the point of this test, so the metadata is set
+         here rather than through `makePublishable`, which writes Arabic. */
       await patch(
         `/api/entity/courses/${course.id}`,
         { pathIds: [pathId], durationMinutes: 60, objectives: ['Objective'] },
         session,
       ).expect(200);
+      await place(course.id);
       await post(`/api/entity/courses/${course.id}/publish`, {}, session).expect(200);
 
       const listed = (
@@ -624,14 +880,17 @@ describe('Entity course lifecycle (e2e)', () => {
       });
 
       const userPath = await prisma.userPath.upsert({
-        where: { userId: learner.id },
-        create: { userId: learner.id, pathId, status: 'BUILDING' },
+        where: { userId_pathId: { userId: learner.id, pathId } },
+        create: { userId: learner.id, pathId, status: 'ACTIVE' },
         update: {},
         select: { id: true },
       });
 
-      await prisma.userPathCourse.create({
-        data: { userPathId: userPath.id, courseId: course.id, displayOrder: 1 },
+      /* Holding is an enrolment now, not a chosen row: nobody builds a path, so
+         what makes a course undeletable is that somebody was put into it in the
+         LMS (D-036/D-134). */
+      await prisma.enrollment.create({
+        data: { userId: learner.id, courseId: course.id, enrolledAt: new Date() },
       });
 
       const result = (
@@ -640,7 +899,7 @@ describe('Entity course lifecycle (e2e)', () => {
 
       expect(result).toMatchObject({ status: 'HIDDEN_BUT_COMPLETABLE', learnersHolding: 1 });
 
-      await prisma.userPathCourse.deleteMany({ where: { courseId: course.id } });
+      await prisma.enrollment.deleteMany({ where: { courseId: course.id } });
       await prisma.userPath.delete({ where: { id: userPath.id } });
     });
 
@@ -765,6 +1024,96 @@ describe('Entity course lifecycle (e2e)', () => {
     });
   });
 
+  describe('resyncing after a live edit (§4B.4, TAM-133)', () => {
+    it('picks up a rename made in the frame immediately, not on the next schedule', async () => {
+      const course = await createCourse({ title: 'العنوان القديم' });
+
+      lms.simulateSettingsEdit(course.moodleCourseId, { title: 'العنوان الجديد' });
+
+      const resynced = (
+        await post(`/api/entity/courses/${course.id}/resync`, {}, session).expect(200)
+      ).body as EntityCourseDetail;
+
+      expect(resynced.title).toBe('العنوان الجديد');
+
+      const row = await prisma.course.findUniqueOrThrow({
+        where: { id: course.id },
+        select: { title: true },
+      });
+      expect(row.title).toBe('العنوان الجديد');
+    });
+
+    it('refreshes the content read-back and the publish blockers in the same response', async () => {
+      const course = await makePublishable(await createCourse());
+      expect(course.publishBlockers).toEqual([]);
+
+      /* Simulate the entity removing the quiz's completion criteria from
+         inside Moodle, then asking this portal to catch up. */
+      lms.simulateAuthoring(course.moodleCourseId, {
+        activityCount: 3,
+        hasQuiz: true,
+        completionConfigured: false,
+      });
+
+      const resynced = (
+        await post(`/api/entity/courses/${course.id}/resync`, {}, session).expect(200)
+      ).body as EntityCourseDetail;
+
+      expect(resynced.content).toMatchObject({ completionConfigured: false });
+      expect(resynced.publishBlockers).toContain('NO_COMPLETION_CRITERIA');
+    });
+
+    it('is refused for another entity’s course, the same as every scoped route', async () => {
+      const course = await createCourse();
+
+      await post(`/api/entity/courses/${course.id}/resync`, {}, otherSession).expect(404);
+    });
+
+    it('the response equals a subsequent GET', async () => {
+      const course = await createCourse();
+
+      const resynced = (
+        await post(`/api/entity/courses/${course.id}/resync`, {}, session).expect(200)
+      ).body as EntityCourseDetail;
+      const fetched = (await get(`/api/entity/courses/${course.id}`, session).expect(200))
+        .body as EntityCourseDetail;
+
+      expect(resynced).toEqual(fetched);
+    });
+
+    it('audits the resync', async () => {
+      const course = await createCourse();
+
+      await post(`/api/entity/courses/${course.id}/resync`, {}, session).expect(200);
+
+      const entry = await prisma.auditLog.findFirst({
+        where: { action: 'ENTITY_COURSE_RESYNCED', targetId: course.id },
+        select: { outcome: true, metadata: true },
+      });
+
+      expect(entry).toMatchObject({ outcome: 'SUCCESS' });
+      /* No PII — a course id and a resync outcome are all this is. */
+      expect(JSON.stringify(entry)).not.toContain('@ministry.gov.example');
+    });
+
+    it('two concurrent resyncs of the same course still leave it correct', async () => {
+      /* The unit suite proves the LMS is read once; this proves the outcome a
+         caller actually sees is unaffected by the coalescing underneath it. */
+      const course = await createCourse({ title: 'دورة متزامنة' });
+      lms.simulateSettingsEdit(course.moodleCourseId, { title: 'بعد التزامن' });
+
+      const [first, second] = await Promise.all([
+        post(`/api/entity/courses/${course.id}/resync`, {}, session),
+        post(`/api/entity/courses/${course.id}/resync`, {}, session),
+      ]);
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect((first.body as EntityCourseDetail).title).toBe('بعد التزامن');
+      expect((second.body as EntityCourseDetail).title).toBe('بعد التزامن');
+    });
+  });
+
   describe('learners and review (§4B.5, D-064)', () => {
     let reviewCourseId: string;
     let learnerId: string;
@@ -782,21 +1131,17 @@ describe('Entity course lifecycle (e2e)', () => {
       learnerId = learner.id;
 
       const userPath = await prisma.userPath.upsert({
-        where: { userId: learnerId },
-        create: { userId: learnerId, pathId, status: 'ACTIVE', confirmedAt: new Date() },
-        update: { status: 'ACTIVE', confirmedAt: new Date() },
+        where: { userId_pathId: { userId: learnerId, pathId } },
+        create: { userId: learnerId, pathId, status: 'ACTIVE' },
+        update: { status: 'ACTIVE' },
         select: { id: true },
       });
       userPathId = userPath.id;
 
-      await prisma.userPathCourse.create({
-        data: {
-          userPathId,
-          courseId: reviewCourseId,
-          displayOrder: 1,
-          status: 'COMPLETED',
-          gradePercent: 88,
-        },
+      /* Progress lives only in `completions`, keyed on `(user, course)`; the
+         enrolment is the fact that the learner was put into the course. */
+      await prisma.enrollment.create({
+        data: { userId: learnerId, courseId: reviewCourseId, enrolledAt: new Date() },
       });
 
       await prisma.completion.create({
@@ -814,7 +1159,7 @@ describe('Entity course lifecycle (e2e)', () => {
 
     afterAll(async () => {
       await prisma.completion.deleteMany({ where: { userId: learnerId } });
-      await prisma.userPathCourse.deleteMany({ where: { userPathId } });
+      await prisma.enrollment.deleteMany({ where: { userId: learnerId } });
       await prisma.userPath.deleteMany({ where: { id: userPathId } });
     });
 
@@ -866,11 +1211,13 @@ describe('Entity course lifecycle (e2e)', () => {
       expect(rows).toEqual([]);
     });
 
-    it('re-derives passing from completions rather than the course status', async () => {
+    it('re-derives progress from completions rather than from the LMS’s own verdict', async () => {
       /*
-       * A course can be COMPLETED in the LMS's sense and still not passed — the
-       * defect D-054 corrected in the path certificate. A review screen calling
-       * a failing learner "passed" would be worse than one showing nothing.
+       * A course can be finished in the LMS's sense and still not passed — the
+       * defect D-054 corrected in the path certificate. Progress is derived
+       * from `completions.passed` against the product threshold (D-007), so a
+       * learner who failed the quiz still owes the course: «قيد التنفيذ», never
+       * «مكتملة». Calling them complete would be worse than showing nothing.
        */
       await prisma.completion.updateMany({
         where: { userId: learnerId },
@@ -881,8 +1228,9 @@ describe('Entity course lifecycle (e2e)', () => {
         .body as EntityLearnerRow[];
       const row = rows.find((entry) => entry.courseId === reviewCourseId);
 
-      expect(row?.status).toBe('COMPLETED');
+      expect(row?.status).toBe('IN_PROGRESS');
       expect(row?.passed).toBe(false);
+      expect(row?.gradePercent).toBe(45);
 
       await prisma.completion.updateMany({
         where: { userId: learnerId },
@@ -936,4 +1284,123 @@ describe('Entity course lifecycle (e2e)', () => {
       expect(dashboard.totalLearners).toBe(0);
     });
   });
+});
+
+/**
+ * Resync rate limiting (§4B.4, TAM-133), with the real ThrottlerGuard in
+ * place. Separate app instance so its counters are not shared with the
+ * lifecycle suite above — the same reasoning as `Auth rate limiting (e2e)`
+ * in auth.e2e-spec.ts.
+ */
+describe('Entity course resync rate limiting (e2e)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+
+  const RATE_RUN_ID = randomBytes(4).toString('hex');
+  let csrfCookie: string;
+  let csrfToken: string;
+  let session: string;
+  let courseId: string;
+
+  beforeAll(async () => {
+    process.env.RATE_LIMIT_ENABLED = 'true';
+
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(EmailService)
+      .useValue(new EmailCapture())
+      .compile();
+
+    app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api');
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    );
+    await app.init();
+
+    prisma = app.get(PrismaService);
+
+    const server = app.getHttpServer() as unknown as App;
+    const csrfResponse = await request(server).get('/api/auth/csrf').expect(200);
+    csrfCookie = (csrfResponse.headers['set-cookie'] as unknown as string[])
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    csrfToken = (csrfResponse.body as { csrfToken: string }).csrfToken;
+
+    const entity = await prisma.entity.create({
+      data: { key: `rate-${RATE_RUN_ID}`, name: 'جهة الحد' },
+      select: { id: true },
+    });
+
+    const email = `rate-${RATE_RUN_ID}@ministry.gov.example`;
+    await prisma.user.create({
+      data: {
+        email,
+        passwordHash: await hashPassword(PASSWORD),
+        fullName: 'مسؤول الجهة',
+        employeeId: `R-${RATE_RUN_ID}`.slice(0, 20),
+        department: 'قسم',
+        role: 'ENTITY',
+        entityId: entity.id,
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    const loginResponse = await request(server)
+      .post('/api/auth/login')
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({ email, password: PASSWORD })
+      .expect(200);
+    session = (loginResponse.headers['set-cookie'] as unknown as string[])
+      .find((value) => value.startsWith('tamkeen_session='))!
+      .split(';')[0]!;
+
+    const courseResponse = await request(server)
+      .post('/api/entity/courses')
+      .set('Cookie', [csrfCookie, session].join('; '))
+      .set('X-CSRF-Token', csrfToken)
+      .send({ title: 'دورة الحد', summary: 'وصف' })
+      .expect(201);
+    courseId = (courseResponse.body as EntityCourseDetail).id;
+  }, 120_000);
+
+  afterAll(async () => {
+    await prisma.course.deleteMany({ where: { id: courseId } });
+    await prisma.auditLog.deleteMany({
+      where: {
+        actorUserId: {
+          in: (
+            await prisma.user.findMany({
+              where: { email: { startsWith: `rate-${RATE_RUN_ID}` } },
+              select: { id: true },
+            })
+          ).map((user) => user.id),
+        },
+      },
+    });
+    await prisma.user.deleteMany({ where: { email: { startsWith: `rate-${RATE_RUN_ID}` } } });
+    await prisma.entity.deleteMany({ where: { key: `rate-${RATE_RUN_ID}` } });
+
+    await app.close();
+  }, 60_000);
+
+  it('returns 429 once the per-user resync limit is exceeded', async () => {
+    const server = app.getHttpServer() as unknown as App;
+
+    const attempt = () =>
+      request(server)
+        .post(`/api/entity/courses/${courseId}/resync`)
+        .set('Cookie', [csrfCookie, session].join('; '))
+        .set('X-CSRF-Token', csrfToken)
+        .send({});
+
+    const statuses: number[] = [];
+    /* The resync limit is 30 per minute; the 31st must be refused outright. */
+    for (let index = 0; index < 32; index += 1) {
+      statuses.push((await attempt()).status);
+    }
+
+    expect(statuses).toContain(429);
+  }, 120_000);
 });

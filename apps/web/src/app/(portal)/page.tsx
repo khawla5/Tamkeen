@@ -1,6 +1,6 @@
 'use client';
 
-import type { DashboardActivity, DashboardView, RiasecLetter } from '@tamkeen/types';
+import type { DashboardActivity, DashboardPath } from '@tamkeen/types';
 import { Award, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -8,8 +8,6 @@ import { useTranslations } from 'next-intl';
 import { JourneyTracker } from '@/components/dashboard/journey-tracker';
 import { PortalPage } from '@/components/layout/portal-page';
 import { usePortal } from '@/components/layout/portal-provider';
-import { HollandCodeChips } from '@/components/riasec/holland-code-chips';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -25,14 +23,16 @@ import type { CurrentUser } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
 /**
- * The dashboard, in its three states (§4.2), made meaningful (TAM-123).
+ * The dashboard, in its two states (§4.2, D-134).
  *
  * The state is a single value from the API, so this renders one branch instead
- * of assembling a screen from several nullable fields — which is how a fourth,
- * unintended state gets rendered by accident. Each branch still carries exactly
- * one primary action (§3); what changed is that the page now also tells the
- * user where they are (the tracker), who they are (the header), and what is
- * next or what just happened — information, never a competing action.
+ * of assembling a screen from several nullable fields — which is how a third,
+ * unintended state gets rendered by accident.
+ *
+ * **The two questions are the ministry's, not the learner's.** Have they been
+ * given a path, and have they sat its assessment. Nobody chooses a path here and
+ * nothing recommends one, so the old middle state — assessed, still deciding —
+ * has no meaning left.
  */
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
@@ -48,13 +48,23 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {dashboard.state === 'PRE_ASSESSMENT' ? (
-          <PreAssessment />
-        ) : dashboard.state === 'ASSESSED_NO_PATH' ? (
-          <AssessedNoPath dashboard={dashboard} />
+        {dashboard.state === 'NO_PATH' ? (
+          <NoPath />
         ) : (
-          <ActivePath dashboard={dashboard} />
+          <ul className="flex flex-col gap-6">
+            {dashboard.paths.map((path) => (
+              <li key={path.id}>
+                <PathCard path={path} />
+              </li>
+            ))}
+          </ul>
         )}
+
+        {dashboard.state !== 'NO_PATH' ? <Tiles /> : null}
+
+        {dashboard.state === 'ACTIVE_PATH' ? (
+          <LatestCertificate certificate={dashboard.latestCertificate} />
+        ) : null}
 
         {dashboard.recentActivity.length > 0 ? (
           <ActivityFeed activity={dashboard.recentActivity} />
@@ -66,8 +76,8 @@ export default function DashboardPage() {
 
 /**
  * Who this page belongs to — the greeting only. The department and employee
- * number moved into the shell header (D-096): chrome, not page content, so
- * they are visible on every screen instead of one.
+ * number live in the shell header (D-096): chrome, not page content, so they are
+ * visible on every screen instead of one.
  */
 function PersonalHeader({ user }: { user: CurrentUser }) {
   const t = useTranslations('dashboard');
@@ -79,95 +89,61 @@ function PersonalHeader({ user }: { user: CurrentUser }) {
   );
 }
 
-function PreAssessment() {
+/**
+ * No path assigned: information, not a dead button (D-130).
+ *
+ * There is nothing for this employee to do, and inventing an action — browse
+ * the catalogue, express a preference — would misdescribe a product where the
+ * ministry decides. What the card owes them is the truth and where it will come
+ * from.
+ */
+function NoPath() {
   const t = useTranslations('dashboard');
 
   return (
-    /* One card, one action. */
     <Card>
       <CardHeader>
-        <CardTitle>{t('preAssessmentTitle')}</CardTitle>
-        <CardDescription>{t('preAssessmentBody')}</CardDescription>
+        <CardTitle>{t('noPathTitle')}</CardTitle>
+        <CardDescription>{t('noPathBody')}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Button asChild size="lg">
-          <Link href="/assessment">{t('startAssessment')}</Link>
-        </Button>
-      </CardContent>
     </Card>
   );
 }
 
-function AssessedNoPath({ dashboard }: { dashboard: DashboardView }) {
+/**
+ * One assigned path, in whichever of its two states it is in.
+ *
+ * Awaiting placement, the single action is the assessment — and no progress is
+ * shown, because "0 من 0" would tell the learner the path is empty when it is
+ * simply not yet theirs to start.
+ */
+function PathCard({ path }: { path: DashboardPath }) {
   const t = useTranslations('dashboard');
-  const tRiasec = useTranslations('riasec');
-
-  return (
-    <>
-      {/* The result as Arabic chips, not the Latin code. Explanation and the
-          retake live on Results — this card has one job: send the user there. */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('assessedTitle')}</CardTitle>
-          <CardDescription>{t('assessedBody')}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <HollandCodeChips code={(dashboard.codeString ?? '').split('') as RiasecLetter[]} />
-          <Button asChild size="lg" className="self-start">
-            <Link href="/results">{t('choosePath')}</Link>
-          </Button>
-        </CardContent>
-      </Card>
-
-      {dashboard.recommendedPaths.length > 0 ? (
-        /* The decision is the most meaningful thing this state can hold: the top
-           recommendations, in the user's rank order, each opening its path page.
-           Results owns the full ranking and the explanation. */
-        <section aria-labelledby="recommended-heading" className="flex flex-col gap-3">
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 id="recommended-heading" className="text-lg font-semibold text-foreground">
-              {t('recommendedHeading')}
-            </h2>
-            <Link
-              href="/results"
-              className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
-            >
-              {t('viewAllPaths')}
-            </Link>
-          </div>
-          <p className="text-sm text-muted-foreground">{t('recommendedBody')}</p>
-          <ul className="grid gap-3 sm:grid-cols-3">
-            {dashboard.recommendedPaths.map((path) => (
-              <li key={path.id}>
-                <Link
-                  href={`/paths/${path.id}`}
-                  className={cn(
-                    cardVariants({ variant: 'selected' }),
-                    'flex h-full flex-col gap-1 p-4 transition-colors hover:bg-primary-50',
-                  )}
-                >
-                  <span className="font-semibold text-foreground">{path.name}</span>
-                  <span className="text-sm text-primary-700">
-                    {tRiasec(`${path.riasecLetter}.name`)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </>
-  );
-}
-
-function ActivePath({ dashboard }: { dashboard: DashboardView }) {
-  const t = useTranslations('dashboard');
-  const tRiasec = useTranslations('riasec');
   const tMyPath = useTranslations('myPath');
   const format = useFormat();
 
-  const path = dashboard.path!;
-  const next = path.nextCourse;
+  if (!path.placedLevel) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{path.name}</CardTitle>
+          <CardDescription>{t('awaitingPlacementBody')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {path.pendingAssessmentId ? (
+            <Button asChild size="lg">
+              <Link href={`/paths/${path.id}/assessment`}>{t('startAssessment')}</Link>
+            </Button>
+          ) : (
+            /* The path has no published assessment yet — the administrator's
+               problem, surfaced honestly rather than as a button that fails. */
+            <p className="text-sm text-muted-foreground">{t('assessmentNotReady')}</p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
   const notStarted = path.totalCount - path.completedCount - path.inProgressCount;
   const counts = [
     { key: 'statusCompleted', value: path.completedCount },
@@ -176,160 +152,136 @@ function ActivePath({ dashboard }: { dashboard: DashboardView }) {
   ] as const;
 
   return (
-    <>
-      {/* The status strip: which path, and how the courses break down. Pure
-          information — nothing here is a link.
-          Four tiles, deliberately equal-width grid cells at every breakpoint:
-          `grid-cols-2` wraps them 2×2 below `sm` (the path tile is not
-          spanned wide there — a spanned first row reads as one wide tile
-          plus a dangling three, not the 2×2 the acceptance criteria call
-          for), and `sm:grid-cols-[2fr_1fr_1fr_1fr]` widens just the path
-          tile once there is room for the desktop row from the mockup. */}
-      <ul
-        aria-label={t('statusHeading')}
-        className="grid grid-cols-2 gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr]"
-      >
-        <li className={cn(cardVariants(), 'flex flex-col justify-center px-4 py-3')}>
-          <span className="text-sm font-bold text-foreground">{path.name}</span>
-          <span className="text-xs font-medium text-primary-700">
-            {tRiasec(`${path.riasecLetter}.name`)}
-          </span>
-        </li>
-        {counts.map(({ key, value }) => (
-          <li key={key} className={cn(cardVariants(), 'flex flex-col justify-center px-4 py-3')}>
-            <span data-count className="text-xl font-bold text-foreground tabular-nums">
-              {format.number(value)}
-            </span>
-            <span className="text-xs text-muted-foreground">{t(key)}</span>
-          </li>
-        ))}
-      </ul>
+    <Card>
+      <CardHeader>
+        <CardTitle>{path.name}</CardTitle>
+        <CardDescription>
+          {path.nextCourse
+            ? t('activeNextCourse', { title: path.nextCourse.title })
+            : t('activeAllDone')}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6">
+        {/* Which rung they were placed on: the fact that decides everything
+            else on this card, so it is stated rather than implied. */}
+        <p className="text-sm font-medium text-primary-700">
+          {t('placedAt', { level: path.placedLevel.name })}
+        </p>
 
-      {/* "Continue where you left off" — the single primary action (§4.2). */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('activeTitle')}</CardTitle>
-          <CardDescription>
-            {next ? t('activeNextCourse', { title: next.title }) : t('activeAllDone')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <Progress
-            value={path.completedCount}
-            max={path.totalCount}
-            label={t('progressLabel')}
-            valueText={t('progressValue', {
-              completed: format.number(path.completedCount),
-              total: format.number(path.totalCount),
-            })}
-          />
+        <ul aria-label={t('statusHeading')} className="grid grid-cols-3 gap-3">
+          {counts.map(({ key, value }) => (
+            <li key={key} className={cn(cardVariants(), 'flex flex-col justify-center px-4 py-3')}>
+              <span data-count className="text-xl font-bold text-foreground tabular-nums">
+                {format.number(value)}
+              </span>
+              <span className="text-xs text-muted-foreground">{tMyPath(key)}</span>
+            </li>
+          ))}
+        </ul>
 
-          {next ? (
-            <Button asChild size="lg" className="self-start">
-              <Link href={`/courses/${next.courseId}`}>{t('continueCourse')}</Link>
-            </Button>
-          ) : (
-            <Button asChild size="lg" variant="outline" className="self-start">
-              <Link href="/my-path">{t('viewMyPath')}</Link>
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+        <Progress
+          value={path.completedCount}
+          max={path.totalCount}
+          label={t('progressLabel')}
+          valueText={t('progressValue', {
+            completed: format.number(path.completedCount),
+            total: format.number(path.totalCount),
+          })}
+        />
 
-      <div className="grid gap-6 md:grid-cols-[3fr_2fr]">
-        {dashboard.upcomingCourses.length > 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('upcomingHeading')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ol
-                aria-label={t('upcomingHeading')}
-                className="flex flex-col divide-y divide-border"
-              >
-                {dashboard.upcomingCourses.map((course) => (
-                  <li key={course.id} className="flex items-center justify-between gap-3 py-3">
-                    <Link
-                      href={`/courses/${course.courseId}`}
-                      className="font-medium text-foreground underline-offset-4 hover:underline"
-                    >
-                      {course.title}
-                    </Link>
-                    <Badge variant={course.status === 'IN_PROGRESS' ? 'primary' : 'soft'}>
-                      {course.status === 'IN_PROGRESS'
-                        ? tMyPath('statusInProgress')
-                        : tMyPath('statusNotStarted')}
-                    </Badge>
-                  </li>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
-        ) : null}
+        {path.nextCourse ? (
+          <Button asChild size="lg" className="self-start">
+            <Link href={`/courses/${path.nextCourse.courseId}`}>{t('continueCourse')}</Link>
+          </Button>
+        ) : (
+          <Button asChild size="lg" variant="outline" className="self-start">
+            <Link href={`/my-path?pathId=${path.id}`}>{t('viewMyPath')}</Link>
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
-        <section
-          aria-labelledby="latest-certificate-heading"
-          className={cn(cardVariants(), 'flex flex-col gap-3 p-6')}
-        >
-          <h2 id="latest-certificate-heading" className="text-lg font-semibold text-foreground">
-            {t('latestCertificateHeading')}
-          </h2>
-          {dashboard.latestCertificate ? (
-            <>
-              <div className="flex items-start gap-3">
-                <Award aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary-700" />
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-medium text-foreground">
-                    {dashboard.latestCertificate.subjectTitle}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {dashboard.latestCertificate.type === 'PATH'
-                      ? t('latestCertificatePath')
-                      : t('latestCertificateCourse')}
-                    <span aria-hidden="true"> · </span>
-                    {format.date(new Date(dashboard.latestCertificate.issuedAt))}
-                  </span>
-                </div>
-              </div>
-              <Link
-                href="/certificates"
-                className="self-start text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
-              >
-                {t('viewCertificates')}
-              </Link>
-            </>
-          ) : (
-            <div className="flex items-start gap-3 text-sm text-muted-foreground">
-              <Lock aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-neutral-400" />
-              <p>{t('noCertificateYet')}</p>
+function LatestCertificate({
+  certificate,
+}: {
+  certificate: {
+    id: string;
+    type: 'COURSE' | 'PATH';
+    subjectTitle: string;
+    issuedAt: string;
+  } | null;
+}) {
+  const t = useTranslations('dashboard');
+  const format = useFormat();
+
+  return (
+    <section
+      aria-labelledby="latest-certificate-heading"
+      className={cn(cardVariants(), 'flex flex-col gap-3 p-6')}
+    >
+      <h2 id="latest-certificate-heading" className="text-lg font-semibold text-foreground">
+        {t('latestCertificateHeading')}
+      </h2>
+      {certificate ? (
+        <>
+          <div className="flex items-start gap-3">
+            <Award aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary-700" />
+            <div className="flex flex-col gap-0.5">
+              <span className="font-medium text-foreground">{certificate.subjectTitle}</span>
+              <span className="text-sm text-muted-foreground">
+                {certificate.type === 'PATH'
+                  ? t('latestCertificatePath')
+                  : t('latestCertificateCourse')}
+                <span aria-hidden="true"> · </span>
+                {format.date(new Date(certificate.issuedAt))}
+              </span>
             </div>
-          )}
-        </section>
-      </div>
-
-      {/* Compact tiles — everything shown is actionable (§4.2). */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {(
-          [
-            ['/my-path', 'tileMyPath'],
-            ['/courses', 'tileCourses'],
-            ['/certificates', 'tileCertificates'],
-            ['/cv', 'tileCv'],
-          ] as const
-        ).map(([href, key]) => (
+          </div>
           <Link
-            key={href}
-            href={href}
-            className={cn(
-              cardVariants(),
-              'p-5 font-medium transition-colors hover:border-primary-600',
-            )}
+            href="/certificates"
+            className="self-start text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
           >
-            {t(key)}
+            {t('viewCertificates')}
           </Link>
-        ))}
-      </div>
-    </>
+        </>
+      ) : (
+        <div className="flex items-start gap-3 text-sm text-muted-foreground">
+          <Lock aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-neutral-400" />
+          <p>{t('noCertificateYet')}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Compact tiles — everything shown is actionable (§4.2). */
+function Tiles() {
+  const t = useTranslations('dashboard');
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {(
+        [
+          ['/my-path', 'tileMyPath'],
+          ['/courses', 'tileCourses'],
+          ['/certificates', 'tileCertificates'],
+          ['/cv', 'tileCv'],
+        ] as const
+      ).map(([href, key]) => (
+        <Link
+          key={href}
+          href={href}
+          className={cn(
+            cardVariants(),
+            'p-5 font-medium transition-colors hover:border-primary-600',
+          )}
+        >
+          {t(key)}
+        </Link>
+      ))}
+    </div>
   );
 }
 

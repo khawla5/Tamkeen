@@ -26,7 +26,7 @@ async function fillStepTwo(
   overrides: { fullName?: string; employeeId?: string; department?: string | null } = {},
 ) {
   await user.type(screen.getByLabelText('الاسم الكامل'), overrides.fullName ?? 'أحمد الموظف');
-  await user.type(screen.getByLabelText('الرقم الوظيفي'), overrides.employeeId ?? 'EMP-1234');
+  await user.type(screen.getByLabelText('الرقم الوظيفي'), overrides.employeeId ?? '1234567890');
   if (overrides.department !== null) {
     await user.selectOptions(
       screen.getByLabelText('الإدارة'),
@@ -94,7 +94,7 @@ describe('RegisterPage', () => {
       email: 'user@ministry.gov.example',
       password: PASSWORD,
       fullName: 'أحمد الموظف',
-      employeeId: 'EMP-1234',
+      employeeId: '1234567890',
       department: DEPARTMENTS[0]!,
     });
     expect(
@@ -129,7 +129,9 @@ describe('RegisterPage', () => {
     await fillStepTwo(user);
     await user.click(screen.getByRole('button', { name: 'إنشاء الحساب' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('الرقم الوظيفي غير صحيح.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'الرقم الوظيفي يجب أن يتكوّن من عشرة أرقام.',
+    );
     expect(screen.getByText('الخطوة 2 من 2')).toBeInTheDocument();
   });
 
@@ -145,9 +147,24 @@ describe('RegisterPage', () => {
     expect(api.register).not.toHaveBeenCalled();
     const alerts = screen.getAllByRole('alert').map((a) => a.textContent);
     expect(alerts.join(' ')).toMatch(/الاسم الكامل/);
-    expect(alerts.join(' ')).toMatch(/الرقم الوظيفي غير صحيح/);
+    expect(alerts.join(' ')).toMatch(/الرقم الوظيفي يجب أن يتكوّن من عشرة أرقام/);
     expect(alerts.join(' ')).toMatch(/الإدارة مطلوبة/);
     expect(screen.getByLabelText('الرقم الوظيفي')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('step 2 refuses a name containing digits — Western or Arabic-Indic', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegisterPage />);
+
+    await fillStepOne(user);
+    await user.click(screen.getByRole('button', { name: 'التالي' }));
+    await fillStepTwo(user, { fullName: 'أحمد ٣ الموظف' });
+    await user.click(screen.getByRole('button', { name: 'إنشاء الحساب' }));
+
+    expect(api.register).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'الاسم الكامل لا يجوز أن يحتوي على أرقام.',
+    );
   });
 
   it('the department is a closed list — the shared DEPARTMENTS constant, nothing typed', async () => {

@@ -35,7 +35,7 @@ export class EntityLearnersService {
    *   id yields nothing rather than their learners.
    */
   async list(scope: EntityScope, courseId?: string): Promise<EntityLearnerRow[]> {
-    const rows = await this.prisma.userPathCourse.findMany({
+    const rows = await this.prisma.enrollment.findMany({
       where: {
         course: {
           ...this.scope.courseFilter(scope),
@@ -44,19 +44,12 @@ export class EntityLearnersService {
       },
       orderBy: [{ course: { title: 'asc' } }, { createdAt: 'asc' }],
       select: {
-        status: true,
-        gradePercent: true,
         enrolledAt: true,
-        completedAt: true,
         course: { select: { id: true, title: true, moodleCourseId: true } },
-        userPath: {
-          select: {
-            /* Explicit columns, never the whole user row — see the class comment
-               and D-064. Adding `email` here would be a one-word privacy
-               regression that nothing else would catch. */
-            user: { select: { id: true, fullName: true, department: true } },
-          },
-        },
+        /* Explicit columns, never the whole user row — see the class comment and
+           D-064. Adding `email` here would be a one-word privacy regression that
+           nothing else would catch. */
+        user: { select: { id: true, fullName: true, department: true } },
       },
     });
 
@@ -64,45 +57,67 @@ export class EntityLearnersService {
       return [];
     }
 
-    const passedKeys = await this.passedKeys(rows);
+    /* One read of every relevant completion, then the per-row status is derived
+       from it. Progress lives in `completions` and nowhere else since D-134, so
+       there is no second opinion for this screen to disagree with. */
+    const completions = await this.completionsFor(rows);
 
-    return rows.map((row) => ({
-      userId: row.userPath.user.id,
-      fullName: row.userPath.user.fullName,
-      department: row.userPath.user.department,
-      courseId: row.course.id,
-      courseTitle: row.course.title,
-      status: row.status,
-      gradePercent: row.gradePercent,
-      /*
-       * Re-derived from `completions`, not read off the course status. A course
-       * can be COMPLETED in the LMS's sense and still not passed — the defect
-       * D-054 corrected in the path certificate — and a review screen that
-       * called a failing learner "passed" would be worse than one that showed
-       * nothing.
-       */
-      passed: passedKeys.has(`${row.userPath.user.id}:${String(row.course.moodleCourseId)}`),
-      enrolledAt: row.enrolledAt?.toISOString() ?? null,
-      completedAt: row.completedAt?.toISOString() ?? null,
-    }));
+    return rows.map((row) => {
+      const completion =
+        completions.get(`${row.user.id}:${String(row.course.moodleCourseId)}`) ?? null;
+
+      return {
+        userId: row.user.id,
+        fullName: row.user.fullName,
+        department: row.user.department,
+        courseId: row.course.id,
+        courseTitle: row.course.title,
+        status: completion?.passed
+          ? ('COMPLETED' as const)
+          : completion && (completion.completed || completion.gradePercent !== null)
+            ? ('IN_PROGRESS' as const)
+            : ('NOT_STARTED' as const),
+        gradePercent: completion?.gradePercent ?? null,
+        /*
+         * Our verdict against the product threshold, never the LMS's. A course
+         * can be complete in the LMS's sense and still not passed — the defect
+         * D-054 corrected in the path certificate — and a review screen that
+         * called a failing learner "passed" would be worse than one that showed
+         * nothing.
+         */
+        passed: completion?.passed === true,
+        enrolledAt: row.enrolledAt?.toISOString() ?? null,
+        completedAt: completion?.completedAt?.toISOString() ?? null,
+      };
+    });
   }
 
-  /** `userId:moodleCourseId` for every passing completion among these rows. */
-  private async passedKeys(
-    rows: ReadonlyArray<{
-      course: { moodleCourseId: number };
-      userPath: { user: { id: string } };
-    }>,
-  ): Promise<Set<string>> {
+  /** Every relevant completion, keyed `userId:moodleCourseId`. */
+  private async completionsFor(
+    rows: ReadonlyArray<{ course: { moodleCourseId: number }; user: { id: string } }>,
+  ): Promise<
+    Map<
+      string,
+      { passed: boolean; completed: boolean; gradePercent: number | null; completedAt: Date | null }
+    >
+  > {
     const completions = await this.prisma.completion.findMany({
       where: {
-        passed: true,
-        userId: { in: [...new Set(rows.map((row) => row.userPath.user.id))] },
+        userId: { in: [...new Set(rows.map((row) => row.user.id))] },
         moodleCourseId: { in: [...new Set(rows.map((row) => row.course.moodleCourseId))] },
       },
-      select: { userId: true, moodleCourseId: true },
+      select: {
+        userId: true,
+        moodleCourseId: true,
+        passed: true,
+        completed: true,
+        gradePercent: true,
+        completedAt: true,
+      },
     });
 
-    return new Set(completions.map((row) => `${row.userId}:${String(row.moodleCourseId)}`));
+    return new Map(
+      completions.map((row) => [`${row.userId}:${String(row.moodleCourseId)}`, row] as const),
+    );
   }
 }

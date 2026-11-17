@@ -15,9 +15,10 @@ import { renderWithProviders } from '@/test/render';
  * default" is only an honest offer if the difference is visible — otherwise it
  * is a button whose effect nobody can predict.
  *
- * **And it must not offer what it cannot do.** The 5-10 bounds and the rate
- * limits are rendered with no input at all, because §2 makes them a product rule
- * and a security floor rather than knobs (D-074).
+ * **And it must not offer what it cannot do.** The auth rate limits are rendered
+ * with no input at all, because §2 makes them a security floor rather than a
+ * knob an operator may loosen. The 5-10 course bounds are gone entirely: nobody
+ * builds a path any more (D-134).
  *
  * **Each field's shape comes from the server** (TAM-135): `editor` is derived
  * from the Zod field that validates the value, so these tests assert the screen
@@ -76,9 +77,8 @@ function view(overrides: Partial<AdminSettingsView> = {}): AdminSettingsView {
       text('ALLOWED_EMAIL_DOMAINS', 'ministry.gov.example'),
     ],
     readOnly: [
-      { key: 'PATH_MIN_COURSES', value: '5' },
-      { key: 'PATH_MAX_COURSES', value: '10' },
       { key: 'API_RATE_LIMIT_MAX_REQUESTS', value: '120' },
+      { key: 'API_RATE_LIMIT_WINDOW_SECONDS', value: '60' },
     ],
     ...overrides,
   };
@@ -222,12 +222,11 @@ describe('Admin settings (§4C.6)', () => {
   it('renders the fixed rules with no control at all', async () => {
     renderWithProviders(<AdminSettingsPage />);
 
-    await screen.findByText('الحد الأدنى لعدد دورات المسار');
+    await screen.findByText('قواعد ثابتة');
 
-    /* Three editable settings in the fixture, so three fields — and none for the
-       bounds or the rate limit (D-074, §2). */
+    /* Three editable settings in the fixture, so three fields — and none for
+       either rate limit, which §2 makes a security floor. */
     expect(screen.getAllByLabelText('القيمة')).toHaveLength(3);
-    expect(screen.getByText('قواعد ثابتة')).toBeInTheDocument();
   });
 
   it('shows the server’s refusal for an invalid value', async () => {

@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useFormat } from '@/i18n/format-provider';
 import { entityApi } from '@/lib/api-client';
@@ -76,17 +77,16 @@ export default function EntityCoursesPage() {
           <div className="min-w-44">
             <Field id="course-publication" label={t('filterAll')}>
               {(field) => (
-                <select
+                <Select
                   {...field}
                   value={publication}
                   onChange={(event) => setPublication(event.target.value as CoursePublication | '')}
-                  className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground"
                 >
                   <option value="">{t('filterAll')}</option>
                   <option value="DRAFT">{t('publicationDRAFT')}</option>
                   <option value="PUBLISHED">{t('publicationPUBLISHED')}</option>
                   <option value="UNPUBLISHED">{t('publicationUNPUBLISHED')}</option>
-                </select>
+                </Select>
               )}
             </Field>
           </div>
@@ -198,7 +198,17 @@ function CreateCourseForm({
 
   return (
     <Card className="p-6">
-      <h2 className="text-lg font-semibold text-foreground">{t('createTitle')}</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="text-lg font-semibold text-foreground">{t('createTitle')}</h2>
+        {/* Quiet — the create moment is exactly where "what happens after I
+            save this?" comes up, and the guide answers it (§4B, TAM-143). */}
+        <Link
+          href="/entity/guide"
+          className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
+        >
+          {t('guideLink')}
+        </Link>
+      </div>
       <p className="mt-1 text-sm text-muted-foreground">{t('createHint')}</p>
 
       <form onSubmit={onSubmit} className="mt-4 space-y-4">
@@ -228,15 +238,14 @@ function CreateCourseForm({
 
         <Field id="new-course-language" label={t('fieldLanguage')}>
           {(field) => (
-            <select
+            <Select
               {...field}
               value={language}
               onChange={(event) => setLanguage(event.target.value as 'AR' | 'EN')}
-              className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground"
             >
               <option value="AR">{t('languageAr')}</option>
               <option value="EN">{t('languageEn')}</option>
-            </select>
+            </Select>
           )}
         </Field>
 

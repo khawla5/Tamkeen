@@ -406,50 +406,6 @@ describe('Admin user management (e2e)', () => {
     });
   });
 
-  describe('changing a role', () => {
-    it('refuses to strand a learner’s record behind a role that cannot read it', async () => {
-      const path = await prisma.path.findFirst({ select: { id: true } });
-
-      await prisma.userPath.create({ data: { userId: employeeId, pathId: path!.id } });
-
-      const response = await patch(
-        `/api/admin/users/${employeeId}/role`,
-        { role: 'ENTITY', entityId },
-        sessionAdmin,
-      ).expect(409);
-
-      expect((response.body as { message: string }).message).toBe('JOURNEY_WOULD_BE_ORPHANED');
-
-      await prisma.userPath.deleteMany({ where: { userId: employeeId } });
-    });
-
-    it('promotes an employee who never started, and evicts their sessions', async () => {
-      const session = await signIn(`ausers-${RUN_ID}-emp@ministry.gov.example`);
-      await get('/api/auth/me', session).expect(200);
-
-      await patch(
-        `/api/admin/users/${employeeId}/role`,
-        { role: 'SUPER_ADMIN' },
-        sessionAdmin,
-      ).expect(200);
-
-      /* A role change is an access change. Leaving the session alive would keep
-         it resolving against the old role until it expired — which for a
-         demotion is precisely the window that matters. */
-      await get('/api/auth/me', session).expect(401);
-    });
-
-    it('refuses an administrator changing their own role', async () => {
-      const response = await patch(
-        `/api/admin/users/${adminId}/role`,
-        { role: 'EMPLOYEE' },
-        sessionAdmin,
-      ).expect(409);
-
-      expect((response.body as { message: string }).message).toBe('CANNOT_MODIFY_SELF');
-    });
-  });
-
   describe('listing and inspecting', () => {
     it('finds a person by name, email or employee id in one search box', async () => {
       const response = await get(
@@ -486,9 +442,9 @@ describe('Admin user management (e2e)', () => {
       expect(detail.id).toBe(employeeId);
       expect(detail).toHaveProperty('certificateCount');
       expect(detail).toHaveProperty('activeSessions');
-      /* A count of attempts, never the superseded codes: a retake is the
-         person's own history, not an administrator's business (D-033). */
-      expect(detail.assessment).toBeNull();
+      /* The paths the ministry assigned and where each placed them (D-134) —
+         a summary, never the learner's own screens. */
+      expect(detail.paths).toEqual([]);
     });
 
     it('answers 404 for an unknown id and 400 for a malformed one', async () => {

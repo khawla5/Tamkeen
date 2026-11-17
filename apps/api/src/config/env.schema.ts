@@ -45,8 +45,8 @@ export const envSchema = z.object({
   REGISTRATION_MODE: z.enum(['restricted', 'admin-only']).default('restricted'),
   ALLOWED_EMAIL_DOMAINS: csv.default('ministry.gov.example'),
   /** Shape of a ministry employee number. Configurable because only the ministry
-   *  knows its real format; the default is permissive but not empty. */
-  EMPLOYEE_ID_PATTERN: z.string().default('^[A-Za-z0-9][A-Za-z0-9-]{3,19}$'),
+   *  knows its real format; the default is exactly ten digits. */
+  EMPLOYEE_ID_PATTERN: z.string().default('^[0-9]{10}$'),
   /* Global per-IP request ceiling. The stricter limits on individual auth
      endpoints are static in the controller: they are security floors, not knobs
      an operator should be able to loosen from a config file. */
@@ -134,6 +134,14 @@ export const envSchema = z.object({
   CERT_SIGNATORY_TITLE: z.string().max(160).default(''),
   CERT_ISSUING_BODY: z.string().max(160).default('الجهة المصدرة: وزارة الداخلية'),
   PASS_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
+  /**
+   * How many paths one course may sit in (TAM-141, D-134).
+   *
+   * The letter-coherence limit went with RIASEC, and the approval gate went with
+   * it: placement is now the administrator's own decision, so an unplaced
+   * membership reaches nobody and needs no separate queue to hold it back.
+   */
+  COURSE_MAX_PATHS: z.coerce.number().int().min(1).max(12).default(3),
   COMPLETION_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5),
   /**
    * Whether the background sync scheduler runs. Off in tests regardless, since a

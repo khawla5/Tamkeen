@@ -51,7 +51,9 @@ export class EntityDashboardService {
         durationMinutes: true,
         language: true,
         objectives: true,
-        _count: { select: { pathCourses: true } },
+        /* Placed memberships only: an unassigned one is not yet a route to any
+           learner, so it cannot satisfy the publish gate (D-134). */
+        _count: { select: { pathCourses: { where: { levelId: { not: null } } } } },
       },
     });
 

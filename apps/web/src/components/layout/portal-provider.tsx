@@ -117,16 +117,16 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       : null;
 
   /*
-   * The catalogue does not exist for a user who has not taken the assessment
-   * (D-071): the sidebar hides it, and a typed or bookmarked /courses URL must
-   * agree with the sidebar, or the nav lies. The dashboard's one card already
-   * says what to do instead. The courses API itself stays open — reading
-   * catalogue data leaks nothing, and every mutation is server-gated behind a
-   * confirmed path — so this is a navigation rule, enforced where navigation
-   * state already lives.
+   * The catalogue does not exist for an employee the ministry has not put on a
+   * path (D-071, restated for D-134): the sidebar hides it, and a typed or
+   * bookmarked /courses URL must agree with the sidebar, or the nav lies. The
+   * dashboard's one card already says what is happening instead. The courses API
+   * itself stays open — reading catalogue data leaks nothing, and it returns
+   * only what is placed in a published path — so this is a navigation rule,
+   * enforced where navigation state already lives.
    */
   const coursesGated =
-    dashboard.data?.state === 'PRE_ASSESSMENT' &&
+    dashboard.data?.state === 'NO_PATH' &&
     (pathname === '/courses' || pathname.startsWith('/courses/'));
 
   useEffect(() => {

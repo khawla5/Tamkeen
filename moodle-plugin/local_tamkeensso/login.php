@@ -97,15 +97,17 @@ if (!isloggedin() || isguestuser() || (int) $USER->id !== (int) $user->id) {
     complete_user_login($user);
 }
 
-if ($embed === 'author') {
+if ($embed === 'author' || $embed === 'learner') {
     // Remembered for the whole session: every later page in the frame reads
     // it (hook_callbacks) to hide the chrome and post the ready message.
-    $SESSION->tamkeen_embed = 'author';
+    // 'learner' (D-121): the course framed by the learner portal — no editing,
+    // and the quiz review page announces itself.
+    $SESSION->tamkeen_embed = $embed;
     // Editing on from the first page. The edit-mode switch sits in the navbar
     // the embed hides, and it is a per-session flag, so setting it here is
     // exactly what the switch would do. Moodle still checks the capability
     // before honouring it, so a learner gains nothing from it.
-    $USER->editing = 1;
+    $USER->editing = $embed === 'author' ? 1 : 0;
 } else {
     unset($SESSION->tamkeen_embed);
     unset($SESSION->tamkeen_content_changed);

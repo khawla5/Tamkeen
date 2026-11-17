@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   interveneCourse: vi.fn(),
   deleteCourse: vi.fn(),
   listEntities: vi.fn(),
+  dashboard: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async () => {
@@ -88,6 +89,31 @@ describe('Admin courses (§4C.5)', () => {
     vi.clearAllMocks();
     api.listCourses.mockResolvedValue(page([row()]));
     api.listEntities.mockResolvedValue([]);
+    api.dashboard.mockRejectedValue(new Error('no figures'));
+  });
+
+  it('opens with the dashboard’s box of waiting work, when there is some', async () => {
+    api.dashboard.mockResolvedValue({
+      courses: { unassigned: 10 },
+      users: { employees: 3 },
+      journey: { assigned: 2 },
+      pathsWithoutAssessment: [],
+    });
+    renderWithProviders(<AdminCoursesPage />);
+
+    expect(await screen.findByText('يحتاج إجراءً منك')).toBeInTheDocument();
+    expect(screen.getByText('10 دورات بانتظار الإسناد إلى مستوى')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'إسناد المستويات' })).toHaveAttribute(
+      'href',
+      '/admin/paths',
+    );
+  });
+
+  it('draws no box when nothing is waiting, and none when the figures cannot be had', async () => {
+    renderWithProviders(<AdminCoursesPage />);
+
+    await screen.findByText('إدارة');
+    expect(screen.queryByText('يحتاج إجراءً منك')).not.toBeInTheDocument();
   });
 
   it('shows the loading state before the list arrives', () => {

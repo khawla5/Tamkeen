@@ -73,7 +73,9 @@ test.describe('Phase 5 — user management', () => {
 
   test('the dashboard reports integration health in words, not only in colour', async () => {
     /* WCAG 1.4.1: the dot beside this is decorative. */
-    await expect(adminPage.getByText(/منصة التعلم (متصلة|غير متصلة)|تعذّر الوصول/)).toBeVisible();
+    await expect(
+      adminPage.getByText(/منصة التعلم (متصلة|غير متصلة)|تعذّر الوصول/).first(),
+    ).toBeVisible();
   });
 
   test('an organisation can be created from a screen', async () => {
@@ -210,7 +212,7 @@ test.describe('Phase 5 — user management', () => {
      * self-suspension is the screen the administrator just lost.
      */
     await expect(adminPage.locator('dialog').getByRole('alert')).toContainText(
-      'لا يمكنك تغيير دور حسابك',
+      'لا يمكنك إيقاف حسابك أو حذفه بنفسك',
       { timeout: 15_000 },
     );
   });

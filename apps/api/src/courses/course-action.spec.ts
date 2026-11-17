@@ -1,133 +1,78 @@
-import { PATH_MAX_COURSES } from '@tamkeen/types';
-
 import { resolveCourseAction, type CourseActionContext } from './course-action';
 
 /**
- * §3: "show only the one action that applies … never all three".
+ * §3's "one action, never three" rule, branch by branch (D-134).
  *
- * The branches below *are* that rule, so each gets its own case. The integration
- * suite proves the wiring; this proves the decision.
+ * Pure, so every case is a table row rather than a fixture. What is being
+ * asserted is a product rule: a learner is offered exactly one thing to do with
+ * a course, and which one depends on whether the course is in a path they hold,
+ * whether the assessment has placed them yet, and where the course sits relative
+ * to that placement.
  */
-
-const COURSE = 'course-1';
-
-function context(overrides: Partial<CourseActionContext> = {}): CourseActionContext {
-  return {
-    userPath: null,
-    courseId: COURSE,
-    courseStatus: 'AVAILABLE',
-    completed: false,
-    ...overrides,
-  };
-}
-
-function withPath(
-  overrides: Partial<NonNullable<CourseActionContext['userPath']>> = {},
-  rest: Partial<CourseActionContext> = {},
-): CourseActionContext {
-  return context({
-    userPath: { confirmed: false, courseInPath: true, selectedCourseIds: [], ...overrides },
-    ...rest,
-  });
-}
+const context = (overrides: Partial<CourseActionContext> = {}): CourseActionContext => ({
+  inPath: { placed: true, standing: 'PLACED' },
+  courseStatus: 'AVAILABLE',
+  completed: false,
+  ...overrides,
+});
 
 describe('resolveCourseAction', () => {
-  it('offers nothing when the user has no path', () => {
-    /* The catalogue is browsable before and after the assessment (§4.6), but
-       there is nothing to add a course to. */
-    expect(resolveCourseAction(context())).toBe('NONE');
+  it('offers nothing for a course in no path this learner holds', () => {
+    /* The catalogue is browsable (§4.6); acting on somebody else's curriculum
+       is not. */
+    expect(resolveCourseAction(context({ inPath: null }))).toBe('NONE');
   });
 
-  it('offers nothing for a course outside the user’s path', () => {
-    expect(resolveCourseAction(withPath({ courseInPath: false }))).toBe('NONE');
+  it('offers nothing before the assessment has placed them', () => {
+    /* The path is theirs, but which part of it they owe is undecided — a start
+       button here could not do what it says. */
+    expect(resolveCourseAction(context({ inPath: { placed: false, standing: 'PLACED' } }))).toBe(
+      'NONE',
+    );
   });
 
-  it('offers ADD_TO_PATH for an unselected course in the path being built', () => {
-    expect(resolveCourseAction(withPath())).toBe('ADD_TO_PATH');
+  it('starts a course on the rung they were placed on', () => {
+    expect(resolveCourseAction(context())).toBe('START_COURSE');
   });
 
-  it('offers IN_PATH for a selected course before commitment', () => {
-    /* "Start" would be a button that cannot do what it says — nothing is
-       enrolled until the path is confirmed. */
-    expect(resolveCourseAction(withPath({ selectedCourseIds: [COURSE] }))).toBe('IN_PATH');
-  });
-
-  it('offers START_COURSE for a selected course after commitment', () => {
-    expect(resolveCourseAction(withPath({ confirmed: true, selectedCourseIds: [COURSE] }))).toBe(
+  it('starts a course above their rung', () => {
+    /* Everything at or above the placement is theirs to work through. */
+    expect(resolveCourseAction(context({ inPath: { placed: true, standing: 'ABOVE' } }))).toBe(
       'START_COURSE',
     );
   });
 
-  it('offers COMPLETED once the course is done, whatever else is true', () => {
+  it('marks a course below their rung as already covered, not as work', () => {
+    expect(resolveCourseAction(context({ inPath: { placed: true, standing: 'BELOW' } }))).toBe(
+      'BELOW_LEVEL',
+    );
+  });
+
+  it('reports a pass before anything else', () => {
+    /* Including for a course that has since left the catalogue: the certificate
+       is earned, and the link to it is the one useful thing left to offer. */
+    expect(resolveCourseAction(context({ completed: true }))).toBe('COMPLETED');
     expect(
-      resolveCourseAction(
-        withPath({ confirmed: true, selectedCourseIds: [COURSE] }, { completed: true }),
-      ),
+      resolveCourseAction(context({ completed: true, courseStatus: 'HIDDEN_BUT_COMPLETABLE' })),
     ).toBe('COMPLETED');
   });
 
-  it('still offers ADD_TO_PATH after commitment while under the maximum (§4.9)', () => {
-    expect(resolveCourseAction(withPath({ confirmed: true, selectedCourseIds: ['other'] }))).toBe(
-      'ADD_TO_PATH',
-    );
-  });
-
-  it('stops offering an add at ten', () => {
-    const full = Array.from({ length: PATH_MAX_COURSES }, (_unused, index) => `c${index}`);
-
-    expect(resolveCourseAction(withPath({ selectedCourseIds: full }))).toBe('UNAVAILABLE');
-    expect(resolveCourseAction(withPath({ confirmed: true, selectedCourseIds: full }))).toBe(
+  it('refuses to start a course the catalogue no longer offers', () => {
+    /* D-015: hidden means no new starts, while whoever is enrolled finishes. */
+    expect(resolveCourseAction(context({ courseStatus: 'HIDDEN_BUT_COMPLETABLE' }))).toBe(
       'UNAVAILABLE',
     );
+    expect(resolveCourseAction(context({ courseStatus: 'DRAFT' }))).toBe('UNAVAILABLE');
+    expect(resolveCourseAction(context({ courseStatus: 'RETIRED' }))).toBe('UNAVAILABLE');
   });
 
-  it('refuses to add a course that has left the catalogue (D-015)', () => {
-    expect(resolveCourseAction(withPath({}, { courseStatus: 'HIDDEN_BUT_COMPLETABLE' }))).toBe(
-      'UNAVAILABLE',
-    );
-    expect(resolveCourseAction(withPath({}, { courseStatus: 'RETIRED' }))).toBe('UNAVAILABLE');
-  });
-
-  it('keeps a withdrawn course completable for someone who already selected it', () => {
-    /* The other half of D-015: content may leave the catalogue, but not out from
-       under a learner who is mid-path. */
+  it('puts "below my level" ahead of "unavailable"', () => {
+    /* A course they do not owe and could not start either way is described by
+       the reason that is about them, not by the catalogue's bookkeeping. */
     expect(
       resolveCourseAction(
-        withPath(
-          { confirmed: true, selectedCourseIds: [COURSE] },
-          { courseStatus: 'HIDDEN_BUT_COMPLETABLE' },
-        ),
+        context({ inPath: { placed: true, standing: 'BELOW' }, courseStatus: 'RETIRED' }),
       ),
-    ).toBe('START_COURSE');
-  });
-
-  it('returns a single value in every reachable combination', () => {
-    /* Exhaustive sweep: whatever the state, exactly one action comes back and it
-       is always a known one. This is the "never all three" rule as a property
-       rather than a set of examples. */
-    const statuses = ['AVAILABLE', 'HIDDEN_BUT_COMPLETABLE', 'RETIRED'] as const;
-    const known = ['NONE', 'ADD_TO_PATH', 'IN_PATH', 'START_COURSE', 'COMPLETED', 'UNAVAILABLE'];
-
-    for (const confirmed of [true, false]) {
-      for (const courseInPath of [true, false]) {
-        for (const selected of [[], [COURSE]]) {
-          for (const courseStatus of statuses) {
-            for (const completed of [true, false]) {
-              const action = resolveCourseAction(
-                withPath(
-                  { confirmed, courseInPath, selectedCourseIds: selected },
-                  {
-                    courseStatus,
-                    completed,
-                  },
-                ),
-              );
-
-              expect(known).toContain(action);
-            }
-          }
-        }
-      }
-    }
+    ).toBe('BELOW_LEVEL');
   });
 });

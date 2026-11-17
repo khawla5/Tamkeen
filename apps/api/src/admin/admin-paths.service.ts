@@ -2,48 +2,38 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 
 import type {
   AdminAttachableCourse,
-  AdminPathBounds,
+  AdminLevelRow,
+  AdminPathCourseRow,
   AdminPathDetail,
   AdminPathRow,
 } from '@tamkeen/types';
 
 import { AuditAction, AuditReason } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { PATH_COURSE_BOUNDS, pathBlockers } from './path-readiness';
-import { isForeignKeyViolation } from './prisma-errors';
-import type {
-  AttachCourseDto,
-  CreatePathDto,
-  ReorderPathCoursesDto,
-  UpdatePathDto,
-} from './admin.dto';
+import { PrismaService, type TransactionClient } from '../prisma/prisma.service';
+import type { AttachCourseDto, CreatePathDto, UpdatePathDto } from './admin.dto';
+import { pathBlockers } from './path-readiness';
 
 /**
- * §4C.4 — managing study paths.
+ * §4C.4 — managing study paths, their ladders and what is placed on them.
  *
- * **Deletion exists for exactly one case: a path nobody ever chose.**
+ * **Deletion exists for exactly one case: a path nobody was ever assigned.**
  * `user_paths.path_id` is `Restrict` and `certificates.path_id` names a path on
- * a document somebody holds, so a path anyone has ever selected cannot be
+ * a document somebody holds, so a path anyone has ever been put on cannot be
  * removed without falsifying a credential — the service refuses that, and the
  * schema refuses it again underneath. What is left is the mistake: a path
- * created with the wrong letter or the wrong key, sitting in the list with no
- * learners, which retirement can only hide rather than clear away. Those two
- * outcomes are deliberately different operations with different words, because
- * one is reversible and the other is not.
+ * created with the wrong key, sitting in the list with no learners, which
+ * unpublishing can only hide rather than clear away. Those two outcomes are
+ * deliberately different operations with different words, because one is
+ * reversible and the other is not.
  *
- * Retirement remains the answer for everything else, and it is a narrower thing
- * than it sounds:
+ * **Unpublishing a path takes it out of new assignments and touches nobody who
+ * holds it.** My Path, a learner's courses and their certificates all read
+ * through `user_paths` and never consult `paths.status` — verified rather than
+ * assumed, because that is the whole of what makes it safe under D-002.
  *
- * **Retiring a path takes it out of new selections and touches nobody who holds
- * it.** My Path, a learner's courses and their certificates all read through
- * `user_paths` and never consult `paths.is_active` — verified rather than
- * assumed, because that is the whole of what makes retirement safe under D-002.
- * A learner still *building* is the one group affected, which is why this
- * service reports that count: the decision should be made knowing it.
- *
- * The one thing that is refused is offering a path a learner could never
- * confirm — see `path-readiness.ts`.
+ * The one thing that is refused is publishing a path a learner could never get
+ * anywhere in — see `path-readiness.ts`.
  */
 @Injectable()
 export class AdminPathsService {
@@ -52,11 +42,6 @@ export class AdminPathsService {
     private readonly audit: AuditService,
   ) {}
 
-  /** The 5-10 rule, shown and never edited (D-074). */
-  bounds(): AdminPathBounds {
-    return { ...PATH_COURSE_BOUNDS };
-  }
-
   async list(): Promise<AdminPathRow[]> {
     const paths = await this.prisma.path.findMany({
       orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
@@ -64,11 +49,21 @@ export class AdminPathsService {
         id: true,
         key: true,
         name: true,
-        riasecLetter: true,
-        isActive: true,
+        status: true,
         displayOrder: true,
-        _count: { select: { pathCourses: true } },
-        userPaths: { where: { confirmedAt: { not: null } }, select: { id: true } },
+        _count: {
+          select: {
+            levels: true,
+            userPaths: true,
+          },
+        },
+        pathCourses: { select: { levelId: true } },
+        /* Only the two live rows: a retired version says nothing about whether
+           the path can place anybody today. */
+        assessments: {
+          where: { status: { in: ['ACTIVE', 'DRAFT'] } },
+          select: { status: true },
+        },
       },
     });
 
@@ -76,13 +71,16 @@ export class AdminPathsService {
       id: path.id,
       key: path.key,
       name: path.name,
-      riasecLetter: path.riasecLetter,
-      courseCount: path._count.pathCourses,
-      /* Confirmed learners specifically: they are the ones D-002 makes
-         permanent, and the number an administrator needs before touching
-         anything about this path. */
-      committedLearners: path.userPaths.length,
-      isActive: path.isActive,
+      levelCount: path._count.levels,
+      placedCourseCount: path.pathCourses.filter((row) => row.levelId !== null).length,
+      /* The administrator's own work queue, visible from the list: courses an
+         entity has offered that nobody has placed, and which therefore reach no
+         learner at all (D-134). */
+      unassignedCourseCount: path.pathCourses.filter((row) => row.levelId === null).length,
+      assignedLearners: path._count.userPaths,
+      hasActiveAssessment: path.assessments.some((row) => row.status === 'ACTIVE'),
+      hasDraftAssessment: path.assessments.some((row) => row.status === 'DRAFT'),
+      status: path.status,
       displayOrder: path.displayOrder,
     }));
   }
@@ -95,14 +93,27 @@ export class AdminPathsService {
         key: true,
         name: true,
         description: true,
-        riasecLetter: true,
+        skillOutcomes: true,
         typicalDurationMinutes: true,
         displayOrder: true,
-        isActive: true,
-        pathCourses: {
-          orderBy: { displayOrder: 'asc' },
+        status: true,
+        levels: {
+          orderBy: { position: 'asc' },
           select: {
-            displayOrder: true,
+            id: true,
+            name: true,
+            position: true,
+            _count: { select: { placements: true } },
+          },
+        },
+        pathCourses: {
+          orderBy: [{ position: 'asc' }, { assignedAt: 'asc' }],
+          select: {
+            id: true,
+            levelId: true,
+            position: true,
+            assignedAt: true,
+            assignedByEntity: { select: { name: true } },
             course: {
               select: {
                 id: true,
@@ -114,7 +125,12 @@ export class AdminPathsService {
             },
           },
         },
-        userPaths: { select: { status: true } },
+        userPaths: { select: { userId: true, status: true } },
+        placements: { select: { learnerId: true } },
+        assessments: {
+          where: { status: { in: ['ACTIVE', 'DRAFT'] } },
+          select: { status: true },
+        },
         _count: { select: { certificates: true } },
       },
     });
@@ -123,54 +139,109 @@ export class AdminPathsService {
       throw new NotFoundException('PATH_NOT_FOUND');
     }
 
-    const held = await this.heldCounts(pathId);
+    const started = await this.startedCounts(pathId);
 
-    const courses = path.pathCourses.map((row) => ({
-      id: row.course.id,
-      moodleCourseId: row.course.moodleCourseId,
-      title: row.course.title,
-      status: row.course.status,
-      displayOrder: row.displayOrder,
-      ownerEntityName: row.course.ownerEntity?.name ?? null,
-      heldByLearners: held.get(row.course.id) ?? 0,
+    const toRow = (entry: (typeof path.pathCourses)[number]): AdminPathCourseRow => ({
+      id: entry.id,
+      courseId: entry.course.id,
+      moodleCourseId: entry.course.moodleCourseId,
+      title: entry.course.title,
+      status: entry.course.status,
+      placement: entry.levelId === null ? 'UNASSIGNED' : 'PLACED',
+      levelId: entry.levelId,
+      position: entry.position,
+      ownerEntityName: entry.course.ownerEntity?.name ?? null,
+      assignedByEntityName: entry.assignedByEntity?.name ?? null,
+      assignedAt: entry.assignedAt.toISOString(),
+      learnersStarted: started.get(entry.course.id) ?? 0,
+    });
+
+    const levels: AdminLevelRow[] = path.levels.map((level) => ({
+      id: level.id,
+      name: level.name,
+      position: level.position,
+      hasPlacedLearners: level._count.placements > 0,
+      courses: path.pathCourses.filter((entry) => entry.levelId === level.id).map(toRow),
     }));
 
-    const selectableCourses = courses.filter((course) => isSelectable(course.status)).length;
+    const unassignedCourses = path.pathCourses.filter((entry) => entry.levelId === null).map(toRow);
+
+    const selectableCourses = levels
+      .flatMap((level) => level.courses)
+      .filter((course) => course.status === 'AVAILABLE').length;
+
+    const hasActiveAssessment = path.assessments.some((row) => row.status === 'ACTIVE');
+
+    const placedLearners = new Set(path.placements.map((row) => row.learnerId));
 
     return {
       id: path.id,
       key: path.key,
       name: path.name,
       description: path.description,
-      riasecLetter: path.riasecLetter,
+      skillOutcomes: path.skillOutcomes,
       typicalDurationMinutes: path.typicalDurationMinutes,
       displayOrder: path.displayOrder,
-      isActive: path.isActive,
-      courseCount: courses.length,
-      committedLearners: path.userPaths.filter((row) => row.status !== 'BUILDING').length,
-      courses,
+      status: path.status,
+      levelCount: path.levels.length,
+      placedCourseCount: levels.reduce((total, level) => total + level.courses.length, 0),
+      unassignedCourseCount: unassignedCourses.length,
+      assignedLearners: path.userPaths.length,
+      hasActiveAssessment,
+      hasDraftAssessment: path.assessments.some((row) => row.status === 'DRAFT'),
+      levels,
+      unassignedCourses,
       learners: {
-        building: path.userPaths.filter((row) => row.status === 'BUILDING').length,
+        /* Assigned but not yet placed: the group a missing or unpublished
+           assessment strands, and the one an administrator can unblock. */
+        awaitingPlacement: path.userPaths.filter((row) => !placedLearners.has(row.userId)).length,
         active: path.userPaths.filter((row) => row.status === 'ACTIVE').length,
         completed: path.userPaths.filter((row) => row.status === 'COMPLETED').length,
       },
-      blockers: pathBlockers({ selectableCourses }),
+      blockers: pathBlockers({
+        levelCount: path.levels.length,
+        hasActiveAssessment,
+        selectableCourses,
+      }),
       selectableCourses,
       certificateCount: path._count.certificates,
       /* The same rule `remove()` enforces, reported before the choice rather
-         than after it: anyone who ever chose this path, or holds a certificate
-         naming it, makes deletion a falsification and retirement the operation. */
+         than after it: anyone who was ever assigned this path, or holds a
+         certificate naming it, makes deletion a falsification and unpublishing
+         the operation. */
       canDelete: path.userPaths.length === 0 && path._count.certificates === 0,
     };
+  }
+
+  /**
+   * How many learners have started each of this path's courses.
+   *
+   * Shown beside a move because §10 of the spec leaves the product question
+   * open: their progress is kept — it lives in `completions`, keyed on the
+   * course — and the administrator is told rather than asked.
+   */
+  private async startedCounts(pathId: string): Promise<Map<string, number>> {
+    const rows = await this.prisma.enrollment.findMany({
+      where: { course: { pathCourses: { some: { pathId } } } },
+      select: { courseId: true },
+    });
+
+    const counts = new Map<string, number>();
+
+    for (const row of rows) {
+      counts.set(row.courseId, (counts.get(row.courseId) ?? 0) + 1);
+    }
+
+    return counts;
   }
 
   /**
    * Courses this path does not already contain (§4C.4's attach picker).
    *
    * Not the learner catalogue: an administrator attaching a course needs to see
-   * drafts and hidden ones too — a draft attached now becomes selectable the
-   * moment its entity publishes it — and needs to know which organisation
-   * supplies each, which no learner-facing shape carries.
+   * drafts and hidden ones too — a draft attached now becomes reachable the
+   * moment its entity publishes it and somebody places it — and needs to know
+   * which organisation supplies each, which no learner-facing shape carries.
    *
    * `RETIRED` is excluded, because a retired course is one the LMS no longer
    * holds; attaching it would put a dead row into a path's membership.
@@ -182,10 +253,10 @@ export class AdminPathsService {
       where: {
         status: { not: 'RETIRED' },
         pathCourses: { none: { pathId } },
-        ...(q ? { title: { contains: q, mode: 'insensitive' as const } } : {}),
+        ...(q ? { title: { contains: q, mode: 'insensitive' } } : {}),
       },
       orderBy: { title: 'asc' },
-      take: 100,
+      take: 50,
       select: {
         id: true,
         moodleCourseId: true,
@@ -205,13 +276,11 @@ export class AdminPathsService {
   }
 
   /**
-   * Creates a path.
+   * Creates a path. Always a draft.
    *
-   * Always inactive to begin with, whatever the caller asks. A path is created
-   * empty, and an empty path cannot be offered — so accepting `isActive: true`
-   * here would mean either refusing every creation or admitting a path nobody
-   * can confirm. Attaching courses and then activating is two deliberate steps
-   * for a reason.
+   * A new path has no levels, no assessment and no courses, so it is exactly
+   * what `pathBlockers` refuses. Building the ladder and publishing are separate
+   * deliberate steps for that reason.
    */
   async create(
     dto: CreatePathDto,
@@ -233,10 +302,14 @@ export class AdminPathsService {
         key,
         name: dto.name,
         description: dto.description,
-        riasecLetter: dto.riasecLetter,
+        skillOutcomes: dto.skillOutcomes ?? [],
         typicalDurationMinutes: dto.typicalDurationMinutes ?? null,
         displayOrder: dto.displayOrder ?? (maxOrder._max.displayOrder ?? 0) + 1,
-        isActive: false,
+        status: 'DRAFT',
+        /* TAM-147's gold-recommendation field, foreign to this D-134 creation
+           flow — an admin building a ladder here has no RIASEC letter to
+           give it. Neutral placeholder until §4C.4 grows a field for it. */
+        riasecLetter: 'C',
       },
       select: { id: true },
     });
@@ -248,19 +321,18 @@ export class AdminPathsService {
       ipAddress,
       targetType: 'path',
       targetId: path.id,
-      detail: { key, riasecLetter: dto.riasecLetter },
+      detail: { key },
     });
 
     return this.get(path.id);
   }
 
   /**
-   * Edits a path, including whether it is offered.
+   * Edits a path, including whether it is published.
    *
-   * Activation is the only field that can be refused, and it is refused for one
-   * reason: a path with fewer than five selectable courses is one no learner can
-   * ever confirm (§2). Everything else — name, description, duration, letter,
-   * order — is content the ministry owns.
+   * Publication is the only field that can be refused, and it is refused for one
+   * reason: a path a learner could not get anywhere in. Everything else — name,
+   * description, outcomes, duration, order — is content the ministry owns.
    */
   async update(
     pathId: string,
@@ -270,7 +342,7 @@ export class AdminPathsService {
   ): Promise<AdminPathDetail> {
     const current = await this.get(pathId);
 
-    if (dto.isActive === true && current.blockers.length > 0) {
+    if (dto.status === 'PUBLISHED' && current.blockers.length > 0) {
       await this.audit.record({
         action: AuditAction.ADMIN_PATH_UPDATED,
         outcome: 'FAILURE',
@@ -290,20 +362,20 @@ export class AdminPathsService {
       data: {
         ...(dto.name === undefined ? {} : { name: dto.name }),
         ...(dto.description === undefined ? {} : { description: dto.description }),
-        ...(dto.riasecLetter === undefined ? {} : { riasecLetter: dto.riasecLetter }),
+        ...(dto.skillOutcomes === undefined ? {} : { skillOutcomes: dto.skillOutcomes }),
         ...(dto.typicalDurationMinutes === undefined
           ? {}
           : { typicalDurationMinutes: dto.typicalDurationMinutes }),
         ...(dto.displayOrder === undefined ? {} : { displayOrder: dto.displayOrder }),
-        ...(dto.isActive === undefined ? {} : { isActive: dto.isActive }),
+        ...(dto.status === undefined ? {} : { status: dto.status }),
       },
     });
 
     await this.audit.record({
       action:
-        dto.isActive === undefined
+        dto.status === undefined
           ? AuditAction.ADMIN_PATH_UPDATED
-          : dto.isActive
+          : dto.status === 'PUBLISHED'
             ? AuditAction.ADMIN_PATH_ACTIVATED
             : AuditAction.ADMIN_PATH_RETIRED,
       outcome: 'SUCCESS',
@@ -313,17 +385,16 @@ export class AdminPathsService {
       targetId: pathId,
       detail: {
         fields: changedFields({ ...dto }),
-        /* Recorded on a retirement because it is the number that made the
-           decision defensible: nobody confirmed is affected, and this many were
-           part way through choosing. */
-        ...(dto.isActive === false ? { buildingLearners: current.learners.building } : {}),
+        /* Recorded on an unpublish because it is the number that made the
+           decision defensible: this many people are on it right now. */
+        ...(dto.status === 'DRAFT' ? { assignedLearners: current.assignedLearners } : {}),
       },
     });
 
     return this.get(pathId);
   }
 
-  /** Attaches a course to the path, at the end of the order. */
+  /** Attaches a course to the path — unassigned, as every membership starts. */
   async attachCourse(
     pathId: string,
     dto: AttachCourseDto,
@@ -350,18 +421,11 @@ export class AdminPathsService {
       throw new ConflictException('COURSE_ALREADY_IN_PATH');
     }
 
-    const maxOrder = await this.prisma.pathCourse.aggregate({
-      where: { pathId },
-      _max: { displayOrder: true },
-    });
-
-    await this.prisma.pathCourse.create({
-      data: {
-        pathId,
-        courseId: dto.courseId,
-        displayOrder: (maxOrder._max.displayOrder ?? 0) + 1,
-      },
-    });
+    /* No level, no position. Even when an administrator is the one attaching,
+       the course lands in the same place an entity's proposal does — the
+       unassigned group — because putting it on a rung is a second, separate
+       decision with its own endpoint (D-134). */
+    await this.prisma.pathCourse.create({ data: { pathId, courseId: dto.courseId } });
 
     await this.audit.record({
       action: AuditAction.ADMIN_PATH_COURSE_ATTACHED,
@@ -377,40 +441,36 @@ export class AdminPathsService {
   }
 
   /**
-   * Detaches a course, unless a learner holds it through this path.
+   * Detaches a course from the path entirely.
    *
-   * **The refusal is what makes this safe.** `user_path_courses` keeps its row
-   * either way — nothing cascades — so a confirmed learner would still see the
-   * course on My Path. What breaks is everyone still *building*: the build rules
-   * validate a selection against path membership, so their next save or their
-   * confirmation would be refused with `COURSE_NOT_IN_PATH`, about a course they
-   * selected from this very screen. That is §2's stranding rule in a different
-   * costume, and it is refused for the same reason.
+   * **Refused while a learner on this path is enrolled in it.** Their enrolment
+   * and their progress survive either way — both are keyed on the course, not on
+   * this join row — but the course would vanish from their ladder mid-way
+   * through, which is §2's stranding rule in a different costume.
    *
-   * Detaching is also refused when it would drop an *active* path below the
-   * five-course floor, for the reason `path-readiness.ts` gives.
+   * A placed membership is detached freely otherwise: the position it vacates is
+   * re-packed with the rest of its level.
    */
   async detachCourse(
     pathId: string,
-    courseId: string,
+    pathCourseId: string,
     actorId: string,
     ipAddress: string | null,
   ): Promise<AdminPathDetail> {
-    const path = await this.get(pathId);
-    const course = path.courses.find((row) => row.id === courseId);
+    const membership = await this.prisma.pathCourse.findFirst({
+      where: { id: pathCourseId, pathId },
+      select: { id: true, courseId: true, levelId: true },
+    });
 
-    if (!course) {
+    if (!membership) {
       throw new NotFoundException('COURSE_NOT_IN_PATH');
     }
 
-    const refusal =
-      course.heldByLearners > 0
-        ? { code: 'COURSE_HELD_BY_LEARNERS', reason: AuditReason.COURSE_HELD_BY_LEARNERS }
-        : path.isActive && isSelectable(course.status) && path.selectableCourses <= bound()
-          ? { code: 'PATH_TOO_FEW_COURSES', reason: AuditReason.PATH_NOT_OFFERABLE }
-          : null;
+    const holders = await this.prisma.enrollment.count({
+      where: { courseId: membership.courseId, user: { userPaths: { some: { pathId } } } },
+    });
 
-    if (refusal) {
+    if (holders > 0) {
       await this.audit.record({
         action: AuditAction.ADMIN_PATH_COURSE_DETACHED,
         outcome: 'FAILURE',
@@ -418,15 +478,19 @@ export class AdminPathsService {
         ipAddress,
         targetType: 'path',
         targetId: pathId,
-        reason: refusal.reason,
-        detail: { courseId, heldByLearners: course.heldByLearners },
+        reason: AuditReason.COURSE_HELD_BY_LEARNERS,
+        detail: { courseId: membership.courseId, heldByLearners: holders },
       });
 
-      throw new ConflictException(refusal.code);
+      throw new ConflictException('COURSE_HELD_BY_LEARNERS');
     }
 
-    await this.prisma.pathCourse.delete({
-      where: { pathId_courseId: { pathId, courseId } },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.pathCourse.delete({ where: { id: membership.id } });
+
+      if (membership.levelId) {
+        await repackLevel(tx, membership.levelId);
+      }
     });
 
     await this.audit.record({
@@ -436,92 +500,31 @@ export class AdminPathsService {
       ipAddress,
       targetType: 'path',
       targetId: pathId,
-      detail: { courseId },
+      detail: { courseId: membership.courseId },
     });
 
     return this.get(pathId);
   }
 
   /**
-   * Reorders a path's courses (owed since Phase 4).
+   * Deletes a path permanently — and only one nobody was ever assigned.
    *
-   * `path_courses.display_order` has been set from the seed's own order and left
-   * alone ever since, because nothing could edit it. It decides the order the
-   * build screen offers courses in, and the order a learner's chosen courses are
-   * numbered in on My Path — so it is curriculum sequencing, not decoration.
+   * **The refusal is the feature.** A path certificate names the path on a
+   * credential somebody holds, and an assignment is the ministry's record of
+   * having put a person on it; deleting either out from under them would falsify
+   * a document or erase a decision. So anything with a `user_paths` row or a
+   * certificate against it is refused here, and the administrator is pointed at
+   * unpublishing, which takes the path out of new assignments and touches nobody
+   * holding it.
    *
-   * Takes the complete order and shuffles in two passes, for the reasons the
-   * assessment editor's reorder gives.
-   */
-  async reorderCourses(
-    pathId: string,
-    dto: ReorderPathCoursesDto,
-    actorId: string,
-    ipAddress: string | null,
-  ): Promise<AdminPathDetail> {
-    const existing = await this.prisma.pathCourse.findMany({
-      where: { pathId },
-      select: { courseId: true },
-    });
-
-    const ids = new Set(existing.map((row) => row.courseId));
-    const given = new Set(dto.courseIds);
-
-    if (given.size !== dto.courseIds.length || given.size !== ids.size) {
-      throw new ConflictException('PATH_ORDER_INCOMPLETE');
-    }
-    if (dto.courseIds.some((id) => !ids.has(id))) {
-      throw new ConflictException('COURSE_NOT_IN_PATH');
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      for (const [index, courseId] of dto.courseIds.entries()) {
-        await tx.pathCourse.update({
-          where: { pathId_courseId: { pathId, courseId } },
-          data: { displayOrder: -(index + 1) },
-        });
-      }
-
-      for (const [index, courseId] of dto.courseIds.entries()) {
-        await tx.pathCourse.update({
-          where: { pathId_courseId: { pathId, courseId } },
-          data: { displayOrder: index + 1 },
-        });
-      }
-    });
-
-    await this.audit.record({
-      action: AuditAction.ADMIN_PATH_UPDATED,
-      outcome: 'SUCCESS',
-      actorUserId: actorId,
-      ipAddress,
-      targetType: 'path',
-      targetId: pathId,
-      detail: { fields: 'courseOrder' },
-    });
-
-    return this.get(pathId);
-  }
-
-  /**
-   * Deletes a path permanently — and only one that nobody ever chose.
-   *
-   * **The refusal is the feature.** D-002 makes a confirmed path permanent and a
-   * path certificate names the path on a credential somebody holds; deleting
-   * either out from under them would falsify a document or strand a learner
-   * mid-path. So anything with a `user_paths` row — building, active or
-   * completed — or with a certificate against it is refused here, and the
-   * administrator is pointed at retirement, which takes the path out of new
-   * selections and touches nobody holding it.
-   *
-   * What remains deletable is the case retirement handles badly: the path
+   * What remains deletable is the case unpublishing handles badly: the path
    * created by mistake. Hiding it leaves it in the management list forever,
    * where it is a permanent invitation to wonder what it was for.
    *
-   * `path_courses` cascades; the courses themselves are the LMS's and are not
-   * touched. The audit entry carries the key, name and letter rather than only
-   * the id, because after this returns there is no row left to resolve an id
-   * against.
+   * Levels, memberships and the assessment cascade; the courses themselves are
+   * the LMS's and are not touched. The audit entry carries the key and name
+   * rather than only the id, because after this returns there is no row left to
+   * resolve an id against.
    */
   async remove(pathId: string, actorId: string, ipAddress: string | null): Promise<void> {
     const path = await this.prisma.path.findUnique({
@@ -530,8 +533,7 @@ export class AdminPathsService {
         id: true,
         key: true,
         name: true,
-        riasecLetter: true,
-        _count: { select: { userPaths: true, certificates: true, pathCourses: true } },
+        _count: { select: { userPaths: true, certificates: true } },
       },
     });
 
@@ -539,9 +541,7 @@ export class AdminPathsService {
       throw new NotFoundException('PATH_NOT_FOUND');
     }
 
-    const held = path._count.userPaths + path._count.certificates;
-
-    if (held > 0) {
+    if (path._count.userPaths > 0 || path._count.certificates > 0) {
       await this.audit.record({
         action: AuditAction.ADMIN_PATH_DELETED,
         outcome: 'FAILURE',
@@ -551,7 +551,7 @@ export class AdminPathsService {
         targetId: pathId,
         reason: AuditReason.PATH_HELD_BY_LEARNERS,
         detail: {
-          learners: path._count.userPaths,
+          assignedLearners: path._count.userPaths,
           certificates: path._count.certificates,
         },
       });
@@ -559,33 +559,7 @@ export class AdminPathsService {
       throw new ConflictException('PATH_HELD_BY_LEARNERS');
     }
 
-    try {
-      await this.prisma.path.delete({ where: { id: pathId } });
-    } catch (error) {
-      /*
-       * The count above and the delete are two statements, and a learner can
-       * choose the path between them. `Restrict` is what actually stops it —
-       * this turns the foreign-key violation into the same refusal the check
-       * above gives, so the race produces a sentence an administrator can read
-       * rather than a 500.
-       */
-      if (isForeignKeyViolation(error)) {
-        await this.audit.record({
-          action: AuditAction.ADMIN_PATH_DELETED,
-          outcome: 'FAILURE',
-          actorUserId: actorId,
-          ipAddress,
-          targetType: 'path',
-          targetId: pathId,
-          reason: AuditReason.PATH_HELD_BY_LEARNERS,
-          detail: { race: 'true' },
-        });
-
-        throw new ConflictException('PATH_HELD_BY_LEARNERS');
-      }
-
-      throw error;
-    }
+    await this.prisma.path.delete({ where: { id: pathId } });
 
     await this.audit.record({
       action: AuditAction.ADMIN_PATH_DELETED,
@@ -594,31 +568,8 @@ export class AdminPathsService {
       ipAddress,
       targetType: 'path',
       targetId: pathId,
-      /* Named, not just identified: the row this id points at is gone. */
-      detail: {
-        key: path.key,
-        name: path.name,
-        riasecLetter: path.riasecLetter,
-        courses: path._count.pathCourses,
-      },
+      detail: { key: path.key, name: path.name },
     });
-  }
-
-  /**
-   * How many learners hold each of this path's courses, through this path.
-   *
-   * Scoped to the path deliberately. A course may belong to several paths
-   * (D-003), and a learner holding it through *another* path is not stranded by
-   * detaching it from this one — their own path still lists it.
-   */
-  private async heldCounts(pathId: string): Promise<Map<string, number>> {
-    const rows = await this.prisma.userPathCourse.groupBy({
-      by: ['courseId'],
-      where: { userPath: { pathId } },
-      _count: { _all: true },
-    });
-
-    return new Map(rows.map((row) => [row.courseId, row._count._all]));
   }
 
   private async requirePath(pathId: string): Promise<void> {
@@ -631,28 +582,45 @@ export class AdminPathsService {
 }
 
 /**
- * Whether a learner could select a course right now.
+ * A position no real row occupies, used to park rows mid-shuffle.
  *
- * `AVAILABLE` only. `HIDDEN_BUT_COMPLETABLE` is the §2/D-015 state — still
- * completable by whoever holds it, gone from new selections — so counting it
- * would report a path as offerable on the strength of courses nobody new can
- * choose, which is exactly the trap this count exists to avoid.
+ * **Two passes, parked then final.** The unique index on `(level_id, position)`
+ * refuses two rows in one slot even momentarily, so writing the final numbers
+ * directly would collide the moment anything moves up the list. Parking the
+ * whole set out of range first vacates it.
+ *
+ * Parked *above* the range rather than below it, because `position >= 1` is a
+ * check constraint: negative parking numbers were the obvious trick and the
+ * database refuses them, which is the constraint doing its job. The offset is
+ * far beyond the DTO's 500-row cap, so a parked row can never collide with a
+ * real one.
  */
-function isSelectable(status: string): boolean {
-  return status === 'AVAILABLE';
+const PARK = 10_000;
+
+/** Re-packs one level's positions to `1 … n`, in their current order. */
+async function repackLevel(tx: TransactionClient, levelId: string): Promise<void> {
+  const rows = await tx.pathCourse.findMany({
+    where: { levelId },
+    orderBy: { position: 'asc' },
+    select: { id: true },
+  });
+
+  for (const [index, row] of rows.entries()) {
+    await tx.pathCourse.update({ where: { id: row.id }, data: { position: PARK + index } });
+  }
+
+  for (const [index, row] of rows.entries()) {
+    await tx.pathCourse.update({ where: { id: row.id }, data: { position: index + 1 } });
+  }
 }
 
-function bound(): number {
-  return PATH_COURSE_BOUNDS.min;
-}
+export { PARK, repackLevel };
 
-function changedFields(dto: Record<string, unknown>): string {
-  /* Filtered on `!== undefined`: `transform: true` gives the DTO an own property
-     for every declared optional, so `Object.keys` alone would report every field
-     as changed on every edit — the defect 5.2's audit test caught. */
-  return Object.entries(dto)
+/** The names of the fields a patch actually carries, for the audit detail. */
+function changedFields(patch: Record<string, unknown>): string {
+  return Object.entries(patch)
     .filter(([, value]) => value !== undefined)
-    .map(([field]) => field)
+    .map(([key]) => key)
     .sort()
     .join(',');
 }

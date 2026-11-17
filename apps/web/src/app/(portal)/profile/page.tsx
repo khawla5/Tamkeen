@@ -1,8 +1,11 @@
 'use client';
 
 import { Check } from 'lucide-react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState, type FormEvent } from 'react';
+
+import type { DashboardView } from '@tamkeen/types';
 
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { PortalPage } from '@/components/layout/portal-page';
@@ -57,7 +60,7 @@ function validate(form: { fullName: string; department: string }): FieldErrors {
 export default function ProfilePage() {
   const t = useTranslations('profile');
   const tErrors = useTranslations('errors');
-  const { user, refreshSession } = usePortal();
+  const { user, dashboard, refreshSession } = usePortal();
 
   const [fullName, setFullName] = useState(user.fullName);
   const [department, setDepartment] = useState(user.department);
@@ -243,6 +246,12 @@ export default function ProfilePage() {
           </Card>
 
           <DigitsCard current={user.numberFormat} onChanged={refreshSession} />
+          {/* Where the ministry put them, and where each assessment placed
+              them (D-134). The profile is where a person's own record of
+              themselves lives, and the CV builder draws on the same facts.
+              Read-only — a placement is not theirs to edit — so it is a card,
+              not a control. */}
+          <PlacementCard paths={dashboard.paths} />
         </div>
 
         <div className="flex flex-col gap-6">
@@ -275,6 +284,46 @@ export default function ProfilePage() {
  * only more so. Whoever can move the address can then use "forgot password" and
  * own the account outright, with the real employee locked out and unnotified.
  */
+/**
+ * The paths the ministry assigned, and where each placed them (D-134).
+ *
+ * Reads the dashboard rather than fetching: the values are already loaded for
+ * every authenticated page, and a second request for three lines would be a
+ * network round trip to say what the portal already knows.
+ */
+function PlacementCard({ paths }: { paths: DashboardView['paths'] }) {
+  const t = useTranslations('profile');
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('placementTitle')}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {paths.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t('placementNone')}</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {paths.map((path) => (
+              <li key={path.id} className="flex flex-wrap items-baseline justify-between gap-2">
+                <Link
+                  href={`/paths/${path.id}`}
+                  className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  {path.name}
+                </Link>
+                <span className="text-sm text-muted-foreground">
+                  {path.placedLevel ? path.placedLevel.name : t('placementPending')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function EmailCard({ current }: { current: string }) {
   const t = useTranslations('profile');
   const translateError = useErrorMessage();

@@ -21,10 +21,14 @@ import { renderWithProviders } from '@/test/render';
 const api = vi.hoisted(() => ({
   listUsers: vi.fn(),
   getUser: vi.fn(),
+  listPaths: vi.fn(),
+  assignPath: vi.fn(),
+  revokePath: vi.fn(),
   createUser: vi.fn(),
   reinvite: vi.fn(),
   setUserStatus: vi.fn(),
-  setUserRole: vi.fn(),
+  setUserDepartment: vi.fn(),
+  deleteUser: vi.fn(),
   listEntities: vi.fn(),
   createEntity: vi.fn(),
   updateEntity: vi.fn(),
@@ -101,23 +105,161 @@ const DETAIL: AdminUserDetail = {
   ...row(),
   createdAt: '2026-07-01T00:00:00.000Z',
   hasLmsAccount: true,
-  assessment: { code: 'SIA', completedAt: '2026-08-05T00:00:00.000Z', attempts: 2 },
-  path: {
-    name: 'مسار الموارد البشرية',
-    status: 'ACTIVE',
-    confirmedAt: '2026-08-06T00:00:00.000Z',
-    coursesChosen: 6,
-    coursesPassed: 2,
-  },
+  assessments: [],
   certificateCount: 2,
   activeSessions: 1,
+  /* D-133/D-134: one path placed, one still awaiting the assessment — the panel
+     shows both states at once, and only the second may be revoked. */
+  paths: [
+    {
+      userPathId: 'up-1',
+      pathId: 'p-1',
+      name: 'مسار الموارد البشرية',
+      status: 'ACTIVE',
+      assignedAt: '2026-08-06T00:00:00.000Z',
+      placedLevel: { id: 'l-2', name: 'متقدم', position: 2 },
+      coursesPassed: 2,
+      coursesTotal: 6,
+    },
+    {
+      userPathId: 'up-2',
+      pathId: 'p-2',
+      name: 'مسار تحليل البيانات',
+      status: 'ACTIVE',
+      assignedAt: '2026-08-07T00:00:00.000Z',
+      placedLevel: null,
+      coursesPassed: 0,
+      coursesTotal: 4,
+    },
+  ],
 };
+
+/** The published paths the assign control offers. */
+const PATH_ROWS = [
+  {
+    id: 'p-1',
+    key: 'hr',
+    name: 'مسار الموارد البشرية',
+    levelCount: 3,
+    placedCourseCount: 6,
+    unassignedCourseCount: 0,
+    assignedLearners: 1,
+    status: 'PUBLISHED' as const,
+    displayOrder: 1,
+  },
+  {
+    id: 'p-2',
+    key: 'data',
+    name: 'مسار تحليل البيانات',
+    levelCount: 3,
+    placedCourseCount: 4,
+    unassignedCourseCount: 0,
+    assignedLearners: 1,
+    status: 'PUBLISHED' as const,
+    displayOrder: 2,
+  },
+  {
+    id: 'p-3',
+    key: 'ops',
+    name: 'مسار العمليات',
+    levelCount: 3,
+    placedCourseCount: 5,
+    unassignedCourseCount: 0,
+    assignedLearners: 0,
+    status: 'PUBLISHED' as const,
+    displayOrder: 3,
+  },
+  {
+    /* A draft: never offered, because assigning to it would strand the learner
+       (the server refuses it too). */
+    id: 'p-4',
+    key: 'draft',
+    name: 'مسار قيد الإعداد',
+    levelCount: 1,
+    placedCourseCount: 0,
+    unassignedCourseCount: 2,
+    assignedLearners: 0,
+    status: 'DRAFT' as const,
+    displayOrder: 4,
+  },
+];
+
+describe('Admin users — each kind of account marked off inside one table', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const MIXED = page([
+    row({
+      id: 'o1',
+      fullName: 'مسؤول الجهة التدريبية',
+      email: 'entity@authority.gov.example',
+      role: 'ENTITY',
+      entity: { id: 'en1', name: 'الهيئة الوطنية للتدريب' },
+    }),
+    row({
+      id: 'a1',
+      fullName: 'مدير النظام',
+      email: 'admin@ministry.gov.example',
+      role: 'SUPER_ADMIN',
+    }),
+    row({ id: 'e1', fullName: 'سارة العتيبي', email: 'sara@ministry.gov.example' }),
+    row({ id: 'e2', fullName: 'خالد الشهري', email: 'khalid@ministry.gov.example' }),
+  ]);
+
+  it('is still ONE table, with a band for each kind in it', async () => {
+    api.listUsers.mockResolvedValue(MIXED);
+    renderWithProviders(<AdminUsersPage />);
+
+    await screen.findByRole('table');
+    expect(screen.getAllByRole('table')).toHaveLength(1);
+
+    const bands = screen.getAllByRole('rowheader');
+    expect(bands.map((band) => band.textContent)).toEqual(['الجهات1', 'المشرفون1', 'الموظفون2']);
+  });
+
+  it('puts each account under its own kind’s band, in the order entities, administrators, employees', async () => {
+    api.listUsers.mockResolvedValue(MIXED);
+    renderWithProviders(<AdminUsersPage />);
+
+    const rows = within(await screen.findByRole('table')).getAllByRole('row');
+    const text = rows.map((r) => r.textContent ?? '');
+
+    const at = (needle: string) => text.findIndex((line) => line.includes(needle));
+
+    expect(at('الجهات')).toBeLessThan(at('مسؤول الجهة التدريبية'));
+    expect(at('مسؤول الجهة التدريبية')).toBeLessThan(at('المشرفون'));
+    expect(at('المشرفون')).toBeLessThan(at('مدير النظام'));
+    expect(at('مدير النظام')).toBeLessThan(at('الموظفون'));
+    expect(at('الموظفون')).toBeLessThan(at('سارة العتيبي'));
+    expect(at('سارة العتيبي')).toBeLessThan(at('خالد الشهري'));
+  });
+
+  it('paints the band green with white text', async () => {
+    api.listUsers.mockResolvedValue(MIXED);
+    renderWithProviders(<AdminUsersPage />);
+
+    const [band] = await screen.findAllByRole('rowheader');
+
+    expect(band).toHaveClass('bg-success');
+    expect(band).toHaveClass('text-white');
+  });
+
+  it('draws no band for a kind with nobody on the page', async () => {
+    api.listUsers.mockResolvedValue(page([row({ id: 'e1' })]));
+    renderWithProviders(<AdminUsersPage />);
+
+    await screen.findByRole('table');
+    expect(screen.getAllByRole('rowheader').map((band) => band.textContent)).toEqual(['الموظفون1']);
+  });
+});
 
 describe('Admin users (§4C.2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.listUsers.mockResolvedValue(page([row()]));
     api.listEntities.mockResolvedValue([]);
+    api.listPaths.mockResolvedValue(PATH_ROWS);
     api.getUser.mockResolvedValue(DETAIL);
   });
 
@@ -254,6 +396,124 @@ describe('Admin users (§4C.2)', () => {
     });
   });
 
+  describe('managing an employee: the department, not the role', () => {
+    it('offers no role control for an employee — they stay an employee', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByLabelText('الإدارة');
+
+      expect(screen.queryByRole('button', { name: 'تطبيق الدور' })).not.toBeInTheDocument();
+      /* The role field of the create form is a different screen; in this panel
+         there is none. */
+      expect(
+        within(document.querySelector('dialog')!).queryByLabelText('الدور'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('offers the department as a drop-down of the ministry’s list', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      const select = await screen.findByLabelText('الإدارة');
+
+      expect(select.tagName).toBe('SELECT');
+      expect(
+        within(select).getByRole('option', { name: 'المديرية العامة للجوازات' }),
+      ).toBeInTheDocument();
+      /* The account's own department predates the list; it is kept so the select
+         never claims the person is somewhere they are not. */
+      expect(within(select).getByRole('option', { name: 'تقنية المعلومات' })).toBeInTheDocument();
+    });
+
+    it('shows the save button only once the department has changed, and saves it', async () => {
+      api.setUserDepartment.mockResolvedValue(row());
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      const select = await screen.findByLabelText('الإدارة');
+      expect(screen.queryByRole('button', { name: 'حفظ الإدارة' })).not.toBeInTheDocument();
+
+      await user.selectOptions(select, 'المديرية العامة للجوازات');
+      await user.click(await screen.findByRole('button', { name: 'حفظ الإدارة' }));
+
+      await waitFor(() =>
+        expect(api.setUserDepartment).toHaveBeenCalledWith('u1', 'المديرية العامة للجوازات'),
+      );
+      expect(await screen.findByText('تم تغيير الإدارة.')).toBeInTheDocument();
+    });
+
+    it('offers no role control for anybody — the role is decided at creation', async () => {
+      api.listUsers.mockResolvedValue(page([row({ id: 'a1', role: 'SUPER_ADMIN' })]));
+      api.getUser.mockResolvedValue({ ...DETAIL, id: 'a1', role: 'SUPER_ADMIN', paths: [] });
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      /* The status controls are there; the role control is not, for an
+         administrator any more than for an employee. */
+      expect(await screen.findByRole('button', { name: 'إيقاف الحساب' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'تطبيق الدور' })).not.toBeInTheDocument();
+      expect(
+        within(document.querySelector('dialog')!).queryByLabelText('الدور'),
+      ).not.toBeInTheDocument();
+      /* The department is an employee's edit; an administrator has none here. */
+      expect(screen.queryByLabelText('الإدارة')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('deleting an account, beyond suspending it', () => {
+    async function openPanel() {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByLabelText('الإدارة');
+      return user;
+    }
+
+    it('offers the delete next to suspending, behind a confirmation', async () => {
+      const user = await openPanel();
+
+      expect(screen.getByRole('button', { name: 'إيقاف الحساب' })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'حذف الحساب' }));
+
+      /* Nothing is deleted by the first click. */
+      expect(await screen.findByText('حذف هذا الحساب نهائيًا؟')).toBeInTheDocument();
+      expect(api.deleteUser).not.toHaveBeenCalled();
+      /* And it says what the alternative is. */
+      expect(screen.getByText(/فاستخدم «إيقاف الحساب»/)).toBeInTheDocument();
+    });
+
+    it('deletes on confirmation and closes the panel', async () => {
+      api.deleteUser.mockResolvedValue(undefined);
+      const user = await openPanel();
+
+      await user.click(screen.getByRole('button', { name: 'حذف الحساب' }));
+      await user.click(await screen.findByRole('button', { name: 'حذف نهائي' }));
+
+      await waitFor(() => expect(api.deleteUser).toHaveBeenCalledWith('u1'));
+      /* The panel has no subject any more, and the list behind it was refreshed. */
+      await waitFor(() => expect(screen.queryByLabelText('الإدارة')).not.toBeInTheDocument());
+      expect(api.listUsers.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it('says why when the server refuses, and leaves the account in place', async () => {
+      const { ApiError } = await import('@/lib/api-client');
+      api.deleteUser.mockRejectedValue(new ApiError('ACCOUNT_HOLDS_CERTIFICATES', 409));
+      const user = await openPanel();
+
+      await user.click(screen.getByRole('button', { name: 'حذف الحساب' }));
+      await user.click(await screen.findByRole('button', { name: 'حذف نهائي' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/يحمل شهادات صادرة/);
+      expect(screen.getByLabelText('الإدارة')).toBeInTheDocument();
+    });
+  });
+
   describe('managing one account', () => {
     it('summarises the journey without reproducing the learner screens', async () => {
       const user = userEvent.setup();
@@ -261,10 +521,92 @@ describe('Admin users (§4C.2)', () => {
 
       await user.click(await screen.findByRole('button', { name: 'إدارة' }));
 
-      expect(await screen.findByText(/SIA/)).toBeInTheDocument();
-      expect(screen.getByText(/مسار الموارد البشرية/)).toBeInTheDocument();
+      /* The rung they were placed on, not the assessment answers behind it. */
+      expect(await screen.findByText('متقدم')).toBeInTheDocument();
+      expect(screen.getAllByText('مسار الموارد البشرية').length).toBeGreaterThan(0);
       /* A count, not the certificates themselves. */
       expect(screen.getByText('الشهادات')).toBeInTheDocument();
+    });
+
+    it('assignments (D-134): lists each path, both placed and awaiting may be revoked', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByText('المسارات المُسندة');
+
+      /* One placed, one awaiting (the fixture) — both are still held, so both
+         offer a revoke; a placed one moves to REVOKED (kept as history) rather
+         than being deleted, which is what the confirmation below is about. */
+      expect(screen.getAllByText('مسار الموارد البشرية').length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('button', { name: 'إلغاء الإسناد' })).toHaveLength(2);
+    });
+
+    it('assignments (D-134): revoking a placed path asks first, and a decline sends nothing', async () => {
+      const user = userEvent.setup();
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByText('المسارات المُسندة');
+
+      const [placedRevoke] = screen.getAllByRole('button', { name: 'إلغاء الإسناد' });
+      await user.click(placedRevoke!);
+
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(api.revokePath).not.toHaveBeenCalled();
+      confirmSpy.mockRestore();
+    });
+
+    it('assignments (D-134): confirming revokes a placed path too', async () => {
+      const user = userEvent.setup();
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      api.revokePath.mockResolvedValue(undefined);
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+      await screen.findByText('المسارات المُسندة');
+
+      const [placedRevoke] = screen.getAllByRole('button', { name: 'إلغاء الإسناد' });
+      await user.click(placedRevoke!);
+
+      await waitFor(() => expect(api.revokePath).toHaveBeenCalledWith('u1', 'p-1'));
+      confirmSpy.mockRestore();
+    });
+
+    it('assignments (D-134): offers only published paths they are not on, one grant per tick', async () => {
+      api.getUser.mockResolvedValue({ ...DETAIL, paths: [] });
+      api.assignPath.mockResolvedValue({ created: 1, alreadyAssigned: 0 });
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      const group = await screen.findByRole('group', { name: 'إسناد مسارات' });
+      const boxes = within(group).getAllByRole('checkbox');
+      /* Three published, never the draft. */
+      expect(boxes).toHaveLength(3);
+
+      /* Nothing ticked, nothing to send. */
+      const assign = within(group).getByRole('button', { name: 'إسناد' });
+      expect(assign).toBeDisabled();
+
+      await user.click(within(group).getByLabelText('مسار الموارد البشرية'));
+      await user.click(within(group).getByLabelText('مسار العمليات'));
+      await user.click(assign);
+
+      /* One decision per path on the wire — each grant its own event. */
+      await waitFor(() => expect(api.assignPath).toHaveBeenCalledTimes(2));
+      expect(api.assignPath).toHaveBeenCalledWith('p-1', ['u1']);
+      expect(api.assignPath).toHaveBeenCalledWith('p-3', ['u1']);
+      expect(await screen.findByText('أُسند المسار.')).toBeInTheDocument();
+    });
+
+    it('assignments (D-134): a path they already hold is not offered again', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AdminUsersPage />);
+      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
+
+      const group = await screen.findByRole('group', { name: 'إسناد مسارات' });
+      /* Two of the three published paths are already theirs. */
+      expect(within(group).getAllByRole('checkbox')).toHaveLength(1);
+      expect(within(group).getByLabelText('مسار العمليات')).toBeInTheDocument();
     });
 
     it('offers suspend for an active account and reactivate for a suspended one', async () => {
@@ -281,7 +623,7 @@ describe('Admin users (§4C.2)', () => {
       const user = userEvent.setup();
       renderWithProviders(<AdminUsersPage />);
       await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-      await screen.findByText(/SIA/);
+      await screen.findByText('المسارات المُسندة');
 
       /* An "invitation" to somebody who already signed in is a password reset,
          and the server refuses it as such. */

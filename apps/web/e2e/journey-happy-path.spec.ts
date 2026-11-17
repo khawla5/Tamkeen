@@ -1,92 +1,50 @@
 import { expect, test } from '@playwright/test';
 
 import { signedInEmployee } from './account';
+import { ADMIN_PASSWORD, releaseAdmin, seedAdmin, type SeededAdmin } from './admin-fixtures';
 import { completeAssessment } from './journey';
 import { assertMailpitReachable } from './mailpit';
 
 /**
- * The Phase 1 end-to-end happy path (§2B, and the Phase 1 "done when"):
+ * The Phase 1 end-to-end happy path, rebuilt for D-130/D-134:
  *
- *   take the assessment → get a Holland Code → see gold-highlighted paths →
- *   pick one → build 5-10 courses → confirm → land on My Path
+ *   nothing to do until the ministry assigns a path → an administrator
+ *   assigns one → the learner sits its placement assessment → the ladder
+ *   shows where they landed → into a course, through the player
  *
  * Driven through a real browser against the built app, real PostgreSQL and the
- * mock LMS. Nothing is stubbed, including registration — this is the whole
- * journey a ministry employee actually makes.
+ * mock LMS. Nothing is stubbed, including registration and the admin's own
+ * assignment screen — the two halves of the journey a real employee and a real
+ * administrator actually make.
  */
 
 test.beforeAll(async () => {
   await assertMailpitReachable();
 });
 
-test.describe('Phase 1 journey', () => {
-  test('assess → Holland Code → gold paths → build five → confirm → My Path', async ({ page }) => {
-    await signedInEmployee(page, 'journey');
+test.describe('Phase 1 journey (D-134)', () => {
+  let admin: SeededAdmin;
 
-    // ── The dashboard starts near-empty, with one action ──────────────────────
-    await expect(page.getByRole('heading', { name: 'ابدأ بتقييم ميولك المهنية' })).toBeVisible();
+  test.afterAll(async () => {
+    if (admin) await releaseAdmin(admin);
+  });
 
-    /* §4.2 (D-071): before the assessment the nav is Dashboard and Profile —
-       two items, nothing else to wander into. */
-    const nav = page.getByRole('navigation', { name: 'التنقل الرئيسي' });
+  test('assign → placement assessment → ladder → course', async ({ browser }) => {
+    test.setTimeout(120_000);
+
+    const learnerPage = await browser.newPage();
+    const account = await signedInEmployee(learnerPage, 'journey');
+
+    // ── Nothing assigned yet: one thing to see, and it is not a button ────────
+    await expect(
+      learnerPage.getByRole('heading', { name: 'لم يُسند إليك مسار بعد' }),
+    ).toBeVisible();
+
+    /* §4.2 (D-071, restated for D-134): before a path exists the nav is
+       Dashboard and Profile — two items, nothing else to wander into. */
+    const nav = learnerPage.getByRole('navigation', { name: 'التنقل الرئيسي' });
     await expect(nav.getByRole('link')).toHaveCount(2);
     await expect(nav.getByRole('link', { name: 'الدورات' })).toHaveCount(0);
-    await expect(nav.getByRole('link', { name: 'مساري' })).toHaveCount(0);
-
-    /* And the URL agrees with the nav: the catalogue bounces to the dashboard. */
-    await page.goto('/courses');
-    await expect(page).toHaveURL('http://localhost:3000/');
-    await expect(page.getByRole('heading', { name: 'ابدأ بتقييم ميولك المهنية' })).toBeVisible();
-
-    await page.getByRole('link', { name: 'ابدأ التقييم' }).click();
-
-    // ── The assessment ────────────────────────────────────────────────────────
-    await expect(page).toHaveURL(/\/assessment$/);
-
-    /* D-073: the sidebar stays during the assessment, and leaving mid-way keeps
-       the answers — answer two, visit the profile, come back, still on the
-       third statement. */
-    await expect(nav.getByRole('link')).toHaveCount(2);
-    for (let i = 0; i < 2; i += 1) {
-      await page.getByRole('radio').last().check();
-      await page.getByRole('button', { name: 'التالي' }).click();
-    }
-    await expect(page.getByText('السؤال 3 من 30')).toBeVisible();
-    await nav.getByRole('link', { name: 'الملف الشخصي' }).click();
-    await expect(page).toHaveURL(/\/profile$/);
-    await page.goto('/assessment');
-    await expect(page.getByText('السؤال 3 من 30')).toBeVisible();
-
-    await completeAssessment(page, 3);
-
-    // ── Results: the code, then gold paths ────────────────────────────────────
-    await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
-    await expect(page.getByRole('heading', { name: 'ميولك المهنية' })).toBeVisible();
-
-    /* Answering everything at the top level ties all six dimensions, so the
-       canonical tie-break (D-031) applies and the code is RIA — deterministic,
-       which is the whole point of that rule. */
-    await expect(page.getByText('الواقعي').first()).toBeVisible();
-
-    const recommended = page.getByRole('heading', { name: 'مسارات موصى بها لك' });
-    await expect(recommended).toBeVisible();
-    /* Two paths per letter × three letters in the code. `exact` matters: without
-       it the substring also matches "الموصى بها" in the section heading and the
-       explanatory sentence, which would quietly inflate the count. */
-    await expect(page.getByText('موصى به', { exact: true })).toHaveCount(6);
-
-    /* Gold is a highlight, not a filter — the other paths are still listed. */
-    await expect(page.getByRole('heading', { name: 'مسارات أخرى' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'استعرض المسار' })).toHaveCount(12);
-
-    /* The retake entry point exists while nothing is committed (D-015). */
-    await expect(page.getByRole('link', { name: 'إعادة التقييم' })).toBeVisible();
-
-    /* Courses joined the nav the moment the assessment was done — no reload,
-       the portal state refreshed on submit. Results is a bare flow page, so
-       read the nav from the dashboard. */
-    await page.goto('/');
-    await expect(nav.getByRole('link', { name: 'الدورات' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'مساري' })).toHaveCount(0);
     await page.goto('/results');
 
@@ -145,118 +103,89 @@ test.describe('Phase 1 journey', () => {
     await expect(page.getByRole('button', { name: 'ابدأ الدورة' })).toBeVisible();
     expect(await page.content()).not.toContain('tamkeensso');
 
-    await page.getByRole('link', { name: 'العودة إلى مساري' }).click();
-    await expect(page).toHaveURL(/\/my-path$/, { timeout: 15_000 });
+    /* The catalogue itself opens only once a path is assigned — the URL
+       bounces to the dashboard exactly as the nav says it would. */
+    await learnerPage.goto('/courses');
+    await expect(learnerPage).toHaveURL('http://localhost:3000/');
 
-    // ── Into a course, through the player (§4.8, Phase 2) ─────────────────────
-    /* The Phase 2 user-visible flow: My Path no longer links at the LMS
-       directly, because that deep link carries no session. Entry goes through
-       the player, which mints a signed single-use handoff on click (D-044). */
-    await page.getByRole('link', { name: 'ابدأ الدورة' }).first().click();
-    await expect(page).toHaveURL(/\/courses\/[0-9a-f-]+\/player$/, { timeout: 15_000 });
+    // ── An administrator assigns a path (§4C.2, D-133) ────────────────────────
+    admin = await seedAdmin();
+    const adminPage = await browser.newPage();
 
-    await expect(page.getByText('الدورة 1 من 5')).toBeVisible();
-    await expect(page.getByText(/منصة التعلّم/)).toBeVisible();
+    await adminPage.goto('/login');
+    await adminPage.getByLabel('البريد الإلكتروني').fill(admin.email);
+    await adminPage.getByLabel('كلمة المرور', { exact: true }).fill(ADMIN_PASSWORD);
+    await adminPage.getByRole('button', { name: 'تسجيل الدخول' }).click();
+    await expect(adminPage).toHaveURL(/\/admin$/, { timeout: 15_000 });
 
-    /* Nothing has been attempted, so no outcome is claimed either way. */
-    await expect(page.getByText('اجتزت هذه الدورة')).toHaveCount(0);
-    await expect(page.getByText('لم تجتز هذه الدورة بعد')).toHaveCount(0);
+    await adminPage.getByRole('link', { name: 'الحسابات' }).click();
+    await adminPage.getByLabel('بحث').fill(account.email);
+    /* The search narrows asynchronously (no debounce, but a real API round
+       trip) — scoped to the account's own row rather than the bare "إدارة"
+       button, so this waits for that row specifically instead of racing
+       whichever page of unfiltered rows loaded first. */
+    const row = adminPage.getByRole('row', { name: account.email });
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: 'إدارة' }).click();
 
-    /* One action, and the handoff URL is NOT in the page — it is minted when
-       the learner clicks, so a credential never sits in the rendered markup. */
-    await expect(page.getByRole('button', { name: 'ابدأ الدورة' })).toBeVisible();
-    expect(await page.content()).not.toContain('tamkeensso');
+    const assignFieldset = adminPage.getByRole('group', { name: 'إسناد مسارات' });
+    const firstPath = assignFieldset.locator('label').first();
+    const pathName = (await firstPath.textContent())!.trim();
+    await firstPath.locator('input[type="checkbox"]').check();
+    await assignFieldset.getByRole('button', { name: 'إسناد' }).click();
+    await expect(adminPage.getByText('أُسند المسار.')).toBeVisible();
 
-    await page.getByRole('link', { name: 'العودة إلى مساري' }).click();
-    await expect(page).toHaveURL(/\/my-path$/, { timeout: 15_000 });
-
-    // ── The commitment is visible everywhere afterwards ───────────────────────
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'تابع من حيث توقفت' })).toBeVisible();
-    /* My Path joins the navigation only once there is a path (§4.2). */
+    // ── The dashboard now offers the placement assessment ─────────────────────
+    await learnerPage.goto('/');
+    await expect(learnerPage.getByRole('heading', { name: pathName })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'الدورات' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'مساري' })).toBeVisible();
 
-    await page.goto('/results');
-    await expect(page.getByRole('heading', { name: 'ميولك المهنية' })).toBeVisible();
-    /* The retake option is gone — not disabled, gone (D-015). */
-    await expect(page.getByRole('link', { name: 'إعادة التقييم' })).toHaveCount(0);
-  });
+    await learnerPage.getByRole('link', { name: 'ابدأ التقييم' }).click();
+    await expect(learnerPage).toHaveURL(/\/paths\/[0-9a-f-]+\/assessment$/);
+    const assessmentUrl = learnerPage.url();
+    const pathId = assessmentUrl.match(/\/paths\/([0-9a-f-]+)\/assessment$/)![1]!;
 
-  test('a confirmed path cannot be rebuilt or switched from the UI', async ({ page }) => {
-    await signedInEmployee(page, 'locked');
-
-    await page.goto('/assessment');
-    await completeAssessment(page);
-    await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
-
-    await page.getByRole('link', { name: 'استعرض المسار' }).first().click();
-    /* Wait for the client-side navigation to land before reading the URL —
-       `page.url()` straight after a click still returns the previous route. */
-    await expect(page).toHaveURL(/\/paths\//);
-    const pathUrl = page.url();
-
-    for (let selected = 1; selected <= 5; selected += 1) {
-      await page.getByRole('button', { name: 'أضف' }).first().click();
-      await expect(page.getByText(`اخترت ${selected} من 5–10`)).toBeVisible();
+    // ── The assessment itself ──────────────────────────────────────────────
+    /* D-073's rule, restated: the sidebar stays during the assessment, and
+       leaving mid-way keeps the answers. The nav is already the full six —
+       courses and My Path both appear the moment a path is assigned, even
+       before the assessment has placed the learner on it. */
+    await expect(nav.getByRole('link')).toHaveCount(6);
+    for (let i = 0; i < 2; i += 1) {
+      await learnerPage.getByRole('radio').first().check();
+      await learnerPage.getByRole('button', { name: 'التالي' }).click();
     }
+    await expect(learnerPage.getByText(/^السؤال 3 من \d+$/)).toBeVisible();
+    await nav.getByRole('link', { name: 'الملف الشخصي' }).click();
+    await expect(learnerPage).toHaveURL(/\/profile$/);
+    await learnerPage.goto(assessmentUrl);
+    await expect(learnerPage.getByText(/^السؤال 3 من \d+$/)).toBeVisible();
 
-    await page.getByRole('button', { name: 'تأكيد المسار' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'نعم، أكّد المسار' }).click();
-    await expect(page).toHaveURL(/\/my-path$/, { timeout: 15_000 });
+    await completeAssessment(learnerPage, 3);
 
-    /* Returning to the build page shows the locked state rather than a form
-       whose submissions the server would reject. */
-    await page.goto(pathUrl);
-    await expect(page.getByText('مسارك مؤكَّد')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'أضف' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'تأكيد المسار' })).toHaveCount(0);
-  });
+    // ── The ladder: placed ──────────────────────────────────────────────────
+    await expect(learnerPage).toHaveURL(`http://localhost:3000/paths/${pathId}`, {
+      timeout: 15_000,
+    });
+    await expect(learnerPage.getByText(/^مستواك في هذا المسار: /)).toBeVisible();
 
-  test('the catalogue is browsable once assessed, before any path, with no action offered', async ({
-    page,
-  }) => {
-    await signedInEmployee(page, 'browse');
+    // ── The commitment is visible everywhere afterwards ────────────────────
+    await learnerPage.goto('/');
+    await expect(learnerPage.getByText(/^مستواك في هذا المسار: /)).toBeVisible();
 
-    /* D-071: the catalogue opens after the assessment, not before. */
-    await page.goto('/assessment');
-    await completeAssessment(page);
-    await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
-    await page.goto('/');
+    // ── Into a course, through the player (§4.8) ───────────────────────────
+    await learnerPage.goto(`/my-path?pathId=${pathId}`);
+    await learnerPage.getByRole('link', { name: 'ابدأ الدورة' }).first().click();
+    await expect(learnerPage).toHaveURL(/\/courses\/[0-9a-f-]+\/player$/, { timeout: 15_000 });
 
-    await page.getByRole('link', { name: 'الدورات' }).click();
-    await expect(page).toHaveURL(/\/courses$/);
+    /* The frame itself is the one action — it mounts on its own once the mock
+       LMS answers the launch request. */
+    const frame = learnerPage.locator('iframe').first();
+    await expect(frame).toBeVisible({ timeout: 15_000 });
+    await expect(frame).toHaveAttribute('src', /tamkeensso/);
 
-    /* 48 seeded courses, one of which the LMS no longer shows. */
-    await expect(page.getByText('47 دورة')).toBeVisible();
-
-    await page.getByRole('link', { name: 'مقدمة في إدارة المشاريع' }).click();
-    await expect(page.getByRole('heading', { name: 'أهداف الدورة' })).toBeVisible();
-
-    /* §4.7: exactly one action applies, and before a path exists none does —
-       so no "add", no "start", no "completed". */
-    await expect(page.getByRole('button', { name: 'أضف إلى مساري' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'ابدأ الدورة' })).toHaveCount(0);
-    await expect(page.getByText('مكتملة')).toHaveCount(0);
-  });
-
-  test('search and filters narrow the catalogue', async ({ page }) => {
-    await signedInEmployee(page, 'filter');
-
-    await page.goto('/assessment');
-    await completeAssessment(page);
-    await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
-
-    await page.goto('/courses');
-    await expect(page.getByText('47 دورة')).toBeVisible();
-
-    await page.getByLabel('ابحث في الدورات').fill('البيانات');
-    await expect(page.getByText('47 دورة')).toBeHidden();
-    await expect(page.getByRole('link', { name: 'تحليل البيانات للمبتدئين' })).toBeVisible();
-
-    await page.getByLabel('ابحث في الدورات').fill('لا-توجد-دورة-بهذا-الاسم');
-    await expect(page.getByText('لا توجد دورات مطابقة')).toBeVisible();
-
-    await page.getByRole('button', { name: 'إزالة عوامل التصفية' }).click();
-    await expect(page.getByText('47 دورة')).toBeVisible();
+    await learnerPage.getByRole('link', { name: 'العودة إلى مساري' }).click();
+    await expect(learnerPage).toHaveURL(/\/my-path/, { timeout: 15_000 });
   });
 });

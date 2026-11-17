@@ -1,53 +1,44 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AdminPathDetail, AdminPathRow } from '@tamkeen/types';
+import type { AdminPathCourseRow, AdminPathDetail, AdminPathRow } from '@tamkeen/types';
 
 import { renderWithProviders } from '@/test/render';
 
 /**
- * §4C.4 — study paths.
+ * §4C.4 — the list of study paths (D-134).
  *
- * Three things carry this file, and all three are about a rule being visible
- * before it is enforced.
+ * **The list only lists.** Each row says how much of the path is still waiting
+ * on the administrator: a course an entity has offered and nobody has placed
+ * reaches no learner at all, and that is invisible from every other screen. The
+ * ladder itself is a screen of its own (`admin-path-editor.test.tsx`), reached
+ * by a link rather than a modal — the work there is long enough to scroll and
+ * to come back to.
  *
- * **The 5-10 bounds are printed and have no control.** D-074 and §2 make them
- * fixed; an administrator explaining a rejected path build needs the numbers,
- * and nobody needs a way to lower them.
- *
- * **A path that cannot be offered says why.** Fewer than five selectable courses
- * means no learner could ever confirm it, and that is invisible from every
- * screen once the path is live.
- *
- * **A course held by learners cannot be removed, and the count says so.** The
- * server refuses; the panel disables the control and prints the number beside
- * the title, so the refusal is predictable rather than discovered.
- *
- * **Hiding and deleting must not be confusable.** They are separate sections
- * with separate words, and the irreversible one is simply absent — with its
- * reason in place of it — for any path somebody has chosen (D-098).
+ * **"إنشاء مسار" opens that exact same screen, not a form of its own.** A
+ * path answers to nothing but a name and a description, and the ladder screen
+ * already edits both — so the button creates a plain, placeholder-named path
+ * outright and hands off straight into it, rather than asking for the same
+ * two fields a second time first.
  */
 
 const api = vi.hoisted(() => ({
   listPaths: vi.fn(),
-  pathBounds: vi.fn(),
-  getPath: vi.fn(),
   createPath: vi.fn(),
-  updatePath: vi.fn(),
-  attachPathCourse: vi.fn(),
-  detachPathCourse: vi.fn(),
-  reorderPathCourses: vi.fn(),
-  attachableCourses: vi.fn(),
-  deletePath: vi.fn(),
+  getPath: vi.fn(),
 }));
+
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 
 vi.mock('@/lib/api-client', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api-client')>('@/lib/api-client');
 
   return { ...actual, adminApi: api };
 });
+
+vi.mock('@/lib/use-app-router', () => ({ useAppRouter: () => nav }));
 
 vi.mock('@/components/layout/admin-page', () => ({
   AdminPage: ({
@@ -72,66 +63,193 @@ const { default: AdminPathsPage } = await import('@/app/(admin)/admin/paths/page
 function row(overrides: Partial<AdminPathRow> = {}): AdminPathRow {
   return {
     id: 'p1',
-    key: 'hr',
-    name: 'مسار الموارد البشرية',
-    riasecLetter: 'S',
-    courseCount: 8,
-    committedLearners: 12,
-    isActive: true,
+    key: 'english',
+    name: 'مسار اللغة الإنجليزية',
+    levelCount: 3,
+    placedCourseCount: 8,
+    unassignedCourseCount: 0,
+    assignedLearners: 12,
+    hasActiveAssessment: true,
+    hasDraftAssessment: false,
+    status: 'PUBLISHED',
     displayOrder: 1,
     ...overrides,
   };
 }
 
-function course(index: number, held = 0) {
+beforeEach(() => {
+  vi.clearAllMocks();
+  api.listPaths.mockResolvedValue([row()]);
+});
+
+function pathCourse(
+  id: string,
+  title: string,
+  overrides: Partial<AdminPathCourseRow> = {},
+): AdminPathCourseRow {
   return {
-    id: `c${index}`,
-    moodleCourseId: 100 + index,
-    title: `دورة رقم ${index}`,
-    status: 'AVAILABLE' as const,
-    displayOrder: index,
+    id,
+    courseId: `c-${id}`,
+    moodleCourseId: 1,
+    title,
+    status: 'AVAILABLE',
+    placement: 'PLACED',
+    levelId: 'l1',
+    position: 1,
     ownerEntityName: null,
-    heldByLearners: held,
-  };
+    assignedByEntityName: null,
+    assignedAt: '2026-08-01T00:00:00.000Z',
+    learnersStarted: 3,
+    ...overrides,
+  } as AdminPathCourseRow;
 }
 
 function detail(overrides: Partial<AdminPathDetail> = {}): AdminPathDetail {
   return {
     ...row(),
-    description: 'وصف المسار الكامل الذي يقرأه الموظف قبل اختياره.',
-    typicalDurationMinutes: 600,
-    courses: [course(1), course(2), course(3), course(4), course(5)],
-    learners: { building: 3, active: 9, completed: 3 },
+    description: 'وصف',
+    skillOutcomes: [],
+    typicalDurationMinutes: null,
+    levels: [
+      {
+        id: 'l1',
+        name: 'مبتدئ',
+        position: 1,
+        hasPlacedLearners: false,
+        courses: [
+          pathCourse('a', 'الحروف والنطق', { position: 1 }),
+          pathCourse('b', 'المفردات الأساسية', { position: 2 }),
+        ],
+      },
+      { id: 'l2', name: 'متوسط', position: 2, hasPlacedLearners: false, courses: [] },
+    ],
+    unassignedCourses: [],
+    learners: { awaitingPlacement: 0, active: 0, completed: 0 },
     blockers: [],
-    selectableCourses: 5,
+    selectableCourses: 2,
     certificateCount: 0,
-    canDelete: false,
+    canDelete: true,
     ...overrides,
-  };
+  } as AdminPathDetail;
 }
 
-function dialog() {
-  return within(document.querySelector('dialog')!);
-}
-
-/* The confirmation opens as a SIBLING of the manage panel — nesting it inside
-   would nest one form in another — so it is the last dialog in the document,
-   not the first. */
-function confirmDialog() {
-  const dialogs = document.querySelectorAll('dialog');
-  return within(dialogs[dialogs.length - 1]!);
-}
-
-describe('Admin paths (§4C.4)', () => {
+describe('Admin paths — the road of a path’s courses', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    api.listPaths.mockResolvedValue([row()]);
-    api.pathBounds.mockResolvedValue({ min: 5, max: 10 });
     api.getPath.mockResolvedValue(detail());
-    api.attachableCourses.mockResolvedValue([]);
   });
 
-  it('shows the loading state before the list arrives', () => {
+  it('shows nothing of the road until the name is pressed, and asks for the path then', async () => {
+    renderWithProviders(<AdminPathsPage />);
+
+    await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ });
+    expect(api.getPath).not.toHaveBeenCalled();
+    expect(screen.queryByText('الحروف والنطق')).not.toBeInTheDocument();
+  });
+
+  it('opens the courses on the name, grouped by the level they are placed on', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    const name = await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ });
+    await user.click(name);
+
+    expect(name).toHaveAttribute('aria-expanded', 'true');
+    expect(api.getPath).toHaveBeenCalledWith('p1');
+    expect(await screen.findByText('الحروف والنطق')).toBeInTheDocument();
+    expect(screen.getByText('المفردات الأساسية')).toBeInTheDocument();
+    /* The levels, in order, each with its own stretch — the empty one marked. */
+    expect(screen.getByText('مبتدئ')).toBeInTheDocument();
+    expect(screen.getByText('متوسط')).toBeInTheDocument();
+    expect(screen.getByText('لا دورات في هذا المستوى')).toBeInTheDocument();
+  });
+
+  it('puts the courses in the order an employee meets them, within each level', async () => {
+    api.getPath.mockResolvedValue(
+      detail({
+        levels: [
+          {
+            id: 'l1',
+            name: 'مبتدئ',
+            position: 1,
+            hasPlacedLearners: false,
+            courses: [
+              pathCourse('b', 'الثانية', { position: 2 }),
+              pathCourse('a', 'الأولى', { position: 1 }),
+            ],
+          },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    await user.click(await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ }));
+
+    const pills = (await screen.findAllByText(/^(الأولى|الثانية)$/)).map(
+      (node) => node.textContent,
+    );
+    expect(pills).toEqual(['الأولى', 'الثانية']);
+  });
+
+  it('says in words that a hidden course cannot be reached', async () => {
+    api.getPath.mockResolvedValue(
+      detail({
+        levels: [
+          {
+            id: 'l1',
+            name: 'مبتدئ',
+            position: 1,
+            hasPlacedLearners: false,
+            courses: [pathCourse('a', 'دورة مخفية', { status: 'DRAFT' })],
+          },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    await user.click(await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ }));
+
+    expect(await screen.findByText('مخفية')).toBeInTheDocument();
+  });
+
+  it('names the courses that are in the path but on no level, off the road', async () => {
+    api.getPath.mockResolvedValue(
+      detail({
+        unassignedCourses: [
+          pathCourse('u', 'دورة بلا مستوى', {
+            placement: 'UNASSIGNED',
+            levelId: null,
+            position: null,
+          }),
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    await user.click(await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ }));
+
+    expect(await screen.findByText('دورة بلا مستوى')).toBeInTheDocument();
+    expect(screen.getByText(/دورات بانتظار الإسناد/)).toBeInTheDocument();
+  });
+
+  it('closes again, and keeps the manage link exactly as it was', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPathsPage />);
+
+    const name = await screen.findByRole('button', { name: /مسار اللغة الإنجليزية/ });
+    await user.click(name);
+    await screen.findByText('الحروف والنطق');
+    await user.click(name);
+
+    expect(screen.queryByText('الحروف والنطق')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'إدارة' })).toHaveAttribute('href', '/admin/paths/p1');
+  });
+});
+
+describe('Admin paths (§4C.4)', () => {
+  it('shows the loading state, then the paths', () => {
     api.listPaths.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<AdminPathsPage />);
 
@@ -145,250 +263,81 @@ describe('Admin paths (§4C.4)', () => {
     expect(await screen.findByRole('button', { name: /إعادة/ })).toBeInTheDocument();
   });
 
-  it('explains an empty list rather than showing a bare page', async () => {
+  it('summarises each path by its rungs, its placed courses and who is on it', async () => {
+    renderWithProviders(<AdminPathsPage />);
+
+    expect(await screen.findByText(/3 مستوى · 8 دورة مُسندة · 12 موظف/)).toBeInTheDocument();
+  });
+
+  it('marks on the list itself how many memberships nobody has placed', async () => {
+    /* The administrator's work queue: content an entity offered that reaches no
+       learner, and no other screen in the product would say so. */
+    api.listPaths.mockResolvedValue([row({ unassignedCourseCount: 3 })]);
+    renderWithProviders(<AdminPathsPage />);
+
+    expect(await screen.findByText('3 بانتظار الإسناد')).toBeInTheDocument();
+  });
+
+  it('marks a path that is not offered', async () => {
+    api.listPaths.mockResolvedValue([row({ status: 'DRAFT' })]);
+    renderWithProviders(<AdminPathsPage />);
+
+    expect(await screen.findByText('مسودة')).toBeInTheDocument();
+  });
+
+  it('explains an empty list rather than showing an empty box', async () => {
     api.listPaths.mockResolvedValue([]);
     renderWithProviders(<AdminPathsPage />);
 
     expect(await screen.findByText('لا توجد مسارات بعد')).toBeInTheDocument();
   });
 
-  it('prints the 5-10 rule and offers no way to change it', async () => {
+  it('opens the ladder as a link, so it can be bookmarked and opened in a tab', async () => {
+    /* A modal has no address. Making this a link is most of what moving the
+       editor onto its own screen bought. */
     renderWithProviders(<AdminPathsPage />);
 
-    expect(await screen.findByText(/يختار الموظف بين 5 و10 دورات/)).toBeInTheDocument();
-    /* D-074: shown, never edited. A spinbutton here would be the control that
-       eventually lowers the floor. */
-    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'إدارة' })).toHaveAttribute(
+      'href',
+      '/admin/paths/p1',
+    );
   });
 
-  it('names the RIASEC type in Arabic and the committed learners', async () => {
+  it('offers no ladder editing on the list itself', async () => {
     renderWithProviders(<AdminPathsPage />);
 
-    expect(await screen.findByText('الاجتماعي')).toBeInTheDocument();
-    expect(screen.getByText(/12 موظفًا أكّدوا هذا المسار/)).toBeInTheDocument();
+    await screen.findByText(/3 مستوى/);
+    expect(screen.queryByLabelText('اسم المسار')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('المستوى')).not.toBeInTheDocument();
   });
 
-  it('marks a path that is not offered', async () => {
-    api.listPaths.mockResolvedValue([row({ isActive: false })]);
+  it('creates a placeholder path and replaces straight into its ladder screen', async () => {
+    /* No form first: the ladder screen already edits the name and the
+       description, so asking for them here would be the same two fields
+       twice. */
+    const user = userEvent.setup();
+    api.createPath.mockResolvedValue({ id: 'p9' });
     renderWithProviders(<AdminPathsPage />);
 
-    expect(await screen.findByText('غير معروض')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'إنشاء مسار' }));
+
+    await waitFor(() =>
+      expect(api.createPath).toHaveBeenCalledWith(
+        expect.objectContaining({ name: expect.any(String), description: expect.any(String) }),
+      ),
+    );
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/admin/paths/p9'));
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
-  describe('creating', () => {
-    it('says the new path will not be offered yet', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminPathsPage />);
+  it('shows the server’s refusal if creating the placeholder path fails', async () => {
+    const user = userEvent.setup();
+    api.createPath.mockRejectedValue(new Error('down'));
+    renderWithProviders(<AdminPathsPage />);
 
-      await user.click(await screen.findByRole('button', { name: 'إنشاء مسار' }));
+    await user.click(await screen.findByRole('button', { name: 'إنشاء مسار' }));
 
-      /* Which is why the form has no activate switch — an answer rather than an
-         omission. */
-      expect(await screen.findByText(/يُنشأ المسار غير معروض على الموظفين/)).toBeInTheDocument();
-      expect(dialog().queryByLabelText(/عرض/)).not.toBeInTheDocument();
-    });
-
-    it('opens the new path straight away, since it needs courses next', async () => {
-      const user = userEvent.setup();
-      api.createPath.mockResolvedValue(detail({ id: 'p2', courses: [], selectableCourses: 0 }));
-
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إنشاء مسار' }));
-
-      await user.type(dialog().getByLabelText('اسم المسار'), 'مسار جديد');
-      await user.type(dialog().getByLabelText('المعرّف'), 'new-path');
-      await user.type(dialog().getByLabelText('وصف المسار'), 'وصف كافٍ لتجاوز الحد الأدنى.');
-      await user.click(dialog().getByRole('button', { name: 'إنشاء' }));
-
-      await waitFor(() => expect(api.getPath).toHaveBeenCalledWith('p2'));
-    });
-  });
-
-  describe('the detail panel', () => {
-    it('separates learners who are committed from learners who are still choosing', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      /* The distinction the retirement decision turns on: only the people still
-         choosing are affected by taking the path out of new selections. */
-      expect(await screen.findByText('يختارون دوراتهم')).toBeInTheDocument();
-      expect(screen.getByText('هؤلاء وحدهم من يتأثر بإيقاف عرض المسار.')).toBeInTheDocument();
-      expect(screen.getByText('أكّدوا المسار، ولا يتأثرون بأي تغيير هنا.')).toBeInTheDocument();
-    });
-
-    it('explains why a path cannot be offered, before the attempt', async () => {
-      const user = userEvent.setup();
-      api.getPath.mockResolvedValue(
-        detail({
-          isActive: false,
-          courses: [course(1), course(2)],
-          selectableCourses: 2,
-          blockers: ['PATH_TOO_FEW_COURSES'],
-        }),
-      );
-
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      expect(await screen.findByText(/أقل من الحد الأدنى الذي يحتاجه الموظف/)).toBeInTheDocument();
-      expect(dialog().getByRole('button', { name: 'عرض المسار' })).toBeDisabled();
-    });
-
-    it('disables removing a course learners hold, and says how many', async () => {
-      const user = userEvent.setup();
-      api.getPath.mockResolvedValue(
-        detail({ courses: [course(1, 4), course(2), course(3), course(4), course(5)] }),
-      );
-
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      /* The number beside the title is the reason the control is disabled —
-         a disabled button with no explanation teaches nothing. */
-      expect(await screen.findByText(/يحتفظ بها 4 من الموظفين/)).toBeInTheDocument();
-
-      const remove = dialog().getAllByRole('button', { name: 'إزالة الدورة من المسار' });
-      expect(remove[0]).toBeDisabled();
-      expect(remove[1]).toBeEnabled();
-    });
-
-    it('offers retire for an offered path and activate for one that is not', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      /* Context-dependent, never both (§3). */
-      expect(await dialog().findByRole('button', { name: 'إيقاف العرض' })).toBeInTheDocument();
-      expect(dialog().queryByRole('button', { name: 'عرض المسار' })).not.toBeInTheDocument();
-    });
-
-    it('shows the server’s refusal rather than assuming the disabled button was enough', async () => {
-      const user = userEvent.setup();
-      const { ApiError } = await import('@/lib/api-client');
-      api.updatePath.mockRejectedValue(new ApiError('PATH_TOO_FEW_COURSES', 409));
-
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-      await user.click(await dialog().findByRole('button', { name: 'إيقاف العرض' }));
-
-      await waitFor(() =>
-        expect(dialog().getByRole('alert')).toHaveTextContent(/أقل من الحد الأدنى/),
-      );
-    });
-
-    it('offers save only once something has changed', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      await screen.findByLabelText('اسم المسار');
-      expect(dialog().queryByRole('button', { name: 'حفظ التعديلات' })).not.toBeInTheDocument();
-
-      await user.type(dialog().getByLabelText('اسم المسار'), 'ـ');
-
-      expect(await dialog().findByRole('button', { name: 'حفظ التعديلات' })).toBeInTheDocument();
-    });
-
-    it('disables moving the first course up and the last one down', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      const up = await dialog().findAllByRole('button', { name: 'تحريك لأعلى' });
-      const down = dialog().getAllByRole('button', { name: 'تحريك لأسفل' });
-
-      expect(up[0]).toBeDisabled();
-      expect(down.at(-1)).toBeDisabled();
-    });
-
-    it('asks for no duration, and offers no way to add a course', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      await screen.findByLabelText('اسم المسار');
-      /* The duration was a hand-maintained estimate for a path whose real
-         length is whichever five to ten courses a learner picks; adding a
-         course is the course's own act, done where its metadata is set. */
-      expect(dialog().queryByLabelText(/المدة/)).not.toBeInTheDocument();
-      expect(dialog().queryByRole('button', { name: 'إضافة دورة' })).not.toBeInTheDocument();
-      /* What can still be decided about the courses from here is untouched. */
-      expect(dialog().getAllByRole('button', { name: 'إزالة الدورة من المسار' })).not.toHaveLength(
-        0,
-      );
-    });
-
-    it('refuses deletion in words for a path somebody has chosen, and still offers hiding', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      expect(await dialog().findByText(/لا يمكن حذف هذا المسار/)).toBeInTheDocument();
-      /* Absent, not disabled: there is nothing to try, and the sentence in its
-         place names the reversible operation that does work. */
-      expect(dialog().queryByRole('button', { name: 'حذف نهائي' })).not.toBeInTheDocument();
-      expect(dialog().getByRole('button', { name: 'إيقاف العرض' })).toBeInTheDocument();
-    });
-
-    it('keeps deleting and hiding apart, and confirms the irreversible one', async () => {
-      const user = userEvent.setup();
-      api.getPath.mockResolvedValue(
-        detail({ canDelete: true, learners: { building: 0, active: 0, completed: 0 } }),
-      );
-      api.deletePath.mockResolvedValue(undefined);
-
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      /* Two sections, two words, and the reversible one is not dressed as the
-         destructive one. */
-      expect(await dialog().findByText('حذف المسار')).toBeInTheDocument();
-      expect(dialog().getByText('عرض المسار على الموظفين')).toBeInTheDocument();
-
-      await user.click(dialog().getByRole('button', { name: 'حذف نهائي' }));
-
-      /* Names the path, and offers the alternative in the same breath — an
-         administrator reaching for delete when they meant hide is the mistake
-         this dialog exists to catch. */
-      expect(
-        await confirmDialog().findByText(/سيُحذف مسار «مسار الموارد البشرية»/),
-      ).toBeInTheDocument();
-      expect(confirmDialog().getByText(/إن أردت إخفاءه مع الاحتفاظ به/)).toBeInTheDocument();
-
-      await user.click(confirmDialog().getByRole('button', { name: 'حذف نهائي' }));
-
-      await waitFor(() => expect(api.deletePath).toHaveBeenCalledWith('p1'));
-      /* The row vanishing is nothing at all to a screen reader. */
-      expect(await screen.findByText('حُذف المسار نهائيًا.')).toBeInTheDocument();
-    });
-
-    it('shows the server’s refusal when the path was chosen between load and click', async () => {
-      const user = userEvent.setup();
-      const { ApiError } = await import('@/lib/api-client');
-      api.getPath.mockResolvedValue(detail({ canDelete: true }));
-      api.deletePath.mockRejectedValue(new ApiError('PATH_HELD_BY_LEARNERS', 409));
-
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-      await user.click(await dialog().findByRole('button', { name: 'حذف نهائي' }));
-      await user.click(confirmDialog().getByRole('button', { name: 'حذف نهائي' }));
-
-      await waitFor(() =>
-        expect(confirmDialog().getByRole('alert')).toHaveTextContent(/لا يمكن حذف هذا المسار/),
-      );
-    });
-
-    it('explains an empty course list rather than showing an empty box', async () => {
-      const user = userEvent.setup();
-      api.getPath.mockResolvedValue(
-        detail({ courses: [], selectableCourses: 0, blockers: ['PATH_TOO_FEW_COURSES'] }),
-      );
-
-      renderWithProviders(<AdminPathsPage />);
-      await user.click(await screen.findByRole('button', { name: 'إدارة' }));
-
-      expect(await screen.findByText('لا توجد دورات في هذا المسار بعد.')).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 });

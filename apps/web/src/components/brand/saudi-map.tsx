@@ -12,9 +12,9 @@ import { SAUDI_MAP_VIEWBOX, SAUDI_REGIONS } from './saudi-map-paths';
  * silences them: the regions reveal in sequence on load, then a slow highlight
  * drifts across them — ambient, not attention-seeking.
  */
-const REVEAL_STEP_MS = 70;
+const REVEAL_STEP_MS = 150;
 const DRIFT_STEP_MS = 600;
-const LABEL_SIZE = 24;
+export const LABEL_SIZE = 24;
 
 /**
  * Where the source's label anchor does not fit the name, a better interior
@@ -22,7 +22,7 @@ const LABEL_SIZE = 24;
  * one. Names always sit inside their region; the map is sized so they fit.
  * Coordinates are viewBox units.
  */
-const LABEL_PLACEMENT: Record<string, { x: number; y: number; size?: number }> = {
+export const LABEL_PLACEMENT: Record<string, { x: number; y: number; size?: number }> = {
   /* Long name: into the region's body, off the Jawf border. */
   SA08: { x: 405, y: 112 },
   /* Off the Tabuk border. */

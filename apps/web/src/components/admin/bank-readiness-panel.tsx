@@ -2,28 +2,37 @@
 
 import { useTranslations } from 'next-intl';
 
-import { RIASEC_LETTERS, type AdminBankReadiness } from '@tamkeen/types';
+import type { AdminAssessmentReadiness, LevelRef } from '@tamkeen/types';
 
 import { Card } from '@/components/ui/card';
 import { useFormat } from '@/i18n/format-provider';
 
 /**
- * Why a draft can or cannot be published (§4C.3, D-071).
+ * Why a draft can or cannot be published (§4C.3, D-071, D-134).
  *
  * **Blockers and warnings are rendered as different things, because they are.**
  * A blocker is a refusal the server will repeat; a warning is a judgement the
  * administrator is allowed to make. Styling them alike would teach that both can
- * be clicked past, which is exactly wrong for the one that skews every Holland
- * Code the version will ever produce.
+ * be clicked past, which is exactly wrong for the one that decides where every
+ * learner this version places will start.
  *
- * When the bank is unbalanced the panel prints **what each dimension can
- * attain**, rather than only saying that something is wrong. "الاجتماعي ٢٤ /
- * الواقعي ٢٠" tells an administrator which dimension to even up; "غير متوازن"
- * sends them to count questions by hand.
+ * The panel prints **the highest attainable total**, because it is the number
+ * the band table has to cover and the one an administrator cannot work out by
+ * looking. A rung with no item aimed at it is named rather than counted, for the
+ * same reason: "المستوى المتقدم" tells them what to write next, "١ ناقص" does
+ * not.
  */
-export function BankReadinessPanel({ readiness }: { readiness: AdminBankReadiness }) {
+export function BankReadinessPanel({
+  readiness,
+  levels,
+}: {
+  readiness: AdminAssessmentReadiness;
+  levels: LevelRef[];
+}) {
   const t = useTranslations('admin');
   const format = useFormat();
+
+  const nameOf = (levelId: string) => levels.find((level) => level.id === levelId)?.name ?? levelId;
 
   const clean = readiness.blockers.length === 0 && readiness.warnings.length === 0;
 
@@ -31,7 +40,9 @@ export function BankReadinessPanel({ readiness }: { readiness: AdminBankReadines
     return (
       <Card edge="success" className="p-5">
         <p className="text-sm font-medium text-foreground">{t('bankReady')}</p>
-        <p className="mt-1 text-sm text-muted-foreground">{t('bankReadyHint')}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t('bankReadyHint', { maxScore: format.number(readiness.maxScore) })}
+        </p>
       </Card>
     );
   }
@@ -47,21 +58,9 @@ export function BankReadinessPanel({ readiness }: { readiness: AdminBankReadines
             ))}
           </ul>
 
-          {!readiness.balanced ? (
-            <>
-              <p className="mt-4 text-sm text-muted-foreground">{t('attainableHeading')}</p>
-              <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                {RIASEC_LETTERS.map((letter) => (
-                  <div key={letter} className="flex gap-2">
-                    <dt className="text-muted-foreground">{t(`riasec.${letter}`)}</dt>
-                    <dd className="font-medium text-foreground">
-                      {format.number(readiness.attainable[letter])}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </>
-          ) : null}
+          <p className="mt-4 text-sm text-muted-foreground">
+            {t('bankMaxScore', { maxScore: format.number(readiness.maxScore) })}
+          </p>
         </Card>
       ) : null}
 
@@ -73,6 +72,13 @@ export function BankReadinessPanel({ readiness }: { readiness: AdminBankReadines
               <li key={code}>{t(`bankWarning.${code}`)}</li>
             ))}
           </ul>
+
+          {readiness.levelsWithoutQuestion.length > 0 ? (
+            <p className="mt-2 text-sm text-foreground">
+              {readiness.levelsWithoutQuestion.map(nameOf).join('، ')}
+            </p>
+          ) : null}
+
           {/* Said plainly, so nobody has to try the button to find out. */}
           <p className="mt-2 text-sm text-muted-foreground">{t('bankWarningHint')}</p>
         </Card>

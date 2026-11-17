@@ -1,7 +1,8 @@
-import type { Certificate } from '../../generated/prisma';
+import type { Certificate } from '../generated/prisma';
 import { AuditAction } from '../audit/audit.actions';
 import type { AuditEntry, AuditService } from '../audit/audit.service';
 import type { AppConfigService } from '../config/app-config.module';
+import type { LearnerPathService } from '../journey/learner-path.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
   CertificateIssuanceService,
@@ -33,12 +34,13 @@ interface Options {
   concurrentInsert?: boolean;
   createError?: { code: string } | Error;
   renderThrows?: boolean;
-  /** The learner's confirmed path, and which of its courses they passed. */
+  /** The courses the path owes this learner, and which of them they passed. */
   pathCourseIds?: number[];
   passedCourseIds?: number[];
-  pathConfirmed?: boolean;
-  /** A different path than the one issuance is asked for (D-002 makes this a mismatch). */
-  committedPathId?: string;
+  /** False when the assessment has not placed them yet (D-134). */
+  placed?: boolean;
+  /** No assigned path at all, so `ladder` answers null. */
+  pathAssigned?: boolean;
   /** Finished paths reconciliation should find. */
   finishedPaths?: Array<{ userId: string; pathId: string }>;
 }
@@ -143,13 +145,7 @@ function harness(options: Options = {}) {
         ),
     },
     userPath: {
-      findUnique: () =>
-        Promise.resolve({
-          path: { name: 'مسار القيادة الإدارية' },
-          pathId: options.committedPathId ?? PATH_ID,
-          confirmedAt: options.pathConfirmed === false ? null : new Date('2026-06-01'),
-          courses: pathCourseIds.map((moodleCourseId) => ({ course: { moodleCourseId } })),
-        }),
+      findFirst: () => Promise.resolve({ path: { name: 'مسار القيادة الإدارية' } }),
       findMany: () => Promise.resolve(options.finishedPaths ?? []),
     },
     path: {
@@ -202,8 +198,59 @@ function harness(options: Options = {}) {
       Promise.resolve(key === 'CERT_ISSUING_BODY' ? 'الجهة المصدرة: وزارة الداخلية' : ''),
   } as unknown as SettingsService;
 
+  /*
+   * The ladder, faked at the seam issuance actually reads (D-134). What a path
+   * owes a learner is derived in one place — `LearnerPathService` — so this
+   * stands in for it rather than reconstructing the derivation here.
+   */
+  const learnerPaths = {
+    ladder: () =>
+      Promise.resolve(
+        options.pathAssigned === false
+          ? null
+          : {
+              pathId: PATH_ID,
+              pathName: 'مسار القيادة الإدارية',
+              userPathId: 'user-path-1',
+              status: 'ACTIVE' as const,
+              assignedAt: new Date('2026-06-01'),
+              placedLevel:
+                options.placed === false ? null : { id: 'level-1', name: 'تأسيسي', position: 1 },
+              pendingAssessmentId: null,
+              levels: [
+                {
+                  id: 'level-1',
+                  name: 'تأسيسي',
+                  position: 1,
+                  standing: 'PLACED' as const,
+                  courses: pathCourseIds.map((moodleCourseId, index) => ({
+                    courseId: `course-${moodleCourseId}`,
+                    moodleCourseId,
+                    title: 'دورة',
+                    summary: '',
+                    durationMinutes: 60,
+                    position: index + 1,
+                    status: 'NOT_STARTED' as const,
+                    gradePercent: null,
+                    passed: passedCourseIds.includes(moodleCourseId),
+                    startable: true,
+                  })),
+                },
+              ],
+            },
+      ),
+  } as unknown as LearnerPathService;
+
   return {
-    service: new CertificateIssuanceService(prisma, audit, config, settings, storage, renderer),
+    service: new CertificateIssuanceService(
+      prisma,
+      audit,
+      learnerPaths,
+      config,
+      settings,
+      storage,
+      renderer,
+    ),
     certificates,
     audits,
     notifications,
@@ -331,8 +378,8 @@ describe('CertificateIssuanceService', () => {
 
     it('refuses when a course was completed but not passed', async () => {
       /*
-       * The whole reason this gate reads `completions.passed` rather than
-       * `UserPathCourse.status`: a course can be COMPLETED in the LMS and below
+       * The whole reason this gate reads `completions.passed` rather than the
+       * LMS's completion signal: a course can be finished in Moodle and below
        * the product threshold (D-042 §4). Certifying that path would attest to
        * something that did not happen.
        */
@@ -348,18 +395,18 @@ describe('CertificateIssuanceService', () => {
       expect(renderCount()).toBe(0);
     });
 
-    it('refuses when the path was never confirmed', async () => {
-      const { service } = harness({ pathConfirmed: false });
+    it('refuses when the assessment has not placed the learner yet', async () => {
+      /* Nothing is owed until a rung is decided, so there is nothing finished
+         to certify (D-134). */
+      const { service } = harness({ placed: false });
 
       await expect(service.issuePathCertificate(USER_ID, PATH_ID)).rejects.toThrow(
         CertificateNotEarnedError,
       );
     });
 
-    it('refuses a path the learner did not commit to', async () => {
-      /* One path per user (D-002), so being asked about another one is a
-         mismatch rather than a second path to check. */
-      const { service } = harness({ committedPathId: 'some-other-path' });
+    it('refuses a path the ministry never assigned to them', async () => {
+      const { service } = harness({ pathAssigned: false });
 
       await expect(service.issuePathCertificate(USER_ID, PATH_ID)).rejects.toThrow(
         CertificateNotEarnedError,
@@ -367,6 +414,8 @@ describe('CertificateIssuanceService', () => {
     });
 
     it('refuses an empty path rather than reading it as finished', async () => {
+      /* A learner placed on the top rung of a path with nothing on it would
+         otherwise earn its certificate without taking a single course. */
       const { service } = harness({ pathCourseIds: [], passedCourseIds: [] });
 
       await expect(service.issuePathCertificate(USER_ID, PATH_ID)).rejects.toThrow(

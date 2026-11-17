@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   /* `generated/**` is the Prisma client: machine-written, not ours to lint. */
-  { ignores: ['dist/**', 'coverage/**', 'generated/**', 'eslint.config.mjs'] },
+  { ignores: ['dist/**', 'coverage/**', 'generated/**', 'src/generated/**', 'eslint.config.mjs'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

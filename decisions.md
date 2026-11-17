@@ -5,6 +5,378 @@
 
 ---
 
+## D-137 — Vercel deployment as Services; Prisma client generated inside `src/`
+
+**Decision (user-directed, 2026-11-17):** the app deploys to Vercel as one project
+with two services from a root `vercel.json` — `api` (NestJS, `apps/api`, public on
+`/api/*`) and `web` (Next.js, `apps/web`, everything else) — on one domain, so the
+session cookie and CSRF double-submit work same-origin. No bindings: the web app
+calls the API from the browser through `NEXT_PUBLIC_API_URL`, never server-to-server.
+Each service builds `@tamkeen/types` first. The Prisma client is now generated to
+`apps/api/src/generated/prisma` (was `apps/api/generated/prisma`) and copied into
+`dist/` by a nest-cli asset rule; imports moved from `../../generated/prisma` to
+`../generated/prisma`.
+
+**Why:** Vercel's NestJS runtime ships the compiled `dist/` as the function root, so a
+client living beside `dist/` was never deployed (`Cannot find module
+'../../generated/prisma'`). Generating it inside `src/` keeps the import depth the same
+in source, in `dist/`, and on Vercel.
+
+**Rejected:** a wrapper entrypoint loading `dist/main.js` (Vercel validates the
+entrypoint before the build and still flattens `dist/`); switching to the default
+`@prisma/client` output (a wider change to the generator than the deploy needed).
+
+**Limits of this deployment (Phase 7 still open):** `MOODLE_MODE=mock` (Moodle cannot
+run on Vercel), `SYNC_SCHEDULER_ENABLED=false` (BullMQ needs a long-running worker),
+certificates written to `/tmp` (not durable), no SMTP provider yet.
+
+---
+
+## D-136 — The path ladder is a screen, not a modal
+
+**Decision (user-directed, 2026-09-10):** `/admin/paths/[pathId]` is a route.
+§4C.4's path editor — the unassigned queue, the rungs and their courses, the
+rung selector and reorder arrows on every row, the learner counts, the publish
+gate and the delete section — moved out of `AdminDialog` onto its own screen,
+reached by a link from the list rather than by a click that opens a panel over
+it. The list keeps only what a list does: name, counts, status, and a link in.
+Creating a path stays a dialog, and so does the delete confirmation.
+
+**Why:** the user's words after using it — the popup «look overwhelmed». They
+are right, and the reason generalises: a modal is for one question answered
+once, and this is a work queue you scroll, leave and come back to. A dialog
+gives that no address to return to, traps focus around something the
+administrator wants to scroll, and nests its scrollbar inside the page's. The
+address is the part worth having beyond the room: a ladder can now be
+bookmarked and opened in a second tab beside the assessment it is waiting on.
+
+**Consequences:** deleting a path navigates back to the list rather than closing
+a panel, so the list's «حُذف المسار نهائيًا» status line went with it — the page
+change is the announcement it was standing in for. Creating a path now goes
+straight into its ladder, which was already the next step and is now a real
+navigation. `path-detail-panel.tsx` is `path-editor.tsx`, and its tests split
+into a list file and an editor file.
+
+**Rejected:** widening the dialog (a bigger modal is still a modal — same
+scrollbar, same missing address); a drawer (same, with less room); splitting the
+editor across two dialogs (two modals to answer one question is worse than one).
+
+## D-135 — The seeded catalogue is three paths: English, Arabic, communication skills
+
+**Decision (user-directed, 2026-09-10):** the twelve seeded ministry-operations
+paths are gone. Three remain — «مسار اللغة الإنجليزية», «مسار اللغة العربية» and
+«مسار مهارات التواصل» — and the mock LMS catalogue was rewritten from
+forty-eight courses to the twenty-seven those three are made of. **All three ship
+PUBLISHED**, each with an authored nine-item Arabic placement bank, so a fresh
+database offers three paths a learner can be assigned and placed on rather than
+two among ten drafts.
+
+**The rungs are named in each subject's own vocabulary,** at the user's
+direction: English carries the CEFR bands («مبتدئ — A1 إلى A2», «متوسط — B1 إلى
+B2», «متقدم — C1»); Arabic and communication skills are simply stages
+(«المرحلة الأولى» and after it). A CEFR band is the one Latin token the seed's
+Arabic-first test now allows, and `catalog.spec.ts` states the exemption in two
+characters and no more — «B1» is what a language learner, an HR file and every
+other language school already mean by that level, and rendering it as Arabic
+alone would throw away the only label portable outside this platform.
+
+**Why:** the ministry's actual training offer. The twelve paths were built to
+give twelve RIASEC letters something to recommend (D-011), and that model is
+retired (D-130/D-134); what survived was a catalogue nobody had asked for. The
+courses had to be replaced rather than regrouped, because the seed's own tests
+require every course to sit on a rung of some path — regrouping would have put
+«أمن المعلومات الأساسي» inside «مسار اللغة الإنجليزية», which is a catalogue that
+reads as nonsense.
+
+**Rejected:** keeping the forty-eight courses and spreading them over three
+paths (see above); shipping the three as drafts (nothing would be assignable on
+a fresh database, and every e2e suite that needs a published path would have to
+build one); a smaller replacement of five or six courses per path (the courses
+page would have had almost nothing to show).
+
+**Still placeholder:** the courses, their objectives, the path descriptions and
+the three banks are engineering-authored and plausible, not directorate content.
+The rule D-134 set stands — the ticket is not done until الإدارة العامة للتدريب
+has signed off a bank per path.
+
+## D-135 — The integration role may delete a course (user-directed, 2026-10-11)
+
+**Decision:** the least-privilege Moodle role of §5.1 gains exactly two things: the capability `moodle/course:delete` and the external-service function `core_course_delete_courses`. Both are in `infra/moodle/moodle-setup.php` (idempotent) and were applied to the local Moodle by re-running it.
+
+**Why:** the administrator's «حذف نهائي» (§4C.5) deleted the LMS course first and our row second, and failed with «حساب الربط لا يملك صلاحية حذف الدورات» because the role could not do the first step. The user asked for the administrator to be able to delete.
+
+**Scope of the widening:** the credential is server-side only and the only caller is `AdminCoursesService.remove`, which is admin-only, audited, and still refuses a course held by any confirmed path (D-015/D-040). Deleting a course in Moodle removes its content, quizzes and grades — it cannot be undone, which is why the dialog says so.
+
+**How to apply:** any other environment (staging, production) must re-run `moodle-setup.php` — until then the delete shows the existing refusal and «سحب الدورة» remains the safe alternative.
+
+## D-134 — Paths have levels; one assessment per path places the learner; an entity offers a course, an administrator places it
+
+**Decision (2026-09-09, implementing D-130's pivot in full):** the career-path structure is rebuilt around four objects and one rule about who decides what.
+
+A **path** has ordered **levels** (`levels.position`, unique per path), exactly one live **assessment** of its own, and many **path_courses** join rows. Each membership carries a nullable `(level_id, position)` pair — **both null or both set**, enforced by the database (`path_courses_placement_complete`) and by the service. That pair is the whole model: `level_id IS NULL` means *unassigned* and the course reaches no learner at all; set means *placed*, and it is visible on that rung. `placement` is derived from it in one place (`PATH_COURSE_PLACEMENTS`) so no screen can invent a third reading. Positions are re-packed to `1 … n` after every place, move, unplace and remove, in two passes through a parking offset above the range — the unique index on `(level_id, position)` refuses two rows in one slot even momentarily, and `position >= 1` refuses the obvious negative-parking trick.
+
+**Who decides what is the point of the split.** An **entity** attaches a course to a *path* and nothing more; a `levelId` or `position` in that request is refused (422), and an entity may withdraw a membership only while it is unassigned — once an administrator has placed it, removing it would pull the course out from under the learners standing on that rung. An **administrator** owns the ladder: creating and reordering rungs, placing courses onto them and ordering them within one. A **learner** takes the assessment, is placed by their score, and sees every rung with theirs marked — the ones below are ground the placement says they covered, readable but not owed.
+
+**The assessment is per path**, replacing both global instruments. It is a scored test — items carry `marks`, exactly one option per item is `isCorrect`, and a band table maps `0 … maxScore` onto the rungs as an exact partition. An unauthored table falls back to an even split (`defaultPlacementBands`), which is the rule in force rather than an empty form. The learner-facing contract carries **no answer key and no triage signal**: not `isCorrect`, and not `marks` or the rung an item targets either — knowing an item is worth three marks or aims at the top rung tells a taker where to spend effort, and a placement test is only useful if it measures what somebody can do unaided across the whole range. Copy-on-write versioning stands (D-049): an edit opens a deep copy, publishing retires its predecessor, and every placement already recorded keeps pointing at the version that produced it.
+
+**Assignment replaces the approval gate.** The ministry assigns a path to an employee, who may hold several (`user_paths` unique on `(user_id, path_id)`); the assessment then places them. There is no path selection, no 5–10 build, no confirm. An assignment may be revoked only before a placement exists, for the same reason a taken assessment could not be unassigned: a placement is a record, and revoking under it would leave it pointing at a path the employee was never on. A path may be published only when it has a rung, a published assessment and something placed — otherwise everyone assigned to it waits at «بانتظار تحديد المستوى» forever, which is what the admin dashboard's stuck-paths section and the assessment shelf both exist to surface.
+
+**Retired with it:** RIASEC in every form (`riasec_letter`, the six dimensions, the Holland code, recommendation and its ranking), the English/CEFR instrument (D-123–D-126), `user_path_courses` and the build flow, `courses.is_general`, `paths.is_active` (now `PathStatus`), the membership approval queue and the letter-coherence cap (D-119's numeric cap stands), and `assessment_assignments` (D-132/D-133 — the path assignment is the gate now, and it still lives in the account panel).
+
+**Why:** D-130 left the product describing a model it no longer implements, and the gap was not closable one screen at a time — the recommendation logic, the 5–10 rule, the single-path ceiling and the Holland scoring were one interlocking design. Levels are what makes an assigned path fair: the ministry directs *what* an employee trains in, and the assessment decides *where they start*, so a senior officer and a new recruit on the same path are not handed the same first course.
+
+**Rejected:** keeping the two global instruments and letting a path point at one (an instrument shared across paths cannot band scores onto rungs that differ per path); storing `placement` as a column (a second source of truth for something `level_id` already says); letting an entity place its own course (the ladder is curriculum sequencing, which is the ministry's judgement, not the supplier's); a nullable `position` without the paired check constraint (half-placed rows are unrepresentable by construction, and the database is where that belongs); resetting a learner's progress when a course moves rungs (see the open item below).
+
+**Open (§10 of the brief, deliberately undecided):** what should happen to a learner's in-progress work when the course they started moves to a different rung. Progress is keyed `(user, moodle_course_id)` in `completions` and survives the move untouched; the administrator is **told, not asked**. Three code locations carry it: the move itself in `AdminLevelsService.place`, its log line, and the warning on the ladder editor. A `TODO(product-decision)` marks the single point where a reset would go if the ministry ever wants one.
+
+## D-133 — Assignment lives in «الحسابات»; /admin/assessment is the shelf of all instruments
+
+**Decision (user-directed, 2026-09-01, superseding D-132's screen — its rules stand):** the standalone «إسناد التقييمات» screen is gone. **Assigning is an account decision**, made in the manage-account panel of «الحسابات»: an employee's panel lists their assigned instruments with status (revoke only while untaken, as before) and offers the **not-yet-assigned instruments as a multi-selection** (checkboxes — amended same session from a single-choice dropdown at the user's direction) with one assign action for everything ticked, sent as one grant per instrument so each stays its own audit event; the read side rides on `GET /admin/users/:id` (`AdminUserDetail.assignments`), the writes stay on `POST/DELETE /api/admin/assignments` (the overview `GET` was removed with its screen). **`/admin/assessment` becomes the list of all assessments** — one row per instrument with its active version, question count and draft badge, each opening its own question editor beneath it (`/admin/assessment/riasec`, `/admin/assessment/english`); the two editors remain separate pages sharing no code (D-124), only the shelf is shared. The admin nav drops both `adminEnglish` and the assignment item — back to eight.
+
+**Why:** the user's direction after seeing the built screen: assignment belongs where the account is managed ("who may take" is a property of a person, beside their role and status — the same panel that already shows their journey), and the assessments belong on one list you press into to edit. The standalone screen answered "who has X been assigned to", which the ministry asks less often than "what may this person take".
+
+**Rejected:** keeping both surfaces (two write paths to one decision drift apart); folding the English editor's *content* into one shared editor page (D-124 stands — the list links, the editors stay siblings); keeping the overview GET unused (dead surface is audit surface).
+
+## D-132 — Assessments are assigned: one admin screen decides who may take which instrument
+
+**Decision (2026-09-01, D-130's first implemented slice):** a new `assessment_assignments` table — `(user_id, instrument)` unique, `instrument` an enum (`RIASEC` | `ENGLISH_CEFR`), `assigned_by_id`/`assigned_at` — gates TAKING each instrument: `GET`/`submit` on both assessment APIs refuse an unassigned employee with 403 `ASSESSMENT_NOT_ASSIGNED` (submission refusals audited), while **result reads stay open — an earned result outlives any assignment change**. One admin screen, «إسناد التقييمات» (`/admin/assignments`, its own nav item beside the two instruments), lists both instruments with assignees and status; assigning is a picked selection of employees (employees only, idempotent per pair, each grant audited `ADMIN_ASSESSMENT_ASSIGNED` against the user); revoking DELETES the row (the audit log is the history, `ADMIN_ASSESSMENT_UNASSIGNED`) and is REFUSED once the instrument is taken — a result must never point at a gate claiming it could not have happened. The gate itself is `AssignmentsService`, a JourneyModule-shaped read-only module both instrument services and the dashboard depend on. The dashboard carries `assignedInstruments`: PRE_ASSESSMENT without RIASEC shows a quiet «بانتظار إسناد التقييم» card instead of the start button, the English card renders only when assigned or already taken, and the assessment pages send an unassigned visitor home (the server 403 is the control, the redirect the courtesy).
+
+**Why:** the user's direction — "employees can only take the assigned assessments", with both instruments on one screen and the human deciding. An enum rather than a generic instruments table (two instruments; a third is an enum member away; the instrument *domains* stay siblings per D-124). No backfill of existing results: assignment gates taking, not seeing, so the 206 Holland results and every English level remain readable; existing e2e takers now assign at account creation, the way the ministry would.
+
+**Rejected:** auto-assignment rules from assessment results (the human decides; results inform); folding the screen into `/admin/assessment` (that page is one instrument's *editor*; this spans both); marking revoked rows instead of deleting (a second history beside the audit log); gating result reads (would orphan earned results).
+
+## D-131 — The landing footer sits on the hero's deep green (user-directed)
+
+**Decision (2026-09-01):** the landing footer's ground is `primary-deep` — the hero's own green — with the hero's light-on-green text scheme, the brand lockup on a white plate (the Tamkeen logo is dark blue on transparent and unreadable on green), and a light hairline before the © strip. This is a deliberate deviation from §3's "never green as a large surface / dark neutral for the landing footer": the user directed it after seeing the light footer live. The page now opens and closes on the same surface. Scope is the landing footer only — the rule stands everywhere else.
+
+## D-130 — PRODUCT PIVOT (user-directed, 2026-09-01): skill-level assessment, ministry-assigned paths, fixed course sets
+
+**Decision:** the ministry's model changes in three connected ways, per the user's direction in-session: (1) the assessment measures the employee's **level in a specific skill according to the ministry's needs** — no longer a Holland/RIASEC interest assessment; (2) there are **no recommendations** — the **ministry assigns paths to each employee** (no free choice), and **an employee may be assigned more than one path** (amended same session — this also retires the old one-path-per-user ceiling, not just the free choice); (3) **each path carries its fixed course set** — the employee completes all of it, no 5–10 self-selection. Certificates (course + path, with verification) remain the outcome. Confirmed as a change to the product itself, not merely landing copy.
+
+**Applied so far:** ONLY the landing page's «عن المنصة» tabs (التقييم · إسناد المسار · دورات المسار · الشهادات, placeholder copy pending the user's authored content). Everything else still implements the old model and now diverges: CLAUDE.md §§2/3A/4.3–4.5 (locked recommendation/retake/5–10 rules), the Holland assessment + scoring, Results & Path Selection, path build + confirm, the dashboard states, the hero body and FAQ answers («كيف يُطابَق الموظف مع مساره؟», the 5–10 answer), `paths.riasec_letter`, the seeded RIASEC bank. Reshaping those is team-level work to be ticketed and sequenced — not to be absorbed silently into unrelated sessions. CLAUDE.md itself needs a ministry-approved rewrite of the affected sections.
+
+**Why:** the ministry's stated need — training is directed by organizational requirement, not employee inclination; the assessment's job is placement precision, not interest matching.
+
+**Open questions for the ministry:** does the assessment result drive which path is assigned (and if so, how)? who performs the assignment (super-admin? entity? import)? can an assignment be changed by the ministry after issue? does the English/CEFR instrument (D-123–D-126) become the template for skill assessments generally?
+
+## D-129 — «عن المنصة» carries the platform's idea in four concept tabs; the path catalogue leaves the landing page
+
+**Decision (user-directed, 2026-09-01):** the "عن المنصة" section is no longer an explorer of the real paths. Its tabs are the four stages of the employee's journey — «التقييم المهني» · «التوصية بالمسارات» · «بناء المسار» · «الشهادات» — each panel two or three sentences of locked product rules (the {min}–{max} range interpolated from the shared constants), one «إنشاء حساب» action beneath. The section fetches nothing; `GET /api/public/paths` (D-128) stays in the API but currently has no consumer. The four-line matching strip is retired — the tabs are those four lines, grown into panels. This partially reverses D-128's explorer (the skills reframe of hero/FAQ/footer and `paths.skill_outcomes` stand); it also supersedes the interim dropdown picker (`ecb89c8`), which had replaced D-128's per-path tabs and was judged worse than either: an explorer that hides its offer behind a form control.
+
+**Why:** the user's direction after living with both versions: the landing page should sell the concept, not preview the catalogue — the real paths meet the employee inside the product, after the assessment has ordered them for *them*, which is the only ordering that makes the list meaningful. On the public page the twelve paths are an unordered wall of names to a visitor with no Holland code, and the per-path panel (counts, outcomes pending directorate sign-off) read as filler.
+
+**Rejected:** keeping path tabs and only dropping the course-count line (still a catalogue, still unordered for the anonymous reader); removing `GET /api/public/paths` (cheap to keep, and the explorer may return in some form once `skill_outcomes` are directorate-authored).
+
+## D-128 — The landing explorer shows real paths; a second public endpoint, cached, feeds it
+
+**Decision (TAM-150):** the landing page's message is reframed around skills — "the ministry builds nameable capabilities through structured paths matched to interests" — read by management first, the employee second, with the assessment named only as the matching mechanism, never the headline. `paths.skill_outcomes` (`text[]`, default `[]`) is a new directorate-authored field, edited beside `description` in §4C.4. The "عن المنصة" explorer is rewritten from a four-stage generic walkthrough into one tab per active path, each panel showing the path's career type (D-099 Arabic names), its skill outcomes, description, course count and typical duration — all read from a new `GET /api/public/paths` (`@Public()`, rate-limited, five-minute in-process cache), never typed into the frontend. A compact four-line strip beneath the tabs keeps the one thing the old walkthrough got right: how a path is actually reached. The FAQ is re-chosen for the same two-reader order (how matching works, what the certificate attests, before registration/logistics questions); the footer line is rewritten in skill-development terms.
+
+**Why:** the platform's own message had drifted into narrating its screens — "take an assessment, get a result, browse courses" — which tells a manager nothing about what their employees will be *able to do*, and tells an employee nothing beyond a sequence of steps. Skills are the actual product; a path that cannot say what it produces is not ready to be shown, which is why `skill_outcomes` exists as directorate content rather than something engineering can honestly invent. The explorer showing four generic stages instead of the twelve real paths was the same drift in the UI: a visitor could learn how the platform works without learning anything about the paths it actually offers.
+
+**The public endpoint is deliberately narrow and separately owned.** `PublicPathsController` is its own controller, not a `@Public()` method bolted onto the authenticated `PathsController` (class-level `@Roles('EMPLOYEE')`, every field answering "for *this* learner") — sharing a prefix would invite the two shapes to drift together. `PublicPathSummary` carries no recommendation fields and nothing from `courses` beyond a count, matching certificate verification's reasoning for what an unauthenticated reader may have. The five-minute in-process cache (no Redis) is sized to the actual requirement — a read-mostly query behind the product's highest-traffic anonymous page — not durability; a cold start or a second instance just pays for one real query.
+
+**The twelve seeded paths carry placeholder skill outcomes, clearly marked as such in `catalog.ts`** — topically plausible so §4C.4 has something concrete to edit rather than a templated blank, but not directorate-authored. The ticket is not done until they are replaced with signed-off content, the same rule the landing copy itself lives under (owed in progress.md).
+
+**Rejected:** folding the public route into `PathsController` (drift risk above); a durable cache for a value editable at any time by an administrator (five minutes of staleness is the acceptable cost of simplicity here, not a product guarantee); writing "real" skill outcomes instead of marked placeholders (content the directorate has not authored is not engineering's to invent, however plausible).
+
+## D-127 — «الأثر» is the first tab of §4C.8, and every figure on it carries the period it is about
+
+**Decision (TAM-149):** §4C.8 becomes three views on the shared tablist (TAM-118) — «الأثر» · «التقارير» · «سجل العمليات» — and opens on the first. The reports beside it are unchanged; what they could not answer is the question management actually asks, because they have no time axis and no department axis: how many of our people took part this quarter, in which directorates, what did they complete, and is it growing. One endpoint, `GET /api/admin/impact?from&to&department`, one service, `admin-impact.service.ts`; every column it reads exists already, so it adds aggregation and nothing else.
+
+**Four rulings inside it, each of which a plausible implementation would have got quietly wrong:**
+
+1. **The comparison is a window of equal length, not the previous calendar period.** Q2 has ninety-one days and Q3 ninety-two; a calendar-to-calendar delta would report about a per cent of growth that is nothing but the length of the months. Equal-length shifting also keeps the contract at `from`/`to`: which preset the screen was showing never becomes a vocabulary the API has to branch on. For the default period — a calendar month — the shift lands exactly on the previous month, which is the case that matters.
+2. **The participation rate is cumulative, and the tile says what its denominator is.** «Confirmed this quarter ÷ registered this quarter» can exceed one hundred per cent — someone who registered last year and committed this one is in the numerator and not the denominator — so it is not a rate. Both halves are counted to the end of the period. The denominator is **accounts, not the ministry's headcount**, which the platform has no way of knowing; the screen states that rather than letting a figure be quoted upward as workforce participation. A `MINISTRY_HEADCOUNT` setting could replace it later — noted, not built.
+3. **A pass with no LMS timestamp is dated by when we recorded it.** `completions.completed_at` is what Moodle reported and is the right date, but it is legitimately null on a course whose completion criteria carry no timestamps (D-038). Filtering on it alone would put such a pass in no period at all — invisible in every impact report while still counting in the reports tab's running total, which is the worst of both.
+4. **Counts are people, de-duplicated, and employees only.** Every participation figure is read through `user` with a relation filter rather than by counting rows in the child table, so a retake is one assessed employee (D-033) and six passed courses are one active learner. An administrator's or an entity contact's account is not the ministry's workforce taking part in training, so `role: EMPLOYEE` is the population everywhere — including the rate's denominator.
+
+**Two things are said out loud rather than left to be inferred:** a pass whose course has no `duration_minutes` (D-035) contributes no hours, and the count of such passes travels with the total so the screen can state it — a silently short figure is worse than a stated gap. And the language-level block renders «لم يُفعَّل اختبار المستوى بعد» rather than an empty list, because "not enabled" and "nobody took it" are different findings; `cefr` is `null` in the contract until TAM-148 ships, which is what makes the distinction expressible.
+
+**Paths completed are read from the path certificate**, not from `user_paths`: issuance is idempotent and happens the moment the last course is passed (§5.5), so the certificate row is the only durable record of *when* a path was finished — `user_paths` carries a status and an `updated_at` that any later write moves.
+
+**Export and print.** The CSV is rendered in the browser over the shared `toCsv`, for D-112's reason: every column of it is Arabic copy, and that lives in the message catalogue. Printing is a stylesheet — `@page` A4, the frame's navigation, user menu and skip link marked `data-print="chrome"` and dropped, the owner's lockup and the classification kept, because a sheet that leaves a government office has to say whose it is. No second renderer: the Puppeteer path stays where the typography has to be exact, on certificates and the CV.
+
+**Rejected:** sending the preset to the API (a second vocabulary for something the two dates already say); a charting dependency for the trend (the repo takes none for a bar, and every bar here is paired with its number so the row survives a printer that drops backgrounds — WCAG 1.4.1); reusing `AdminLetterShare` whole for the period's career types (its `activePaths` is a fact about now, and every other figure on the tab is a fact about the period); a fifth «مسارات مكتملة» tile beside the path-certificate count (§3 — the same number twice); per-department queries for the table (it is tallied from the same rows the tiles are counted from, which is the only way the columns cannot disagree with the totals above them).
+## D-127 — Make the invalid state unreachable in the editor; keep the guard in the gate
+
+**Decision (E.3):** §4C.9's editor is shaped so that two of `assessEnglishBank`'s blockers cannot be produced through it. Marking an option correct **clears the question's other options in the same transaction** (radio semantics, server-side), so `MULTIPLE_CORRECT_OPTIONS` is unreachable. The band editor exposes **five ceilings, not twelve bounds** — A1 starts at 0, each band starts one above the previous ceiling, C2 is pinned to the attainable total — so `BANDS_NOT_CONTIGUOUS` and `BANDS_DO_NOT_COVER_RANGE` are unreachable. **Both blockers stay in the publish gate regardless.**
+
+**Why not delete the now-unreachable guards:** because "unreachable" is a statement about *this screen*, and rows arrive by other routes — the E.4 seed, a future import, a hand-run SQL fix during an incident. A blocker that no UI can trigger is exactly the one worth keeping: nothing else would catch the case, and it costs one branch in a pure function. The inverse — trusting the UI and dropping the check — is how a data fix made at 2am becomes a learner placed at the wrong level with nothing reporting it.
+
+**Why not the other way round (free-form fields, refuse afterwards):** an editor that lets somebody type a gap and then refuses them for it is an editor that teaches its own rules by rejection. Deriving the lower bounds means the administrator is *only ever* choosing the thing they actually have an opinion about — where B1 ends — and the structure holds itself together.
+
+**A convenience that is not a policy:** «توزيع متساوٍ» fills the five boundaries evenly. Growing a bank from twenty items to thirty makes every boundary stale at once, and retyping five numbers to get back to "roughly even" is work the screen can do; the administrator then moves the ones they care about. It is a starting point, never applied automatically — the band table is a ministry judgement, and a screen that silently rebalanced it would be making that judgement.
+
+**Rejected:** a checkbox per option with a "only one may be correct" validator (the state is reachable, so it must be explained, so the screen grows an error nobody needs to see); twelve band fields with live validation (same); auto-rescaling the bands when `maxScore` changes (the editor would be deciding what B2 means).
+
+## D-126 — The CEFR code is shown; the RIASEC letter is not
+
+**Decision (E.2):** `CefrLevelBadge` renders «B2 · فوق المتوسط» — the Latin level code beside its Arabic name — where `HollandCodeChips` renders «الاجتماعي» and never the letter S.
+
+**Why the two differ rather than one of them being wrong:** a RIASEC letter is a *storage key*. "S" is an index into a framework an employee has no reason to know, and «الاجتماعي» is the whole of the result; showing the letter would be showing them our database. A CEFR level is the opposite — "B2" **is** the internationally recognised name of the thing. It is what a training officer screens on, what a course prerequisite is written in, and what an employee would put on the English CV §4.11 exports (D-050). Hiding it would withhold the half that travels, and leave «فوق المتوسط» to be translated back by whoever needed it.
+
+**Consequence for the message catalogue:** the code is rendered from the data — the `level` field — and never from `ar.json`, so the catalogue stays free of Latin letters and bare digits and `messages.test.ts` needs no exemption for it. The Arabic name carries the meaning; the code carries the currency. `dir="ltr"` is set on the code span alone, because an isolated Latin token in an RTL run throws its neighbouring punctuation to the wrong end.
+
+**Rejected:** hiding the code for consistency with Holland (consistency with a rule whose reason does not apply here); showing the code alone (an Arabic-first product must not make a level readable only to people who already know the framework); putting the codes in `ar.json` (would need a third `LITERAL_VALUE_PATHS` exemption, for data that is not copy).
+
+## D-125 — The CEFR bands live on the assessment version, and they are what the balance rule is not
+
+**Decision (E.1):** the six CEFR bands are rows on the `english_assessments` version that owns them (`english_assessment_bands`), copied by copy-on-write with everything else, **not** entries in the `settings` table. Publishing an English version is gated by `assessEnglishBank`, whose central rule is that the band table must **partition `0 … maxScore` exactly**: all six levels present once, no inverted range, no gap, no overlap, starting at zero and ending at the highest attainable total. `isBalancedBank` and `assessBank` are not imported, not called and not modified.
+
+**Why on the version rather than in settings:** a band table is not a knob beside the sync interval — it is the part of the instrument that turns a raw total into the level a person is told they are. In `settings` it would be a global mutable, and an administrator moving the B2 boundary would silently re-interpret every result ever issued: the stored `level` would say one thing and the live table another, with no way to say which was in force when. That is exactly the gap D-072 exists to close, and the fix is the same one — the bands travel with the version, so "38 out of 60 meant B2" stays true after the boundary moves. D-075's rule is unbroken: settings hold what an administrator must change *without a deploy*, and this is changed without a deploy too, through §4C.9's draft-then-publish.
+
+**Why the partition rule replaces balance rather than joining it:** D-032's balance protects a comparison *across* dimensions — Holland ranks six raw scores against each other, so unequal attainable maxima make the code an artefact of authoring. English has one scale and nothing to compare across; an item worth four marks is difficulty weighting doing its job, not a skew. Applying the guard here would refuse correct instruments for a reason that does not exist in this model. The partition rule is the English analogue in the sense that matters: it is the one property whose violation produces an instrument that is *silently* wrong — a gap and a scoring learner cannot be placed at all, an overlap and the level they are told depends on which row was read first.
+
+**Both bounds are inclusive**, because an administrator types "45 to 56" and a half-open editor would put an off-by-one between what they entered and what a learner was told. The floor on the bank is expressed over **attainable marks, not question count** (`MIN_ENGLISH_ATTAINABLE_MARKS = 5`), the same choice D-074 made and for the same reason: six levels need six distinct integers, and a count-based rule has no opinion about a bank whose items are worth different amounts.
+
+**One warning, not a blocker:** a CEFR level with no question targeting it. It is a real quality problem — a bank with no C1 item systematically under-places strong candidates — but it is a content judgement, and refusing it would make the legal destination unreachable while a bank is being grown one level at a time. Same severity reasoning as D-074's adjacency rule.
+
+**Rejected:** bands in `settings` (see above); sorting the table by `minScore` before validating it (a table where B1 sits below A2 is wrong, not "sorted differently", and sorting first would silently accept it); reporting contiguity and coverage over an incomplete table (three faults named for one mistake); defaulting an uncovered score to the nearest band (telling somebody they are A1 because a table was malformed is worse than refusing to score them — hence `ENGLISH_ASSESSMENT_NO_BAND`).
+
+## D-124 — The English test gets sibling tables, not a discriminator on `assessments`
+
+**Decision (E.1):** the English placement test is six new tables — `english_assessments`, `_questions`, `_options`, `_bands`, `_results`, `_responses` — mirroring the Holland instrument's *shape* and its copy-on-write versioning, and sharing no table, no type and no function with it. `AssessmentStatus` is the one thing reused, because DRAFT/ACTIVE/RETIRED is a lifecycle rather than a RIASEC fact. Not one line of the Holland schema, service, editor or test changes.
+
+**Why, decisively:** the service layer is not key-aware. `AssessmentService.getActive` and `AdminAssessmentService.createDraft`/`requireDraft` all ask `findFirst({ where: { status: 'ACTIVE' } })` — or `'DRAFT'` — **with no filter on `key`**, and `overview()` reads the whole table. The partial unique indexes are per-key, so the *database* would happily hold a second ACTIVE instrument; the *code* would then serve whichever row Postgres returned first as the learner's Holland assessment. Making those queries key-aware means editing the live RIASEC path, which is precisely what this work is forbidden to do. Separate tables make "Holland is unchanged" a property of the diff rather than a claim about care.
+
+**Two supporting reasons.** `AssessmentResult` is irreducibly RIASEC — six score columns and a `VarChar(3)` code — so English needed its own result table regardless; folding the banks together would have left the results split anyway. And the two models differ in kind, not degree: `AssessmentOptionWeight` (an option contributes points to one or more dimensions) has no English meaning, while `options.is_correct` and `questions.marks` have no Holland meaning. A shared table would carry both as nullable columns nothing enforces.
+
+**What English adds that Holland lacks:** `is_correct` on the option and `marks` on the question. Marks sit on the *question*, not the option, because exactly one option scores and the rest score nothing — putting the value on the option would invite a bank where two options are worth different amounts of "correct". "Exactly one correct option" is checked at **publish**, not by a database constraint, on D-073's reasoning: a draft must be free to sit in an invalid state while somebody edits it.
+
+**Rejected:** a `kind` discriminator on `assessments` (breaks the three unfiltered `findFirst` calls above; every future query must remember the filter); making the Holland queries key-aware first (edits the live path this work must not touch); a shared abstract "assessment engine" (its only two instances disagree about what scoring *is*, and it would put a correct RIASEC tally at risk for reuse nobody asked for).
+
+## D-123 — The English test is independent, optional, and taken once
+
+**Decision (at the user's direction, 2026-08-30):** the English (CEFR) placement test is an **independent** instrument. It is takeable at any time from a dashboard card, in every dashboard state; it produces a standalone CEFR level shown on the dashboard and Profile; and it **does not gate path selection** — Holland alone drives recommendation. It is **taken once and never retaken**: `english_assessment_results.user_id` is unique, and `EnglishAssessmentResultView.canRetake` is always `false`.
+
+**Why this shape costs the existing journey nothing:** `DashboardState` gains no fourth member, `navForState` gains no branch, `JourneyStateService` gains no fact, and path confirmation gains no gate. The entry point is a secondary card, so §4.2's "one primary action per state" survives — the pre-assessment dashboard's single primary action is still «ابدأ التقييم» for Holland. The only change to an existing shared contract is one nullable field on `DashboardView`. It is not a learner nav item either: §4's steady-state six stands, and the English test is a flow page reached from its card, exactly as `/assessment` and `/results` are.
+
+**Why "once" is a constraint rather than a check:** §4.13 says the test is taken once; a service-layer guard loses the race between two concurrent submissions and a unique index does not. Same shape as `user_paths.user_id`, and the D-035 reasoning applies unchanged.
+
+**Why not mirror Holland's retake lock literally.** D-015 permits a Holland retake until a path is confirmed and refuses it after. Applied here, that gate would refuse the **first** attempt too for anyone who had already confirmed a path — so a learner with an active path could never take the optional English test at all. The rule that carries over is the one D-015 is actually protecting: a result, once taken, is frozen and not revisited.
+
+**Consequence worth knowing:** there is deliberately no administrative "clear this person's English result" endpoint. If the ministry later wants a re-sit policy, that is a change to this decision and to the unique index, not a setting.
+
+**Rejected:** English as a required second onboarding step before path selection (a new `DashboardState`, a new server-side gate on path confirm, and a change to the Holland journey e2e — a large blast radius for an instrument nothing downstream consumes); English retakeable at will (the user's direction); offering it only after Holland (couples two independent instruments for no product reason).
+
+## D-122 — Previous / next in the framed player: the portal navigates the frame, the frame reports where it is
+
+**Decision (at the user's direction, 2026-08-25):** the player's side panel carries «السابق / التالي» and «النشاط 3 من 8 · <name>». Two small additions make it honest: the LMS port gains `getCourseOutline` (the course's activities in order — id, name, kind, URL; labels and hidden activities omitted; one `core_course_get_contents` read), exposed as `GET /api/courses/:id/outline` behind the launch's own gate (a course outside the confirmed path answers an empty outline, so nothing is learned about other people's paths); and the plugin's `tamkeen:ready` message now carries `cmid`, the module the framed page shows (null on the course page). The panel keeps its position from that message — so navigating *inside* the frame (the course index, a link) keeps the counter in step — and moves the frame by setting the iframe's `src` to the neighbour's LMS URL through a `MoodleEmbedHandle.navigate`. **No new token is minted for a move:** the frame already holds the session; setting `src` on a cross-origin frame is permitted and the cookie rides along. The first «التالي» from the course page leads into the first activity.
+
+**Rejected:** a course-index tree in the panel (Moodle's own index is already in the frame; two would drift); `postMessage` *into* the frame to ask Moodle to navigate (needs plugin JS listening on every page for what `src` does natively); driving the frame by the outline alone without the `cmid` report (the counter would lie the moment the learner clicks inside the frame).
+
+**Verified live** as `demo-student`: «صفحة الدورة · 7 أنشطة» → «التالي» → `/mod/forum/view.php` «النشاط 1 من 7» → «التالي» → «النشاط 2 من 7 · فيديو تعريفي (رابط)», the embedded video rendered. Tests: player suite +2 (follows the frame; moves without a launch), contract case for the outline, web 521, API 164.
+
+## D-121 — The learner's course is framed too; the handoff becomes the fallback for everyone
+
+**Decision (at the user's direction, 2026-08-25):** §4.8's course player renders the Moodle course **inside the page**, the same way the entity's editor is framed (D-101). The plugin gains `embed=learner` (chrome hidden as for authors, **plus the course tabs** — a learner has no business in Settings, Participants or Grades; the course index stays; no editing) and posts `tamkeen:quiz-finished` when the quiz review page renders. The launch endpoint takes `{ embed: true }` and answers `mode: 'embed' | 'handoff'`; the frame component is now one, portal-agnostic `components/moodle-embed.tsx` fed the two launches and its words. D-045's "the player is a handoff page" is superseded: the handoff is the **fallback** — when the frame never reports ready, and always as the quiet «افتح في منصة التعلّم» beneath it. Its other rules stand unchanged: launch is a POST per visit, never prefetched, enrolment on demand, refusals indistinguishable, no `courseUrl` in the API.
+
+**The outcome comes back in seconds, not at the next run.** On `quiz-finished` the page calls `POST /api/courses/:id/sync`, which runs the scheduled completion sync's own `syncUser` for this learner only — same code, same idempotency, same threshold reading — behind a 10-second per-learner cooldown so a burst of messages is one LMS read; then it refetches the player view. The scheduled sync remains the safety net, and certificate issuance still happens inside the sync.
+
+**Why now:** the entity side proved the mechanism (same-site cookies, `frame-ancestors`, ready/fallback) and the user's test showed the learner's leave-for-Moodle as the last seam. **Rejected:** a separate learner frame component (one seam, one discipline); polling the player view after launch (the plugin already knows when the quiz was submitted); a course-scoped sync (Moodle's progress read is per user anyway).
+
+**Verified:** as `demo-student`, `/courses/<id>/player` frames Moodle course 85 with `tamkeen:ready` received, `body.editing` false, navbar and course tabs hidden, course index present, all eight demo activities listed. Web 519, API unit 209, journey + entity e2e 105 green.
+
+## D-120 — The authoring guide is one Markdown file, rendered in the portal by a forty-line converter of our own
+
+**Decision (TAM-143):** the entity authoring guide lives once, in Arabic, at `docs/entity-authoring-guide.md`, and the portal renders it at `/entity/courses/guide` through `lib/simple-markdown.ts` — a converter for exactly the subset the guide uses (three heading levels with `{#anchor}` ids, paragraphs, one-level lists, bold, inline code, links to `#`, relative or http(s) targets). The source is HTML-escaped before any tag is written, so the only markup in the output is the converter's own. Blockers whose fix is in Moodle or in بيانات الدورة carry a «كيف؟» link straight to the section; the create card and the Content page link to the guide; it is not a nav destination (§4B keeps the entity nav to four) and it sits under `/entity/courses/…` so TAM-140's longest-match rule lights «دوراتي».
+
+**Why not a Markdown library:** a general renderer is a new dependency to review for a government repository, would still need our own escaping and link policy, and would bring a hundred features the guide does not use. Forty tested lines that we can read are cheaper to own than a dependency we cannot. **Why not `ar.json`:** two copies of a long document drift; the file is the one source and the page reads it at render time (two candidate paths, because `process.cwd()` differs between the workspace and the repo root).
+
+**Also here:** the Content page and Manage Course now show the course's **description** under its title — the text learners read in the catalogue, visible where the entity edits the course so the two never drift unnoticed.
+
+**Owed:** screenshots of the framed editor in the guide once the Arabic language pack is installed on the target Moodle (the local one has none — download pending); the upload ceiling per environment (Phase 7).
+
+**Amended 2026-08-27 (merge with `main`):** the guide shipped to `main` independently at `/entity/guide`, rendered by `apps/web/src/lib/markdown.ts`; this branch’s `/entity/courses/guide` route and `lib/simple-markdown.ts` were dropped when the two met. The decision’s substance — one Arabic Markdown file in `docs/`, an in-repo converter, links from the create card / Content page / publish blockers, not a nav destination — stands in that implementation.
+
+## D-119 — A course belongs to at most three paths, within two RIASEC letters; membership is a proposal; «عامة» is the admin's word for "everywhere"
+
+**Decision (TAM-141, at the user's direction 2026-08-25):** four rules for which paths a course may belong to.
+
+1. **Cap of 3** (`COURSE_MAX_PATHS`, a setting). 2. **Coherence:** those paths may span at most **2** distinct RIASEC letters (`COURSE_MAX_RIASEC_LETTERS`). 3. **Approval:** what an entity saves is a proposal — `path_courses.status PENDING | APPROVED`; only APPROVED rows reach the learner catalogue, path build, the derived letters (D-066) and the publish gate. Auto-approved while `PATH_MEMBERSHIP_APPROVAL=off`, which is the state until Phase 5's Path Management queue exists; the schema (`status`, `decidedById`, `decidedAt`) is in place so switching it on is a setting, not a migration. 4. **«عامة»:** an admin-only `courses.isGeneral` — such a course reaches every path's build list without memberships, carries no letters, and is exempt from rules 1–2; entities see it read-only.
+
+**Why each rule:** a course in every path carries every letter — no Holland signal (D-066 derives letters from paths); every path's 5–10 build list then holds the same generic course, so paths stop being curated tracks; and path membership is *path* content the admin owns (§4C.4), yet one entity ticking twelve boxes has edited every path. The cap alone does not protect the signal — three paths from R, S and C still smear it — hence coherence. «عامة» exists so a genuinely cross-cutting course (أساسيات أمن المعلومات) has an honest route that is an admin's decision, not the "all paths" hole under a nicer name.
+
+**Grandfathering:** a course already outside the rules (seeded before them, or the limits lowered) keeps its memberships — learners may hold it in confirmed paths and D-002/D-040 forbid pulling it. It may remove memberships but not add until it is back within the rules (`PATH_MEMBERSHIP_FROZEN`, and the form says «يمكنك إزالة مسارات فقط»). No migration rewrites `path_courses`.
+
+**Where the rules live:** one pure module, `path-membership-rules.ts` (`checkPathMembership`), used by `replacePathMembership`; the form applies the same three checks per checkbox from `pathRules` on the course payload, so the numbers live in the settings and nowhere else. Every learner-facing reader of `path_courses` filters `status: 'APPROVED'` (`courses.service`, `paths.service`, the entity dashboard count); the entity's own views show pending rows with their status. Admin readers deliberately see everything — the queue is theirs.
+
+**Rejected:** letting the entity mark «عامة» (the same hole); cap without coherence; approval with no auto-approve setting (would block entities until Phase 5); trimming existing memberships by migration (touches confirmed learner paths); `@ArrayMaxSize` on the DTO (would bake the number into a decorator instead of reading the setting).
+
+## D-118 — The authoring loop is one page, and the publish gate is one component offered on two
+
+**Decision:** Course Content (§4B.4) is where an entity authors: Moodle's editor framed with editing on, the D-061 read-back strip above it, and **publish / unpublish as the page header's single action** — the same `PublishAction` component Manage Course renders in its publish card, so the two pages cannot disagree about whether a course may be published, and the blockers clear on the page the entity is looking at (one `getCourse` request carries both the read-back and the gate, refetched on the frame's `content-changed` message). Manage Course no longer mints a launch; it links to the content page, so the author credential is issued in one place with one audit trail.
+
+**Why one page:** the read-back exists to stop an uncompletable course being published (D-061); putting it beside the editor that fixes the problem, with the publish button in sight, turns "fix, go back, refresh, check, publish" into one screen. **Why the gate in the header:** §3's one primary action per page — publishing is the decision this page ends in; the frame's fallback («افتح في منصة التعلّم») is secondary by design and the refresh is a ghost button. The blockers are rendered by the page, not the component, so the component fits the header slot as well as a card.
+
+**The D-045 amendment, now implemented for this page:** the launch is a POST on mount (never prefetched, never in the page before it resolves); once the frame has loaded it, the `src` in the DOM is a spent single-use token. The component test asserts exactly that sequence — absent before, only as the frame `src` after, never as a link.
+
+**Fallback semantics:** the only honest "it worked" signal is the plugin's `tamkeen:ready` — a blocked frame fires `load` like any other. No ready within 8 s (`EMBED_READY_TIMEOUT_MS`) replaces the frame with an `ErrorState` and one recovery: a **fresh** handoff (the first token is spent) via `location.assign`, not `window.open` (popup blockers — D-045). The ready timeout is a prop so the fallback can be tested with a real 30 ms timer; faking timers around the whole page was flaky under a loaded run and was abandoned.
+
+**Also, in the plugin:** the framed CSS now hides Moodle's first-visit user tour — onboarding for a chrome the frame does not show, so it pointed at things that were not there.
+
+**Noticed, not fixed here:** Moodle renders in English for users our app provisions (the created Moodle user's language is not set to `ar` — the site default is). Arabic-first (§2) says provisioning should set it; a one-line change in `provisionUser`, owed to the next Moodle-module pass.
+
+
+## D-117 — The catalogue opens where the reader is, and groups the rest by the path that explains it
+
+**Decision (TAM-127):** the courses catalogue stays **global for everyone** (§4.6 unchanged) and changes only where it *starts*. A learner with a **confirmed path** lands with that path preselected in the path filter — «كل المسارات» is one selection away, and their later choice wins. A learner still deciding lands on the whole catalogue **grouped by path**, one `<section>` per path in the API's order (recommended first, in the user's letter rank), each heading carrying the path name, the «موصى به» badge when it applies, and the group's course count. **Any search text or filter collapses the grouping into the flat grid** and clearing it restores the grouping. Courses in the learner's own path carry **exactly one status chip** — «مكتملة» / «قيد التنفيذ» / «في مسارك» — and courses outside it carry none. Path membership renders as quiet neutral tags instead of a comma-joined sentence, and the three filters are rebuilt on the shared `Field` + `Input` + `Select` primitives. **§4.6's "category" filter is satisfied by the path filter** — that is the reading recorded here.
+
+**Why the default:** the product already does not treat these two readers alike. `assertCoursesSelectable` refuses to add any course outside the confirmed path, so a committed learner browsing forty-eight courses was looking at roughly forty they can never act on, with nothing marking the eight that are theirs. For the *un*committed learner the catalogue is the opposite tool — it is how "what does this path actually teach?" gets answered — and a flat grid of forty-eight cards answers it for nobody. One page, two starting positions, both a click from the other.
+
+**Why grouping collapses under a filter:** a filtered result is an answer to a question, not a tour. Keeping the sections would spread three matches across three headings and make the answer harder to read than the question.
+
+**Why the chip and not colour, and why absence:** the chip's word carries the meaning (WCAG 1.4.1) and it is neutral, never the primary accent — the accent means *recommended* (D-069), and a chip in it would recommend a course the learner has already committed to. A "not in your path" chip on forty cards would be noise on every card that is not the answer; absence is the signal (§3). The resolution is **one component** (`CourseStatusChip`) shared with the course page (TAM-128), reading a `courseStatus` namespace of its own — three screens share those three words, and a namespace named after one of them would make the other two look like borrowers.
+
+**No API change.** The chips come from `myPathApi.get()`, fetched once alongside the list and only when a path is confirmed; its failure is deliberately **not** wired into the `DataView`, because blocking the catalogue on a decoration trades the page for a badge. The grouping comes from `pathsApi.list()`, which already carries `recommendationRank` — nothing is re-sorted in the browser (D-113's rule holds here too). A course in two paths appears in both groups: the grouping is a lens, not a partition. A course belonging to no listed path falls into a final «دورات خارج المسارات» section rather than vanishing from a view whose own count line still counts it.
+
+**Rejected:** *restricting* a committed learner to their path (that is a gate, and §4.6 says browse is global); adding per-user status to the courses list response as well as fetching my-path (two sources for one fact); a RIASEC-type filter beside the path filter (two filters narrowing the same dimension compete, and users think in paths); pagination (the grouped default and the filters keep screens short at seed scale — it becomes its own ticket when real ministry data lands); deep-linking a card straight to the player (the chip informs, the detail page acts — §4.7 owns the single action).
+
+## D-116 — The build page answers "what am I committing to" before it asks
+
+**Decision (TAM-125):** the path build page gains a **header card** — the description, the path's RIASEC type as a tag, the «موصى به» badge when the path is in the user's code, the count of courses on offer, and a **live total of the selected hours** that moves on every toggle — and the eleven stacked rows become a **1/2/3-column grid of selectable cards where the whole card is the control**. One `<button>` per course, `aria-pressed`, a decorative tick glyph plus the primary border for the selected state, and the state word (أضف / مضافة / بلغت الحد الأقصى / غير متاحة للإضافة) printed on the card. The accessible name pairs the state with the course title. Unavailable and at-max cards stay buttons and stay disabled, with their reason on the card. The counter bar, the 5–10 rule, the confirmation dialog and the locked state are untouched.
+
+**Why:** the page's subject is a comparison — pick five to ten of eleven — and it was rendering as six screenfuls of mostly-empty full-width rows with the decision pushed below all of them. Nothing about the *path* was on the page either: its type and its recommendation lived only on Results, so arriving by link or reloading lost the one fact that explained why this path was suggested. The hours total exists because "5 to 10 courses" is not what the user is actually committing to — time is, and it should be visible while it is still changing.
+
+**Why the card and not a button inside it:** §3's "exactly one control per course" was already the rule here, and a card with a button in the corner makes the other 90% of the card a dead target that looks clickable. Making the card the button keeps one control and makes the whole card the target. The explicit `aria-label` (state + title) is what stops a screen reader reading the summary and the duration aloud at every tab stop, and it still contains both visible labels the control offers (WCAG 2.5.3).
+
+**No API change was needed** — `PathDetail extends PathSummary`, so `riasecLetter`, `recommended`, `recommendationRank` and `courseCount` were already on the detail response; the ticket's note to verify them was checked, not assumed.
+
+**Rejected:** a checkbox input inside the card (two focus targets, and the label-vs-card click ambiguity is exactly what this replaces); leaving unavailable cards as plain non-interactive text (the ticket's own acceptance asks for the disabled control, and a disabled button still announces its state where a `<div>` announces nothing); letting the card's accessible name be its concatenated content (title + summary + hours + state on every tab stop); a fourth "remove" word for the selected state («مضافة» *is* the toggle's current state, and `aria-pressed` carries the rest).
+## D-115 — Per-course resync is the immediate path; the scheduled sync is only the net
+
+**Decision (TAM-133):** a rename, summary edit or visibility change made in the frame's own Settings tab now fires the same `tamkeen:content-changed` message a content edit does (`\core\event\course_updated` added to `db/events.php`, one message type for both). The portal answers it, and the entity's own manual «تحديث», with `POST /api/entity/courses/:id/resync` — a **synchronous, single-course** re-read of the LMS (`core_course_get_courses_by_field` by id), applied through the exact mapping the scheduled catalogue sync uses (`CatalogSyncService.upsertLmsCourse`, extracted so `sync()`'s loop and the new `syncOne(moodleCourseId)` can never map a field differently). The scheduled sync (`COMPLETION_SYNC_INTERVAL_MINUTES`) is kept, unchanged, as the safety net for a course edited some other way — directly against the LMS's own admin, or by a job — that never passes through this portal's frame at all.
+
+**Why:** title, summary and visibility were a cached copy refreshed only on that schedule, so a rename at 13:31 stayed wrong everywhere in the portal — the Content page header, Manage Course, «دوراتي», the learner catalogue — until 13:35 (observed 2026-08-25). A five-minute lag on structure was already covered by the frame's existing message; the same lag on the course's own name was not, for no product reason — an entity watching the Content page after a rename should not need to know which kind of edit propagates immediately and which does not. Extracting the shared upsert rather than writing a second mapping is what keeps `sync()` and `syncOne` from silently disagreeing about what a given LMS course means, the same reasoning D-059 already applies to `status`.
+
+**Coalesced, not merely rate-limited:** the frame can post its signal several times in one burst (an activity edit and a settings save land within the same couple of seconds), and each is a separate call into `resync`. `CatalogSyncService` holds one in-flight promise per `moodleCourseId`; a second caller for the same course during that window is handed the first's result rather than triggering its own LMS read. The `@Throttle` ceiling (30/min per user) is a second, cheaper backstop against a caller retrying faster than the LMS can answer — the two are independent, not alternatives to each other.
+
+**Courses created directly in Moodle stay unclaimed.** An entity in the framed editor cannot reach "create course" — the primary nav is hidden — and D-060 already makes the portal the only place a course shell is created, so a course born in Moodle has no owner. This ticket does not change that or auto-claim such a course for whichever entity happened to resync it; it remains Phase 5's Course Oversight matter, shown there as unclaimed exactly as it is today. Noted here so a future convenience does not quietly attach ownership to whoever's frame first noticed the course.
+
+**Rejected:** shortening the scheduled interval instead (fixes every course's lag at the cost of load, when only the course an entity is actively looking at needs to be fast); polling the single course from the Content page instead of the frame signalling (reintroduces the polling this event-based design was written to avoid, TAM-129); writing a second, resync-specific mapping function (the exact drift risk D-059 exists to close off — the two-harness unit test that feeds `sync()` and `syncOne` the same LMS course and asserts identical rows is what keeps this true rather than merely intended).
+
+## D-114 — After the commitment, one card keeps an action and the rest become reference
+
+**Decision (TAM-114):** once a path is confirmed, Results stops offering "استعرض المسار" on any card. The user's own path carries a **"مسارك" marker in the neutral tag** — never the primary accent — and its single action becomes a link to مساري. **Every other card, in the letter groups and behind the "مسارات أخرى" toggle alike, has no button at all.** The letter groups, the "موصى به" badges, the collapsed section and the result card are otherwise unchanged; the retake was already gone via `canRetake` (D-015). The committed path id is passed into `PathCard` as a prop, read once on the page from `usePortal().dashboard.path?.id` — non-null exactly in `ACTIVE_PATH`, i.e. after the gate, so a user mid-build still sees every card as choosable.
+
+**Why:** §2 makes the path unswitchable, and the page was still inviting the user to open eleven other paths as though the decision were open. That is not a small cosmetic wrong: the one screen whose job was "choose" kept its choosing affordances after choosing was over, and the only way to learn the truth was to click through and be refused. §3 says show only what is actionable now — after commitment the only action left on this page is "go to my path", and every other card's value is as a record of what the user's profile recommended. The marker is neutral rather than primary because the primary accent has one meaning in this product (recommended, D-069/D-025), and a path chosen from outside the code would otherwise acquire that meaning retroactively.
+
+**Rejected:** disabled buttons on the other cards (a control that exists only to refuse invites "why can't I?" and is the exact pattern §2's retake rule already rejects); hiding the non-chosen paths entirely (the ranked groups are the explanation of the user's own profile, and they stay true after the choice); redirecting /results to /my-path after commitment (the result card is the user's permanent Holland profile — §4.4 has no other home for it); having `PathCard` read portal state itself (it would stop being presentational and its tests would need the whole provider).
+
+**Also closed here:** the shared `HollandCodeChips`. TAM-108 landed first and created it (`src/components/riasec/holland-code-chips.tsx`) with the `ordinals` prop this ticket specified; Results already consumes it and no second chip implementation exists. A results test now asserts the two render through the same component, so a future copy fails rather than drifts.
+
+## D-113 — The user's own ranking organizes the results page, and the rest is one click away
+
+**Decision (TAM-113):** Results groups the recommended paths **by the letter that recommends them**, one `<section>` per letter of the Holland Code in the user's rank order — "الأقرب إلى ميلك الأول — الاجتماعي" for #1, "مناسب أيضًا — {type}" plus a quiet "ميلك الثاني" / "ميلك الثالث" tag for #2 and #3. A letter with no paths produces no heading. The cards became **compact** — name, RIASEC type, badge, course count, duration, one action — with **the description moved off the card** onto the path page the action opens. The paths outside the code sit behind **one native `<details>`/`<summary>` toggle, "عرض المسارات الأخرى (n)", collapsed on every visit**. Grouping uses `recommendationRank`, which every `PathSummary` already carries: no API change, and the order inside a group is still the API's. §4.4 and §3A amended.
+
+**Why:** with twelve seeded paths, two per letter, the page rendered six identical-looking recommended cards and six plain ones, each with a paragraph, under a tall result card. Everything was technically correct — the API had ranked them and the browser preserved that order — and none of it was legible: the ranking that the whole assessment exists to produce was invisible, because rank was expressed only as position in a grid of equals. The heading is what carries it now, and it answers "why is this recommended?" once per group instead of needing an explanation on every card. Dropping the description is what makes the group small enough to see as a group; it was never the thing a user decides on at this stage, and it is one click away on the page that can afford it.
+
+**On `<details>` rather than React state:** the element already gives the keyboard operation and the expanded/collapsed announcement for free, cannot desynchronise from a `useState` a re-render resets, and needs no JavaScript to be correct. Collapsed on every visit is deliberate — persisting the choice would put a returning user back in the long list they came here to escape. jsdom does not implement summary activation, so the component test asserts the element *is* the native one and Chromium asserts the actual toggling.
+
+**This amends §4.4** — "All other paths shown normally below" becomes "available one click below". §3A's **recommendation, not restriction** is untouched: every other path is still listed, still fully selectable, still one keystroke from view. Hiding them behind a toggle is a reading-order decision, not a gate.
+
+**Rejected:** re-sorting or re-deriving the recommendation in the browser (§3A's rule would then live in two places and they would eventually disagree — the existing test asserting the API's order is kept for exactly this); explaining the recommendation per card ("لأن ميلك الأول اجتماعي" × six, saying the same thing six times); a "show more" button with client state (all of `<details>`'s semantics, hand-built and worse); dropping the non-recommended paths to a separate page (a route to say "you may still choose these" is a heavier answer than a toggle).
+
 ## D-112 — The audit export is rendered where the words are
 
 **Decision:** the §4C.8 trail export is built in the browser and saved from a blob; `/api/admin/audit.csv` is gone. `toCsv` moved to `packages/types`, so the browser and the still-server-side reports export share one implementation of the quoting, the formula guard and the BOM. The API's part is a page big enough to export (`pageSize` up to 5,000, the DTO's existing ceiling) honouring the same filters.

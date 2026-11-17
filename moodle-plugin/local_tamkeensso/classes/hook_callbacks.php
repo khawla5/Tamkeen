@@ -50,21 +50,28 @@ class hook_callbacks {
     public static function before_standard_head_html_generation(
         \core\hook\output\before_standard_head_html_generation $hook
     ): void {
-        global $SESSION;
+        global $SESSION, $PAGE;
 
         if (empty($SESSION->tamkeen_embed)) {
             return;
         }
 
+        $mode = (string) $SESSION->tamkeen_embed;
         $origin = self::allowed_ancestor();
         $changed = !empty($SESSION->tamkeen_content_changed);
         // Consumed: one change, one message.
         unset($SESSION->tamkeen_content_changed);
+        // A learner has just submitted a quiz when the review page renders
+        // (D-121); the portal then asks for an on-demand completion sync.
+        $quizfinished = $mode === 'learner' && strpos((string) $PAGE->pagetype, 'mod-quiz-review') === 0;
+        // Which activity this page is — the portal's previous/next keeps in
+        // step with what the frame shows (D-122). Null on the course page.
+        $cmid = ($PAGE->cm !== null) ? (int) $PAGE->cm->id : null;
 
-        $hook->add_html(self::chrome_css());
+        $hook->add_html(self::chrome_css($mode));
 
         if ($origin !== null) {
-            $hook->add_html(self::messaging_script($origin, $changed));
+            $hook->add_html(self::messaging_script($origin, $changed, $quizfinished, $cmid));
         }
     }
 
@@ -99,33 +106,44 @@ class hook_callbacks {
         return $origin;
     }
 
-    private static function chrome_css(): string {
+    private static function chrome_css(string $mode): string {
         // Selectors are Boost 4.x. `!important` because the theme sets the
         // 60px navbar offset with its own specificity; this must win without a
         // theme edit.
         return '<style id="tamkeen-embed">'
             . 'nav.navbar.fixed-top,#page-footer,#page-header .breadcrumb,'
-            . 'nav[aria-label="Navigation bar"],.tamkeen-embed-hidden{display:none!important}'
+            . 'nav[aria-label="Navigation bar"],.tamkeen-embed-hidden,'
+            // Moodle's first-visit user tour: onboarding for a chrome the frame
+            // does not show, so it would point at things that are not there.
+            . '[data-flexitour="container"],[data-flexitour="backdrop"],'
+            . '[data-flexitour="step-background"],.tour-backdrop{display:none!important}'
             . '#page,#page.drawers,#page-wrapper,#topofscroll{margin-top:0!important;padding-top:0!important}'
             . '.drawer{top:0!important;height:100vh!important}'
             . '.drawer-toggles .drawer-toggler{top:.5rem!important}'
             . 'body{scroll-padding-top:0!important}'
+            // Learners have no business in Settings / Participants / Grades:
+            // the course tabs go too, leaving the material and the course index.
+            // …and the course heading, which the portal's own panel already shows.
+            . ($mode === 'learner' ? '.secondary-navigation,#page-header .page-header-headings{display:none!important}' : '')
             . '</style>';
     }
 
-    private static function messaging_script(string $origin, bool $changed): string {
+    private static function messaging_script(string $origin, bool $changed, bool $quizfinished = false, ?int $cmid = null): string {
         // Target origin is the configured ancestor, never `*`: a message to a
         // wildcard would reach whatever framed the page, and the whole point
         // of frame-ancestors is that only the portal can.
         $originjson = json_encode($origin, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
         $changedjson = $changed ? 'true' : 'false';
+        $quizjson = $quizfinished ? 'true' : 'false';
+        $cmidjson = $cmid === null ? 'null' : (string) $cmid;
 
         return '<script id="tamkeen-embed-messages">(function(){'
             . 'var origin=' . $originjson . ';'
             . 'if(!origin||window.parent===window){return;}'
             . 'function post(message){try{window.parent.postMessage(message,origin);}catch(e){}}'
-            . 'function announce(){post({type:"tamkeen:ready"});'
-            . 'if(' . $changedjson . '){post({type:"tamkeen:content-changed"});}}'
+            . 'function announce(){post({type:"tamkeen:ready",cmid:' . $cmidjson . '});'
+            . 'if(' . $changedjson . '){post({type:"tamkeen:content-changed"});}'
+            . 'if(' . $quizjson . '){post({type:"tamkeen:quiz-finished"});}}'
             . 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",announce);}'
             . 'else{announce();}'
             . '})();</script>';

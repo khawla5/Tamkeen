@@ -6,13 +6,14 @@ import {
 } from '@nestjs/common';
 
 import {
-  RIASEC_LETTERS,
+  defaultPlacementBands,
   type AdminAssessmentDraft,
   type AdminAssessmentOverview,
   type AdminAssessmentQuestion,
+  type AdminAssessmentReadiness,
   type AdminAssessmentVersion,
-  type AdminBankReadiness,
-  type RiasecLetter,
+  type LevelRef,
+  type PlacementBand,
 } from '@tamkeen/types';
 
 import { AuditAction, AuditReason } from '../audit/audit.actions';
@@ -21,37 +22,43 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assessBank, type DraftQuestion } from './bank-readiness';
 import type {
   AddDraftQuestionDto,
+  ReorderDraftDto,
+  SetBandsDto,
   UpdateDraftDto,
   UpdateDraftOptionDto,
   UpdateDraftQuestionDto,
 } from './admin.dto';
 
 /**
- * §4C.3 — editing the assessment.
+ * §4C.3 — editing a path's placement assessment (D-134).
  *
- * **Three rules govern everything here, and none of them is negotiable.**
+ * **Per path.** There is no "the assessment" any more: each path owns one, and
+ * every method here is scoped by `pathId`. That is what makes the versioning
+ * indexes work — one DRAFT and one ACTIVE per path — and it is why an
+ * administrator editing one path's bank cannot disturb another's.
  *
- * 1. **Admins edit inputs, never the algorithm** (D-048). Questions, options and
- *    per-dimension weights are data in these tables. The tally, the ranking, the
- *    canonical tie-break and the top-three derivation are in `scoring.ts` and
- *    `@tamkeen/types`, and nothing on this surface can reach them.
+ * **Three rules govern everything here.**
  *
- * 2. **Editing is copy-on-write** (D-069). Publishing inserts a *new* version
- *    carrying its own copy of every question, option and weight, and retires the
- *    previous one. Nothing this service does ever writes to a row a past
- *    response points at — which is why the draft can be edited and deleted
- *    freely: no `assessment_responses` row can reference a DRAFT's questions,
- *    because a draft is never served to anybody.
+ * 1. **Admins edit inputs, never the algorithm** (D-048). Questions, options,
+ *    which option is correct, what an item is worth, and the band table are data
+ *    in these tables. The tally, the placement and the partition rule are in
+ *    `assessment/scoring.ts` and `bank-readiness.ts`, and nothing on this
+ *    surface can reach them.
  *
- * 3. **Existing results are never recomputed** (D-049, D-033). There is no code
- *    path here that touches `assessment_results` at all. That is the strongest
- *    form the guarantee can take: not "we are careful not to", but "there is
- *    nothing to be careful about".
+ * 2. **Editing is copy-on-write** (D-072). Publishing inserts a new version
+ *    carrying its own copy of every question, option **and band**, and retires
+ *    the previous one. Nothing here ever writes to a row a past response points
+ *    at — which is why the draft is freely editable and freely deletable.
  *
- * The balance guard fires at **publish**, not on save (D-070/D-071) — going from
- * a balanced thirty-item bank to a balanced thirty-six-item bank passes through
- * six unbalanced states, and a rule that makes the legal destination unreachable
- * is one people learn to defeat.
+ * 3. **Existing results are never recomputed** (D-049). There is no code path
+ *    here that touches `assessment_results` or `learner_placements` at all. That
+ *    is the strongest form the guarantee can take: not "we are careful not to",
+ *    but "there is nothing to be careful about".
+ *
+ * The gate fires at **publish**, not on save (D-073) — growing a bank changes
+ * the attainable total, which invalidates the band table until the administrator
+ * gets round to it, and a rule that makes the legal destination unreachable is
+ * one people learn to defeat.
  */
 @Injectable()
 export class AdminAssessmentService {
@@ -60,53 +67,48 @@ export class AdminAssessmentService {
     private readonly audit: AuditService,
   ) {}
 
-  /** §4C.3's landing state. */
-  async overview(): Promise<AdminAssessmentOverview> {
-    const rows = await this.prisma.assessment.findMany({
+  /** What is live for this path, what is being edited, what came before. */
+  async overview(pathId: string): Promise<AdminAssessmentOverview> {
+    const path = await this.requirePath(pathId);
+
+    const versions = await this.prisma.pathAssessment.findMany({
+      where: { pathId },
       orderBy: { version: 'desc' },
       select: VERSION_SELECT,
     });
 
     return {
-      active: rows.filter((row) => row.status === 'ACTIVE').map(toVersion)[0] ?? null,
-      draft: rows.filter((row) => row.status === 'DRAFT').map(toVersion)[0] ?? null,
-      history: rows.filter((row) => row.status === 'RETIRED').map(toVersion),
+      pathId,
+      pathName: path.name,
+      levels: path.levels,
+      active: versions.filter((row) => row.status === 'ACTIVE').map(toVersion)[0] ?? null,
+      draft: versions.filter((row) => row.status === 'DRAFT').map(toVersion)[0] ?? null,
+      history: versions.filter((row) => row.status === 'RETIRED').map(toVersion),
     };
   }
 
-  /** The draft bank, weights included. Admin-only by the controller's guard. */
-  async getDraft(): Promise<AdminAssessmentDraft> {
-    const draft = await this.requireDraft();
-    const questions = await this.loadQuestions(draft.id);
+  async getDraft(pathId: string): Promise<AdminAssessmentDraft> {
+    const draft = await this.requireDraft(pathId);
 
-    const previous = await this.prisma.assessment.findFirst({
-      where: { key: draft.key, version: { lt: draft.version } },
-      orderBy: { version: 'desc' },
-      select: { version: true },
-    });
-
-    return {
-      id: draft.id,
-      key: draft.key,
-      version: draft.version,
-      title: draft.title,
-      description: draft.description,
-      questions,
-      readiness: readiness(questions),
-      basedOnVersion: previous?.version ?? null,
-    };
+    return this.load(draft.id);
   }
 
   /**
-   * Opens a draft as a deep copy of the active version (D-069/D-070).
+   * Opens an edit: a new version copied from the active one.
    *
-   * The copy is one transaction. A half-copied draft would be an assessment
-   * missing questions, and the balance guard would then refuse it for a reason
-   * that has nothing to do with anything the administrator did.
+   * A path with no assessment at all gets an empty first draft rather than an
+   * error — that is how a path acquires one, and refusing here would leave a new
+   * path with no way to reach §4C.3 at all.
    */
-  async createDraft(actorId: string, ipAddress: string | null): Promise<AdminAssessmentDraft> {
-    const existing = await this.prisma.assessment.findFirst({
-      where: { status: 'DRAFT' },
+  async createDraft(
+    pathId: string,
+    actorId: string,
+    ipAddress: string | null,
+  ): Promise<AdminAssessmentDraft> {
+    await this.requirePath(pathId);
+
+    const existing = await this.prisma.pathAssessment.findFirst({
+      where: { pathId, status: 'DRAFT' },
       select: { id: true },
     });
 
@@ -116,83 +118,86 @@ export class AdminAssessmentService {
       throw new ConflictException('ASSESSMENT_DRAFT_EXISTS');
     }
 
-    const active = await this.prisma.assessment.findFirst({
-      where: { status: 'ACTIVE' },
+    const active = await this.prisma.pathAssessment.findFirst({
+      where: { pathId, status: 'ACTIVE' },
       select: {
-        id: true,
-        key: true,
         version: true,
         title: true,
         description: true,
+        bands: { select: { levelId: true, minScore: true, maxScore: true } },
         questions: {
           orderBy: { displayOrder: 'asc' },
           select: {
             key: true,
             displayOrder: true,
             text: true,
+            marks: true,
+            levelId: true,
+            topic: true,
             options: {
               orderBy: { displayOrder: 'asc' },
-              select: {
-                key: true,
-                displayOrder: true,
-                label: true,
-                weights: { select: { dimension: true, points: true } },
-              },
+              select: { key: true, displayOrder: true, label: true, isCorrect: true },
             },
           },
         },
       },
     });
 
-    if (!active) {
-      throw new NotFoundException('ASSESSMENT_NOT_FOUND');
-    }
+    const path = await this.prisma.path.findUniqueOrThrow({
+      where: { id: pathId },
+      select: { name: true },
+    });
 
     const draftId = await this.prisma.$transaction(
       async (tx) => {
-        const draft = await tx.assessment.create({
+        const draft = await tx.pathAssessment.create({
           data: {
-            key: active.key,
-            version: active.version + 1,
-            title: active.title,
-            description: active.description,
+            pathId,
+            version: (active?.version ?? 0) + 1,
+            title: active?.title ?? `تحديد المستوى — ${path.name}`,
+            description: active?.description ?? DEFAULT_DESCRIPTION,
             status: 'DRAFT',
+            /* Copied with the version, which is the whole of D-072: a past
+               placement stays explicable because the table that produced it
+               travelled with the instrument rather than being global. */
+            bands: active
+              ? {
+                  create: active.bands.map((band) => ({
+                    levelId: band.levelId,
+                    minScore: band.minScore,
+                    maxScore: band.maxScore,
+                  })),
+                }
+              : undefined,
           },
           select: { id: true },
         });
 
         /*
-         * One round trip per question, with its options and their weights
-         * nested inside it.
-         *
-         * Written as three nested loops first, which is 30 + 150 statements for
-         * the seeded bank — and slow enough under load to exhaust Prisma's
-         * five-second interactive-transaction budget, which surfaced as an
-         * intermittent failure with nothing wrong in it. Nesting the writes lets
-         * the driver send each question and its 25-odd descendant rows together,
-         * so the copy is 30 statements and the transaction is short.
+         * One round trip per question, with its options nested inside it. Three
+         * nested loops is hundreds of statements and slow enough under load to
+         * exhaust Prisma's interactive-transaction budget, which surfaces as an
+         * intermittent failure with nothing wrong in it.
          */
-        for (const question of active.questions) {
-          await tx.assessmentQuestion.create({
+        for (const question of active?.questions ?? []) {
+          await tx.pathAssessmentQuestion.create({
             data: {
               assessmentId: draft.id,
-              /* Keys are carried over, so a question that survives an edit is
-                 recognisably the same question across versions even though the
-                 row is new. */
+              /* Keys carry over, so an item that survives an edit is
+                 recognisably the same item across versions even though the row
+                 is new. */
               key: question.key,
               displayOrder: question.displayOrder,
               text: question.text,
+              marks: question.marks,
+              levelId: question.levelId,
+              topic: question.topic,
               options: {
                 create: question.options.map((option) => ({
                   key: option.key,
                   displayOrder: option.displayOrder,
                   label: option.label,
-                  weights: {
-                    create: option.weights.map((weight) => ({
-                      dimension: weight.dimension,
-                      points: weight.points,
-                    })),
-                  },
+                  isCorrect: option.isCorrect,
                 })),
               },
             },
@@ -202,14 +207,10 @@ export class AdminAssessmentService {
 
         return draft.id;
       },
-      /*
-       * Room for a large bank on a loaded database. Prisma's default is five
-       * seconds, which is a sensible ceiling for a request-path transaction and
-       * the wrong one for copying an instrument: the work is bounded by the
-       * ministry's question count, not by anything a caller controls, and a
-       * partial copy is not a state this rolls back *to* — it rolls back to no
-       * draft at all, which means an administrator's edit simply never opened.
-       */
+      /* Room for a large bank on a loaded database. The work is bounded by the
+         ministry's question count, not by anything a caller controls, and a
+         partial copy rolls back to no draft at all — the administrator's edit
+         simply never opened. */
       { timeout: 30_000 },
     );
 
@@ -220,23 +221,20 @@ export class AdminAssessmentService {
       ipAddress,
       targetType: 'assessment',
       targetId: draftId,
-      detail: { copiedFromVersion: active.version },
+      detail: { copiedFromVersion: String(active?.version ?? 'none') },
     });
 
-    return this.getDraft();
+    return this.load(draftId);
   }
 
   /** Abandons the draft. Nothing references it, so it deletes cleanly. */
-  async discardDraft(actorId: string, ipAddress: string | null): Promise<void> {
-    const draft = await this.requireDraft();
+  async discardDraft(pathId: string, actorId: string, ipAddress: string | null): Promise<void> {
+    const draft = await this.requireDraft(pathId);
 
-    /*
-     * Safe by construction rather than by check: a DRAFT is never served by
-     * `getActive`, so no `assessment_responses` row can point at its questions,
-     * so the `Restrict` that protects published banks has nothing to refuse.
-     * Questions and options cascade from the assessment.
-     */
-    await this.prisma.assessment.delete({ where: { id: draft.id } });
+    /* Safe by construction rather than by check: a DRAFT is never served by
+       `getActive`, so no response row can point at its questions, so the
+       `Restrict` that protects published banks has nothing to refuse. */
+    await this.prisma.pathAssessment.delete({ where: { id: draft.id } });
 
     await this.audit.record({
       action: AuditAction.ADMIN_ASSESSMENT_DRAFT_DISCARDED,
@@ -245,13 +243,14 @@ export class AdminAssessmentService {
       ipAddress,
       targetType: 'assessment',
       targetId: draft.id,
+      detail: { version: String(draft.version) },
     });
   }
 
-  async updateDraft(dto: UpdateDraftDto): Promise<AdminAssessmentDraft> {
-    const draft = await this.requireDraft();
+  async updateDraft(pathId: string, dto: UpdateDraftDto): Promise<AdminAssessmentDraft> {
+    const draft = await this.requireDraft(pathId);
 
-    await this.prisma.assessment.update({
+    await this.prisma.pathAssessment.update({
       where: { id: draft.id },
       data: {
         ...(dto.title === undefined ? {} : { title: dto.title }),
@@ -259,156 +258,141 @@ export class AdminAssessmentService {
       },
     });
 
-    return this.getDraft();
+    return this.load(draft.id);
   }
 
   /**
-   * Adds a question, with the standard Likert options weighted to one dimension.
+   * Adds a question with four blank options and no correct answer yet.
    *
-   * **The shortcut is the point.** The schema permits an option weighted across
-   * several dimensions and the option editor exposes that, but the bank's shape
-   * — five agreement levels, one dimension per item, 0-4 — is what makes it
-   * balanced by construction (D-032). Going from five items per dimension to six
-   * means adding six questions, one per letter; making that the easy path is how
-   * the editor helps the administrator stay balanced rather than merely telling
-   * them afterwards that they are not.
+   * Four because that is the shape of every item in the seeded banks and the one
+   * an author expects; blank because writing the distractors *is* the authoring
+   * work, and generating them would be inventing assessment content. The missing
+   * correct answer is a blocker until they tick one, which is the editor telling
+   * the truth about an unfinished item.
    */
-  async addQuestion(dto: AddDraftQuestionDto): Promise<AdminAssessmentDraft> {
-    const draft = await this.requireDraft();
+  async addQuestion(pathId: string, dto: AddDraftQuestionDto): Promise<AdminAssessmentDraft> {
+    const draft = await this.requireDraft(pathId);
 
-    const levels = await this.likertLevels(draft.id);
-
-    if (levels.length === 0) {
-      /* An empty draft has no house style to copy. Rather than inventing one
-         silently, refuse and let the administrator say what the options are. */
-      throw new BadRequestException('ASSESSMENT_NO_TEMPLATE_QUESTION');
+    if (dto.levelId) {
+      await this.requireLevel(pathId, dto.levelId);
     }
 
     const [maxOrder, keys] = await Promise.all([
-      this.prisma.assessmentQuestion.aggregate({
+      this.prisma.pathAssessmentQuestion.aggregate({
         where: { assessmentId: draft.id },
         _max: { displayOrder: true },
       }),
-      this.prisma.assessmentQuestion.findMany({
+      this.prisma.pathAssessmentQuestion.findMany({
         where: { assessmentId: draft.id },
         select: { key: true },
       }),
     ]);
 
-    await this.prisma.assessmentQuestion.create({
+    await this.prisma.pathAssessmentQuestion.create({
       data: {
         assessmentId: draft.id,
-        key: nextKey(
-          dto.letter,
-          keys.map((row) => row.key),
-        ),
+        key: nextKey(keys.map((row) => row.key)),
         displayOrder: (maxOrder._max.displayOrder ?? 0) + 1,
         text: dto.text,
+        marks: dto.marks ?? 1,
+        levelId: dto.levelId ?? null,
+        topic: dto.topic ?? null,
         options: {
-          create: levels.map((level) => ({
-            key: level.key,
-            displayOrder: level.displayOrder,
-            label: level.label,
-            weights: { create: [{ dimension: dto.letter, points: level.points }] },
+          create: [1, 2, 3, 4].map((index) => ({
+            key: `o${index}`,
+            displayOrder: index,
+            label: '',
+            isCorrect: false,
           })),
         },
       },
     });
 
-    return this.getDraft();
+    return this.load(draft.id);
   }
 
   async updateQuestion(
+    pathId: string,
     questionId: string,
     dto: UpdateDraftQuestionDto,
   ): Promise<AdminAssessmentDraft> {
-    const draft = await this.requireDraft();
+    const draft = await this.requireDraft(pathId);
     await this.requireDraftQuestion(draft.id, questionId);
 
-    await this.prisma.assessmentQuestion.update({
+    if (dto.levelId) {
+      await this.requireLevel(pathId, dto.levelId);
+    }
+
+    await this.prisma.pathAssessmentQuestion.update({
       where: { id: questionId },
       data: {
         ...(dto.text === undefined ? {} : { text: dto.text }),
+        ...(dto.marks === undefined ? {} : { marks: dto.marks }),
+        ...(dto.levelId === undefined ? {} : { levelId: dto.levelId }),
+        ...(dto.topic === undefined ? {} : { topic: dto.topic }),
         ...(dto.displayOrder === undefined ? {} : { displayOrder: dto.displayOrder }),
       },
     });
 
-    return this.getDraft();
+    return this.load(draft.id);
   }
 
-  async removeQuestion(questionId: string): Promise<AdminAssessmentDraft> {
-    const draft = await this.requireDraft();
+  async removeQuestion(pathId: string, questionId: string): Promise<AdminAssessmentDraft> {
+    const draft = await this.requireDraft(pathId);
     await this.requireDraftQuestion(draft.id, questionId);
 
-    await this.prisma.assessmentQuestion.delete({ where: { id: questionId } });
+    await this.prisma.pathAssessmentQuestion.delete({ where: { id: questionId } });
 
-    return this.getDraft();
+    return this.load(draft.id);
   }
 
-  /**
-   * Reorders the draft's questions.
-   *
-   * Takes the complete order rather than a move-up/move-down, so the result is
-   * whatever the administrator arranged rather than the outcome of replaying
-   * their clicks against a list that may have changed underneath them. Written
-   * in one transaction with a two-pass shuffle, because `display_order` has an
-   * index and a naive one-by-one update collides with itself half way through.
-   */
-  async reorder(questionIds: string[]): Promise<AdminAssessmentDraft> {
-    const draft = await this.requireDraft();
+  /** Takes the complete order, and shuffles in two passes. */
+  async reorder(pathId: string, dto: ReorderDraftDto): Promise<AdminAssessmentDraft> {
+    const draft = await this.requireDraft(pathId);
 
-    const existing = await this.prisma.assessmentQuestion.findMany({
+    const existing = await this.prisma.pathAssessmentQuestion.findMany({
       where: { assessmentId: draft.id },
       select: { id: true },
     });
 
-    const ids = new Set(existing.map((row) => row.id));
-    const given = new Set(questionIds);
+    const known = new Set(existing.map((row) => row.id));
+    const given = new Set(dto.questionIds);
 
-    /* Every question exactly once. A partial order would leave the omitted ones
-       at whatever position they held, which is not an order anybody chose. */
-    if (given.size !== questionIds.length || given.size !== ids.size) {
+    if (given.size !== dto.questionIds.length || given.size !== known.size) {
       throw new BadRequestException('ASSESSMENT_ORDER_INCOMPLETE');
     }
-    if (questionIds.some((id) => !ids.has(id))) {
+    if (dto.questionIds.some((id) => !known.has(id))) {
       throw new BadRequestException('ASSESSMENT_QUESTION_NOT_IN_DRAFT');
     }
 
     await this.prisma.$transaction(async (tx) => {
-      /* Out of the way first: display orders are 1..n, so writing the final
-         values directly would transiently duplicate one. */
-      for (const [index, id] of questionIds.entries()) {
-        await tx.assessmentQuestion.update({
+      for (const [index, id] of dto.questionIds.entries()) {
+        await tx.pathAssessmentQuestion.update({
           where: { id },
           data: { displayOrder: -(index + 1) },
         });
       }
-
-      for (const [index, id] of questionIds.entries()) {
-        await tx.assessmentQuestion.update({
+      for (const [index, id] of dto.questionIds.entries()) {
+        await tx.pathAssessmentQuestion.update({
           where: { id },
           data: { displayOrder: index + 1 },
         });
       }
     });
 
-    return this.getDraft();
+    return this.load(draft.id);
   }
 
-  /**
-   * Edits an option's label and its per-dimension weights (D-048).
-   *
-   * Weights are replaced wholesale rather than merged, because "this option now
-   * contributes to S only" has to be expressible, and a merge cannot say that.
-   * The dimension column is an enum, so a mistyped letter is refused by the
-   * database rather than silently contributing nothing (D-035).
-   */
-  async updateOption(optionId: string, dto: UpdateDraftOptionDto): Promise<AdminAssessmentDraft> {
-    const draft = await this.requireDraft();
+  async updateOption(
+    pathId: string,
+    optionId: string,
+    dto: UpdateDraftOptionDto,
+  ): Promise<AdminAssessmentDraft> {
+    const draft = await this.requireDraft(pathId);
 
-    const option = await this.prisma.assessmentOption.findFirst({
+    const option = await this.prisma.pathAssessmentOption.findFirst({
       where: { id: optionId, question: { assessmentId: draft.id } },
-      select: { id: true },
+      select: { id: true, questionId: true },
     });
 
     if (!option) {
@@ -418,44 +402,94 @@ export class AdminAssessmentService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      if (dto.label !== undefined) {
-        await tx.assessmentOption.update({ where: { id: optionId }, data: { label: dto.label } });
+      if (dto.isCorrect === true) {
+        /* Moving the tick is one action, not two. Making the client clear the
+           old one first would leave the bank momentarily two-answered, and the
+           readiness panel would flicker a blocker at them for it. */
+        await tx.pathAssessmentOption.updateMany({
+          where: { questionId: option.questionId },
+          data: { isCorrect: false },
+        });
       }
 
-      if (dto.weights !== undefined) {
-        await tx.assessmentOptionWeight.deleteMany({ where: { optionId } });
-
-        const rows = Object.entries(dto.weights)
-          .filter(([, points]) => points !== undefined)
-          .map(([dimension, points]) => ({
-            optionId,
-            dimension: dimension as RiasecLetter,
-            points: points as number,
-          }));
-
-        if (rows.length > 0) {
-          await tx.assessmentOptionWeight.createMany({ data: rows });
-        }
-      }
+      await tx.pathAssessmentOption.update({
+        where: { id: optionId },
+        data: {
+          ...(dto.label === undefined ? {} : { label: dto.label }),
+          ...(dto.isCorrect === undefined ? {} : { isCorrect: dto.isCorrect }),
+        },
+      });
     });
 
-    return this.getDraft();
+    return this.load(draft.id);
   }
 
   /**
-   * Publishes the draft: validate, activate, retire the predecessor (D-070).
+   * Replaces the band table — §4C.3's configurable placement rule (D-134).
+   *
+   * **The whole table at once, never one band.** A partition is a single object:
+   * moving a boundary necessarily changes two bands, so a per-band endpoint
+   * would force the administrator through states that are invalid by
+   * construction and make the editor reject its own intermediate steps. Taking
+   * the complete table also means what is stored is what they arranged, on the
+   * same reasoning `reorder` takes the complete order.
+   *
+   * An empty list clears the table and returns the path to the even split.
+   *
+   * Validation is the gate's, at publish, not here — a draft whose bank has just
+   * grown has a stale table by definition, and refusing the save would leave no
+   * way to fix it.
+   */
+  async setBands(pathId: string, dto: SetBandsDto): Promise<AdminAssessmentDraft> {
+    const draft = await this.requireDraft(pathId);
+
+    const levelIds = dto.bands.map((band) => band.levelId);
+
+    if (new Set(levelIds).size !== levelIds.length) {
+      /* The unique index would refuse this too; catching it here turns a 500
+         into a named refusal the screen can render. */
+      throw new BadRequestException('ASSESSMENT_BAND_LEVEL_REPEATED');
+    }
+
+    for (const levelId of levelIds) {
+      await this.requireLevel(pathId, levelId);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.pathAssessmentBand.deleteMany({ where: { assessmentId: draft.id } });
+
+      if (dto.bands.length > 0) {
+        await tx.pathAssessmentBand.createMany({
+          data: dto.bands.map((band) => ({
+            assessmentId: draft.id,
+            levelId: band.levelId,
+            minScore: band.minScore,
+            maxScore: band.maxScore,
+          })),
+        });
+      }
+    });
+
+    return this.load(draft.id);
+  }
+
+  /**
+   * Publishes the draft: validate, activate, retire the predecessor.
    *
    * One transaction, and the order inside it matters. The previous version is
    * retired *before* the draft becomes active, because a partial unique index
-   * permits only one ACTIVE row per key — doing it the other way round would
+   * permits only one ACTIVE row per path — doing it the other way round would
    * fail on the constraint, which is the constraint working.
    */
-  async publish(actorId: string, ipAddress: string | null): Promise<AdminAssessmentVersion> {
-    const draft = await this.requireDraft();
-    const questions = await this.loadQuestions(draft.id);
-    const state = readiness(questions);
+  async publish(
+    pathId: string,
+    actorId: string,
+    ipAddress: string | null,
+  ): Promise<AdminAssessmentVersion> {
+    const draft = await this.requireDraft(pathId);
+    const loaded = await this.load(draft.id);
 
-    if (state.blockers.length > 0) {
+    if (loaded.readiness.blockers.length > 0) {
       await this.audit.record({
         action: AuditAction.ADMIN_ASSESSMENT_PUBLISHED,
         outcome: 'FAILURE',
@@ -466,21 +500,21 @@ export class AdminAssessmentService {
         reason: AuditReason.BANK_NOT_PUBLISHABLE,
         /* The specific blockers, so a refusal is explicable months later without
            reconstructing the bank as it stood. */
-        detail: { blockers: state.blockers.join(',') },
+        detail: { blockers: loaded.readiness.blockers.join(',') },
       });
 
-      throw new ConflictException(state.blockers[0]);
+      throw new ConflictException(loaded.readiness.blockers[0]);
     }
 
     const effectiveFrom = new Date();
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.assessment.updateMany({
-        where: { key: draft.key, status: 'ACTIVE' },
+      await tx.pathAssessment.updateMany({
+        where: { pathId, status: 'ACTIVE' },
         data: { status: 'RETIRED', retiredAt: effectiveFrom },
       });
 
-      await tx.assessment.update({
+      await tx.pathAssessment.update({
         where: { id: draft.id },
         data: { status: 'ACTIVE', effectiveFrom },
       });
@@ -494,15 +528,16 @@ export class AdminAssessmentService {
       targetType: 'assessment',
       targetId: draft.id,
       detail: {
-        version: draft.version,
-        questions: questions.length,
+        version: String(draft.version),
+        questions: String(loaded.questions.length),
+        maxScore: String(loaded.readiness.maxScore),
         /* Recorded even on success: an administrator who published past a
            warning made a decision, and the trail should say which one. */
-        warnings: state.warnings.join(',') || 'none',
+        warnings: loaded.readiness.warnings.join(',') || 'none',
       },
     });
 
-    const published = await this.prisma.assessment.findUniqueOrThrow({
+    const published = await this.prisma.pathAssessment.findUniqueOrThrow({
       where: { id: draft.id },
       select: VERSION_SELECT,
     });
@@ -512,29 +547,126 @@ export class AdminAssessmentService {
 
   /** A published version, read-only, exactly as it was taken. */
   async getVersion(assessmentId: string): Promise<AdminAssessmentDraft> {
-    const version = await this.prisma.assessment.findUnique({
+    return this.load(assessmentId);
+  }
+
+  // ── internals ───────────────────────────────────────────────────────────────
+
+  /** One version, whatever its status, with everything the editor renders. */
+  private async load(assessmentId: string): Promise<AdminAssessmentDraft> {
+    const version = await this.prisma.pathAssessment.findUnique({
       where: { id: assessmentId },
-      select: { id: true, key: true, version: true, title: true, description: true },
+      select: {
+        id: true,
+        pathId: true,
+        version: true,
+        title: true,
+        description: true,
+        path: {
+          select: {
+            name: true,
+            levels: {
+              orderBy: { position: 'asc' },
+              select: { id: true, name: true, position: true },
+            },
+          },
+        },
+        bands: { select: { levelId: true, minScore: true, maxScore: true } },
+        questions: {
+          orderBy: { displayOrder: 'asc' },
+          select: {
+            id: true,
+            key: true,
+            text: true,
+            displayOrder: true,
+            marks: true,
+            levelId: true,
+            topic: true,
+            options: {
+              orderBy: { displayOrder: 'asc' },
+              select: { id: true, key: true, label: true, displayOrder: true, isCorrect: true },
+            },
+          },
+        },
+      },
     });
 
     if (!version) {
       throw new NotFoundException('ASSESSMENT_NOT_FOUND');
     }
 
-    const questions = await this.loadQuestions(version.id);
+    const questions: AdminAssessmentQuestion[] = version.questions.map((question) => ({
+      id: question.id,
+      key: question.key,
+      text: question.text,
+      order: question.displayOrder,
+      marks: question.marks,
+      levelId: question.levelId,
+      topic: question.topic,
+      options: question.options.map((option) => ({
+        id: option.id,
+        key: option.key,
+        label: option.label,
+        order: option.displayOrder,
+        isCorrect: option.isCorrect,
+      })),
+    }));
+
+    const levels: LevelRef[] = version.path.levels;
+    const authored = [...version.bands].sort((a, b) => a.minScore - b.minScore);
+    const readiness = toReadiness(questions, authored, levels);
 
     return {
-      ...version,
+      id: version.id,
+      pathId: version.pathId,
+      pathName: version.path.name,
+      version: version.version,
+      title: version.title,
+      description: version.description,
+      levels,
       questions,
-      readiness: readiness(questions),
-      basedOnVersion: null,
+      /* What placement will actually use: the authored table, or the split it
+         falls back to. Sending the effective table rather than an empty list
+         means the editor shows the administrator the rule in force rather than
+         a blank they have to know the meaning of. */
+      bands: authored.length > 0 ? authored : defaultPlacementBands(levels, readiness.maxScore),
+      bandsAreDefault: authored.length === 0,
+      readiness,
+      basedOnVersion: version.version > 1 ? version.version - 1 : null,
     };
   }
 
-  private async requireDraft() {
-    const draft = await this.prisma.assessment.findFirst({
-      where: { status: 'DRAFT' },
-      select: { id: true, key: true, version: true, title: true, description: true },
+  private async requirePath(pathId: string): Promise<{ name: string; levels: LevelRef[] }> {
+    const path = await this.prisma.path.findUnique({
+      where: { id: pathId },
+      select: {
+        name: true,
+        levels: { orderBy: { position: 'asc' }, select: { id: true, name: true, position: true } },
+      },
+    });
+
+    if (!path) {
+      throw new NotFoundException('PATH_NOT_FOUND');
+    }
+
+    return path;
+  }
+
+  private async requireLevel(pathId: string, levelId: string): Promise<void> {
+    const level = await this.prisma.level.findFirst({
+      where: { id: levelId, pathId },
+      select: { id: true },
+    });
+
+    if (!level) {
+      throw new BadRequestException(AuditReason.LEVEL_NOT_IN_PATH);
+    }
+  }
+
+  private async requireDraft(pathId: string) {
+    const draft = await this.prisma.pathAssessment.findFirst({
+      where: { pathId, status: 'DRAFT' },
+      select: { id: true, version: true },
     });
 
     if (!draft) {
@@ -545,7 +677,7 @@ export class AdminAssessmentService {
   }
 
   private async requireDraftQuestion(assessmentId: string, questionId: string): Promise<void> {
-    const question = await this.prisma.assessmentQuestion.findFirst({
+    const question = await this.prisma.pathAssessmentQuestion.findFirst({
       where: { id: questionId, assessmentId },
       select: { id: true },
     });
@@ -554,83 +686,10 @@ export class AdminAssessmentService {
       throw new NotFoundException('ASSESSMENT_QUESTION_NOT_IN_DRAFT');
     }
   }
-
-  private async loadQuestions(assessmentId: string): Promise<AdminAssessmentQuestion[]> {
-    const rows = await this.prisma.assessmentQuestion.findMany({
-      where: { assessmentId },
-      orderBy: { displayOrder: 'asc' },
-      select: {
-        id: true,
-        key: true,
-        text: true,
-        displayOrder: true,
-        options: {
-          orderBy: { displayOrder: 'asc' },
-          select: {
-            id: true,
-            key: true,
-            label: true,
-            displayOrder: true,
-            weights: { select: { dimension: true, points: true } },
-          },
-        },
-      },
-    });
-
-    return rows.map((question) => ({
-      id: question.id,
-      key: question.key,
-      text: question.text,
-      order: question.displayOrder,
-      options: question.options.map((option) => ({
-        id: option.id,
-        key: option.key,
-        label: option.label,
-        order: option.displayOrder,
-        weights: Object.fromEntries(
-          option.weights.map((weight) => [weight.dimension, weight.points]),
-        ) as Partial<Record<RiasecLetter, number>>,
-      })),
-    }));
-  }
-
-  /**
-   * The option template a new question copies.
-   *
-   * Read from the draft's own first question rather than from
-   * `seed-data/assessment.ts`, so a ministry that has revised its agreement
-   * labels gets *its* labels on the next question it adds rather than the ones
-   * that shipped with the code. The bank is theirs after the first publish
-   * (D-069); the editor should behave as if it is.
-   */
-  private async likertLevels(assessmentId: string) {
-    const template = await this.prisma.assessmentQuestion.findFirst({
-      where: { assessmentId },
-      orderBy: { displayOrder: 'asc' },
-      select: {
-        options: {
-          orderBy: { displayOrder: 'asc' },
-          select: {
-            key: true,
-            displayOrder: true,
-            label: true,
-            weights: { select: { points: true } },
-          },
-        },
-      },
-    });
-
-    return (template?.options ?? []).map((option) => ({
-      key: option.key,
-      displayOrder: option.displayOrder,
-      label: option.label,
-      /* The points the template gives this level, whichever dimension it was
-         for — the level's *weight* is a property of the agreement scale, not of
-         the dimension it happens to score. */
-      points: option.weights[0]?.points ?? 0,
-    }));
-  }
 }
+
+const DEFAULT_DESCRIPTION =
+  'اختبار قصير لتحديد نقطة البداية المناسبة لك في هذا المسار. يُجرى مرة واحدة.';
 
 const VERSION_SELECT = {
   id: true,
@@ -659,42 +718,49 @@ function toVersion(row: {
     effectiveFrom: row.effectiveFrom?.toISOString() ?? null,
     retiredAt: row.retiredAt?.toISOString() ?? null,
     questionCount: row._count.questions,
-    /* How many people this version scored. Shown because it is what makes
-       D-049 concrete on the screen: these results exist, and editing does not
-       touch them. */
+    /* How many people this version placed. Shown because it is what makes D-049
+       concrete on the screen: these results exist, and editing does not touch
+       them. */
     resultCount: row._count.results,
   };
 }
 
-function readiness(questions: readonly AdminAssessmentQuestion[]): AdminBankReadiness {
+function toReadiness(
+  questions: readonly AdminAssessmentQuestion[],
+  bands: readonly PlacementBand[],
+  levels: readonly LevelRef[],
+): AdminAssessmentReadiness {
   const draft: DraftQuestion[] = questions.map((question) => ({
     id: question.id,
     displayOrder: question.order,
-    options: question.options.map((option) => ({ id: option.id, weights: option.weights })),
+    marks: question.marks,
+    levelId: question.levelId,
+    options: question.options.map((option) => ({ id: option.id, isCorrect: option.isCorrect })),
   }));
 
-  const result = assessBank(draft);
+  const result = assessBank(draft, bands, levels);
 
   return {
     blockers: [...result.blockers],
     warnings: [...result.warnings],
-    attainable: result.attainable,
-    balanced: result.balanced,
+    maxScore: result.maxScore,
+    levelsWithoutQuestion: [...result.levelsWithoutQuestion],
+    bandsCoverRange: result.bandsCoverRange,
   };
 }
 
 /**
- * The next free key for a dimension, e.g. `S6`.
+ * The next free question key, e.g. `q7`.
  *
- * Keys stay stable across versions (D-032), so a new question must not reuse one
- * a retired version already gave to a different question — that would make two
- * different questions look like the same question revised.
+ * Keys stay stable across versions, so a new question must not reuse one a
+ * retired version already gave to a different question — that would make two
+ * different items look like the same item revised.
  */
-function nextKey(letter: RiasecLetter, taken: readonly string[]): string {
+function nextKey(taken: readonly string[]): string {
   const used = new Set(taken);
 
-  for (let index = 1; index <= taken.length + RIASEC_LETTERS.length + 1; index += 1) {
-    const candidate = `${letter}${index}`;
+  for (let index = 1; index <= taken.length + 1; index += 1) {
+    const candidate = `q${index}`;
     if (!used.has(candidate)) {
       return candidate;
     }

@@ -142,6 +142,30 @@
   }
 
   /*
+   * An empty native date field prints its own placeholder («يوم/شهر/سنة»), and in
+   * an Arabic page Chrome draws it with each word's letters reversed and the
+   * order flipped — it reads as garbage. While the field is empty and not being
+   * edited the text is made transparent (the label above names the field and the
+   * calendar icon stays); the moment it is focused or holds a date, it is drawn
+   * normally. Applies to every date input, so no screen has to remember it.
+   */
+  input[type='date'][value='']:not(:focus)::-webkit-datetime-edit {
+    color: transparent;
+  }
+
+  /*
+   * Native <select> popups on Windows Chrome are drawn outside the page's
+   * renderer, where a page-loaded web font does not exist — options set in
+   * the self-hosted Plex Arabic rendered as blank rows. A system stack the
+   * popup can always resolve; the closed control still wears the brand font.
+   */
+  option {
+    font-family: system-ui, 'Segoe UI', Tahoma, Arial, sans-serif;
+    color: var(--foreground);
+    background-color: var(--card);
+  }
+
+  /*
    * Visible focus on every interactive element — WCAG 2.1 AA 2.4.7 (§2B DoD 5).
    * `:focus-visible` rather than `:focus` so pointer users don't see rings, but
    * keyboard users always do.
@@ -226,13 +250,13 @@
     /* Fill lives on the group so the drift keyframe (which animates the
        group's fill) actually reaches the path — a fill class on the path
        itself would override it. Labels set their own fill explicitly. */
-    fill: var(--color-primary-200);
+    fill: color-mix(in srgb, var(--color-primary-600), var(--color-primary-200) 45%);
     opacity: 0;
     transform-box: fill-box;
     transform-origin: center;
     animation:
-      map-reveal 0.7s ease-out both,
-      map-drift 8s ease-in-out 1.2s infinite;
+      map-reveal 1s ease-out both,
+      map-drift 8s ease-in-out 1.6s infinite;
   }
 
   /*
@@ -258,15 +282,19 @@
     pointer-events: none;
   }
 
-  .map-region:hover path {
-    stroke: var(--color-surface);
-    stroke-width: 4;
-    transform: scale(1.03);
-    filter: brightness(1.12);
-  }
+  /* Hover-capable pointers only — a tap on a touch screen would otherwise
+     stick a false hover on a region until the next tap. */
+  @media (hover: hover) and (pointer: fine) {
+    .map-region:hover path {
+      stroke: var(--color-surface);
+      stroke-width: 4;
+      transform: scale(1.03);
+      filter: brightness(1.12);
+    }
 
-  .map-region:hover text {
-    fill: var(--color-primary-deep);
+    .map-region:hover text {
+      fill: var(--color-primary-deep);
+    }
   }
 
   @keyframes map-reveal {
@@ -284,7 +312,7 @@
     0%,
     18%,
     100% {
-      fill: var(--color-primary-200);
+      fill: color-mix(in srgb, var(--color-primary-600), var(--color-primary-200) 45%);
     }
     8% {
       fill: var(--color-surface);
@@ -304,5 +332,52 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border-width: 0;
+  }
+}
+
+/*
+ * ── Print ───────────────────────────────────────────────────────────────────
+ * §4C.8's «الأثر» is printed to PDF through the browser (TAM-149): the
+ * ministry's one-page summary of a quarter. A print stylesheet rather than a
+ * second renderer — the Puppeteer path stays where the typography has to be
+ * exact, on certificates and the CV.
+ *
+ * Only the frame's chrome is dropped. The owner's lockup and the classification
+ * strip stay: a printed sheet that leaves a government office has to say whose
+ * it is and how it is classified.
+ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  /* Bars carry meaning here, and browsers drop backgrounds by default. Every
+     bar is paired with its number in words, so a printer that ignores this
+     still produces a readable sheet (WCAG 1.4.1). */
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  /* Navigation, the user menu and the skip link are ways to go somewhere,
+     which paper is not. */
+  [data-print='chrome'] {
+    display: none !important;
+  }
+
+  /* A card's frame reads as a box on screen and as clutter on paper. */
+  main {
+    padding: 0 !important;
+  }
+
+  /* Nothing may be pushed off the sheet by a scroll container the reader
+     cannot scroll. */
+  [class*='overflow-x-auto'] {
+    overflow: visible !important;
   }
 }

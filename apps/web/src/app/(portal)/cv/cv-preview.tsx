@@ -3,14 +3,7 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 
-import {
-  RIASEC_LETTERS,
-  cvDocumentBody,
-  cvDocumentCss,
-  type CvAutofill,
-  type CvProfile,
-  type RiasecLetter,
-} from '@tamkeen/types';
+import { cvDocumentBody, cvDocumentCss, type CvAutofill, type CvProfile } from '@tamkeen/types';
 
 /**
  * The live preview (§4.11).
@@ -32,23 +25,10 @@ import {
  */
 export function CvPreview({ profile, autofill }: { profile: CvProfile; autofill: CvAutofill }) {
   const t = useTranslations('cv');
-  const tRiasec = useTranslations('riasec');
 
-  /* D-050: RIASEC type names pass through as authored, and the catalogue is
-     where the Arabic lives (D-024) — so they are read here rather than being
-     duplicated into the shared renderer. */
-  const riasecNames = useMemo(
-    () =>
-      Object.fromEntries(
-        RIASEC_LETTERS.map((letter) => [letter, tRiasec(`${letter}.name`)]),
-      ) as Record<RiasecLetter, string>,
-    [tRiasec],
-  );
-
-  const html = useMemo(
-    () => cvDocumentBody({ profile, autofill, riasecNames }),
-    [profile, autofill, riasecNames],
-  );
+  /* Path and level names are proper nouns and pass through as authored, Arabic
+     and all (D-050) — so the renderer needs no catalogue of its own. */
+  const html = useMemo(() => cvDocumentBody({ profile, autofill }), [profile, autofill]);
 
   return (
     <section aria-labelledby="cv-preview-heading" className="flex flex-col gap-2">

@@ -1,5 +1,6 @@
 'use client';
 
+import { BookOpen, Building2, CircleOff, EyeOff, Route } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -11,18 +12,20 @@ import {
 } from '@tamkeen/types';
 
 import { AdminDialog } from '@/components/admin/admin-dialog';
+import { NeedsAction } from '@/components/admin/needs-action';
 import { useErrorMessage } from '@/components/auth/use-error-message';
 import { AdminPage } from '@/components/layout/admin-page';
 import { DataView } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, cardVariants } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { useFormat } from '@/i18n/format-provider';
 import { adminApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
+import { cn } from '@/lib/utils';
 
 /**
  * §4C.5 — course oversight.
@@ -65,9 +68,17 @@ export default function AdminCoursesPage() {
     [q, visibility, unowned, page],
   );
 
+  /* The same box the dashboard opens with — what is waiting on the administrator —
+     so it is in front of them here too, where courses are placed. Drawn only when
+     there is something to do, and silent if the figures cannot be had: it is a
+     reminder, not what this page is for. */
+  const dashboard = useApiQuery(() => adminApi.dashboard(), []);
+
   return (
     <AdminPage title={t('coursesTitle')}>
       <div className="space-y-4">
+        {dashboard.data ? <NeedsAction data={dashboard.data} /> : null}
+
         {courses.data && courses.data.unownedTotal > 0 ? (
           <Card className="p-4 text-sm text-muted-foreground">
             {t('coursesUnownedNotice', { count: format.number(courses.data.unownedTotal) })}
@@ -202,6 +213,43 @@ function hiddenReasonKey(row: AdminCourseRow): string | null {
   return null;
 }
 
+/** One supplier's courses, split by whether they sit in a path. */
+interface SupplierBlock {
+  key: string;
+  name: string | null;
+  inPath: AdminCourseRow[];
+  inNone: AdminCourseRow[];
+}
+
+/**
+ * The rows grouped by supplier, in the order the API returned them (it sorts by
+ * supplier, so a supplier's courses arrive together and the unowned last).
+ */
+function blocksOf(rows: AdminCourseRow[]): SupplierBlock[] {
+  const blocks: SupplierBlock[] = [];
+
+  for (const row of rows) {
+    const key = row.ownerEntityId ?? 'none';
+    let block = blocks.find((candidate) => candidate.key === key);
+
+    if (!block) {
+      block = { key, name: row.ownerEntityName, inPath: [], inNone: [] };
+      blocks.push(block);
+    }
+
+    (row.paths.length > 0 ? block.inPath : block.inNone).push(row);
+  }
+
+  return blocks;
+}
+
+/**
+ * Every course as a card, in the shape the assessment page uses: a tinted icon,
+ * the name set large, and a band underneath. A green band names each supplier, and
+ * under it a quieter label says whether the courses below are already in a path or
+ * in none — the second being the administrator's work queue: a course in no path
+ * reaches no employee at all. The filters and the paging are unchanged.
+ */
 function CourseTable({
   rows,
   onManage,
@@ -212,67 +260,160 @@ function CourseTable({
   const t = useTranslations('admin');
   const format = useFormat();
 
-  return (
-    /* Scrolls inside its own container: six columns do not fit a narrow
-       viewport, and a horizontally scrolling page breaks every other screen. */
-    <Card className="overflow-x-auto">
-      <table className="w-full min-w-[52rem] text-sm">
-        <caption className="sr-only">{t('coursesTitle')}</caption>
-        <thead className="border-b border-border text-muted-foreground">
-          <tr>
-            <Th>{t('columnCourse')}</Th>
-            <Th>{t('columnEntity')}</Th>
-            <Th>{t('columnStatus')}</Th>
-            <Th>{t('columnAvailability')}</Th>
-            <Th>{t('columnHeld')}</Th>
-            <Th>
-              <span className="sr-only">{t('columnActions')}</span>
-            </Th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((row) => {
-            const visibility = courseVisibility(row.status);
-            const reason = hiddenReasonKey(row);
+  const blocks = blocksOf(rows);
 
-            return (
-              <tr key={row.id}>
-                <td className="px-4 py-3 font-medium text-foreground">
-                  {row.title}
-                  {row.paths.length > 0 ? (
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      {row.paths.map((path) => path.name).join(' · ')}
-                    </span>
-                  ) : null}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {row.ownerEntityName ?? t('pathCourseUnowned')}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge variant={visibility === 'AVAILABLE' ? 'soft' : 'dark'}>
-                    {t(`courseVisibility.${visibility}`)}
-                  </Badge>
-                  {reason ? (
-                    <span className="block text-xs text-muted-foreground">{t(reason)}</span>
-                  ) : null}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  <AvailabilityCell course={row} />
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {format.number(row.heldByLearners)}
-                </td>
-                <td className="px-4 py-3 text-end">
-                  <Button variant="outline" size="sm" onClick={() => onManage(row)}>
-                    {t('manage')}
-                  </Button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </Card>
+  return (
+    <div className="space-y-6">
+      {blocks.map((block) => (
+        <section
+          key={block.key}
+          aria-label={block.name ?? t('pathCourseUnowned')}
+          className="space-y-3"
+        >
+          {/* The supplier: green, white text (#067647 is 5.9:1 with white), its
+              icon and how many of its courses are on this page. */}
+          <h2 className="flex items-center gap-2 rounded-lg bg-success px-4 py-1 text-sm font-semibold leading-6 text-white">
+            <Building2 aria-hidden="true" className="size-4 shrink-0" />
+            {block.name ?? t('pathCourseUnowned')}
+            <span className="rounded-full bg-white/20 px-2 text-xs font-medium">
+              {format.number(block.inPath.length + block.inNone.length)}
+            </span>
+          </h2>
+
+          <CourseGroup
+            icon={Route}
+            label={t('courseGroupInPath')}
+            rows={block.inPath}
+            onManage={onManage}
+          />
+          <CourseGroup
+            icon={CircleOff}
+            label={t('courseGroupInNone')}
+            rows={block.inNone}
+            tone="warning"
+            onManage={onManage}
+          />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/** A label and its cards; nothing at all when there are no rows. */
+function CourseGroup({
+  icon: Icon,
+  label,
+  rows,
+  tone = 'default',
+  onManage,
+}: {
+  icon: typeof Route;
+  label: string;
+  rows: AdminCourseRow[];
+  tone?: 'default' | 'warning';
+  onManage: (course: AdminCourseRow) => void;
+}) {
+  const format = useFormat();
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      <p
+        className={cn(
+          'flex items-center gap-2 rounded-md px-3 py-1 text-xs font-semibold',
+          tone === 'warning' ? 'bg-warning-50 text-warning' : 'bg-primary-50 text-primary-800',
+        )}
+      >
+        <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+        {label}
+        <span>({format.number(rows.length)})</span>
+      </p>
+
+      <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((row) => (
+          <li key={row.id}>
+            <CourseCard row={row} onManage={onManage} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function CourseCard({
+  row,
+  onManage,
+}: {
+  row: AdminCourseRow;
+  onManage: (course: AdminCourseRow) => void;
+}) {
+  const t = useTranslations('admin');
+  const format = useFormat();
+
+  const visibility = courseVisibility(row.status);
+  const reason = hiddenReasonKey(row);
+  const reachable = visibility === 'AVAILABLE';
+  const Icon = reachable ? BookOpen : EyeOff;
+
+  return (
+    <div className={cn(cardVariants(), 'flex h-full flex-col overflow-hidden')}>
+      <div className="flex items-start gap-3 p-5">
+        <span
+          aria-hidden="true"
+          className={cn(
+            'flex size-10 shrink-0 items-center justify-center rounded-lg',
+            reachable ? 'bg-primary-50 text-primary-700' : 'bg-neutral-100 text-neutral-500',
+          )}
+        >
+          <Icon className="size-5" />
+        </span>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <p className="text-lg font-semibold leading-snug text-foreground">{row.title}</p>
+          {row.paths.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {row.paths.map((path) => path.name).join(' · ')}
+            </p>
+          ) : null}
+          <div>
+            <Badge variant={reachable ? 'soft' : 'dark'}>
+              {t(`courseVisibility.${visibility}`)}
+            </Badge>
+            {reason ? (
+              <span className="mt-1 block text-xs text-muted-foreground">{t(reason)}</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <dl className="space-y-1 px-5 pb-4 text-sm">
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">{t('columnAvailability')}</dt>
+          <dd className="text-end text-foreground">
+            <AvailabilityCell course={row} />
+          </dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">{t('columnHeld')}</dt>
+          <dd className="text-foreground">{format.number(row.heldByLearners)}</dd>
+        </div>
+      </dl>
+
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-border bg-neutral-50 px-5 py-3">
+        <span className="min-w-0 text-sm">
+          <span className="text-muted-foreground">{t('columnEntity')}: </span>
+          <span className="font-medium text-foreground">
+            {row.ownerEntityName ?? t('pathCourseUnowned')}
+          </span>
+        </span>
+        <Button variant="outline" size="sm" onClick={() => onManage(row)}>
+          {t('manage')}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -579,13 +720,5 @@ function Detail({ label, value }: { label: string; value: string }) {
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 font-medium text-foreground">{value}</dd>
     </div>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th scope="col" className="px-4 py-3 text-start font-medium">
-      {children}
-    </th>
   );
 }

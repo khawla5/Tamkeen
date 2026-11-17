@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  type OnApplicationBootstrap,
+} from '@nestjs/common';
 
 import { AuditAction } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
@@ -12,7 +18,18 @@ import {
   fieldsForPublishedCourse,
   isUsableCatalogue,
   type CoursePublicationValue,
+  type CourseStatusValue,
 } from './catalog-mapping';
+
+/** What `upsertLmsCourse` needs of a row we already hold. Shaped as a subset
+ *  so `sync()`'s bulk read and `syncOne`'s single-row read can each supply it
+ *  without either owning the other's query shape. */
+interface KnownCourseFields {
+  publication: CoursePublicationValue;
+  durationMinutes: number | null;
+  availableFrom: Date | null;
+  availableUntil: Date | null;
+}
 
 export interface CatalogSyncResult {
   /** Courses the LMS returned, after the site course is discarded. */
@@ -46,6 +63,23 @@ export interface CatalogSyncResult {
 @Injectable()
 export class CatalogSyncService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CatalogSyncService.name);
+
+  /**
+   * One `syncOne` per LMS course id at a time (TAM-133).
+   *
+   * The frame can post its "something changed" signal several times in a
+   * burst — one activity edit plus a settings save both land within the same
+   * couple of seconds — and each is a separate caller into `resync`. Without
+   * this, a burst of N messages would mean N concurrent reads of the same LMS
+   * course and N upserts racing each other for no benefit: the second read
+   * can only ever confirm what the first already found. A caller that arrives
+   * while one is in flight is handed the same promise rather than starting
+   * its own.
+   */
+  private readonly resyncInFlight = new Map<
+    number,
+    Promise<{ status: CourseStatusValue; created: boolean }>
+  >();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -127,53 +161,8 @@ export class CatalogSyncService implements OnApplicationBootstrap {
 
     for (const lmsCourse of lmsCourses) {
       const known = existingByLmsId.get(lmsCourse.lmsCourseId) ?? null;
-      const fields = fieldsForPublishedCourse(
-        lmsCourse,
-        known ? { durationMinutes: known.durationMinutes } : null,
-      );
 
-      /*
-       * A course the LMS has but we have never seen enters as a DRAFT owned by
-       * nobody. That is a legitimate state, not an error (D-040): an entity
-       * claims and publishes it, and until then it simply belongs to no path.
-       * Entering as DRAFT rather than AVAILABLE is a Phase 4 correction — a
-       * course with no path membership, no RIASEC letter and no objectives was
-       * never usable in the catalogue, so publishing it automatically only ever
-       * produced a card a learner could not act on.
-       */
-      const publication: CoursePublicationValue = known?.publication ?? 'DRAFT';
-
-      const status = effectiveCourseStatus({
-        publication,
-        lmsPresent: fields.lmsPresent,
-        lmsVisible: fields.lmsVisible,
-        heldByAnyLearner: known ? heldIds.has(known.id) : false,
-        /* A course we have never seen has no window, so it is open — the same
-           answer `isWithinAvailabilityWindow` gives for two absent bounds. */
-        withinAvailabilityWindow: known
-          ? isWithinAvailabilityWindow(
-              { availableFrom: known.availableFrom, availableUntil: known.availableUntil },
-              now,
-            )
-          : true,
-      });
-
-      await this.prisma.course.upsert({
-        where: { moodleCourseId: lmsCourse.lmsCourseId },
-        create: {
-          moodleCourseId: lmsCourse.lmsCourseId,
-          ...fields,
-          status,
-          publication,
-          objectives: [],
-          prerequisites: null,
-          lastSyncedAt: new Date(),
-        },
-        /* `publication` is absent from the update on purpose, and this is the
-           single most important line in the file: sync reads our publishing
-           decision but may never write it (D-059). */
-        update: { ...fields, status, lastSyncedAt: new Date() },
-      });
+      await this.upsertLmsCourse(lmsCourse, known, known ? heldIds.has(known.id) : false, now);
 
       if (known) {
         updated += 1;
@@ -197,6 +186,138 @@ export class CatalogSyncService implements OnApplicationBootstrap {
     );
 
     return { seen: lmsCourses.length, created, updated, withdrawn };
+  }
+
+  /**
+   * Re-reads **one** course from the LMS and applies it now, rather than
+   * waiting for the next scheduled `sync()` (§4B.4, TAM-133).
+   *
+   * Routes through {@link upsertLmsCourse} — the exact function `sync()`'s own
+   * loop calls — so a per-course resync and the scheduled sweep can never map
+   * a field differently. What is deliberately **not** shared is the LMS call
+   * itself: `sync()` already holds every course from one `listCourses()`, and
+   * having it call `syncOne` per course would turn one bulk read into N+1.
+   *
+   * Concurrent callers for the *same* course id are coalesced — see
+   * `resyncInFlight` — so the second caller in a burst gets the first's result
+   * rather than triggering its own LMS read.
+   */
+  syncOne(moodleCourseId: number): Promise<{ status: CourseStatusValue; created: boolean }> {
+    const inFlight = this.resyncInFlight.get(moodleCourseId);
+
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const run = this.runSyncOne(moodleCourseId).finally(() => {
+      this.resyncInFlight.delete(moodleCourseId);
+    });
+
+    this.resyncInFlight.set(moodleCourseId, run);
+
+    return run;
+  }
+
+  private async runSyncOne(
+    moodleCourseId: number,
+  ): Promise<{ status: CourseStatusValue; created: boolean }> {
+    const lmsCourse = await this.lms.getCourse(moodleCourseId);
+
+    if (!lmsCourse) {
+      /*
+       * Should not happen in the normal trigger path — the frame's own signal
+       * means Moodle just showed *this* course to the entity editing it — but
+       * the id could in principle vanish between that edit and this request.
+       * A thrown `ConflictException` rather than a silent no-op, so the caller
+       * (the resync endpoint) can tell the entity rather than reporting a
+       * refresh that quietly did nothing.
+       */
+      throw new ConflictException('LMS_COURSE_RESYNC_FAILED');
+    }
+
+    const known = await this.prisma.course.findUnique({
+      where: { moodleCourseId },
+      select: {
+        id: true,
+        publication: true,
+        durationMinutes: true,
+        availableFrom: true,
+        availableUntil: true,
+      },
+    });
+
+    const heldByAnyLearner = known
+      ? (await this.courseIdsHeldByLearners([known.id])).has(known.id)
+      : false;
+
+    const { status } = await this.upsertLmsCourse(lmsCourse, known, heldByAnyLearner, new Date());
+
+    return { status, created: known === null };
+  }
+
+  /**
+   * Maps one LMS course onto our row and writes it — **the** mapping, shared
+   * by `sync()`'s loop and by `syncOne` (§4B.4, TAM-133; D-059).
+   *
+   * Everything this function decides is exactly what it decided when it lived
+   * inline in `sync()`'s loop; moving it here changed no behaviour; it only
+   * removed the chance of a second copy drifting from this one.
+   */
+  private async upsertLmsCourse(
+    lmsCourse: LmsCourse,
+    known: KnownCourseFields | null,
+    heldByAnyLearner: boolean,
+    now: Date,
+  ): Promise<{ status: CourseStatusValue }> {
+    const fields = fieldsForPublishedCourse(
+      lmsCourse,
+      known ? { durationMinutes: known.durationMinutes } : null,
+    );
+
+    /*
+     * A course the LMS has but we have never seen enters as a DRAFT owned by
+     * nobody. That is a legitimate state, not an error (D-040): an entity
+     * claims and publishes it, and until then it simply belongs to no path.
+     * Entering as DRAFT rather than AVAILABLE is a Phase 4 correction — a
+     * course with no path membership, no RIASEC letter and no objectives was
+     * never usable in the catalogue, so publishing it automatically only ever
+     * produced a card a learner could not act on.
+     */
+    const publication: CoursePublicationValue = known?.publication ?? 'DRAFT';
+
+    const status = effectiveCourseStatus({
+      publication,
+      lmsPresent: fields.lmsPresent,
+      lmsVisible: fields.lmsVisible,
+      heldByAnyLearner,
+      /* A course we have never seen has no window, so it is open — the same
+         answer `isWithinAvailabilityWindow` gives for two absent bounds. */
+      withinAvailabilityWindow: known
+        ? isWithinAvailabilityWindow(
+            { availableFrom: known.availableFrom, availableUntil: known.availableUntil },
+            now,
+          )
+        : true,
+    });
+
+    await this.prisma.course.upsert({
+      where: { moodleCourseId: lmsCourse.lmsCourseId },
+      create: {
+        moodleCourseId: lmsCourse.lmsCourseId,
+        ...fields,
+        status,
+        publication,
+        objectives: [],
+        prerequisites: null,
+        lastSyncedAt: new Date(),
+      },
+      /* `publication` is absent from the update on purpose, and this is the
+         single most important line in the file: sync reads our publishing
+         decision but may never write it (D-059). */
+      update: { ...fields, status, lastSyncedAt: new Date() },
+    });
+
+    return { status };
   }
 
   /**
@@ -304,7 +425,11 @@ export class CatalogSyncService implements OnApplicationBootstrap {
       return new Set();
     }
 
-    const held = await this.prisma.userPathCourse.findMany({
+    /* "Held" is now an enrolment (D-134): the row that says a learner was
+       placed above this course and owes it. It is the same fact
+       `user_path_courses` used to carry, minus the selection that no longer
+       exists. */
+    const held = await this.prisma.enrollment.findMany({
       where: { courseId: { in: courseIds } },
       select: { courseId: true },
       distinct: ['courseId'],

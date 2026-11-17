@@ -1,13 +1,25 @@
 'use client';
 
-import Link from 'next/link';
+import {
+  Activity,
+  BarChart3,
+  BadgeCheck,
+  BookOpen,
+  Building2,
+  History,
+  Link2,
+  RefreshCw,
+  Route,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import type { AdminDashboardView } from '@tamkeen/types';
 
+import { NeedsAction } from '@/components/admin/needs-action';
 import { AdminPage } from '@/components/layout/admin-page';
 import { DataView } from '@/components/states';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { adminApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
@@ -16,19 +28,32 @@ import { useFormat } from '@/i18n/format-provider';
 /**
  * §4C.1 — the admin dashboard.
  *
- * **Integration health is the page; the counts are context.** §4C.1 asks for
- * both, and §3 requires that what is shown be actionable — an administrator can
- * do nothing about "312 employees", but a Moodle that stopped answering, or a
- * sync job that has not run since yesterday, is theirs to fix and nobody else's.
- * So health sits first and reads in words rather than as a coloured tick, and
- * the totals follow as the context that makes the health figure mean something.
+ * **Same information as before; only the way it is laid out changed**, to the
+ * approved proposal's (admin_dashboard_redesign_proposal.html): a status line in
+ * the title row, a box of what is waiting on the administrator, four figures,
+ * and the employees' journey as bars. Every figure the page ever showed is still
+ * here — the integration detail, the per-path picture and the activity list
+ * follow, unchanged.
+ *
+ * **Integration health is still what the page is for**, which is why the status
+ * line is the first thing in the title row and the address and both sync times
+ * remain on the page in full: a Moodle that answers while the scheduler has not
+ * run since yesterday is a healthy LMS behind a broken job, and one tick would
+ * hide it.
+ *
+ * The box of waiting work is not drawn at all when there is nothing to do (§3),
+ * and no row of it leans on colour alone — each says what it is in words
+ * (WCAG 1.4.1).
  */
 export default function AdminDashboardPage() {
   const t = useTranslations('admin');
   const dashboard = useApiQuery(() => adminApi.dashboard(), []);
 
   return (
-    <AdminPage title={t('dashboardTitle')}>
+    <AdminPage
+      title={t('dashboardTitle')}
+      action={dashboard.data ? <StatusLine data={dashboard.data} /> : undefined}
+    >
       <DataView isLoading={dashboard.isLoading} error={dashboard.error} onRetry={dashboard.refetch}>
         {dashboard.data ? <DashboardBody data={dashboard.data} /> : null}
       </DataView>
@@ -37,70 +62,186 @@ export default function AdminDashboardPage() {
 }
 
 function DashboardBody({ data }: { data: AdminDashboardView }) {
-  const t = useTranslations('admin');
-  const format = useFormat();
-
   return (
-    <div className="space-y-8">
-      <IntegrationHealth data={data} />
+    <div className="space-y-6">
+      <NeedsAction data={data} />
+      <Totals data={data} />
+      <Journey data={data} />
 
-      <section aria-labelledby="admin-people">
-        <SectionHeading id="admin-people">{t('sectionPeople')}</SectionHeading>
-        {/*
-          Three tiles, not four. The count of accounts that never verified their
-          address used to sit here, and it was the one figure on the page an
-          administrator could neither act on nor interpret: it cannot say WHICH
-          accounts, and §4C.2 already marks each one «بانتظار التفعيل» beside the
-          resend-invitation button that fixes it. A number whose only use is to
-          send you somewhere else is what §3 rules out.
-        */}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Stat label={t('statEmployees')} value={format.number(data.users.employees)} />
-          <Stat label={t('statEntities')} value={format.number(data.entities.active)} />
-          <Stat label={t('statSuspended')} value={format.number(data.users.suspended)} />
-        </div>
-      </section>
-
-      <section aria-labelledby="admin-journey">
-        <SectionHeading id="admin-journey">{t('sectionJourney')}</SectionHeading>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label={t('statAssessed')} value={format.number(data.journey.assessed)} />
-          <Stat label={t('statActivePaths')} value={format.number(data.journey.active)} />
-          <Stat
-            label={t('statPathCompletion')}
-            /* An em dash, not 0%: a rate over an empty denominator is undefined,
-               and "0%" on a product nobody has finished yet reads as failure. */
-            value={
-              data.journey.pathCompletionRate === null
-                ? '—'
-                : format.percent(data.journey.pathCompletionRate)
-            }
-          />
-          <Stat
-            label={t('statCertificates')}
-            value={format.number(data.journey.certificatesIssued)}
-          />
-        </div>
-      </section>
-
-      <section aria-labelledby="admin-catalogue">
-        <SectionHeading id="admin-catalogue">{t('sectionCatalogue')}</SectionHeading>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label={t('statPathsActive')} value={format.number(data.paths.active)} />
-          <Stat label={t('statCoursesPublished')} value={format.number(data.courses.published)} />
-          <Stat label={t('statCoursesDraft')} value={format.number(data.courses.draft)} />
-          {/* Courses no entity supplies (D-063). §4C.5 makes them the admin's,
-              and they are invisible from every entity portal by construction. */}
-          <Stat label={t('statCoursesUnowned')} value={format.number(data.courses.unowned)} />
-        </div>
-      </section>
-
-      <LetterDistribution rows={data.letterDistribution} />
+      <PathDistribution rows={data.pathDistribution} />
       <RecentActivity rows={data.recentActivity} />
+      <IntegrationHealth data={data} />
     </div>
   );
 }
 
+/** The platform's state in the title row: a dot, and the words beside it. */
+function StatusLine({ data }: { data: AdminDashboardView }) {
+  const t = useTranslations('admin');
+  const format = useFormat();
+
+  /* The newer of the two syncs: «آخر مزامنة» is one answer here; the two separate
+     times are in «حالة التكامل» below. */
+  const stamps = [data.lms.lastCatalogSyncAt, data.lms.lastCompletionSyncAt]
+    .filter((value): value is string => value !== null)
+    .map((value) => new Date(value).getTime());
+  const latest = stamps.length === 0 ? null : new Date(Math.max(...stamps));
+
+  const up = data.lms.reachable;
+
+  return (
+    <p
+      className={`flex flex-wrap items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] ${
+        up ? 'bg-success-50 text-success' : 'bg-danger-50 text-danger'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`size-2 shrink-0 rounded-full ${up ? 'bg-success' : 'bg-danger'}`}
+      />
+      {up ? t('lmsReachable') : t('lmsUnreachable')}
+      <span className="text-muted-foreground">
+        · {t('statusLastSync', { when: latest ? format.dateTime(latest) : t('syncNever') })}
+      </span>
+    </p>
+  );
+}
+
+/** The four figures that say how big the platform is. */
+function Totals({ data }: { data: AdminDashboardView }) {
+  const t = useTranslations('admin');
+  const format = useFormat();
+
+  return (
+    <section aria-label={t('sectionTotals')} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Stat
+        icon={Users}
+        label={t('statEmployees')}
+        value={format.number(data.users.employees)}
+        note={t('suspendedNote', {
+          n: data.users.suspended,
+          count: format.number(data.users.suspended),
+        })}
+      />
+      <Stat
+        icon={Building2}
+        label={t('statEntities')}
+        value={format.number(data.entities.active)}
+      />
+      <Stat icon={Route} label={t('statPathsActive')} value={format.number(data.paths.published)} />
+      <Stat
+        icon={BookOpen}
+        label={t('statCoursesPublished')}
+        value={format.number(data.courses.published)}
+        note={t('draftNote', {
+          n: data.courses.draft,
+          count: format.number(data.courses.draft),
+        })}
+      />
+    </section>
+  );
+}
+
+function Stat({
+  icon: Icon,
+  label,
+  value,
+  note,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  note?: string;
+}) {
+  return (
+    <div className="rounded-lg bg-neutral-100 p-4">
+      <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+        <Icon aria-hidden="true" className="size-4 shrink-0" />
+        {label}
+      </p>
+      <p className="mt-1 text-2xl font-medium text-foreground">{value}</p>
+      {/* A blank line keeps the four cards one height when one has no note. */}
+      <p className="min-h-4 text-xs text-muted-foreground">{note ?? ' '}</p>
+    </div>
+  );
+}
+
+/** How far the employees have got: assigned, placed, certified. */
+function Journey({ data }: { data: AdminDashboardView }) {
+  const t = useTranslations('admin');
+  const format = useFormat();
+
+  const { journey } = data;
+  const share = (part: number, whole: number) =>
+    whole === 0 ? 0 : Math.min(100, (part / whole) * 100);
+
+  return (
+    <section
+      aria-labelledby="admin-journey"
+      className="rounded-xl border border-border bg-card px-5 py-4"
+    >
+      <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="admin-journey" className="text-base font-medium text-foreground">
+          {t('sectionJourney')}
+        </h2>
+        <p className="text-[13px] text-muted-foreground">
+          {t('statPathCompletion')}{' '}
+          {/* An em dash, not 0%: a rate over an empty denominator is undefined,
+              and "0%" on a product nobody has finished yet reads as failure. */}
+          {journey.pathCompletionRate === null ? '—' : format.percent(journey.pathCompletionRate)}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <Progress
+          label={t('statAssigned')}
+          detail={t('ofTotal', {
+            value: format.number(journey.assigned),
+            total: format.number(data.users.employees),
+          })}
+          percent={share(journey.assigned, data.users.employees)}
+        />
+        <Progress
+          label={t('statPlaced')}
+          detail={t('ofTotal', {
+            value: format.number(journey.placed),
+            total: format.number(journey.assigned),
+          })}
+          percent={share(journey.placed, journey.assigned)}
+        />
+        {/* Certificates have no whole of their own, so the bar is read against
+            the employees who have been placed — the people who can earn one. */}
+        <Progress
+          label={t('statCertificates')}
+          detail={format.number(journey.certificatesIssued)}
+          percent={share(journey.certificatesIssued, journey.placed)}
+        />
+      </div>
+    </section>
+  );
+}
+
+function Progress({ label, detail, percent }: { label: string; detail: string; percent: number }) {
+  return (
+    <div>
+      <div className="mb-1 flex justify-between text-[13px]">
+        <span className="text-foreground">{label}</span>
+        <span className="font-medium text-foreground">{detail}</span>
+      </div>
+      <span aria-hidden="true" className="block h-2 overflow-hidden rounded bg-neutral-100">
+        <span className="block h-full bg-success" style={{ width: `${percent}%` }} />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * «حالة التكامل» in full: the platform's name, its address and both sync times.
+ *
+ * Sync freshness is asked separately from reachability on purpose: a Moodle that
+ * answers while the job has not run since yesterday is a healthy LMS behind a
+ * broken scheduler, and a single tick hides it.
+ */
 function IntegrationHealth({ data }: { data: AdminDashboardView }) {
   const t = useTranslations('admin');
   const format = useFormat();
@@ -110,19 +251,12 @@ function IntegrationHealth({ data }: { data: AdminDashboardView }) {
 
   return (
     <section aria-labelledby="admin-health">
-      <SectionHeading id="admin-health">{t('sectionHealth')}</SectionHeading>
+      <SectionHeading id="admin-health" icon={Activity}>
+        {t('sectionHealth')}
+      </SectionHeading>
 
       <Card className="p-5">
         <p className="flex flex-wrap items-center gap-2 text-base font-medium text-foreground">
-          {/*
-            The dot is decorative and paired with the wording beside it: colour
-            alone must never carry the state (WCAG 1.4.1), and "متصل" / "غير
-            متصل" is what a screen reader and a colour-blind operator both read.
-          */}
-          <span
-            aria-hidden="true"
-            className={`size-2.5 shrink-0 rounded-full ${data.lms.reachable ? 'bg-success' : 'bg-destructive'}`}
-          />
           {data.lms.reachable ? t('lmsReachable') : t('lmsUnreachable')}
           {data.lms.siteName ? (
             <span className="text-sm font-normal text-muted-foreground">{data.lms.siteName}</span>
@@ -136,98 +270,60 @@ function IntegrationHealth({ data }: { data: AdminDashboardView }) {
         ) : null}
 
         <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-3">
-          <Detail label={t('lmsAddress')} value={data.lms.baseUrl || '—'} ltr />
-          {/*
-            Sync freshness is asked separately from reachability on purpose: a
-            Moodle that answers while the job has not run since yesterday is a
-            healthy LMS behind a broken scheduler, and a single tick hides it.
-          */}
-          <Detail label={t('lastCatalogSync')} value={stamp(data.lms.lastCatalogSyncAt)} />
-          <Detail label={t('lastCompletionSync')} value={stamp(data.lms.lastCompletionSyncAt)} />
+          <Detail icon={Link2} label={t('lmsAddress')} value={data.lms.baseUrl || '—'} ltr />
+          <Detail
+            icon={RefreshCw}
+            label={t('lastCatalogSync')}
+            value={stamp(data.lms.lastCatalogSyncAt)}
+          />
+          <Detail
+            icon={BadgeCheck}
+            label={t('lastCompletionSync')}
+            value={stamp(data.lms.lastCompletionSyncAt)}
+          />
         </dl>
-
-        {data.assessment ? (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-            <p className="text-sm text-muted-foreground">
-              {t('assessmentVersion', {
-                version: format.number(data.assessment.version),
-                date: format.date(new Date(data.assessment.effectiveFrom)),
-              })}
-            </p>
-
-            {/*
-              The unfinished edit, finally shown. The server has reported
-              `hasDraft` since §4C.1 was built — "the one thing on this page
-              waiting on the administrator personally" — and nothing rendered
-              it, so a half-finished assessment could sit unpublished with no
-              trace of it anywhere an administrator looks first. It appears only
-              when there IS a draft, so it costs nothing on the ordinary day.
-            */}
-            {data.assessment.hasDraft ? (
-              <span className="flex flex-wrap items-center gap-3">
-                <span className="text-sm text-foreground">{t('assessmentDraftPending')}</span>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/admin/assessment">{t('assessmentDraftAction')}</Link>
-                </Button>
-              </span>
-            ) : null}
-          </div>
-        ) : null}
       </Card>
     </section>
   );
 }
 
 /**
- * §4C.1 — where the ministry's people are, against what is offered them.
+ * Where the ministry has put its people, and how far each group got (D-134).
  *
- * **This used to be a list of Holland Codes, and it said nothing.** «SIA» is
- * three Latin letters in an RTL page, one of thirty-odd values, and no
- * administrator has ever had a decision that turned on it — §4C.8's reports
- * already keep that breakdown for the analyst who wants it, so the dashboard
- * copy bought nothing either. The bars were painted in a token D-069 retired,
- * so they rendered with no fill at all: the chart was invisible as well.
- *
- * What replaces it is the same population read by its *dominant* letter — six
- * values, each with the Arabic name the ministry already uses — set beside the
- * number of paths offered for that letter. The pairing is the point: a type
- * many employees lead with and no path serves is a gap in the catalogue, and
- * this is the only screen where both halves of that comparison exist.
+ * It replaces the career-type distribution, which answered "where are our
+ * people's interests" — a question the ministry stopped asking when it started
+ * assigning paths. A path with many assigned and few placed is the finding, and
+ * it is actionable from this screen.
  */
-function LetterDistribution({ rows }: { rows: AdminDashboardView['letterDistribution'] }) {
+function PathDistribution({ rows }: { rows: AdminDashboardView['pathDistribution'] }) {
   const t = useTranslations('admin');
   const format = useFormat();
 
-  const assessed = rows.reduce((sum, row) => sum + row.employees, 0);
-  /* Bars scale against the largest share rather than the total: six types
-     rarely split evenly, and against the total the smaller ones would all be
-     slivers of much the same indistinguishable width. */
-  const largest = rows.reduce((max, row) => Math.max(max, row.employees), 0);
+  const assigned = rows.reduce((sum, row) => sum + row.assigned, 0);
+  /* Bars scale against the largest share rather than the total: paths rarely
+     split evenly, and against the total the smaller ones would all be slivers of
+     much the same indistinguishable width. */
+  const largest = rows.reduce((max, row) => Math.max(max, row.assigned), 0);
 
   return (
-    <section aria-labelledby="admin-codes">
-      <SectionHeading id="admin-codes">{t('sectionCodes')}</SectionHeading>
+    <section aria-labelledby="admin-paths-distribution">
+      <SectionHeading id="admin-paths-distribution" icon={BarChart3}>
+        {t('sectionPathShare')}
+      </SectionHeading>
 
-      {assessed === 0 ? (
-        <Card className="p-6 text-sm text-muted-foreground">{t('codesEmpty')}</Card>
+      {assigned === 0 ? (
+        <Card className="p-6 text-sm text-muted-foreground">{t('pathShareEmpty')}</Card>
       ) : (
         <Card className="p-5">
-          {/* Says what the section counts, because a bare "توزيع" left the
-              administrator guessing whether it meant people, paths or results. */}
-          <p className="mb-4 text-sm text-muted-foreground">{t('sectionCodesHint')}</p>
+          <p className="mb-4 text-sm text-muted-foreground">{t('sectionPathShareHint')}</p>
 
           <ul className="space-y-4">
             {rows.map((row) => (
-              <li key={row.letter} className="grid gap-1">
+              <li key={row.pathId} className="grid gap-1">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium text-foreground">
-                    {t(`riasec.${row.letter}`)}
-                  </span>
+                  <span className="text-sm font-medium text-foreground">{row.name}</span>
                   <span className="text-sm text-muted-foreground">
-                    {/* The count and its share: a bar is a comparison, and an
-                        administrator reporting upward needs the number. */}
-                    {t('codesColumnEmployees', { count: format.number(row.employees) })} ·{' '}
-                    {format.percent(Math.round((row.employees / assessed) * 100))}
+                    {t('pathShareAssigned', { count: format.number(row.assigned) })}
                   </span>
                 </div>
 
@@ -239,28 +335,28 @@ function LetterDistribution({ rows }: { rows: AdminDashboardView['letterDistribu
                     <span
                       className="block h-full rounded-full bg-primary"
                       style={{
-                        width: largest === 0 ? '0%' : `${(row.employees / largest) * 100}%`,
+                        width: largest === 0 ? '0%' : `${(row.assigned / largest) * 100}%`,
                       }}
                     />
                   </span>
 
                   {/*
-                    The other half of the comparison. A type with no path offered
-                    for it is the finding this section exists to surface, so it
-                    is said in words rather than left as a "0" to be noticed —
-                    and the warning colour is paired with that wording, never
-                    carrying the meaning alone (WCAG 1.4.1).
+                    The other half of the comparison. A path everybody was
+                    assigned and nobody was placed on is the finding this section
+                    exists to surface, so it is said in words rather than left as
+                    a "0" to be noticed — and the warning colour is paired with
+                    that wording, never carrying the meaning alone (WCAG 1.4.1).
                   */}
                   <span
                     className={
-                      row.activePaths === 0
+                      row.assigned > 0 && row.placed === 0
                         ? 'shrink-0 text-xs font-medium text-warning'
                         : 'shrink-0 text-xs text-muted-foreground'
                     }
                   >
-                    {row.activePaths === 0
-                      ? t('codesNoPaths')
-                      : t('codesColumnPaths', { count: format.number(row.activePaths) })}
+                    {row.assigned > 0 && row.placed === 0
+                      ? t('pathShareNonePlaced')
+                      : t('pathSharePlaced', { count: format.number(row.placed) })}
                   </span>
                 </div>
               </li>
@@ -290,7 +386,9 @@ function RecentActivity({ rows }: { rows: AdminDashboardView['recentActivity'] }
 
   return (
     <section aria-labelledby="admin-activity">
-      <SectionHeading id="admin-activity">{t('sectionActivity')}</SectionHeading>
+      <SectionHeading id="admin-activity" icon={History}>
+        {t('sectionActivity')}
+      </SectionHeading>
 
       {rows.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground">{t('activityEmpty')}</Card>
@@ -330,27 +428,45 @@ function RecentActivity({ rows }: { rows: AdminDashboardView['recentActivity'] }
   );
 }
 
-function SectionHeading({ id, children }: { id: string; children: string }) {
+function SectionHeading({
+  id,
+  icon: Icon,
+  children,
+}: {
+  id: string;
+  icon: LucideIcon;
+  children: string;
+}) {
   return (
-    <h2 id={id} className="mb-3 text-lg font-semibold text-foreground">
+    <h2 id={id} className="mb-3 flex items-center gap-2 text-lg font-semibold text-foreground">
+      <span
+        aria-hidden="true"
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-700"
+      >
+        <Icon className="size-[18px]" />
+      </span>
       {children}
     </h2>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <Card className="p-5">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
-    </Card>
-  );
-}
-
-function Detail({ label, value, ltr }: { label: string; value: string; ltr?: boolean }) {
+function Detail({
+  icon: Icon,
+  label,
+  value,
+  ltr,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  ltr?: boolean;
+}) {
   return (
     <div>
-      <dt className="text-muted-foreground">{label}</dt>
+      <dt className="flex items-center gap-1.5 text-muted-foreground">
+        <Icon aria-hidden="true" className="size-4 shrink-0" />
+        {label}
+      </dt>
       <dd className="mt-1 break-all text-foreground" dir={ltr ? 'ltr' : undefined}>
         {value}
       </dd>

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,6 +14,12 @@ import { renderWithProviders } from '@/test/render';
  * Moodle down, Moodle refusing the token, and Moodle fine but the sync stalled —
  * because a single green tick would collapse all three into "something is wrong"
  * and cost them the first hour of the outage.
+ *
+ * The second thing asserted is the D-134 finding this page now exists to
+ * surface: a path the ministry assigned people to that nobody can start,
+ * because its assessment was never published. Assignment happens on another
+ * screen, so without this a directorate sits at «بانتظار تحديد المستوى» and
+ * nobody learns why.
  */
 
 const api = vi.hoisted(() => ({ dashboard: vi.fn() }));
@@ -43,24 +49,19 @@ const { default: AdminDashboardPage } = await import('@/app/(admin)/admin/page')
 const VIEW: AdminDashboardView = {
   users: { employees: 312, entityAccounts: 5, admins: 2, suspended: 3, unverified: 7 },
   entities: { total: 4, active: 3, suspended: 1 },
-  paths: { total: 6, active: 5 },
-  courses: { total: 48, published: 40, draft: 4, unowned: 44 },
+  paths: { total: 6, published: 5, draft: 1 },
+  courses: { total: 48, published: 40, draft: 4, unowned: 44, unassigned: 6 },
   journey: {
-    assessed: 120,
-    building: 9,
-    active: 60,
+    assigned: 120,
+    placed: 60,
     completed: 20,
     pathCompletionRate: 25,
     coursesPassed: 210,
     certificatesIssued: 230,
   },
-  letterDistribution: [
-    { letter: 'S', employees: 40, activePaths: 2 },
-    { letter: 'R', employees: 10, activePaths: 1 },
-    { letter: 'I', employees: 0, activePaths: 0 },
-    { letter: 'A', employees: 0, activePaths: 1 },
-    { letter: 'E', employees: 0, activePaths: 1 },
-    { letter: 'C', employees: 0, activePaths: 1 },
+  pathDistribution: [
+    { pathId: 'path-1', name: 'مسار تحليل البيانات', assigned: 40, placed: 32, completed: 8 },
+    { pathId: 'path-2', name: 'مسار إدارة المشاريع', assigned: 10, placed: 4, completed: 0 },
   ],
   lms: {
     reachable: true,
@@ -74,14 +75,14 @@ const VIEW: AdminDashboardView = {
   recentActivity: [
     {
       id: '9007199254740993',
-      action: 'PATH_CONFIRMED',
+      action: 'LEARNER_PLACED',
       outcome: 'SUCCESS',
       actorName: 'سارة العتيبي',
       targetType: 'user_path',
       occurredAt: '2026-08-23T08:00:00.000Z',
     },
   ],
-  assessment: { version: 1, effectiveFrom: '2026-08-01T00:00:00.000Z', hasDraft: false },
+  pathsWithoutAssessment: [],
 };
 
 function view(patch: Partial<AdminDashboardView> = {}): AdminDashboardView {
@@ -113,14 +114,13 @@ describe('Admin dashboard (§4C.1)', () => {
 
     /* WCAG 1.4.1: the dot is decorative and the state is carried by text, which
        is what a screen reader and a colour-blind operator both get. */
-    expect(await screen.findByText('منصة التعلم متصلة')).toBeInTheDocument();
+    expect(await screen.findAllByText('منصة التعلم متصلة')).toHaveLength(2);
     expect(screen.getByText('منصة تمكين')).toBeInTheDocument();
+    /* The title-row line answers «آخر مزامنة» with one time. */
+    expect(screen.getByText(/^· آخر مزامنة /)).toBeInTheDocument();
   });
 
   it('explains WHY the LMS is unreachable rather than only that it is', async () => {
-    renderWithProviders(<AdminDashboardPage />);
-    await screen.findByText('منصة التعلم متصلة');
-
     api.dashboard.mockResolvedValue(
       view({ lms: { ...VIEW.lms, reachable: false, failureCode: 'UNAUTHORISED', siteName: null } }),
     );
@@ -140,90 +140,192 @@ describe('Admin dashboard (§4C.1)', () => {
 
     /* The failure this exists to catch: Moodle answers, the scheduler is dead,
        and nobody's completion has been recorded for a day. */
-    expect(await screen.findByText('منصة التعلم متصلة')).toBeInTheDocument();
+    expect((await screen.findAllByText('منصة التعلم متصلة')).length).toBeGreaterThan(0);
     expect(screen.getByText('لم تُنفَّذ بعد')).toBeInTheDocument();
   });
 
-  it('shows an em dash rather than 0% when nobody has committed to a path', async () => {
+  it('shows an em dash rather than 0% when nobody has finished a path', async () => {
     api.dashboard.mockResolvedValue(
       view({ journey: { ...VIEW.journey, pathCompletionRate: null } }),
     );
     renderWithProviders(<AdminDashboardPage />);
 
-    await screen.findByText('نسبة إكمال المسارات');
+    const rate = await screen.findByText(/نسبة إكمال المسارات/);
     /* 0% would read as failure; the rate is undefined, not zero. */
-    expect(screen.queryByText('0%')).not.toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(rate).toHaveTextContent('—');
+    expect(rate).not.toHaveTextContent('0%');
   });
 
-  it('names each career type in Arabic rather than printing a Latin code', async () => {
+  it('counts the courses sitting in a path on no rung, which no learner can reach', async () => {
+    /* D-134's one catalogue number that names work waiting on the
+       administrator: an entity offered the course, nobody placed it. */
     renderWithProviders(<AdminDashboardPage />);
 
-    /* «SIA» is three Latin letters an administrator cannot act on; the Arabic
-       type name is the vocabulary the ministry and §3A already use. */
-    expect(await screen.findByText('الاجتماعي')).toBeInTheDocument();
-    expect(screen.queryByText('SIA')).not.toBeInTheDocument();
+    expect(await screen.findByText('6 دورات بانتظار الإسناد إلى مستوى')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'إسناد المستويات' })).toHaveAttribute(
+      'href',
+      '/admin/paths',
+    );
+  });
+});
+
+describe("Admin dashboard — the proposal's layout over the same information", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.dashboard.mockResolvedValue(VIEW);
   });
 
-  it('states what the distribution counts, and shows the paths offered beside it', async () => {
+  it('says what is waiting on the administrator, with the screen that clears each', async () => {
     renderWithProviders(<AdminDashboardPage />);
 
-    await screen.findByText('الاجتماعي');
-    expect(screen.getByText(/توزيع الموظفين حسب النمط المهني الأول/)).toBeInTheDocument();
-    /* Regex, not an exact string: the percent carries the LRM marks Intl
-       inserts for a Latin numeral inside Arabic text. */
-    expect(screen.getByText(/40 موظف · 80/)).toBeInTheDocument();
-    expect(screen.getByText('2 مسار معروض')).toBeInTheDocument();
+    expect(await screen.findByText('يحتاج إجراءً منك')).toBeInTheDocument();
+    /* 312 employees, 120 of them holding a path. */
+    expect(screen.getByText('192 موظفًا لم يُسند إليهم مسار بعد')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'إسناد مسار' })).toHaveAttribute(
+      'href',
+      '/admin/users',
+    );
   });
 
-  it('says in words when a career type has no path offered for it', async () => {
+  it('puts the noun in the right form for the number', async () => {
     api.dashboard.mockResolvedValue(
       view({
-        letterDistribution: [
-          { letter: 'S', employees: 40, activePaths: 0 },
-          { letter: 'R', employees: 10, activePaths: 1 },
-          { letter: 'I', employees: 0, activePaths: 1 },
-          { letter: 'A', employees: 0, activePaths: 1 },
-          { letter: 'E', employees: 0, activePaths: 1 },
-          { letter: 'C', employees: 0, activePaths: 1 },
+        users: { ...VIEW.users, employees: 121 },
+        courses: { ...VIEW.courses, unassigned: 1 },
+      }),
+    );
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('دورة واحدة بانتظار الإسناد إلى مستوى')).toBeInTheDocument();
+    expect(screen.getByText('موظف واحد لم يُسند إليه مسار بعد')).toBeInTheDocument();
+  });
+
+  it('is not drawn at all when nothing is waiting', async () => {
+    /* An empty warning box would train the administrator to ignore the one place
+       on this page that is ever urgent. */
+    api.dashboard.mockResolvedValue(
+      view({
+        users: { ...VIEW.users, employees: 120 },
+        courses: { ...VIEW.courses, unassigned: 0 },
+      }),
+    );
+    renderWithProviders(<AdminDashboardPage />);
+
+    await screen.findAllByText('منصة التعلم متصلة');
+    expect(screen.queryByText('يحتاج إجراءً منك')).not.toBeInTheDocument();
+  });
+
+  it('keeps the four totals, each with its one quiet note', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('الموظفون')).toBeInTheDocument();
+    expect(screen.getByText('312')).toBeInTheDocument();
+    expect(screen.getByText('3 حسابات موقوفة')).toBeInTheDocument();
+    expect(screen.getByText('الجهات النشطة')).toBeInTheDocument();
+    expect(screen.getByText('مسارات نشطة')).toBeInTheDocument();
+    expect(screen.getByText('دورات منشورة')).toBeInTheDocument();
+    expect(screen.getByText('4 دورات تحت الإعداد')).toBeInTheDocument();
+  });
+
+  it('draws the journey as bars and keeps every figure it had', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('مسار الموظفين')).toBeInTheDocument();
+    expect(screen.getByText('120 من 312')).toBeInTheDocument();
+    expect(screen.getByText('60 من 120')).toBeInTheDocument();
+    expect(screen.getByText('230')).toBeInTheDocument();
+  });
+
+  it('removes no information: the address, both syncs, the per-path picture and the activity', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('https://moodle.ministry.gov.example')).toBeInTheDocument();
+    expect(screen.getByText('آخر مزامنة للدورات')).toBeInTheDocument();
+    expect(screen.getByText('آخر مزامنة للإنجاز')).toBeInTheDocument();
+    expect(screen.getByText('مسار تحليل البيانات')).toBeInTheDocument();
+    expect(screen.getByText('أحدث النشاط')).toBeInTheDocument();
+  });
+});
+
+describe('Admin dashboard — paths nobody can start (§4C.1, D-134)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.dashboard.mockResolvedValue(VIEW);
+  });
+
+  it('names each stranded path and links straight to the assessment that fixes it', async () => {
+    api.dashboard.mockResolvedValue(
+      view({ pathsWithoutAssessment: [{ id: 'path-9', name: 'مسار الأمن السيبراني' }] }),
+    );
+    renderWithProviders(<AdminDashboardPage />);
+
+    const link = await screen.findByRole('link', { name: 'مسار الأمن السيبراني' });
+    expect(link).toHaveAttribute('href', '/admin/assessment/path-9');
+  });
+
+  it('shows the section not at all when nothing is stuck', async () => {
+    /* An empty warning card would train the administrator to ignore the one
+       place on this page that is ever urgent. */
+    renderWithProviders(<AdminDashboardPage />);
+
+    await screen.findAllByText('منصة التعلم متصلة');
+    expect(screen.queryByText('مسارات لا يمكن البدء فيها')).not.toBeInTheDocument();
+  });
+});
+
+describe('Admin dashboard — the assignment picture (§4C.1, D-134)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.dashboard.mockResolvedValue(VIEW);
+  });
+
+  it('names each path with how many were assigned it and how many were placed', async () => {
+    renderWithProviders(<AdminDashboardPage />);
+
+    expect(await screen.findByText('مسار تحليل البيانات')).toBeInTheDocument();
+    expect(screen.getByText('40 موظف')).toBeInTheDocument();
+    expect(screen.getByText('32 حُدِّد مستواه')).toBeInTheDocument();
+  });
+
+  it('says in words when a path was assigned and nobody was placed', async () => {
+    /* The finding the section exists for, carried by wording rather than by the
+       warning colour alone (WCAG 1.4.1). */
+    api.dashboard.mockResolvedValue(
+      view({
+        pathDistribution: [
+          { pathId: 'path-1', name: 'مسار تحليل البيانات', assigned: 40, placed: 0, completed: 0 },
         ],
       }),
     );
     renderWithProviders(<AdminDashboardPage />);
 
-    /* The gap the section exists to surface, carried by wording rather than by
-       the warning colour alone (WCAG 1.4.1). */
-    expect(await screen.findByText('لا مسار معروض')).toBeInTheDocument();
+    expect(await screen.findByText('لم يُحدَّد مستوى أحد')).toBeInTheDocument();
   });
 
-  it('explains the empty distribution instead of drawing an empty chart', async () => {
-    api.dashboard.mockResolvedValue(
-      view({
-        letterDistribution: [
-          { letter: 'R', employees: 0, activePaths: 2 },
-          { letter: 'I', employees: 0, activePaths: 0 },
-          { letter: 'A', employees: 0, activePaths: 0 },
-          { letter: 'S', employees: 0, activePaths: 0 },
-          { letter: 'E', employees: 0, activePaths: 0 },
-          { letter: 'C', employees: 0, activePaths: 0 },
-        ],
-      }),
-    );
+  it('explains an empty picture instead of drawing an empty chart', async () => {
+    api.dashboard.mockResolvedValue(view({ pathDistribution: [] }));
     renderWithProviders(<AdminDashboardPage />);
 
-    /* Nobody assessed: the six rows exist but describe nobody, and a chart of
-       six empty bars would claim to say something. */
-    expect(await screen.findByText(/لم يُكمل أحد التقييم بعد/)).toBeInTheDocument();
-    expect(screen.queryByText('لا مسار معروض')).not.toBeInTheDocument();
+    expect(await screen.findByText('لم يُسند أي مسار بعد.')).toBeInTheDocument();
+    expect(screen.queryByText('لم يُحدَّد مستوى أحد')).not.toBeInTheDocument();
   });
 
-  it('no longer counts unverified accounts, which §4C.2 marks per row', async () => {
+  it('names no career type — the ministry stopped asking that question', async () => {
+    /* The Holland distribution went with the recommendation model (D-134). A
+       leftover would be a chart nobody has a decision behind. */
     renderWithProviders(<AdminDashboardPage />);
 
-    await screen.findByText('الموظفون');
-    /* A total that cannot say WHICH accounts sends the administrator to the
-       accounts screen either way, and that screen badges each one. */
-    expect(screen.queryByText('لم تُؤكَّد بريدها')).not.toBeInTheDocument();
+    await screen.findByText('مسار تحليل البيانات');
+    for (const type of ['الاجتماعي', 'البحثي', 'الواقعي']) {
+      expect(screen.queryByText(type)).not.toBeInTheDocument();
+    }
+  });
+});
+
+describe('Admin dashboard — recent activity (§4C.1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.dashboard.mockResolvedValue(VIEW);
   });
 
   it('keeps the activity list inside its own scroll area, reachable by keyboard', async () => {
@@ -236,25 +338,10 @@ describe('Admin dashboard (§4C.1)', () => {
     expect(list.className).toContain('overflow-y-auto');
   });
 
-  it('surfaces an unpublished assessment draft, which nothing used to show', async () => {
-    api.dashboard.mockResolvedValue(view({ assessment: { ...VIEW.assessment!, hasDraft: true } }));
-    renderWithProviders(<AdminDashboardPage />);
-
-    const link = await screen.findByRole('link', { name: 'متابعة التعديل' });
-    expect(link).toHaveAttribute('href', '/admin/assessment');
-  });
-
-  it('says nothing about a draft when there is none', async () => {
-    renderWithProviders(<AdminDashboardPage />);
-
-    await waitFor(() => expect(screen.getByText(/التقييم المعمول به/)).toBeInTheDocument());
-    expect(screen.queryByRole('link', { name: 'متابعة التعديل' })).not.toBeInTheDocument();
-  });
-
   it('translates an audit action into Arabic', async () => {
     renderWithProviders(<AdminDashboardPage />);
 
-    expect(await screen.findByText('تأكيد المسار')).toBeInTheDocument();
+    expect(await screen.findByText('تحديد مستوى موظف في مسار')).toBeInTheDocument();
     expect(screen.getByText(/سارة العتيبي/)).toBeInTheDocument();
   });
 
@@ -281,16 +368,10 @@ describe('Admin dashboard (§4C.1)', () => {
     expect(screen.getByText(/النظام/)).toBeInTheDocument();
   });
 
-  it('names the assessment version being served to new takers', async () => {
+  it('says so plainly when nothing has happened yet', async () => {
+    api.dashboard.mockResolvedValue(view({ recentActivity: [] }));
     renderWithProviders(<AdminDashboardPage />);
 
-    await waitFor(() => expect(screen.getByText(/التقييم المعمول به/)).toBeInTheDocument());
-  });
-
-  it('surfaces courses no entity owns, which no entity portal can show', async () => {
-    renderWithProviders(<AdminDashboardPage />);
-
-    expect(await screen.findByText('دورات بلا جهة')).toBeInTheDocument();
-    expect(screen.getByText('44')).toBeInTheDocument();
+    expect(await screen.findByText('لا يوجد نشاط مسجَّل بعد.')).toBeInTheDocument();
   });
 });

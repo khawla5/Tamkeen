@@ -173,28 +173,39 @@ export async function releaseEntity(entity: SeededEntity): Promise<void> {
   });
 }
 
-/** Puts a learner on the borrowed course, so the review screen has a row. */
-export async function enrolLearnerOnCourse(email: string, courseId: string): Promise<void> {
+/**
+ * Puts a learner on the borrowed course, so the review screen has a row and
+ * the catalogue-bridge assertions have someone who holds it (D-134).
+ *
+ * There is no per-learner course list any more to add a row to — holding a
+ * course is a fact about the *path*, placed onto the rung the learner already
+ * stands on, alongside whatever the seed put there. Placed directly rather
+ * than through the admin ladder editor: what this fixture sets up is not
+ * under test, only its effect on the learner and the catalogue is.
+ */
+export async function placeCourseOnLearnerPath(email: string, courseId: string): Promise<void> {
   await withClient(async (client) => {
-    const learner = await client.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [
-      email,
-    ]);
-    const userId = learner.rows[0]?.id;
-    if (!userId) throw new Error(`No learner found for ${email}`);
-
-    const path = await client.query<{ id: string }>(
-      'SELECT id FROM user_paths WHERE user_id = $1',
-      [userId],
+    const learner = await client.query<{ id: string; path_id: string; level_id: string }>(
+      `SELECT u.id, lp.path_id, lp.level_id
+         FROM users u
+         JOIN learner_placements lp ON lp.learner_id = u.id
+        WHERE u.email = $1
+        LIMIT 1`,
+      [email],
     );
-    const userPathId = path.rows[0]?.id;
-    if (!userPathId) throw new Error(`${email} has no path — confirm one first`);
+    const placement = learner.rows[0];
+    if (!placement) throw new Error(`${email} has no placement — place them on a path first`);
+
+    const position = await client.query<{ next: number }>(
+      `SELECT COALESCE(MAX(position), 0) + 1 AS next FROM path_courses WHERE level_id = $1`,
+      [placement.level_id],
+    );
 
     await client.query(
-      `INSERT INTO user_path_courses
-         (id, user_path_id, course_id, display_order, status, grade_percent, created_at, updated_at)
-       VALUES (gen_random_uuid(), $1, $2, 99, 'IN_PROGRESS', NULL, now(), now())
-       ON CONFLICT (user_path_id, course_id) DO NOTHING`,
-      [userPathId, courseId],
+      `INSERT INTO path_courses (id, path_id, course_id, level_id, position, assigned_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, now())
+       ON CONFLICT (path_id, course_id) DO NOTHING`,
+      [placement.path_id, courseId, placement.level_id, position.rows[0]!.next],
     );
   });
 }

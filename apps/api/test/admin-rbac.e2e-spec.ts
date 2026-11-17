@@ -12,6 +12,7 @@ import { AppModule } from '../src/app.module';
 import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * The super-admin portal is closed to everyone else (§4C, D-062, D-075).
@@ -212,7 +213,7 @@ describe('Admin portal RBAC (e2e)', () => {
         email,
         passwordHash: await hashPassword(PASSWORD),
         fullName: 'حساب تجريبي',
-        employeeId: `A-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'قسم',
         role,
         entityId: entity,
@@ -234,7 +235,7 @@ describe('Admin portal RBAC (e2e)', () => {
         email,
         password: PASSWORD,
         fullName: 'موظف تجريبي',
-        employeeId: `A-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'تقنية المعلومات',
       })
       .expect(202);
@@ -278,6 +279,14 @@ describe('Admin portal RBAC (e2e)', () => {
       await call(route).expect(401);
     });
 
+    /*
+     * A longer budget than Jest's default five seconds, for one route rather
+     * than the file: `/admin/certificate-template` renders the real certificate
+     * artwork with a QR code to build its preview, and the first such render in
+     * a process pays for loading the Arabic typeface. A slow *unit* test is a
+     * smell; a first-call font load is arithmetic, and the alternative — a
+     * preview drawn separately from the renderer — is a preview that lies.
+     */
     it('admits a super-admin', async () => {
       const response = await call(route, sessionAdmin);
 
@@ -286,7 +295,7 @@ describe('Admin portal RBAC (e2e)', () => {
          never happen is the *authorisation* refusing the one role the portal
          exists for. */
       expect([401, 403]).not.toContain(response.status);
-    });
+    }, 30_000);
   });
 
   it('audits a refused cross-portal read', async () => {

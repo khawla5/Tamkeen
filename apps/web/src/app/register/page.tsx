@@ -17,6 +17,7 @@ import { ApiError, authApi } from '@/lib/api-client';
 import {
   DEPARTMENTS,
   EMPLOYEE_ID_PATTERN,
+  FULL_NAME_DIGITS,
   FULL_NAME_MIN_LENGTH,
   PASSWORD_MIN_LENGTH,
 } from '@/lib/auth-constants';
@@ -69,6 +70,7 @@ function validateStepTwo(form: {
   const name = form.fullName.trim();
   if (name.length === 0) errors.fullName = 'FULL_NAME_REQUIRED';
   else if (name.length < FULL_NAME_MIN_LENGTH) errors.fullName = 'FULL_NAME_TOO_SHORT';
+  else if (FULL_NAME_DIGITS.test(name)) errors.fullName = 'FULL_NAME_HAS_DIGITS';
   if (form.employeeId.trim().length === 0) errors.employeeId = 'EMPLOYEE_ID_REQUIRED';
   else if (!EMPLOYEE_ID_PATTERN.test(form.employeeId.trim()))
     errors.employeeId = 'EMPLOYEE_ID_INVALID';
@@ -292,7 +294,14 @@ export default function RegisterPage() {
 
           <Field id="employeeId" label={t('employeeId')} required error={errorFor('employeeId')}>
             {(props) => (
-              <Input {...props} dir="ltr" value={form.employeeId} onChange={update('employeeId')} />
+              <Input
+                {...props}
+                dir="ltr"
+                inputMode="numeric"
+                maxLength={10}
+                value={form.employeeId}
+                onChange={update('employeeId')}
+              />
             )}
           </Field>
 

@@ -7,6 +7,7 @@ import {
   type EnrolInput,
   type LmsCourse,
   type LmsCourseContentSummary,
+  LmsCourseOutlineItem,
   type LmsCourseId,
   type LmsCourseProgress,
   type LmsHealth,
@@ -316,6 +317,31 @@ export class MockLmsService implements LmsPort {
     return { ...course };
   }
 
+  /** As many stand-in activities as the simulated authoring says, quiz last. */
+  getCourseOutline(lmsCourseId: LmsCourseId): Promise<LmsCourseOutlineItem[]> {
+    if (!this.catalogue.some((course) => course.lmsCourseId === lmsCourseId)) {
+      return Promise.resolve([]);
+    }
+
+    const authored = this.authoring.get(lmsCourseId);
+    const count = authored?.activityCount ?? 3;
+    const hasQuiz = authored?.hasQuiz ?? true;
+
+    return Promise.resolve(
+      Array.from({ length: count }, (_, index) => {
+        const last = index === count - 1;
+        const kind = last && hasQuiz ? 'quiz' : 'page';
+        const lmsModuleId = lmsCourseId * 100 + index + 1;
+        return {
+          lmsModuleId,
+          name: kind === 'quiz' ? 'اختبار الدورة' : `النشاط ${index + 1}`,
+          kind,
+          url: `${MOCK_LMS_BASE_URL}/mod/${kind}/view.php?id=${lmsModuleId}`,
+        };
+      }),
+    );
+  }
+
   getCourseContentSummary(lmsCourseId: LmsCourseId): Promise<LmsCourseContentSummary | null> {
     if (!this.catalogue.some((course) => course.lmsCourseId === lmsCourseId)) {
       return Promise.resolve(null);
@@ -489,6 +515,29 @@ export class MockLmsService implements LmsPort {
       hasQuiz: summary.hasQuiz ?? true,
       completionConfigured: summary.completionConfigured ?? true,
     });
+  }
+
+  /**
+   * Stands in for an entity editing a course's name, summary or visibility
+   * from Moodle's own Settings tab (§4B.4, TAM-133). Mock-only, like
+   * `simulateAuthoring` — the real adapter cannot drive Moodle's UI, so this
+   * must never reach `LmsPort`.
+   *
+   * Only ever touches a course this process created: the seeded catalogue is
+   * a shared module constant, and mutating it would leak one suite's edit
+   * into every other test that reads `MOCK_COURSES`.
+   */
+  simulateSettingsEdit(
+    lmsCourseId: LmsCourseId,
+    patch: Partial<Pick<LmsCourse, 'title' | 'summary' | 'visible'>>,
+  ): void {
+    const course = this.created.find((entry) => entry.lmsCourseId === lmsCourseId);
+
+    if (!course) {
+      throw new Error(`simulateSettingsEdit: ${lmsCourseId} was not created by this mock instance`);
+    }
+
+    Object.assign(course, patch);
   }
 
   /** Whether an enrolment carries editing capabilities. Mock-only. */

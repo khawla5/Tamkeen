@@ -1,6 +1,5 @@
 import type { CvAutofill, CvProfile } from './cv';
 import { CV_FORMAT_CONTEXT, formatDate, formatMonthYear, formatYear } from './format';
-import type { RiasecLetter } from './riasec';
 
 /**
  * The CV document itself — one renderer, used by both the live preview and the
@@ -32,15 +31,6 @@ import type { RiasecLetter } from './riasec';
 export interface CvDocumentInput {
   profile: CvProfile;
   autofill: CvAutofill;
-  /**
-   * Arabic RIASEC type names, supplied by the caller.
-   *
-   * Not defined here: `riasec.ts` is deliberately free of Arabic copy, because
-   * the letters are domain facts and the names are user-facing text. The web
-   * passes them from the message catalogue; the API passes its own copy, the
-   * way it already does for email and certificate templates.
-   */
-  riasecNames: Record<RiasecLetter, string>;
 }
 
 const NAVY = '#222e42';
@@ -242,35 +232,22 @@ ${section('Skills', skills)}`;
 /**
  * The career-orientation line (§4.11) — "distinctive to this platform".
  *
- * The Holland letters are the internationally-legible part and stay Latin; the
- * type names pass through in Arabic as D-050 requires, rather than being
- * translated into an English gloss.
+ * One sentence per assigned path: what it was, which rung the placement test
+ * put them on, and whether they finished. Path and level names pass through in
+ * Arabic as D-050 requires, rather than being translated into an English gloss.
  */
 function careerProfileSentence(input: CvDocumentInput): string {
   const career = input.autofill.careerProfile;
-  if (!career) return '';
+  if (!career || career.paths.length === 0) return '';
 
-  const code = career.hollandCode.join('');
-  const names = career.hollandCode
-    .map((letter) => input.riasecNames[letter])
-    .filter((name) => typeof name === 'string' && name.length > 0)
-    .map((name) => ar(name))
-    .join(' · ');
+  const sentences = career.paths.map((path) => {
+    const verb = path.completed ? 'Completed the' : 'Enrolled on the';
+    const level = path.levelName ? ` at level ${ar(path.levelName)}` : '';
 
-  const pathClause = career.pathName
-    ? `${career.pathCompleted ? 'Completed the' : 'Enrolled on the'} ${ar(
-        career.pathName,
-      )} career path on the ministry training platform. `
-    : '';
+    return `${verb} ${ar(path.name)} career path${level} on the ministry training platform.`;
+  });
 
-  const codeClause =
-    code.length > 0
-      ? `Holland profile: <strong>${escapeHtml(code)}</strong>${names ? ` — ${names}` : ''}.`
-      : '';
-
-  const sentence = `${pathClause}${codeClause}`.trim();
-
-  return sentence.length > 0 ? `<p class="cv-body">${sentence}</p>` : '';
+  return `<p class="cv-body">${sentences.join(' ')}</p>`;
 }
 
 /**

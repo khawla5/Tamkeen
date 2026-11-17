@@ -42,6 +42,8 @@ export const AUDIT_TARGET_TYPES = [
   'course',
   'assessment',
   'assessment_result',
+  'assessment_assignment',
+  'assessment_group',
   'certificate',
   'setting',
 ] as const;
@@ -68,13 +70,18 @@ export const AuditAction = {
   AUTHZ_DENIED: 'AUTHZ_DENIED',
 
   // Assessment and path (Phase 1)
+  /** A path's assessment was taken. Recorded on refusal too. */
   ASSESSMENT_SUBMITTED: 'ASSESSMENT_SUBMITTED',
-  /** A path entered the BUILDING state, or the user switched which one. */
-  PATH_SELECTED: 'PATH_SELECTED',
-  PATH_COURSES_UPDATED: 'PATH_COURSES_UPDATED',
-  /** The hard commitment gate (§2). Auditable by name in CLAUDE.md. */
-  PATH_CONFIRMED: 'PATH_CONFIRMED',
-  /** LMS enrolment requested for a confirmed path's courses. */
+  /**
+   * An assessment placed a learner on a rung of a path (D-134).
+   *
+   * Its own action rather than part of the submission, because it is the
+   * consequence somebody may later dispute: "why did I start here" is answered
+   * by this entry, which names the level, the score and the version that
+   * decided it.
+   */
+  LEARNER_PLACED: 'LEARNER_PLACED',
+  /** LMS enrolment requested for the courses an assigned path owes. */
   PATH_ENROLMENT_REQUESTED: 'PATH_ENROLMENT_REQUESTED',
 
   // LMS integration (Phase 2)
@@ -157,6 +164,12 @@ export const AuditAction = {
    * somewhere else, and here it carries editing rights.
    */
   ENTITY_COURSE_AUTHOR_LAUNCHED: 'ENTITY_COURSE_AUTHOR_LAUNCHED',
+  /**
+   * A single course was re-read from the LMS on demand (TAM-133) — triggered
+   * by the frame's own edit signal or by the entity's manual «تحديث», rather
+   * than waiting for the next scheduled catalogue sync.
+   */
+  ENTITY_COURSE_RESYNCED: 'ENTITY_COURSE_RESYNCED',
 
   // Super-admin portal (Phase 5)
   /**
@@ -175,6 +188,10 @@ export const AuditAction = {
   ADMIN_USER_STATUS_CHANGED: 'ADMIN_USER_STATUS_CHANGED',
   /** An account's role changed, or an entity account moved organisation. */
   ADMIN_USER_ROLE_CHANGED: 'ADMIN_USER_ROLE_CHANGED',
+  /** An account moved to another department (the administrator's own edit). */
+  ADMIN_USER_DEPARTMENT_CHANGED: 'ADMIN_USER_DEPARTMENT_CHANGED',
+  /** An account was deleted outright (not merely suspended). */
+  ADMIN_USER_DELETED: 'ADMIN_USER_DELETED',
   /** An organisation was created (§4C.2 fills Phase 4's provisioning seam). */
   ADMIN_ENTITY_CREATED: 'ADMIN_ENTITY_CREATED',
   /** An organisation's details or status changed. */
@@ -186,13 +203,15 @@ export const AuditAction = {
   /**
    * A new assessment version became the one new takers receive (D-069/D-070).
    *
-   * The single most consequential change an administrator can make: every
-   * Holland Code produced from this moment comes from a different instrument.
-   * Recorded on refusal too, with the blockers, so a rejected publish is
-   * explicable months later without reconstructing the bank as it stood.
+   * The single most consequential change an administrator can make on a path:
+   * every placement produced from this moment comes from a different
+   * instrument, and — because the bands travel with the version — potentially
+   * from a different scale. Recorded on refusal too, with the blockers, so a
+   * rejected publish is explicable months later without reconstructing the bank
+   * as it stood.
    */
   ADMIN_ASSESSMENT_PUBLISHED: 'ADMIN_ASSESSMENT_PUBLISHED',
-  /** A study path was created (§4C.4). Always inactive to begin with. */
+  /** A study path was created (§4C.4). Always a draft to begin with. */
   ADMIN_PATH_CREATED: 'ADMIN_PATH_CREATED',
   /** A path's content changed — name, description, duration, letter, order. */
   ADMIN_PATH_UPDATED: 'ADMIN_PATH_UPDATED',
@@ -219,6 +238,30 @@ export const AuditAction = {
   /** A course joined or left a path's membership. */
   ADMIN_PATH_COURSE_ATTACHED: 'ADMIN_PATH_COURSE_ATTACHED',
   ADMIN_PATH_COURSE_DETACHED: 'ADMIN_PATH_COURSE_DETACHED',
+  /* D-134 — the ladder itself, and what is placed on it. Levels are recorded
+     apart from an ordinary path edit because they change what every assigned
+     learner sees, and a deletion in particular unassigns courses that were
+     part of somebody's curriculum a moment earlier. */
+  ADMIN_LEVEL_CREATED: 'ADMIN_LEVEL_CREATED',
+  ADMIN_LEVEL_UPDATED: 'ADMIN_LEVEL_UPDATED',
+  /** Deleting a level. The courses it held are named as unassigned in `detail`. */
+  ADMIN_LEVEL_DELETED: 'ADMIN_LEVEL_DELETED',
+  ADMIN_LEVELS_REORDERED: 'ADMIN_LEVELS_REORDERED',
+  /**
+   * A course was placed onto a level, moved between levels, or taken off one.
+   *
+   * One action for all three because they are one decision — where in the path
+   * does this course belong — and `detail` carries the before and after. A move
+   * that affects a course somebody has started records how many, which is the
+   * open product question §10 of the spec leaves for later.
+   */
+  ADMIN_COURSE_PLACED: 'ADMIN_COURSE_PLACED',
+  /** Courses were reordered within one level. */
+  ADMIN_LEVEL_COURSES_REORDERED: 'ADMIN_LEVEL_COURSES_REORDERED',
+  /* An entity's own half of membership (D-134): it proposes a course into a
+     path and may withdraw it again only while nobody has placed it. */
+  ENTITY_COURSE_PATH_JOINED: 'ENTITY_COURSE_PATH_JOINED',
+  ENTITY_COURSE_PATH_LEFT: 'ENTITY_COURSE_PATH_LEFT',
   /**
    * An administrator intervened on a course (§4C.5) — hid it, restored it, or
    * placed it with an organisation.
@@ -231,6 +274,27 @@ export const AuditAction = {
   ADMIN_COURSE_INTERVENED: 'ADMIN_COURSE_INTERVENED',
   /** §4C.5's permanent deletion (TAM-134) — recorded whichever way it goes. */
   ADMIN_COURSE_DELETED: 'ADMIN_COURSE_DELETED',
+  /* D-130/D-134 — path assignment. Which paths an employee is put on is the
+     ministry's decision and the whole of their entitlement, so both directions
+     are recorded: the grant and the revocation. The path travels in `detail`;
+     the target is the employee, because "what was this person put on, and
+     since when" is the question an incident review asks. */
+  /** A path was assigned to an employee. */
+  ADMIN_PATH_ASSIGNED: 'ADMIN_PATH_ASSIGNED',
+  /** An assignment was revoked. Refusals (already started) audit too. */
+  ADMIN_PATH_UNASSIGNED: 'ADMIN_PATH_UNASSIGNED',
+  /* TAM-147 — the ministry-wide instrument registry's own assignment
+     framework, separate from a path assignment above: which RIASEC/CEFR
+     instrument (or group of them) reaches everyone / a department / a
+     person, not which path. */
+  /** An instrument or group was assigned to everyone, a department or a
+   *  person. Target type `assessment_assignment` rather than `assessment`,
+   *  because the row named is the assignment rule, not the instrument. */
+  ADMIN_ASSESSMENT_ASSIGNED: 'ADMIN_ASSESSMENT_ASSIGNED',
+  /** An assignment was revoked. */
+  ADMIN_ASSESSMENT_UNASSIGNED: 'ADMIN_ASSESSMENT_UNASSIGNED',
+  /** A group's name or member list changed. */
+  ADMIN_ASSESSMENT_GROUP_CHANGED: 'ADMIN_ASSESSMENT_GROUP_CHANGED',
   /**
    * A product knob changed (§4C.6).
    *
@@ -275,12 +339,34 @@ export const AuditReason = {
   ASSESSMENT_UNKNOWN_OPTION: 'ASSESSMENT_UNKNOWN_OPTION',
   ASSESSMENT_DUPLICATE_ANSWER: 'ASSESSMENT_DUPLICATE_ANSWER',
 
-  // Phase 1 — path building and commitment
-  PATH_ALREADY_CONFIRMED: 'PATH_ALREADY_CONFIRMED',
-  PATH_NOT_SELECTED: 'PATH_NOT_SELECTED',
-  COURSE_COUNT_OUT_OF_RANGE: 'COURSE_COUNT_OUT_OF_RANGE',
+  /** The bands did not cover the score. Unreachable past the publish gate. */
+  ASSESSMENT_NO_BAND: 'ASSESSMENT_NO_BAND',
+  /** A second attempt at an assessment that has already placed them (D-134). */
+  ASSESSMENT_ALREADY_TAKEN: 'ASSESSMENT_ALREADY_TAKEN',
+  /** The path has no published assessment, so nobody can be placed on it. */
+  ASSESSMENT_NOT_PUBLISHED: 'ASSESSMENT_NOT_PUBLISHED',
+
+  // D-134 — paths, levels and placement
+  /** Acting on a path the ministry never assigned to this employee. */
+  PATH_NOT_ASSIGNED: 'PATH_NOT_ASSIGNED',
   COURSE_NOT_IN_PATH: 'COURSE_NOT_IN_PATH',
   COURSE_NOT_AVAILABLE: 'COURSE_NOT_AVAILABLE',
+  /** Starting a course below the rung the assessment placed them on. */
+  COURSE_BELOW_LEVEL: 'COURSE_BELOW_LEVEL',
+  /** A level from a different path was named in a placement. */
+  LEVEL_NOT_IN_PATH: 'LEVEL_NOT_IN_PATH',
+  /** A position outside `1 … n + 1` for the level it was aimed at. */
+  POSITION_OUT_OF_RANGE: 'POSITION_OUT_OF_RANGE',
+  /** An entity tried to set a level or a position. Only an administrator may. */
+  PLACEMENT_NOT_YOURS: 'PLACEMENT_NOT_YOURS',
+  /** An entity tried to withdraw a membership an administrator has placed. */
+  MEMBERSHIP_ALREADY_PLACED: 'MEMBERSHIP_ALREADY_PLACED',
+  /** A level could not be deleted because learners are standing on it. */
+  LEVEL_HELD_BY_LEARNERS: 'LEVEL_HELD_BY_LEARNERS',
+  /** The course is in as many paths as the setting allows (TAM-141). */
+  PATH_LIMIT_EXCEEDED: 'PATH_LIMIT_EXCEEDED',
+  /** The course is over that cap already and may only remove memberships. */
+  PATH_MEMBERSHIP_FROZEN: 'PATH_MEMBERSHIP_FROZEN',
 
   // Phase 4 — the entity portal
   /** Publishing was refused; the specific blockers go in the detail payload. */
@@ -288,14 +374,22 @@ export const AuditReason = {
   /** The LMS refused or could not be reached while creating a course shell. */
   LMS_COURSE_CREATE_FAILED: 'LMS_COURSE_CREATE_FAILED',
   LMS_COURSE_DELETE_FAILED: 'LMS_COURSE_DELETE_FAILED',
+  /** A per-course resync (TAM-133) could not read the course back from the LMS —
+   *  most likely it vanished between the frame's edit and this request. */
+  LMS_COURSE_RESYNC_FAILED: 'LMS_COURSE_RESYNC_FAILED',
 
   /* Phase 5 — refused administrative changes. Every one of these is a lockout
      or an integrity failure that was prevented, which makes them the entries a
      security review most wants to be able to find. */
   /** An administrator tried to change their own status or role. */
   SELF_MODIFICATION_REFUSED: 'SELF_MODIFICATION_REFUSED',
+  /* D-134 — path assignment. */
+  /** Revoking an assignment on a path the learner has already been placed in. */
+  ASSIGNMENT_ALREADY_STARTED: 'ASSIGNMENT_ALREADY_STARTED',
   /** The change would have left the system with no active administrator. */
   LAST_ACTIVE_ADMIN: 'LAST_ACTIVE_ADMIN',
+  /** Deleting would erase a certificate somebody holds. */
+  ACCOUNT_HOLDS_CERTIFICATES: 'ACCOUNT_HOLDS_CERTIFICATES',
   /** An ENTITY account was asked for without an organisation to act for. */
   ENTITY_REQUIRED: 'ENTITY_REQUIRED',
   /** An organisation was supplied for a role that cannot belong to one. */
@@ -311,15 +405,15 @@ export const AuditReason = {
    */
   BANK_NOT_PUBLISHABLE: 'BANK_NOT_PUBLISHABLE',
   /**
-   * A path was refused activation, or an edit that would have left an active
-   * path with fewer selectable courses than a learner needs to confirm (§2).
+   * A path was refused publication: no levels, no published assessment, or no
+   * course placed on any rung (§4C.4, D-134).
    */
   PATH_NOT_OFFERABLE: 'PATH_NOT_OFFERABLE',
   /** A course could not leave a path because learners hold it through it. */
   COURSE_HELD_BY_LEARNERS: 'COURSE_HELD_BY_LEARNERS',
   /**
-   * A path could not be deleted because somebody has chosen it, or a
-   * certificate names it. Retirement is what the administrator wants instead.
+   * A path could not be deleted because somebody was assigned it, or a
+   * certificate names it. Unpublishing is what the administrator wants instead.
    */
   PATH_HELD_BY_LEARNERS: 'PATH_HELD_BY_LEARNERS',
   /** A published course cannot be returned to DRAFT — that state is reachable
@@ -379,9 +473,7 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   AUTHZ_DENIED: 'auth',
 
   ASSESSMENT_SUBMITTED: 'learner',
-  PATH_SELECTED: 'learner',
-  PATH_COURSES_UPDATED: 'learner',
-  PATH_CONFIRMED: 'learner',
+  LEARNER_PLACED: 'learner',
   PATH_ENROLMENT_REQUESTED: 'learner',
   PATH_COMPLETED: 'learner',
   LMS_COURSE_PASSED: 'learner',
@@ -398,6 +490,7 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ENTITY_COURSE_PUBLISHED: 'content',
   ENTITY_COURSE_UNPUBLISHED: 'content',
   ENTITY_COURSE_AUTHOR_LAUNCHED: 'content',
+  ENTITY_COURSE_RESYNCED: 'content',
   ADMIN_ASSESSMENT_DRAFT_OPENED: 'content',
   ADMIN_ASSESSMENT_DRAFT_DISCARDED: 'content',
   ADMIN_ASSESSMENT_PUBLISHED: 'content',
@@ -408,6 +501,14 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ADMIN_PATH_DELETED: 'content',
   ADMIN_PATH_COURSE_ATTACHED: 'content',
   ADMIN_PATH_COURSE_DETACHED: 'content',
+  ADMIN_LEVEL_CREATED: 'content',
+  ADMIN_LEVEL_UPDATED: 'content',
+  ADMIN_LEVEL_DELETED: 'content',
+  ADMIN_LEVELS_REORDERED: 'content',
+  ADMIN_COURSE_PLACED: 'content',
+  ADMIN_LEVEL_COURSES_REORDERED: 'content',
+  ENTITY_COURSE_PATH_JOINED: 'content',
+  ENTITY_COURSE_PATH_LEFT: 'content',
   ADMIN_COURSE_INTERVENED: 'content',
   ADMIN_COURSE_DELETED: 'content',
 
@@ -415,8 +516,18 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   ADMIN_USER_INVITED: 'administration',
   ADMIN_USER_STATUS_CHANGED: 'administration',
   ADMIN_USER_ROLE_CHANGED: 'administration',
+  ADMIN_USER_DEPARTMENT_CHANGED: 'administration',
+  ADMIN_USER_DELETED: 'administration',
+  ADMIN_PATH_ASSIGNED: 'administration',
+  ADMIN_PATH_UNASSIGNED: 'administration',
+  ADMIN_ASSESSMENT_ASSIGNED: 'content',
+  ADMIN_ASSESSMENT_UNASSIGNED: 'content',
+  ADMIN_ASSESSMENT_GROUP_CHANGED: 'content',
   ADMIN_ENTITY_CREATED: 'administration',
   ADMIN_ENTITY_UPDATED: 'administration',
+  /* The entity editing its own §4B.6 record — the same subject as the two
+     above, reached from the other portal. */
+  ENTITY_PROFILE_UPDATED: 'administration',
   ADMIN_SETTING_CHANGED: 'administration',
   ADMIN_SETTING_RESET: 'administration',
 

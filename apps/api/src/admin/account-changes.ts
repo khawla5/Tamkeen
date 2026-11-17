@@ -32,11 +32,6 @@ export interface AccountChangeFacts {
   currentRole: UserRole;
   /** True when the target is the only ACTIVE SUPER_ADMIN in the system. */
   isOnlyActiveAdmin: boolean;
-  /**
-   * Whether the target holds learner data — an assessment result, a path, or a
-   * certificate. Only meaningful for an EMPLOYEE.
-   */
-  holdsJourneyData: boolean;
 }
 
 export interface AccountChangeRefusal {
@@ -73,54 +68,32 @@ export function refuseStatusChange(
   return null;
 }
 
-/** Whether the role change is allowed. */
-export function refuseRoleChange(
+/**
+ * Whether the account may be deleted outright.
+ *
+ * Three refusals, and each is a different kind of harm. **Yourself**: the session
+ * that is deleting it dies with it, and the screen you would undo it from goes
+ * too. **The last active administrator**: the ministry loses the portal, which is
+ * unrecoverable without database access. **A holder of certificates**: they
+ * cascade with the account, so deleting would silently erase a credential somebody
+ * can still present and a third party can still verify — suspending is the
+ * operation that fits an account that must stop working but whose record must
+ * stand.
+ */
+export function refuseDeletion(
   facts: AccountChangeFacts,
-  next: UserRole,
-  entityId: string | null,
+  certificateCount: number,
 ): AccountChangeRefusal | null {
-  if (next === facts.currentRole && facts.currentRole !== 'ENTITY') {
-    /* A no-op, and worth refusing rather than silently accepting: an audit entry
-       claiming a role changed when it did not is worse than an error. ENTITY is
-       excluded because re-issuing the same role with a different organisation is
-       a real change — moving an account between suppliers. */
-    return { reason: AuditReason.ROLE_UNCHANGED, code: 'ROLE_UNCHANGED' };
-  }
-
   if (facts.targetId === facts.actorId) {
-    /* Including a promotion. There is no legitimate reason to change your own
-       role, and allowing it upward makes every downward guard optional. */
     return { reason: AuditReason.SELF_MODIFICATION_REFUSED, code: 'CANNOT_MODIFY_SELF' };
   }
 
-  if (facts.currentRole === 'SUPER_ADMIN' && facts.isOnlyActiveAdmin) {
+  if (facts.isOnlyActiveAdmin) {
     return { reason: AuditReason.LAST_ACTIVE_ADMIN, code: 'LAST_ACTIVE_ADMIN' };
   }
 
-  if (next === 'ENTITY' && !entityId) {
-    /* `EntityScopeService` fails closed on an ENTITY with no organisation, so
-       this would create an account that can sign in and then see nothing, with
-       no way to tell whether that is a permission bug or a provisioning one. */
-    return { reason: AuditReason.ENTITY_REQUIRED, code: 'ENTITY_REQUIRED' };
-  }
-
-  if (next !== 'ENTITY' && entityId) {
-    return { reason: AuditReason.ENTITY_NOT_ALLOWED, code: 'ENTITY_NOT_ALLOWED' };
-  }
-
-  if (facts.currentRole === 'EMPLOYEE' && next !== 'EMPLOYEE' && facts.holdsJourneyData) {
-    /*
-     * Converting a learner strands what they earned. Their path, result and
-     * certificates all survive — `user_paths.pathId` is Restrict and
-     * certificates are immutable — but every screen that reads them is
-     * `@Roles('EMPLOYEE')`, so the person can no longer reach their own record
-     * while their certificate stays publicly verifiable in their name.
-     *
-     * The ministry case this looks like — an employee seconded to run a
-     * supplier's account — is properly served by a second account, not by
-     * converting the one that holds their training history.
-     */
-    return { reason: AuditReason.JOURNEY_WOULD_BE_ORPHANED, code: 'JOURNEY_WOULD_BE_ORPHANED' };
+  if (certificateCount > 0) {
+    return { reason: AuditReason.ACCOUNT_HOLDS_CERTIFICATES, code: 'ACCOUNT_HOLDS_CERTIFICATES' };
   }
 
   return null;

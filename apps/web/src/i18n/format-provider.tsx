@@ -7,6 +7,7 @@ import {
   formatDate,
   formatDateTime,
   formatFraction,
+  formatMonthYear,
   formatNumber,
   formatPercent,
   type DateStyle,
@@ -45,6 +46,10 @@ export function useFormat() {
       fraction: (current: number, total: number) => formatFraction(current, total, context),
       date: (value: Date, style?: DateStyle) => formatDate(value, context, style),
       dateTime: (value: Date) => formatDateTime(value, context),
+      /* «أغسطس ٢٠٢٦» from the `YYYY-MM` a trend point carries — through the
+         shared layer like everything else, so a month heading honours D-018's
+         digit switch rather than deciding for itself. */
+      monthYear: (value: string) => formatMonthYear(value, context),
     }),
     [context],
   );

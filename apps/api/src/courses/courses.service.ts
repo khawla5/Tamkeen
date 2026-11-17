@@ -1,9 +1,13 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
-import type { CourseDetail, CourseSummary, UserPathCourseStatus } from '@tamkeen/types';
+import type { CourseDetail, CourseProgressStatus, CourseSummary } from '@tamkeen/types';
 
 import { JourneyStateService, type JourneyState } from '../journey/journey-state.service';
-import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
+import {
+  levelStanding,
+  placedInAnyPublishedPathWhere,
+  visibleCourseWhere,
+} from '../paths/path-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveCourseAction } from './course-action';
 import type { CourseQueryDto } from './courses.dto';
@@ -12,38 +16,20 @@ import type { CourseQueryDto } from './courses.dto';
  * The courses catalogue and course detail (§4.6, §4.7).
  *
  * Course *content* lives in the LMS; what this serves is our cached mirror plus
- * the product metadata layered on top (§6). The one thing still asked of the LMS
- * at request time is `courseUrl`, because building a deep link is the LMS's
- * business and hardcoding its URL shape here would leak the boundary.
+ * the product metadata layered on top (§6).
+ *
+ * **Every path lens here goes through `path-access`** (D-134). A course sitting
+ * in a path on no level is invisible: not in the catalogue's path tags, not in
+ * a path filter's results, not on the detail page. The filter is composed in one
+ * helper rather than repeated in each query, because forgetting it returns
+ * *more* rows and so looks like it works.
  */
 @Injectable()
 export class CoursesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly journey: JourneyStateService,
-    @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
-
-  /**
-   * Which course statuses this user may see.
-   *
-   * AVAILABLE always. A course that has left the catalogue stays visible only to
-   * someone who already selected it — that is exactly the "available to add"
-   * versus "still completable if already enrolled" distinction D-015 asks the
-   * catalogue to make. RETIRED is visible to nobody.
-   */
-  private visibleCourseFilter(state: JourneyState) {
-    const selected = state.userPath?.selectedCourseIds ?? [];
-
-    return selected.length > 0
-      ? {
-          OR: [
-            { status: 'AVAILABLE' as const },
-            { id: { in: selected }, status: { not: 'RETIRED' as const } },
-          ],
-        }
-      : { status: 'AVAILABLE' as const };
-  }
 
   async list(userId: string, query: CourseQueryDto): Promise<CourseSummary[]> {
     const state = await this.journey.getState(userId);
@@ -51,8 +37,18 @@ export class CoursesService {
     const courses = await this.prisma.course.findMany({
       where: {
         AND: [
-          this.visibleCourseFilter(state),
-          query.pathId ? { pathCourses: { some: { pathId: query.pathId } } } : {},
+          visibleCourseWhere(state.enrolledCourseIds),
+          /* Only courses placed somewhere a learner could reach. A course in no
+             published path, or in one but on no level, is not in the catalogue
+             — it is content nobody has finished setting up. */
+          { pathCourses: { some: placedInAnyPublishedPathWhere() } },
+          query.pathId
+            ? {
+                pathCourses: {
+                  some: { ...placedInAnyPublishedPathWhere(), pathId: query.pathId },
+                },
+              }
+            : {},
           query.maxDurationMinutes ? { durationMinutes: { lte: query.maxDurationMinutes } } : {},
           query.q
             ? {
@@ -68,58 +64,27 @@ export class CoursesService {
         ],
       },
       orderBy: { title: 'asc' },
-      select: {
-        id: true,
-        moodleCourseId: true,
-        title: true,
-        summary: true,
-        durationMinutes: true,
-        status: true,
-        language: true,
-        pathCourses: {
-          where: { path: { isActive: true } },
-          orderBy: { path: { displayOrder: 'asc' } },
-          select: { path: { select: { id: true, name: true, riasecLetter: true } } },
-        },
-      },
+      select: this.summarySelect(),
     });
 
-    return courses.map((course) => ({
-      id: course.id,
-      moodleCourseId: course.moodleCourseId,
-      title: course.title,
-      summary: course.summary,
-      durationMinutes: course.durationMinutes,
-      status: course.status,
-      language: course.language,
-      paths: course.pathCourses.map((entry) => ({
-        id: entry.path.id,
-        name: entry.path.name,
-        riasecLetter: entry.path.riasecLetter,
-      })),
-    }));
+    return courses.map((course) => this.toSummary(course));
   }
 
   async getDetail(userId: string, courseId: string): Promise<CourseDetail> {
     const state = await this.journey.getState(userId);
 
     const course = await this.prisma.course.findFirst({
-      where: { AND: [{ id: courseId }, this.visibleCourseFilter(state)] },
+      where: {
+        AND: [
+          { id: courseId },
+          visibleCourseWhere(state.enrolledCourseIds),
+          { pathCourses: { some: placedInAnyPublishedPathWhere() } },
+        ],
+      },
       select: {
-        id: true,
-        moodleCourseId: true,
-        title: true,
-        summary: true,
-        durationMinutes: true,
-        status: true,
-        language: true,
+        ...this.summarySelect(),
         objectives: true,
         prerequisites: true,
-        pathCourses: {
-          where: { path: { isActive: true } },
-          orderBy: { path: { displayOrder: 'asc' } },
-          select: { pathId: true, path: { select: { id: true, name: true, riasecLetter: true } } },
-        },
       },
     });
 
@@ -127,23 +92,96 @@ export class CoursesService {
       throw new NotFoundException('COURSE_NOT_FOUND');
     }
 
-    const personalStatus = await this.getPersonalStatus(state, course.id);
+    /* Which of the learner's own paths this course is reachable through. A
+       course in two of their paths is read through the first — they owe it
+       once, and picking a lens is not a decision to put to them. */
+    const own = course.pathCourses.find((entry) =>
+      state.paths.some((path) => path.pathId === entry.pathId),
+    );
+    const assigned = own ? JourneyStateService.findPath(state, own.pathId) : null;
 
-    const action = resolveCourseAction({
-      userPath: state.userPath
-        ? {
-            confirmed: JourneyStateService.isCommitted(state),
-            courseInPath: course.pathCourses.some(
-              (entry) => entry.pathId === state.userPath!.pathId,
-            ),
-            selectedCourseIds: state.userPath.selectedCourseIds,
-          }
-        : null,
-      courseId: course.id,
-      courseStatus: course.status,
-      completed: personalStatus === 'COMPLETED',
+    const completion = await this.prisma.completion.findUnique({
+      where: { userId_moodleCourseId: { userId, moodleCourseId: course.moodleCourseId } },
+      select: { passed: true, completed: true, gradePercent: true },
     });
 
+    const action = resolveCourseAction({
+      inPath:
+        assigned && own?.level
+          ? {
+              placed: assigned.placedLevel !== null,
+              standing: levelStanding(own.level.position, assigned.placedLevel?.position ?? null),
+            }
+          : null,
+      courseStatus: course.status,
+      completed: completion?.passed === true,
+    });
+
+    return {
+      ...this.toSummary(course),
+      objectives: course.objectives,
+      prerequisites: course.prerequisites,
+      action,
+      pathId: assigned?.pathId ?? null,
+      personalStatus: assigned ? this.progressOf(completion) : null,
+      certificateId:
+        action === 'COMPLETED' ? await this.findCertificateId(userId, course.id) : null,
+    };
+  }
+
+  /**
+   * The learner's own progress on one course.
+   *
+   * Read from `completions` and nowhere else (D-134). There is no per-learner
+   * course row to disagree with it any more, which is what makes progress
+   * survive an administrator moving the course to another level.
+   */
+  private progressOf(
+    completion: { passed: boolean; completed: boolean; gradePercent: number | null } | null,
+  ): CourseProgressStatus {
+    if (!completion) return 'NOT_STARTED';
+    if (completion.passed) return 'COMPLETED';
+    /* Attempted but not passed. A grade with no pass is somebody mid-course, and
+       calling that NOT_STARTED would lose the only evidence they began. */
+    if (completion.completed || completion.gradePercent !== null) return 'IN_PROGRESS';
+
+    return 'NOT_STARTED';
+  }
+
+  private summarySelect() {
+    return {
+      id: true,
+      moodleCourseId: true,
+      title: true,
+      summary: true,
+      durationMinutes: true,
+      status: true,
+      language: true,
+      pathCourses: {
+        where: placedInAnyPublishedPathWhere(),
+        orderBy: { path: { displayOrder: 'asc' } },
+        select: {
+          pathId: true,
+          path: { select: { id: true, name: true } },
+          level: { select: { id: true, name: true, position: true } },
+        },
+      },
+    } as const;
+  }
+
+  private toSummary(course: {
+    id: string;
+    moodleCourseId: number;
+    title: string;
+    summary: string;
+    durationMinutes: number | null;
+    status: CourseSummary['status'];
+    language: CourseSummary['language'];
+    pathCourses: Array<{
+      path: { id: string; name: string };
+      level: { id: string; name: string; position: number } | null;
+    }>;
+  }): CourseSummary {
     return {
       id: course.id,
       moodleCourseId: course.moodleCourseId,
@@ -152,46 +190,15 @@ export class CoursesService {
       durationMinutes: course.durationMinutes,
       status: course.status,
       language: course.language,
-      objectives: course.objectives,
-      prerequisites: course.prerequisites,
       paths: course.pathCourses.map((entry) => ({
         id: entry.path.id,
         name: entry.path.name,
-        riasecLetter: entry.path.riasecLetter,
+        level: entry.level,
       })),
-      action,
-      /* Only meaningful when the action is ADD_TO_PATH or IN_PATH; the client
-         uses it to link to the right build page rather than guessing. */
-      buildablePathId: state.userPath?.pathId ?? null,
-      personalStatus,
-      certificateId:
-        action === 'COMPLETED' ? await this.findCertificateId(userId, course.id) : null,
     };
   }
 
-  /**
-   * The user's own progress on this course, or null when it is not in their
-   * path at all. `action` alone cannot carry this: a confirmed, unattempted
-   * course and one genuinely in progress both resolve to `START_COURSE`
-   * (§4.7 needs the distinction for the card's status chip).
-   */
-  private async getPersonalStatus(
-    state: JourneyState,
-    courseId: string,
-  ): Promise<UserPathCourseStatus | null> {
-    if (!state.userPath?.selectedCourseIds.includes(courseId)) {
-      return null;
-    }
-
-    const chosen = await this.prisma.userPathCourse.findFirst({
-      where: { userPathId: state.userPath.id, courseId },
-      select: { status: true },
-    });
-
-    return chosen?.status ?? 'NOT_STARTED';
-  }
-
-  /** Only ever queried for a completed course, which the unique constraint on
+  /** Only ever queried for a passed course, which the unique constraint on
    *  (user, type, course) guarantees has at most one certificate. */
   private async findCertificateId(userId: string, courseId: string): Promise<string | null> {
     const certificate = await this.prisma.certificate.findFirst({
@@ -200,5 +207,10 @@ export class CoursesService {
     });
 
     return certificate?.id ?? null;
+  }
+
+  /** Exposed for the player, which needs the same state without re-querying. */
+  async stateFor(userId: string): Promise<JourneyState> {
+    return this.journey.getState(userId);
   }
 }

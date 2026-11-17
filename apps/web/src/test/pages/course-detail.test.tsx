@@ -1,5 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -12,24 +11,23 @@ import { renderWithProviders } from '@/test/render';
  * and the one server-chosen action; the content card carries only what §4.7
  * actually asks for.
  *
- * The action's *logic* — which of the six values `resolveCourseAction`
- * returns — is the API's contract, proven against a real database in
- * journey.e2e-spec.ts. What is asserted here is what TAM-128 actually
- * changed: that each value renders its correct label in the header slot, not
- * at the bottom of the page, and that relocating it broke nothing else —
- * the empty-section rule, the failed-add error, the reload-after-add, and
- * the back link are the same behaviour this page already had.
+ * The action's *logic* — which of the five values `resolveCourseAction` returns
+ * — is the API's contract, proven against a real database in
+ * journey.e2e-spec.ts. What is asserted here is that each value renders its
+ * correct label in the header slot, not buried at the bottom of the page.
+ *
+ * There is no "add to my path" here any more (D-134): a learner does not choose
+ * what their path contains, so the only outward actions left are entering a
+ * course and opening the certificate it earned.
  */
 
 const mocks = vi.hoisted(() => ({
   detail: vi.fn(),
-  addCourse: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async (importActual) => ({
   ...(await importActual<typeof import('@/lib/api-client')>()),
   coursesApi: { detail: mocks.detail },
-  myPathApi: { addCourse: mocks.addCourse },
 }));
 
 vi.mock('next/navigation', () => ({
@@ -72,7 +70,7 @@ function course(overrides: Partial<CourseDetail> = {}): CourseDetail {
     objectives: [],
     prerequisites: null,
     action: 'NONE',
-    buildablePathId: null,
+    pathId: null,
     personalStatus: null,
     certificateId: null,
     ...overrides,
@@ -81,7 +79,6 @@ function course(overrides: Partial<CourseDetail> = {}): CourseDetail {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.addCourse.mockResolvedValue(undefined);
 });
 
 async function renderCourse(overrides: Partial<CourseDetail> = {}) {
@@ -107,8 +104,8 @@ describe('course detail — header and meta row', () => {
   it('shows path membership as quiet tags, not a comma-joined list', async () => {
     await renderCourse({
       paths: [
-        { id: 'p1', name: 'مسار خدمة المتعاملين', riasecLetter: 'S' },
-        { id: 'p2', name: 'مسار القيادة', riasecLetter: 'E' },
+        { id: 'p1', name: 'مسار خدمة المتعاملين', level: null },
+        { id: 'p2', name: 'مسار القيادة', level: null },
       ],
     });
 
@@ -117,8 +114,8 @@ describe('course detail — header and meta row', () => {
     expect(screen.queryByText('مسار خدمة المتعاملين، مسار القيادة')).not.toBeInTheDocument();
   });
 
-  it('shows exactly one personal-status chip when the course is in the user’s path', async () => {
-    await renderCourse({ action: 'IN_PATH', personalStatus: 'NOT_STARTED' });
+  it('shows exactly one personal-status chip when the course is in an assigned path', async () => {
+    await renderCourse({ action: 'START_COURSE', personalStatus: 'NOT_STARTED' });
 
     expect(screen.getByText('في مسارك')).toBeInTheDocument();
   });
@@ -129,8 +126,8 @@ describe('course detail — header and meta row', () => {
     expect(screen.getByText('قيد التنفيذ')).toBeInTheDocument();
   });
 
-  it('shows no personal-status chip for a course outside the user’s path — absence is the signal', async () => {
-    await renderCourse({ action: 'ADD_TO_PATH', personalStatus: null });
+  it('shows no personal-status chip for a course outside every assigned path — absence is the signal', async () => {
+    await renderCourse({ action: 'NONE', personalStatus: null });
 
     expect(screen.queryByText('في مسارك')).not.toBeInTheDocument();
     expect(screen.queryByText('قيد التنفيذ')).not.toBeInTheDocument();
@@ -181,43 +178,43 @@ describe('course detail — the one action, in the header', () => {
     expect(screen.getByTestId('header-action')).toBeEmptyDOMElement();
   });
 
-  it('ADD_TO_PATH: adds the course, then reloads to pick up the server’s new action', async () => {
-    const user = userEvent.setup();
-    await renderCourse({ action: 'ADD_TO_PATH' });
+  it('BELOW_LEVEL: says why, and offers nothing to click', async () => {
+    /* Absence, not a disabled button: the course is not pending, it is ground
+       the placement says the learner already covered (§3, D-134). */
+    await renderCourse({ action: 'BELOW_LEVEL', pathId: 'path-9' });
 
-    mocks.detail.mockResolvedValueOnce(
-      course({ action: 'IN_PATH', personalStatus: 'NOT_STARTED' }),
-    );
-    await user.click(screen.getByRole('button', { name: 'أضف إلى مساري' }));
-
-    await waitFor(() => expect(mocks.addCourse).toHaveBeenCalledWith('course-1'));
-    expect(await screen.findByRole('link', { name: 'ضمن مسارك' })).toBeInTheDocument();
+    const header = screen.getByTestId('header-action');
+    expect(header).toHaveTextContent('دون مستواك في المسار');
+    expect(within(header).queryByRole('button')).toBeNull();
+    expect(within(header).queryByRole('link')).toBeNull();
   });
 
-  it('reports a failed add without losing the course, and stays retryable', async () => {
-    const user = userEvent.setup();
-    mocks.addCourse.mockRejectedValue(new Error('network'));
-    await renderCourse({ action: 'ADD_TO_PATH' });
+  it('offers no way to add a course to a path — nobody builds one', async () => {
+    /* D-134 retired the build flow entirely. A leftover button here would be an
+       action the server has no endpoint for. */
+    for (const action of ['NONE', 'START_COURSE', 'BELOW_LEVEL', 'UNAVAILABLE'] as const) {
+      const view = renderWithProviders(<CourseDetailPage />);
+      mocks.detail.mockResolvedValue(course({ action }));
+      await screen.findAllByText('أساسيات إدارة المشاريع');
 
-    await user.click(screen.getByRole('button', { name: 'أضف إلى مساري' }));
-
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'أضف إلى مساري' })).toBeEnabled();
+      expect(screen.queryByRole('button', { name: /أضف/ })).not.toBeInTheDocument();
+      view.unmount();
+    }
   });
 
-  it('IN_PATH: links to the path build page', async () => {
-    await renderCourse({ action: 'IN_PATH', buildablePathId: 'path-9' });
-
-    expect(screen.getByRole('link', { name: 'ضمن مسارك' })).toHaveAttribute(
-      'href',
-      '/paths/path-9',
-    );
-  });
-
-  it('START_COURSE: links to the player, never the raw LMS URL', async () => {
-    await renderCourse({ action: 'START_COURSE' });
+  it('START_COURSE, not yet attempted: links to the player as «ابدأ الدورة»', async () => {
+    await renderCourse({ action: 'START_COURSE', personalStatus: 'NOT_STARTED' });
 
     expect(screen.getByRole('link', { name: 'ابدأ الدورة' })).toHaveAttribute(
+      'href',
+      '/courses/course-1/player',
+    );
+  });
+
+  it('START_COURSE, already in progress: the same link reads «أكمل الدورة» (§4.7, TAM-128)', async () => {
+    await renderCourse({ action: 'START_COURSE', personalStatus: 'IN_PROGRESS' });
+
+    expect(screen.getByRole('link', { name: 'أكمل الدورة' })).toHaveAttribute(
       'href',
       '/courses/course-1/player',
     );
@@ -249,7 +246,7 @@ describe('course detail — the one action, in the header', () => {
   it('UNAVAILABLE: states why, offers nothing to click', async () => {
     await renderCourse({ action: 'UNAVAILABLE' });
 
-    expect(screen.getByText('غير متاحة للإضافة')).toBeInTheDocument();
+    expect(screen.getByText(/لم تعد هذه الدورة متاحة/)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /غير متاحة/ })).not.toBeInTheDocument();
   });

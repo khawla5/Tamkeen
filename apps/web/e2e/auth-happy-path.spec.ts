@@ -1,7 +1,14 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-import { DEPARTMENT, PASSWORD, RUN_ID, accountFor, signedInEmployee } from './account';
-import { completeAssessment } from './journey';
+import {
+  DEPARTMENT,
+  PASSWORD,
+  RUN_ID,
+  accountFor,
+  signedInEmployee,
+  numericEmployeeId,
+} from './account';
+import { assignSeededPath } from './admin-fixtures';
 import { assertMailpitReachable, tokenFromEmail } from './mailpit';
 
 /**
@@ -143,7 +150,7 @@ test.describe('Authentication happy path', () => {
     await fillRegistration(page, {
       fullName: 'شخص خارجي',
       email: `pw-${RUN_ID}-outsider@ministry.gov`,
-      employeeId: `PW-${RUN_ID}-out`.slice(0, 20),
+      employeeId: numericEmployeeId('out'),
       department: DEPARTMENT,
     });
 
@@ -260,22 +267,25 @@ test.describe('Authenticated shell', () => {
   });
 
   test('numbers use Western Arabic digits by default (D-018)', async ({ page }) => {
-    await signedInEmployee(page, 'digits');
+    const account = await signedInEmployee(page, 'digits');
 
     /* The catalogue's result count is the first Phase 1 number a signed-in user
        meets; the Phase 0 sample page it used to assert against is gone.
 
-       D-071 opens the catalogue only once the assessment is done — a
-       pre-assessment visit bounces to the dashboard — so take it first, the
-       same order the journey suite uses for the same reason. */
-    await page.goto('/assessment');
-    await completeAssessment(page);
-    await expect(page).toHaveURL(/\/results$/, { timeout: 15_000 });
-
+       The catalogue opens only once a path is assigned (D-071, restated for
+       D-134) — a pre-assignment visit bounces to the dashboard — so assign one
+       first, the same reason the journey suite does. Placement is not needed:
+       the nav and the catalogue both open the moment the ministry assigns a
+       path, before the assessment has placed the learner on it. */
+    await assignSeededPath(account.email);
     await page.goto('/courses');
 
-    const count = page.getByText(/دورة$/).first();
-    await expect(count).toContainText('47');
-    await expect(count).not.toContainText('٤٧');
+    /* The catalogue opens filtered to the one path just assigned (TAM-127) —
+       whatever that path's own course count is, the digits it is rendered
+       with are the point, not the number itself. */
+    const count = page.getByText(/^\d+ دورة$/).first();
+    await expect(count).toBeVisible();
+    await expect(count).toContainText(/[0-9]/);
+    await expect(count).not.toContainText(/[٠-٩]/);
   });
 });

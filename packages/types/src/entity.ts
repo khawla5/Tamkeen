@@ -1,5 +1,10 @@
-import type { CourseLanguage, CoursePublication, CourseStatus } from './catalog';
-import type { RiasecLetter } from './riasec';
+import type {
+  CourseLanguage,
+  CoursePublication,
+  CourseStatus,
+  PathCoursePlacement,
+} from './catalog';
+import type { LevelRef } from './levels';
 
 /**
  * The entity / reviewer portal (CLAUDE.md §4B).
@@ -40,10 +45,21 @@ export interface EntityCourseSummary {
   /** What that decision plus the LMS's state actually produces for a learner. */
   status: CourseStatus;
 
-  /** Paths this course belongs to, as product metadata the entity set. */
-  paths: Array<{ id: string; name: string; riasecLetter: RiasecLetter }>;
+  /**
+   * Every path this course is in, with where the administrator has placed it
+   * (D-134). `placement` is derived from the level being set or not, never
+   * stored, and `level` is read-only here — choosing a level is the
+   * administrator's alone, which is deliberate product policy and not a missing
+   * control.
+   */
+  paths: Array<{
+    id: string;
+    name: string;
+    placement: PathCoursePlacement;
+    level: LevelRef | null;
+  }>;
 
-  /** How many learners have this course among their selected path courses. */
+  /** How many learners hold this course through a path assigned to them. */
   enrolledCount: number;
   /** How many of those have passed it. Null when nobody is enrolled — a rate
    *  over zero learners is not 0%, it is undefined, and printing 0% would read
@@ -89,16 +105,30 @@ export interface EntityCourseContentView {
   completionConfigured: boolean;
 }
 
+/**
+ * The membership rules the form enforces alongside the server (TAM-141,
+ * D-134) — sent with the course so the number lives in one place, the settings.
+ *
+ * The letter-coherence limit is gone with RIASEC. What remains is a plain cap on
+ * how many paths one course may sit in, which is what stops a single course
+ * becoming every path's filler.
+ */
+export interface PathMembershipRules {
+  /** At most this many paths. */
+  maxPaths: number;
+  /**
+   * The course is already over the cap (seeded before it, or the limit was
+   * lowered). It may remove memberships but not add — grandfathered, because
+   * learners may hold it in an assigned path.
+   */
+  frozen: boolean;
+}
+
 /** §4B.3 — one course, as the entity manages it. */
 export interface EntityCourseDetail extends EntityCourseSummary {
+  pathRules: PathMembershipRules;
   objectives: string[];
   prerequisites: string | null;
-
-  /**
-   * The RIASEC letters this course carries, **derived from its paths** rather
-   * than authored separately (D-066). A course in no path has none.
-   */
-  riasecLetters: RiasecLetter[];
 
   /** Null when the LMS could not be reached; the blockers say so explicitly. */
   content: EntityCourseContentView | null;
@@ -116,7 +146,7 @@ export interface EntityCourseDetail extends EntityCourseSummary {
   learnersHolding: number;
 
   /** Every path the entity may attach this course to, for the metadata form. */
-  availablePaths: Array<{ id: string; name: string; riasecLetter: RiasecLetter }>;
+  availablePaths: Array<{ id: string; name: string }>;
 }
 
 /** The response to unpublishing — see `learnersHolding` above. */
@@ -131,8 +161,8 @@ export interface EntityUnpublishResult {
 /**
  * §4B.5 — one learner on one of this entity's courses.
  *
- * **What is absent is the specification** (D-064). No email, no employee ID, no
- * Holland Code, no path, no certificates: review requires identifying a
+ * **What is absent is the specification** (D-064). No email, no employee ID,
+ * no path, no certificates: review requires identifying a
  * colleague and seeing how they did on *this* course, and nothing more. Email
  * and employee ID are the two identifiers that would make a leaked export
  * directly actionable elsewhere in the ministry, and neither helps a reviewer.

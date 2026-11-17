@@ -1,12 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
-import {
-  PATH_MAX_COURSES,
-  PATH_MIN_COURSES,
-  SETTING_KEYS,
-  type AdminSettingsView,
-  type SettingKey,
-} from '@tamkeen/types';
+import { SETTING_KEYS, type AdminSettingsView, type SettingKey } from '@tamkeen/types';
 
 import { AuditAction } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
@@ -65,8 +59,6 @@ export class AdminSettingsService {
        * of five, and a rate limit an operator can loosen is not a limit.
        */
       readOnly: [
-        { key: 'PATH_MIN_COURSES', value: String(PATH_MIN_COURSES) },
-        { key: 'PATH_MAX_COURSES', value: String(PATH_MAX_COURSES) },
         {
           key: 'API_RATE_LIMIT_MAX_REQUESTS',
           value: String(this.config.get('API_RATE_LIMIT_MAX_REQUESTS')),

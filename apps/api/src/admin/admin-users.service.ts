@@ -9,13 +9,14 @@ import { randomBytes } from 'node:crypto';
 import type {
   AdminInviteResult,
   AdminRegistrationPolicyView,
+  AdminUserAssessmentSummary,
   AdminUserDetail,
   AdminUserPage,
   AdminUserRow,
   UserRole,
 } from '@tamkeen/types';
 
-import { AuditAction, type AuditReasonCode } from '../audit/audit.actions';
+import { AuditAction, AuditReason, type AuditReasonCode } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { SessionService } from '../auth/session.service';
 import { hashPassword } from '../common/password';
@@ -23,7 +24,7 @@ import { generateToken, hashToken } from '../common/secure-token';
 import { AppConfigService } from '../config/app-config.module';
 import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { refuseRoleChange, refuseStatusChange, type AccountChangeFacts } from './account-changes';
+import { refuseDeletion, refuseStatusChange, type AccountChangeFacts } from './account-changes';
 import type { AdminUserQueryDto, CreateAdminUserDto } from './admin.dto';
 
 /**
@@ -79,18 +80,52 @@ export class AdminUsersService {
         : {}),
     };
 
-    const [rows, total] = await Promise.all([
-      this.prisma.user.findMany({
-        where,
-        orderBy: [{ createdAt: 'desc' }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        select: USER_ROW_SELECT,
-      }),
-      this.prisma.user.count({ where }),
-    ]);
+    /* Entities, then administrators, then employees — the order the accounts
+       screen sets them out in. Prisma cannot order by an arbitrary sequence of
+       enum values (the column sorts in the order the enum was declared, which is
+       a different one), so the page is cut out of the three kinds laid end to end:
+       count each kind, then take the slice of this page from whichever kinds it
+       overlaps. Newest first inside each kind. */
+    const kinds = query.role ? [query.role] : KIND_ORDER;
 
-    return { rows: rows.map(toRow), total, page, pageSize };
+    const findKind = (role: UserRole, skip: number, take: number) =>
+      this.prisma.user.findMany({
+        where: { ...where, role },
+        orderBy: [{ createdAt: 'desc' }],
+        skip,
+        take,
+        select: USER_ROW_SELECT,
+      });
+
+    const counts = await Promise.all(
+      kinds.map((role) => this.prisma.user.count({ where: { ...where, role } })),
+    );
+
+    let skip = (page - 1) * pageSize;
+    let remaining = pageSize;
+    const rows: AdminUserRow[] = [];
+
+    for (const [index, role] of kinds.entries()) {
+      const inKind = counts[index] ?? 0;
+
+      if (skip >= inKind) {
+        skip -= inKind;
+        continue;
+      }
+
+      const take = Math.min(remaining, inKind - skip);
+      rows.push(...(await findKind(role, skip, take)).map(toRow));
+      remaining -= take;
+      skip = 0;
+
+      if (remaining === 0) {
+        break;
+      }
+    }
+
+    const total = counts.reduce((sum, count) => sum + count, 0);
+
+    return { rows, total, page, pageSize };
   }
 
   /**
@@ -109,16 +144,28 @@ export class AdminUsersService {
         ...USER_ROW_SELECT,
         createdAt: true,
         moodleUserId: true,
-        assessmentResults: {
-          orderBy: { completedAt: 'desc' },
-          select: { code: true, completedAt: true },
-        },
-        userPath: {
+        /* D-130/D-133: what this person has been put on, managed from this
+           same panel. Assignment is an account decision, not a screen of its
+           own. */
+        userPaths: {
+          orderBy: { assignedAt: 'asc' },
           select: {
+            id: true,
+            pathId: true,
             status: true,
-            confirmedAt: true,
-            path: { select: { name: true } },
-            courses: { select: { status: true } },
+            assignedAt: true,
+            path: {
+              select: {
+                name: true,
+                _count: { select: { pathCourses: { where: { levelId: { not: null } } } } },
+              },
+            },
+          },
+        },
+        placements: {
+          select: {
+            pathId: true,
+            level: { select: { id: true, name: true, position: true } },
           },
         },
         _count: { select: { certificates: true } },
@@ -129,40 +176,82 @@ export class AdminUsersService {
       throw new NotFoundException('USER_NOT_FOUND');
     }
 
-    const [activeSessions, passed] = await Promise.all([
+    const [activeSessions, passed, allResults] = await Promise.all([
       this.prisma.session.count({
         where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
       }),
       /* Passed, not merely completed (D-054). The two diverge exactly when a
          learner is stuck, which is what this screen exists to reveal. */
       this.prisma.completion.count({ where: { userId, passed: true } }),
+      /* Every instrument, every kind — the generalised counterpart to the
+         RIASEC-only query above (§4C.2 part 5, TAM-147). A second query
+         rather than a second filter on the same relation: Prisma cannot
+         select `assessmentResults` twice under different `where`s in one
+         `select`, and this one needs the joined title besides. */
+      this.prisma.assessmentResult.findMany({
+        where: { userId },
+        orderBy: { completedAt: 'desc' },
+        select: {
+          kind: true,
+          code: true,
+          cefrLevel: true,
+          assessmentVersion: true,
+          completedAt: true,
+          assessment: { select: { key: true, title: true } },
+        },
+      }),
     ]);
 
-    const newest = user.assessmentResults[0];
+    const levelByPath = new Map(user.placements.map((row) => [row.pathId, row.level]));
+
+    /* One row per instrument key, at its latest attempt — `allResults` is
+       already newest-first, so the first row seen per key is that latest
+       attempt, and the rest are only counted. */
+    const attemptsByKey = new Map<string, number>();
+    const assessments: AdminUserAssessmentSummary[] = [];
+
+    for (const result of allResults) {
+      const key = result.assessment.key;
+      attemptsByKey.set(key, (attemptsByKey.get(key) ?? 0) + 1);
+
+      if (attemptsByKey.get(key) === 1) {
+        assessments.push({
+          key,
+          kind: result.kind,
+          title: result.assessment.title,
+          result: result.kind === 'RIASEC' ? (result.code ?? '') : (result.cefrLevel ?? ''),
+          version: result.assessmentVersion,
+          completedAt: result.completedAt.toISOString(),
+          attempts: 1,
+        });
+      }
+    }
+
+    for (const summary of assessments) {
+      summary.attempts = attemptsByKey.get(summary.key) ?? summary.attempts;
+    }
 
     return {
       ...toRow(user),
       createdAt: user.createdAt.toISOString(),
       hasLmsAccount: user.moodleUserId !== null,
-      assessment: newest
-        ? {
-            code: newest.code,
-            completedAt: newest.completedAt.toISOString(),
-            /* Retakes append (D-033). Showing the count makes a retake visible
-               without exposing the superseded codes, which are the person's
-               history and not an administrator's business. */
-            attempts: user.assessmentResults.length,
-          }
-        : null,
-      path: user.userPath
-        ? {
-            name: user.userPath.path.name,
-            status: user.userPath.status,
-            confirmedAt: user.userPath.confirmedAt?.toISOString() ?? null,
-            coursesChosen: user.userPath.courses.length,
-            coursesPassed: passed,
-          }
-        : null,
+      paths: user.userPaths.map((row) => ({
+        userPathId: row.id,
+        pathId: row.pathId,
+        name: row.path.name,
+        status: row.status,
+        assignedAt: row.assignedAt.toISOString(),
+        /* Null while the path's assessment is untaken — the one state an
+           administrator most often needs to see: assigned, but not yet started,
+           because nobody has sat the test. */
+        placedLevel: levelByPath.get(row.pathId) ?? null,
+        coursesPassed: passed,
+        /* Every course placed on the path, not only the ones above their rung:
+           this is a summary, and the finer figure is on the learner's own
+           screens. */
+        coursesTotal: row.path._count.pathCourses,
+      })),
+      assessments,
       certificateCount: user._count.certificates,
       activeSessions,
     };
@@ -337,19 +426,27 @@ export class AdminUsersService {
     return toRow(updated);
   }
 
-  /** Changes an account's role, and the organisation an entity account acts for. */
-  async setRole(
-    userId: string,
-    role: UserRole,
-    entityId: string | null,
-    actorId: string,
-    ipAddress: string | null,
-  ): Promise<AdminUserRow> {
+  /**
+   * Deletes an account outright (§4C.2) — the step beyond suspending it.
+   *
+   * What goes with it is what the database cascades: sessions, tokens, enrolments,
+   * completions, path assignments, assessment results, notifications and the CV.
+   * What stops it is anything that cannot be erased without damage — see
+   * `refuseDeletion`. The audit entry records the role and the account's id and
+   * nothing that identifies the person: the row it names is gone, and an audit log
+   * that kept the name would be the one place the deleted person's data survives.
+   *
+   * The matching account in the learning platform is not deleted here: the
+   * integration role has no capability to, and removing a person's course history
+   * there is not this screen's decision to make.
+   */
+  async remove(userId: string, actorId: string, ipAddress: string | null): Promise<void> {
     const facts = await this.gatherFacts(userId, actorId);
-    const refusal = refuseRoleChange(facts, role, entityId);
+    const certificates = await this.prisma.certificate.count({ where: { userId } });
+    const refusal = refuseDeletion(facts, certificates);
 
     if (refusal) {
-      await this.recordRefusal(AuditAction.ADMIN_USER_ROLE_CHANGED, refusal.reason, {
+      await this.recordRefusal(AuditAction.ADMIN_USER_DELETED, refusal.reason, {
         actorId,
         targetId: userId,
         ipAddress,
@@ -357,39 +454,72 @@ export class AdminUsersService {
       throw new ConflictException(refusal.code);
     }
 
-    if (entityId) {
-      const entity = await this.prisma.entity.findUnique({
-        where: { id: entityId },
-        select: { id: true },
-      });
-
-      if (!entity) {
-        throw new NotFoundException('ENTITY_NOT_FOUND');
-      }
+    try {
+      await this.prisma.user.delete({ where: { id: userId } });
+    } catch {
+      /* Something the checks above do not know about still points at the account
+         and the schema refused (a `Restrict`). Said as a refusal, not a 500. */
+      await this.recordRefusal(
+        AuditAction.ADMIN_USER_DELETED,
+        AuditReason.ACCOUNT_HOLDS_CERTIFICATES,
+        {
+          actorId,
+          targetId: userId,
+          ipAddress,
+        },
+      );
+      throw new ConflictException('ACCOUNT_HAS_RECORDS');
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id: userId },
-      data: { role, entityId },
-      select: USER_ROW_SELECT,
-    });
-
-    /*
-     * A role change is an access change, so the sessions go. Losing a role
-     * mid-session would otherwise leave the person holding a session resolved
-     * against their old role until it expired, which for a demotion is exactly
-     * the window that matters.
-     */
-    await this.sessions.revokeAllForUser(userId);
-
     await this.audit.record({
-      action: AuditAction.ADMIN_USER_ROLE_CHANGED,
+      action: AuditAction.ADMIN_USER_DELETED,
       outcome: 'SUCCESS',
       actorUserId: actorId,
       ipAddress,
       targetType: 'user',
       targetId: userId,
-      detail: { from: facts.currentRole, to: role },
+      detail: { role: facts.currentRole },
+    });
+  }
+
+  /**
+   * Moves an account to another department (§4C.2).
+   *
+   * Deliberately its own operation rather than a field on the role change: a
+   * department is a fact about where somebody works, and changing it is not an
+   * access change — it revokes no session and cannot lock anybody out, which is
+   * exactly what makes it safe to offer on its own. The audit entry records both
+   * values so "who moved this person, and from where" is answerable later.
+   */
+  async setDepartment(
+    userId: string,
+    department: string,
+    actorId: string,
+    ipAddress: string | null,
+  ): Promise<AdminUserRow> {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, department: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('USER_NOT_FOUND');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { department },
+      select: USER_ROW_SELECT,
+    });
+
+    await this.audit.record({
+      action: AuditAction.ADMIN_USER_DEPARTMENT_CHANGED,
+      outcome: 'SUCCESS',
+      actorUserId: actorId,
+      ipAddress,
+      targetType: 'user',
+      targetId: userId,
+      detail: { from: existing.department, to: department },
     });
 
     return toRow(updated);
@@ -456,24 +586,18 @@ export class AdminUsersService {
       throw new NotFoundException('USER_NOT_FOUND');
     }
 
-    const [otherActiveAdmins, results, path, certificates] = await Promise.all([
-      /* "Another active admin exists" rather than "how many admins" — the count
-         is not the question, and asking it this way is correct whether there are
-         two administrators or two hundred. */
-      this.prisma.user.count({
-        where: { role: 'SUPER_ADMIN', status: 'ACTIVE', id: { not: userId } },
-      }),
-      this.prisma.assessmentResult.count({ where: { userId } }),
-      this.prisma.userPath.count({ where: { userId } }),
-      this.prisma.certificate.count({ where: { userId } }),
-    ]);
+    /* "Another active admin exists" rather than "how many admins" — the count is not
+       the question, and asking it this way is correct whether there are two
+       administrators or two hundred. */
+    const otherActiveAdmins = await this.prisma.user.count({
+      where: { role: 'SUPER_ADMIN', status: 'ACTIVE', id: { not: userId } },
+    });
 
     return {
       targetId: target.id,
       actorId,
       currentRole: target.role,
       isOnlyActiveAdmin: target.role === 'SUPER_ADMIN' && otherActiveAdmins === 0,
-      holdsJourneyData: results + path + certificates > 0,
     };
   }
 
@@ -495,6 +619,9 @@ export class AdminUsersService {
 }
 
 /** The columns behind `AdminUserRow`, shared so the list and detail agree. */
+/** The order the accounts screen sets the kinds out in. */
+const KIND_ORDER: UserRole[] = ['ENTITY', 'SUPER_ADMIN', 'EMPLOYEE'];
+
 const USER_ROW_SELECT = {
   id: true,
   email: true,

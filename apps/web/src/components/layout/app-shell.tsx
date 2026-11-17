@@ -1,7 +1,6 @@
 import { useTranslations } from 'next-intl';
 
-import { Logo } from '@/components/brand/logo';
-import { MinistryEmblem } from '@/components/brand/ministry-emblem';
+import { BrandCorner } from '@/components/brand/brand-corner';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
@@ -73,23 +72,29 @@ export function AppShell({
       */}
       <a
         href="#main-content"
+        data-print="chrome"
         className="sr-only-focusable absolute top-3 start-3 z-50 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
       >
         {tA11y('skipToContent')}
       </a>
 
       {/* The owner's bar: lockup on the start edge, the signed-in identity on
-          the end — the same frame the landing and auth pages establish. */}
-      <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
-        <span className="inline-flex items-center gap-2">
-          <MinistryEmblem height={36} />
-          <span aria-hidden="true" className="h-7 w-px bg-border" />
-          <Logo height={30} />
-          <span className="sr-only">{t('name')}</span>
-        </span>
+          the end — the same frame the landing and auth pages establish.
+          `justify-end`, not `justify-between`: the lockup itself is
+          `BrandCorner` below, fixed to the page's true top-right corner
+          rather than laid out in this row, so without an explicit `end`
+          the identity group — now this row's only child — would default to
+          the start edge instead of staying where it always was. */}
+      <header className="flex items-center justify-end gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
+        {/* The portal has no public landing to send a signed-in visitor
+            back to, so the wordmark leads to the dashboard instead. */}
+        <BrandCorner size="sm" homeHref="/" />
 
         {user ? (
-          <span className="flex items-center gap-3">
+          /* Marked as chrome for print (TAM-149): a printed sheet keeps the
+             owner's lockup and the classification, but the signed-in identity
+             and the way out of the app are not part of the record. */
+          <span data-print="chrome" className="flex items-center gap-3">
             {user.department && user.employeeId ? (
               /* The identity line, in the chrome rather than on a page (D-096). */
               <p className="hidden text-sm text-muted-foreground md:block">
@@ -110,7 +115,10 @@ export function AppShell({
         {/* Light navigation rail (TAM-117): Platforms Code applications use a
             light nav with the primary as the active indicator — the dark
             neutral-900 rail was the last of the old brand. */}
-        <aside className="flex flex-col border-b border-border bg-card md:w-64 md:shrink-0 md:border-b-0 md:border-e">
+        <aside
+          data-print="chrome"
+          className="flex flex-col border-b border-border bg-card md:w-64 md:shrink-0 md:border-b-0 md:border-e"
+        >
           <nav aria-label={tA11y('primaryNav')} className="p-3">
             <div className="hidden md:block">
               <SidebarNav items={items} indicators={indicators} />
@@ -144,9 +152,7 @@ export function AppShell({
               the auth footer. */}
           <footer className="border-t border-border bg-card px-4 py-3 sm:px-6">
             <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                {t('ministry')} · {tLanding('footerDirectorate')}
-              </span>
+              <span>{t('ministry')}</span>
               <span>{tLanding('footerClassification')}</span>
             </div>
           </footer>

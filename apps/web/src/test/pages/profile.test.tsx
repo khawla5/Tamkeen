@@ -1,7 +1,9 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { DashboardView } from '@tamkeen/types';
 
 import type { CurrentUser } from '@/lib/api-client';
 
@@ -41,7 +43,11 @@ vi.mock('@/lib/api-client', async () => {
 });
 
 const portal = vi.hoisted(() => ({
-  value: { user: {} as CurrentUser, refreshSession: vi.fn() },
+  value: {
+    user: {} as CurrentUser,
+    dashboard: { paths: [] } as unknown as DashboardView,
+    refreshSession: vi.fn(),
+  },
 }));
 
 vi.mock('@/components/layout/portal-provider', () => ({
@@ -69,11 +75,30 @@ const BASE_USER: CurrentUser = {
   numberFormat: null,
 };
 
-function setUser(overrides: Partial<CurrentUser> = {}) {
+function setUser(overrides: Partial<CurrentUser> = {}, paths: DashboardView['paths'] = []) {
   portal.value = {
     user: { ...BASE_USER, ...overrides },
+    /* The placement card reads the paths from the portal rather than fetching
+       its own copy, so the page needs a dashboard in scope. */
+    dashboard: { paths } as unknown as DashboardView,
     refreshSession: vi.fn(),
   };
+}
+
+/** One assigned path, placed or still awaiting its assessment. */
+function assigned(placed: boolean): DashboardView['paths'] {
+  return [
+    {
+      id: 'path-1',
+      name: 'مسار تحليل البيانات',
+      placedLevel: placed ? { id: 'level-2', name: 'متقدم', position: 2 } : null,
+      pendingAssessmentId: placed ? null : 'assessment-1',
+      completedCount: 0,
+      inProgressCount: 0,
+      totalCount: placed ? 4 : 0,
+      nextCourse: null,
+    },
+  ];
 }
 
 beforeEach(() => {
@@ -445,5 +470,48 @@ describe('profile — changing the email (§4.12)', () => {
     await user.click(screen.getByRole('button', { name: 'إرسال رابط التأكيد' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/نطاقات الوزارة/);
+  });
+});
+
+/**
+ * The paths the ministry assigned and where each placed them (§4.12, D-134) —
+ * read-only, because there is nothing here to edit and no retake.
+ */
+describe('profile — assigned paths and placement', () => {
+  it('names each path with the rung it placed them on', () => {
+    setUser({}, assigned(true));
+    renderWithProviders(<ProfilePage />);
+
+    expect(screen.getByRole('link', { name: 'مسار تحليل البيانات' })).toHaveAttribute(
+      'href',
+      '/paths/path-1',
+    );
+    expect(screen.getByText('متقدم')).toBeInTheDocument();
+  });
+
+  it('says the placement is still pending rather than inventing a rung', () => {
+    setUser({}, assigned(false));
+    renderWithProviders(<ProfilePage />);
+
+    expect(screen.getByText('بانتظار تحديد المستوى')).toBeInTheDocument();
+  });
+
+  it('says so plainly when the ministry has assigned nothing', () => {
+    setUser({}, []);
+    renderWithProviders(<ProfilePage />);
+
+    expect(screen.getByText('لم يُسند إليك مسار بعد.')).toBeInTheDocument();
+  });
+
+  it('offers no control to change it', () => {
+    /* The card is a record, not a setting: a form here would imply a learner can
+       move their own rung, which is the opposite of what D-134 guarantees. */
+    setUser({}, assigned(true));
+    renderWithProviders(<ProfilePage />);
+
+    const card = screen.getByText('مساراتك ومستوياتك').closest('div');
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).queryByRole('button')).toBeNull();
+    expect(within(card as HTMLElement).queryByRole('textbox')).toBeNull();
   });
 });
