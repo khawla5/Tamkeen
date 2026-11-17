@@ -11,6 +11,8 @@ Live at **https://tamkeen-iota.vercel.app** (Vercel project `tamkeen`, team Khaw
 
 **Fix needed to run on Vercel:** the Prisma client moved into `apps/api/src/generated/prisma` (D-137); five imports updated, nest-cli copies it to `dist/`. Local `nest build`, typecheck and `certificate-issuance.service.spec` (26) pass. Full suites **not** run.
 
+**Images (same day):** under Services `/_next/image` answers 404, so every `<Image>` was blank — the hero headquarters photos and the header logos. `next.config.ts` now sets `images.unoptimized` when `VERCEL=1` (local dev and `next start` keep the optimizer). Verified in the browser: the hero photo and both logos render.
+
 **Verified live:** `/`, `/login`, `/api/auth/csrf`, `/api/public/paths` → 200; super-admin login → 200, `/api/auth/me` = SUPER_ADMIN.
 
 **Open / not done:** Upstash Redis not provisioned (needs a browser checkout step; `REDIS_URL` unset); Moodle, background sync, durable certificate storage and SMTP are not running. **Security:** the seed read the local `.env` and created `entity@authority.gov.example` and `student@ministry.gov.example` with the local dev passwords; both were **deleted the same day** through `DELETE /api/admin/users/:id` (audited). The live DB now holds only the super-admin. The 8 courses the demo entity owned are ownerless. Lesson: seed a remote DB with an env that does not inherit the local `.env`. The repo copy `khawla5/Tamkeen` was public when last checked. No PR opened (needs the user's approval of the test first).
