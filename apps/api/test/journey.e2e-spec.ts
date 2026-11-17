@@ -459,6 +459,17 @@ describe('Learner journey (e2e)', () => {
       const result = await sit(session, true);
 
       const detail = (await get(`/api/paths/${pathId}`, session).expect(200)).body as PathDetail;
+      const extra = detail.courses.find(
+        (course) => course.status === 'AVAILABLE' && !courseIds.includes(course.id),
+      )!;
+
+      await post('/api/my-path/courses', { courseId: extra.id }, session).expect(204);
+
+      const view = (await get('/api/my-path', session).expect(200)).body as MyPathView;
+      expect(view.totalCount).toBe(PATH_MIN_COURSES + 1);
+      /* TAM-126: every stop carries its certificate id, null until issued. */
+      expect(view.courses.every((course) => course.certificateId === null)).toBe(true);
+    });
 
       expect(detail.levels).toHaveLength(levels.length);
       expect(detail.placedLevel?.id).toBe(result.level.id);

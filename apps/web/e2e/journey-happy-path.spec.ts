@@ -46,6 +46,62 @@ test.describe('Phase 1 journey (D-134)', () => {
     await expect(nav.getByRole('link')).toHaveCount(2);
     await expect(nav.getByRole('link', { name: 'الدورات' })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'مساري' })).toHaveCount(0);
+    await page.goto('/results');
+
+    // ── Build the path ────────────────────────────────────────────────────────
+    await page.getByRole('link', { name: 'استعرض المسار' }).first().click();
+    await expect(page).toHaveURL(/\/paths\//);
+
+    await expect(page.getByText('اخترت 0 من 5–10')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'تأكيد المسار' })).toBeDisabled();
+
+    for (let selected = 1; selected <= 5; selected += 1) {
+      await page.getByRole('button', { name: 'أضف' }).first().click();
+      await expect(page.getByText(`اخترت ${selected} من 5–10`)).toBeVisible();
+    }
+
+    await expect(page.getByRole('button', { name: 'تأكيد المسار' })).toBeEnabled();
+
+    // ── The hard commitment gate ──────────────────────────────────────────────
+    await page.getByRole('button', { name: 'تأكيد المسار' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('لا يمكنك تغيير المسار بعد ذلك');
+    await expect(dialog).toContainText('عدد الدورات: 5');
+
+    await dialog.getByRole('button', { name: 'نعم، أكّد المسار' }).click();
+
+    // ── My Path ───────────────────────────────────────────────────────────────
+    await expect(page).toHaveURL(/\/my-path$/, { timeout: 15_000 });
+
+    await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '5');
+    await expect(page.getByText('0 من 5 دورات مكتملة')).toBeVisible();
+    /* Exactly one course is next up — §4.9's "must not compete with continue". */
+    await expect(page.getByText('التالية', { exact: true })).toHaveCount(1);
+    /* Passed, not merely finished — the gate Phase 3 corrected. */
+    await expect(page.getByText('تُفتح عند اجتياز دوراتك الـ5 — بقيت 5.')).toBeVisible();
+    /* TAM-126: the next-up course holds the page's only action. */
+    await expect(page.getByRole('link', { name: 'ابدأ الدورة' })).toHaveCount(1);
+
+    // ── Into a course, through the player (§4.8, Phase 2) ─────────────────────
+    /* The Phase 2 user-visible flow: My Path no longer links at the LMS
+       directly, because that deep link carries no session. Entry goes through
+       the player, which mints a signed single-use handoff on click (D-044). */
+    await page.getByRole('link', { name: 'ابدأ الدورة' }).first().click();
+    await expect(page).toHaveURL(/\/courses\/[0-9a-f-]+\/player$/, { timeout: 15_000 });
+
+    await expect(page.getByText('الدورة 1 من 5')).toBeVisible();
+    await expect(page.getByText(/منصة التعلّم/)).toBeVisible();
+
+    /* Nothing has been attempted, so no outcome is claimed either way. */
+    await expect(page.getByText('اجتزت هذه الدورة')).toHaveCount(0);
+    await expect(page.getByText('لم تجتز هذه الدورة بعد')).toHaveCount(0);
+
+    /* One action, and the handoff URL is NOT in the page — it is minted when
+       the learner clicks, so a credential never sits in the rendered markup. */
+    await expect(page.getByRole('button', { name: 'ابدأ الدورة' })).toBeVisible();
+    expect(await page.content()).not.toContain('tamkeensso');
 
     /* The catalogue itself opens only once a path is assigned — the URL
        bounces to the dashboard exactly as the nav says it would. */

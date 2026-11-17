@@ -482,6 +482,9 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditActionCode, AuditActionCategory>
   PROFILE_UPDATED: 'learner',
   PROFILE_LMS_SYNC_FAILED: 'learner',
 
+  /* The entity account's own name and its organisation's contact (§4B.6) —
+     the entity portal's housekeeping, filed with the rest of its actions. */
+  ENTITY_PROFILE_UPDATED: 'content',
   ENTITY_COURSE_CREATED: 'content',
   ENTITY_COURSE_METADATA_UPDATED: 'content',
   ENTITY_COURSE_PUBLISHED: 'content',

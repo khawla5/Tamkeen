@@ -71,6 +71,52 @@ export class EnrollmentService {
       throw new NotFoundException('PATH_NOT_ASSIGNED');
     }
 
+    /* One read for every course certificate on this path (TAM-126): the link
+       on a done stop, not a promise — null until the sync has issued one. */
+    const certificates = await this.prisma.certificate.findMany({
+      where: {
+        userId,
+        type: 'COURSE',
+        courseId: { in: userPath.courses.map((chosen) => chosen.course.id) },
+      },
+      select: { id: true, courseId: true },
+    });
+    const certificateByCourse = new Map(
+      certificates.map((certificate) => [certificate.courseId, certificate.id]),
+    );
+
+    let nextAssigned = false;
+    const courses: MyPathCourseView[] = userPath.courses.map((chosen) => {
+      /*
+       * The stored status is now the whole truth. Phase 1 overlaid live LMS
+       * progress here because nothing persisted it yet; the completion-sync job
+       * is that missing writer, and it has arrived (D-036, D-042).
+       *
+       * Removing the overlay is not merely tidying: it took an N+1 call to the
+       * LMS on every render of this page, which against a real Moodle means the
+       * page's latency — and its ability to render at all — depended on the LMS
+       * being up. It no longer does.
+       */
+      const status: UserPathCourseStatus = chosen.status;
+
+      const isNextUp = !nextAssigned && status !== 'COMPLETED';
+      if (isNextUp) {
+        nextAssigned = true;
+      }
+
+      return {
+        id: chosen.id,
+        courseId: chosen.course.id,
+        moodleCourseId: chosen.course.moodleCourseId,
+        title: chosen.course.title,
+        durationMinutes: chosen.course.durationMinutes,
+        order: chosen.displayOrder,
+        status,
+        gradePercent: chosen.gradePercent,
+        isNextUp,
+        certificateId: certificateByCourse.get(chosen.course.id) ?? null,
+      };
+    });
     return this.toMyPathView(ladder);
   }
 

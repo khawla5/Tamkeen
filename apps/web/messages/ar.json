@@ -362,7 +362,7 @@
     "start": "ابدأ الدورة",
     "continue": "تابع الدورة",
     "certificateHeading": "شهادة المسار",
-    "certificateLocked": "تُفتح شهادة المسار بعد اجتياز جميع دوراتك.",
+    "certificateLocked": "تُفتح عند اجتياز دوراتك الـ{total} — بقيت {remaining}.",
     "certificateReady": "أتممت المسار وصدرت شهادتك.",
     "addMore": "إضافة دورة أخرى",
     "emptyTitle": "لم يُسند إليك مسار بعد",

@@ -34,6 +34,12 @@ export interface MyPathCourseView {
   passed: boolean;
   /** Exactly one course carries this at a time (§3). */
   isNextUp: boolean;
+  /**
+   * The course certificate issued to this learner for this course, once the
+   * sync has issued one (§4.9, TAM-126) — read-only here, so My Path can link
+   * to the same file the gallery opens. Null until issued.
+   */
+  certificateId: string | null;
   /** False for a course below the learner's placed level (D-134). */
   startable: boolean;
 }
