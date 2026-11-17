@@ -13,7 +13,7 @@ Live at **https://tamkeen-iota.vercel.app** (Vercel project `tamkeen`, team Khaw
 
 **Verified live:** `/`, `/login`, `/api/auth/csrf`, `/api/public/paths` → 200; super-admin login → 200, `/api/auth/me` = SUPER_ADMIN.
 
-**Open / not done:** Upstash Redis not provisioned (needs a browser checkout step; `REDIS_URL` unset); Moodle, background sync, durable certificate storage and SMTP are not running. **Security:** the seed read the local `.env`, so `entity@authority.gov.example` and `student@ministry.gov.example` exist on the live DB with the local dev passwords — remove or reset them before sharing the URL. The repo copy `khawla5/Tamkeen` was public when last checked. No PR opened (needs the user's approval of the test first).
+**Open / not done:** Upstash Redis not provisioned (needs a browser checkout step; `REDIS_URL` unset); Moodle, background sync, durable certificate storage and SMTP are not running. **Security:** the seed read the local `.env` and created `entity@authority.gov.example` and `student@ministry.gov.example` with the local dev passwords; both were **deleted the same day** through `DELETE /api/admin/users/:id` (audited). The live DB now holds only the super-admin. The 8 courses the demo entity owned are ownerless. Lesson: seed a remote DB with an env that does not inherit the local `.env`. The repo copy `khawla5/Tamkeen` was public when last checked. No PR opened (needs the user's approval of the test first).
 
 ### 2026-10-08 — Dev data: real English programmes placed in the English path (dev DB only, no code)
 
