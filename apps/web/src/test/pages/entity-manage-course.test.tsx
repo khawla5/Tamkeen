@@ -13,8 +13,8 @@ import { renderWithProviders } from '@/test/render';
  * The rules worth pinning in a component test are the ones a screen can quietly
  * break: that publishing is refused *and explained* rather than merely disabled,
  * that exactly one of publish/unpublish is offered, that withdrawing a course
- * learners hold says so before the entity commits, and that the RIASEC letters
- * are shown but not editable (D-066).
+ * learners hold says so before the entity commits, and that an entity offers a
+ * course to a path but never places it on a rung (D-134).
  */
 
 const api = vi.hoisted(() => ({
@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
   publish: vi.fn(),
   unpublish: vi.fn(),
   authorLaunch: vi.fn(),
+  resync: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async () => ({
@@ -33,6 +34,7 @@ vi.mock('@/lib/api-client', async () => ({
     publish: api.publish,
     unpublish: api.unpublish,
     authorLaunch: api.authorLaunch,
+    resync: api.resync,
   },
 }));
 
@@ -58,17 +60,20 @@ const detail = (overrides: Partial<EntityCourseDetail> = {}): EntityCourseDetail
   language: 'AR',
   publication: 'DRAFT',
   status: 'DRAFT',
-  paths: [{ id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E' }],
+  paths: [{ id: 'path-1', name: 'مسار القيادة', placement: 'UNASSIGNED', level: null }],
   objectives: ['هدف أول'],
   prerequisites: null,
-  riasecLetters: ['E'],
   content: { activityCount: 4, hasQuiz: true, completionConfigured: true },
   publishBlockers: [],
   learnersHolding: 0,
   availablePaths: [
-    { id: 'path-1', name: 'مسار القيادة', riasecLetter: 'E' },
-    { id: 'path-2', name: 'مسار التحليل', riasecLetter: 'I' },
+    { id: 'path-1', name: 'مسار القيادة' },
+    { id: 'path-2', name: 'مسار التحليل' },
+    { id: 'path-3', name: 'مسار الإدارة' },
+    { id: 'path-4', name: 'مسار الميدان' },
+    { id: 'path-5', name: 'مسار الخدمة' },
   ],
+  pathRules: { maxPaths: 3, frozen: false },
   enrolledCount: 0,
   completionRate: null,
   ...overrides,
@@ -123,6 +128,13 @@ describe('manage course', () => {
       renderWithProviders(<ManageCoursePage />);
 
       expect(await screen.findByText(/لن يتمكّن أي متدرب من اجتياز/)).toBeInTheDocument();
+
+      /* The one blocker fixed inside Moodle, not this form (TAM-143) — its
+         list item is the one that gets a guide deep link. */
+      expect(screen.getByRole('link', { name: 'دليل إنشاء الدورة' })).toHaveAttribute(
+        'href',
+        '/entity/guide#completion',
+      );
     });
 
     it('publishes when nothing is blocking', async () => {
@@ -209,19 +221,13 @@ describe('manage course', () => {
       });
     });
 
-    it('shows the RIASEC letters but offers no way to edit them (D-066)', async () => {
-      /* §3A makes the path the owner of the letter; a separately authored one
-         could contradict it and nothing downstream would notice. */
+    it('states the cap the server enforces rather than leaving it to be discovered', async () => {
+      /* The number lives in the settings and travels with the course, so the
+         form and the server can never disagree about it (TAM-141). */
       renderWithProviders(<ManageCoursePage />);
-
-      /* The derived value is shown… */
       await screen.findByLabelText('المدة بالدقائق');
-      expect(screen.getAllByText(/تصنيف هولاند/).length).toBeGreaterThan(0);
 
-      /* …and there is no control of any kind to change it. */
-      expect(screen.queryByLabelText(/تصنيف هولاند/)).not.toBeInTheDocument();
-      expect(screen.queryByRole('combobox', { name: /هولاند/ })).not.toBeInTheDocument();
-      expect(screen.queryByRole('textbox', { name: /هولاند/ })).not.toBeInTheDocument();
+      expect(screen.getByText(/بحد أقصى 3 مسارات/)).toBeInTheDocument();
     });
 
     it('confirms a save politely, and the confirmation survives the refetch', async () => {
@@ -249,31 +255,165 @@ describe('manage course', () => {
     });
   });
 
-  describe('authoring in Moodle (D-045, D-060)', () => {
-    it('never renders the handoff URL into the page', async () => {
+  describe('the way to the editor (TAM-139, D-101)', () => {
+    it('links to the content page and mints nothing here', async () => {
       /*
-       * It carries a live, single-use credential. As an href it would sit in the
-       * DOM, in view-source and in any cached copy from the moment the page
-       * loaded — so it is fetched on the click instead.
+       * The author credential is minted in one place — the content page, when
+       * it opens. Manage Course only points there, so nothing carrying a token
+       * can appear on this page at all.
        */
       renderWithProviders(<ManageCoursePage />);
 
-      await screen.findByRole('button', { name: 'حرّر المحتوى في منصة التعلّم' });
+      const link = await screen.findByRole('link', { name: 'افتح محرّر المحتوى' });
+      expect(link).toHaveAttribute('href', '/entity/courses/course-1/content');
 
       expect(document.body.innerHTML).not.toContain('token=');
       expect(api.authorLaunch).not.toHaveBeenCalled();
     });
+  });
 
-    it('mints the handoff when the entity clicks', async () => {
+  describe('path membership rules (TAM-141, D-134)', () => {
+    /* The accessible name carries the disabled reason too, so match by prefix. */
+    const box = (name: string) => screen.getByRole('checkbox', { name: new RegExp('^' + name) });
+
+    it('disables the remaining paths once the cap is reached, and says why', async () => {
       const user = userEvent.setup();
-      api.authorLaunch.mockResolvedValue({ url: 'http://moodle.test/local/tamkeensso/login.php' });
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      /* One already; two more reaches the cap of three. */
+      await user.click(box('مسار الإدارة'));
+      await user.click(box('مسار التحليل'));
+
+      expect(box('مسار الميدان')).toBeDisabled();
+      expect(box('مسار الخدمة')).toBeDisabled();
+      expect(screen.getAllByText('بلغت الحد الأقصى للمسارات.').length).toBeGreaterThan(0);
+      /* A ticked one stays removable. */
+      expect(box('مسار التحليل')).toBeEnabled();
+    });
+
+    it('leaves every remaining path open while the course is under the cap', async () => {
+      /* The letter-coherence rule went with RIASEC (D-134). Nothing but the
+         plain cap narrows the choice now, so two of three must leave the rest
+         selectable — a leftover restriction would refuse a legitimate offer. */
+      const user = userEvent.setup();
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      await user.click(box('مسار التحليل'));
+
+      expect(box('مسار الميدان')).toBeEnabled();
+      expect(box('مسار الخدمة')).toBeEnabled();
+      expect(box('مسار الإدارة')).toBeEnabled();
+    });
+
+    it('freezes a grandfathered course to removals, and explains it', async () => {
+      api.getCourse.mockResolvedValue(
+        detail({
+          paths: [
+            { id: 'path-1', name: 'مسار القيادة', placement: 'UNASSIGNED', level: null },
+            { id: 'path-2', name: 'مسار التحليل', placement: 'UNASSIGNED', level: null },
+            { id: 'path-4', name: 'مسار الميدان', placement: 'UNASSIGNED', level: null },
+          ],
+          pathRules: { maxPaths: 3, frozen: true },
+        }),
+      );
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      expect(screen.getAllByText(/يمكنك إزالة مسارات فقط/).length).toBeGreaterThan(0);
+      expect(box('مسار الخدمة')).toBeDisabled();
+      expect(box('مسار الإدارة')).toBeDisabled();
+      expect(box('مسار الميدان')).toBeEnabled();
+    });
+
+    it('says which memberships reach a learner and which the ministry has not placed', async () => {
+      /* An offered course sitting in no level is invisible to every learner
+         (D-134). An entity that was not told would believe it had published
+         something reachable. */
+      api.getCourse.mockResolvedValue(
+        detail({
+          paths: [
+            { id: 'path-1', name: 'مسار القيادة', placement: 'UNASSIGNED', level: null },
+            {
+              id: 'path-2',
+              name: 'مسار التحليل',
+              placement: 'PLACED',
+              level: { id: 'level-2', name: 'متقدم', position: 2 },
+            },
+          ],
+        }),
+      );
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      expect(screen.getByText('لم تُدرج في مستوى بعد')).toBeInTheDocument();
+      expect(screen.getByText('متقدم')).toBeInTheDocument();
+    });
+
+    it('will not let the entity withdraw a membership the ministry has placed', async () => {
+      /* Absence of the choice, not a refused save: removing it would pull a
+         course out from under learners standing on that rung. */
+      api.getCourse.mockResolvedValue(
+        detail({
+          paths: [
+            {
+              id: 'path-1',
+              name: 'مسار القيادة',
+              placement: 'PLACED',
+              level: { id: 'level-1', name: 'تأسيسي', position: 1 },
+            },
+          ],
+        }),
+      );
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      expect(box('مسار القيادة')).toBeDisabled();
+      expect(box('مسار التحليل')).toBeEnabled();
+    });
+
+    it('offers no control over which level a course sits on', async () => {
+      /* Placement is the ministry's decision alone (D-134); a control here would
+         be one the server refuses with 422. */
+      renderWithProviders(<ManageCoursePage />);
+      await screen.findByLabelText('المدة بالدقائق');
+
+      expect(screen.queryByLabelText(/المستوى/)).not.toBeInTheDocument();
+      expect(screen.getByText(/فتحدده الإدارة/)).toBeInTheDocument();
+    });
+  });
+
+  describe('the manual resync (§4B.4, TAM-133)', () => {
+    it('applies the resync response directly, with no second request', async () => {
+      const user = userEvent.setup();
+      api.resync.mockResolvedValue(detail({ title: 'إدارة المخاطر — محدّثة' }));
 
       renderWithProviders(<ManageCoursePage />);
-      await user.click(await screen.findByRole('button', { name: 'حرّر المحتوى في منصة التعلّم' }));
+      await screen.findByText('إدارة المخاطر');
+      const callsBefore = api.getCourse.mock.calls.length;
+
+      await user.click(screen.getByRole('button', { name: 'تحديث' }));
 
       await waitFor(() => {
-        expect(api.authorLaunch).toHaveBeenCalledWith('course-1');
+        expect(api.resync).toHaveBeenCalledWith('course-1');
       });
+      expect(await screen.findByText('إدارة المخاطر — محدّثة')).toBeInTheDocument();
+      /* The endpoint returns the full detail precisely so this page needs no
+         second request — a `getCourse` here would mean the resync response
+         was thrown away. */
+      expect(api.getCourse.mock.calls.length).toBe(callsBefore);
+    });
+
+    it('reports a failed resync without losing the course', async () => {
+      const user = userEvent.setup();
+      api.resync.mockRejectedValue(new Error('network'));
+
+      renderWithProviders(<ManageCoursePage />);
+      await user.click(await screen.findByRole('button', { name: 'تحديث' }));
+
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText('إدارة المخاطر')).toBeInTheDocument();
     });
   });
 });

@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CatalogSyncService } from './catalog-sync.service';
+import { CourseAvailabilityService } from './course-availability.service';
 
 /**
  * Catalogue sync (Phase 2C).
@@ -12,7 +13,7 @@ import { CatalogSyncService } from './catalog-sync.service';
  */
 @Module({
   imports: [PrismaModule, AuditModule],
-  providers: [CatalogSyncService],
-  exports: [CatalogSyncService],
+  providers: [CatalogSyncService, CourseAvailabilityService],
+  exports: [CatalogSyncService, CourseAvailabilityService],
 })
 export class CatalogSyncModule {}

@@ -59,7 +59,7 @@ There are also (later phases) an **entity/reviewer portal** (organizations that 
 - **Arabic-first.** Arabic is the default and primary language. Full **RTL** layout everywhere. This is an architecture decision set in Phase 0, not a late styling pass. Dates, numerals, and all UI copy default to Arabic. English can be a later add-on but never at the expense of the Arabic experience. **Certificate and CV PDF rendering must correctly render Arabic (RTL, proper shaping).** This is a known hard problem — handle it deliberately.
 - **One path per user, no switching** once confirmed. The confirm step is a hard commitment gate and must show an Arabic confirmation dialog making this explicit.
 - **5–10 courses.** A path cannot be confirmed with fewer than 5 or more than 10 courses. Enforce on both client and server.
-- **One Moodle course can belong to multiple paths** (a modeling fact, so the same course isn't duplicated per path). **Under the current single-path rule, a user only ever works one path, so shared-course "reuse" rarely triggers in practice.** Still implement completion keyed by `(user, moodle_course_id)` so that IF a course ever appears reachable to a user through more than one route, an existing completion is reused and never re-taken. Do not build elaborate cross-path machinery beyond this key.
+- **One Moodle course can belong to multiple paths** (a modeling fact, so the same course isn't duplicated per path). **Path membership rules (LOCKED, D-119):** a course belongs to at most **3** paths spanning at most **2** RIASEC letters (both system settings); an entity's membership is a proposal the admin approves (auto-approved until Phase 5's queue ships); an admin may mark a course **«عامة»** to reach every path without memberships. Courses already over the limits keep them but may only remove. **Under the current single-path rule, a user only ever works one path, so shared-course "reuse" rarely triggers in practice.** Still implement completion keyed by `(user, moodle_course_id)` so that IF a course ever appears reachable to a user through more than one route, an existing completion is reused and never re-taken. Do not build elaborate cross-path machinery beyond this key.
 - **Assessment retake policy (LOCKED):** a user MAY retake the assessment and get a new Holland Code **only while they have NOT confirmed a path**. **Once a path is confirmed, both the path and the assessment result are locked** — no retake, no new recommendations, consistent with one-path-no-switching. Surface this in the UI (a retake option exists pre-commitment; it disappears after).
 - **Course changed/unpackaged after selection (LOCKED):** entities may edit courses, but a course that is **part of any user's confirmed path may not be deleted/unpublished** — it can only be superseded/hidden from *new* selections. Users mid-path keep the version they enrolled in until they complete it. The catalog distinguishes "available to add" from "still completable if already enrolled."
 - **Registration policy (LOCKED, confirm with ministry):** default assumption is **ministry-provisioned / restricted registration** — either accounts are pre-created by admins, or self-registration is gated by an allowed email domain and/or a valid employee ID. Do NOT ship open public registration. (If the ministry wants pure admin-provisioning, that's a settings toggle.)
@@ -177,7 +177,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 ### Recommendation rule (how the recommendation highlight works — LOCKED)
 - A path is shown as **recommended** if its `riasec_letter` **appears in the user's top-three Holland Code**.
 - Recommended paths are **ranked by how high their letter sits in the user's profile** (paths tagged with the user's #1 letter come first, then #2, then #3).
-- All other paths (letters outside the top three) are still shown, normally styled, and **fully selectable** — the highlight is recommendation, not restriction. The treatment is the primary-600 border plus the "موصى به" badge (§3, D-069); "gold" in older decisions refers to this same highlight under the retired palette.
+- All other paths (letters outside the top three) are still **available one click below** — normally styled and **fully selectable**, behind the collapsed "مسارات أخرى" toggle on Results (§4.4, D-113). The highlight is recommendation, not restriction. The treatment is the primary-600 border plus the "موصى به" badge (§3, D-069); "gold" in older decisions refers to this same highlight under the retired palette.
 - The user still commits to **exactly one** path (see §2).
 
 > If the product later wants stricter matching (only the single #1 letter) or looser matching, that is a change to this rule and must be recorded in `decisions.md`.
@@ -191,7 +191,7 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 ### 4.0 Public landing page (الصفحة الرئيسية العامة) — `/landing`, and `/` for signed-out visitors
 - The only page an unauthenticated visitor sees besides auth. **Structure (LOCKED with the 2026-08-23 rebuild): Hero → "عن المنصة" explorer → FAQ → Footer.** No marketing sections (problem/trust/CTA strips were removed as such), no stats, no feature pills.
 - **Hero:** ministry eyebrow, one-line title, one sentence, "إنشاء حساب" + "كيف تعمل المنصة" (jumps to the explorer), the BR-101 eligibility line; on the deep-green ground (`primary-deep`) with the ministry emblem above the Kingdom's map (13 named regions, decorative, animated, hover never touches `fill`).
-- **Explorer:** Absher-style — four stage tabs (التقييم المهني / المسار التدريبي / الدورات / الشهادات والسيرة الذاتية), each stage's steps as a list, the selected step explained from the BRD's functional requirements with the single action "إنشاء حساب". A real `tablist`; steps are `aria-current` buttons.
+- **Explorer (TAM-150, D-123):** one tab per active path — real data from `GET /api/public/paths`, never typed — each panel showing the path's career type (D-099 Arabic name), its skill outcomes, description, course count and typical duration, with the single action "إنشاء حساب". A real `tablist`, horizontal-scrolling at twelve paths. Beneath it, a four-line "how a path is reached" strip (assessment → recommended → build within {min}–{max} → certificate).
 - **FAQ:** six native `<details>`, answers are locked product rules only. **Footer:** identity (emblem + logo, الوزارة، الإدارة العامة للتدريب), the three real links (#about, /register, /login), policy names as plain text until their pages exist, © + classification.
 - **Copy rules:** formal institutional register, specific nouns, no slogans, no symmetrical triplets; every number interpolated from config/constants. All copy is placeholder until الإدارة العامة للتدريب signs it off.
 
@@ -215,25 +215,29 @@ The assessment is a **Holland Codes / RIASEC** career-interest assessment. This 
 
 ### 4.4 Results & Path Selection (النتيجة والمسارات)
 - Top: the user's **Holland Code** (the three letters with their Arabic type names, e.g. اجتماعي / بحثي / فني) + a short plain-language description (2–3 sentences) of what the code means. Optionally a compact visual of the six-dimension ranking.
-- All paths as cards. **Paths whose `riasec_letter` is in the user's top-three code are rendered as recommended** (primary border + "موصى به" badge, D-069) and **sorted by the user's letter ranking** (#1 letter's paths first). All other paths shown normally below, fully selectable.
-- Each card: name, its RIASEC type, one-line description, number of courses available, typical duration.
+- **Recommended paths are grouped by the letter that recommends them (D-113), one section per letter of the user's code, in the user's rank order:** "الأقرب إلى ميلك الأول — الاجتماعي" for #1, then "مناسب أيضًا — {type}" with a quiet "ميلك الثاني" / "ميلك الثالث" tag. **Paths whose `riasec_letter` is in the top-three code are rendered as recommended** (primary border + "موصى به" badge, D-069). A letter with no paths produces no heading. Ordering inside a group is the API's — never re-sorted in the browser.
+- **Compact cards:** name, its RIASEC type, the "موصى به" badge, number of courses available, typical duration, one action. **The description is not on the card** — it lives on the path page the action opens.
+- **Other paths (letters outside the code) sit behind one native `<details>` toggle, "عرض المسارات الأخرى (n)", collapsed on every visit** (D-113) — available one click below, fully selectable, never removed. §3A's _recommendation, not restriction_ is preserved.
 - User must actively choose (the highlight is a recommendation, not a default selection).
+- **After a path is confirmed (D-114):** the chosen path's card carries a "مسارك" marker (neutral, never the recommendation accent) and its one action becomes a link to مساري; **every other card loses its button entirely** — absence, not a disabled control (§3). The result card keeps working as the user's permanent Holland profile; the retake is already gone via `canRetake` (D-015).
 
 ### 4.5 Path detail / build (تفاصيل المسار)
-- Path description at top, then the courses belonging to that path as selectable cards (title, short description, duration, "أضف" toggle).
+- **Header card (D-116):** the path description, its RIASEC type as a tag, the «موصى به» badge when the path is in the user's code, the number of courses on offer, and a **live total of the selected hours** — what the user is committing to, answered before the list asks.
+- Then the path's courses as a **1/2/3-column grid of selectable cards** (title, clamped one-line summary, duration). **The whole card is the toggle** — one control per course, `aria-pressed`, a decorative tick glyph plus the primary border, and the state word (أضف / مضافة / بلغت الحد الأقصى / غير متاحة للإضافة) on the card, so the state is never colour alone. Unavailable and at-max cards are disabled and print their reason.
 - Persistent counter: "اخترت 4 من 5–10". Confirm button disabled until 5–10 selected.
 - **Confirm = hard commitment** (Arabic confirmation dialog: one path, cannot switch). On confirm: lock path + course set, fire Moodle enrollment, go to My Path.
 
 ### 4.6 Courses catalog (الدورات)
-- Global browse of all courses, **available once the assessment is done** (D-071; before that the catalogue is neither in the nav nor reachable by URL — the new user's one action is the assessment). The courses API itself stays open: reading catalogue data leaks nothing and every mutation is server-gated behind a confirmed path. Filters: path-type/category, duration; plus search.
-- Card: title, short description, category, duration, path(s) it belongs to. Click → Course detail.
+- Global browse of all courses, **available once the assessment is done** (D-071; before that the catalogue is neither in the nav nor reachable by URL — the new user's one action is the assessment). The courses API itself stays open: reading catalogue data leaks nothing and every mutation is server-gated behind a confirmed path. Filters: path, duration; plus search — **§4.6's "category" is the path filter** (D-117). All three sit on the shared `Field`/`Input`/`Select` primitives.
+- **Where the page starts depends on the reader (D-117), never what it will show:** a learner with a **confirmed path** lands with that path preselected — «كل المسارات» is one selection away and their choice wins; everyone else lands on the whole catalogue **grouped by path**, one section per path in the API's order (recommended first, in the user's letter rank), each heading carrying the path name, «موصى به» when it applies, and the group's course count. A path with no visible courses produces no heading; a course in two paths appears in both (a lens, not a partition); anything belonging to no listed path falls into a final «دورات خارج المسارات» section. **Any search or filter collapses the grouping into the flat grid** and clearing it restores the grouping.
+- Card: title, short description, duration, path(s) it belongs to as quiet tags, and — **only when the course is in the learner's own path** — exactly one status chip («مكتملة» / «قيد التنفيذ» / «في مسارك»); courses outside it carry none, absence is the signal. The chip is neutral, never the recommendation accent, and shares one implementation with §4.7. Click → Course detail, never the player.
 
 ### 4.7 Course detail (صفحة الدورة)
 - Full description, objectives, prerequisites, duration, path(s), certificate granted.
 - **Single context-dependent primary action:** "أضف إلى مساري" / "ابدأ الدورة" / "مكتمل" (with certificate link). Show only the applicable one.
 
 ### 4.8 Course view / player (محتوى الدورة)
-- Moodle content (handoff or embed). App contribution is thin: a header (course/path context), the Moodle material + quiz, and outcome handling: pass → certificate issued + return to path; fail → clear retake action. Do not rebuild Moodle chrome.
+- **Moodle inside the page** (D-121): a header (course/path context, description, the last outcome), then the Moodle course in an iframe — chrome hidden, course tabs hidden, course index kept, no editing — and beneath it the quiet «افتح في منصة التعلّم» fallback (the D-045 handoff on a fresh token, also shown when the frame never reports ready). Outcome handling: the frame reports a submitted quiz → on-demand completion sync → the outcome updates in seconds; pass → certificate issued (in the sync) + onward link; fail → clear retake (the frame is still there). Do not rebuild Moodle chrome — ours replaces it. Premise: Moodle on a subdomain of the app's site (D-101).
 
 ### 4.9 My Path (مساري)
 - Path name + single progress bar. Ordered list of chosen courses with status (in progress / completed / next-up) and quiz result.
@@ -280,13 +284,13 @@ List of courses this entity owns, each showing status (draft / published / `HIDD
 
 ### 4B.3 Add / Manage Course
 The create + edit flow:
-- Create the course shell, then be HANDED INTO MOODLE (seamless login, D-044) to author content — lectures, videos, materials, quiz + questions — using Moodle's own tools (Model 1).
-- Back in the portal, set the PRODUCT metadata our app owns: path(s) the course belongs to, its RIASEC letter (consistent with the path), duration (product field, D-035), objectives, prerequisites, and course language (D-047).
-- Publish / unpublish / hide — publish makes it appear in the learner catalog; unpublish/hide respects course-edit protection (can't strand mid-path learners).
-- A clear "author content in Moodle" launch action keeps the seam smooth.
+- Create the course shell, then author its content — lectures, videos, materials, quiz + questions — in **Moodle's own editor, framed inside the Course Content page** (§4B.4, D-101; the seamless login of D-044 is the frame's first URL). Model 1 stands: the editor is Moodle's, only its chrome is hidden.
+- Set the PRODUCT metadata our app owns: path(s) the course belongs to — **at most 3, within 2 RIASEC letters, as a proposal the admin approves (D-119)** — its RIASEC letter (derived from the paths), duration (product field, D-035), objectives, prerequisites, and course language (D-047).
+- Publish / unpublish / hide — publish makes it appear in the learner catalog; unpublish/hide respects course-edit protection (can't strand mid-path learners). The publish gate is one shared component, offered on Manage Course and on Course Content alike, with its blockers listed beside it.
+- Manage Course **links** to the editor («افتح محرّر المحتوى»); it mints no launch itself — the author credential is issued in one place, the content page (D-101).
 
-### 4B.4 Course Content (launch-to-Moodle)
-Thin: a launch-into-Moodle button for authoring, plus a read-back summary of what Moodle holds (activities, quiz presence, completion criteria configured — the exact gap D-042 flagged) so the entity can confirm the course is actually completable before publishing. We do not rebuild Moodle's editor.
+### 4B.4 Course Content (the editor, framed)
+The authoring loop on one page (TAM-139, D-101): the page header carries the course's single action — «نشر الدورة» / «إلغاء النشر» (the shared publish gate); a compact **read-back strip** shows what Moodle holds (activities, quiz presence, completion criteria configured — the exact gap D-042 flagged) with the D-061 warning and the publish blockers beside it; below, **Moodle's course editor inside an iframe**, editing on, Moodle's navbar/footer/breadcrumb hidden and its course navigation + course index kept. A content edit — and a course-level edit in the frame's Settings tab (name, summary, visibility) alike — fires `tamkeen:content-changed`, and the portal answers it (and the manual «تحديث») with an **immediate per-course resync** rather than waiting for the scheduled catalogue sync (D-115); the read-back, the title and the publish blockers refresh together from that one response. If the frame never reports ready (blocked framing, refused cookie, LMS down) the page falls back to the full-page handoff on a fresh token; the same «افتح في منصة التعلّم» link sits quietly under the frame at all times. We do not rebuild Moodle's editor. Premise: Moodle on a subdomain of the app's site (D-101).
 
 ### 4B.5 Learners / Review
 For THIS entity's courses only: enrolled learners, per-learner progress, quiz results, completions. Strictly RBAC-scoped. Optional flag/note. No other entities' data; no PII beyond what review requires.
@@ -315,13 +319,13 @@ Edit the Holland/RIASEC assessment: questions, options, and each option's RIASEC
 - Full loading/empty/error states; changes audited.
 
 ### 4C.4 Path Management
-Create/edit study paths: name, description, duration, RIASEC letter (§3A). Manage `path_courses` membership, ordering, and — if ever made configurable — the 5–10 bounds. Retiring a path respects course-edit protection and doesn't strand learners on a confirmed path (D-002).
+Create/edit study paths: name, description, **skill outcomes** (`skill_outcomes`, three to five short directorate-authored noun phrases — what the path produces, feeds the landing explorer, TAM-150/D-123), duration, RIASEC letter (§3A). Manage `path_courses` membership, ordering, and — if ever made configurable — the 5–10 bounds. **Approve or reject entities' path-membership proposals** (`path_courses.status`, D-119) per path, with a reason returned to the entity; every decision audited. Retiring a path respects course-edit protection and doesn't strand learners on a confirmed path (D-002).
 
 ### 4C.5 Course Oversight
-Global view across ALL entities' courses (admin sees everything; entities see only their own). Intervene (hide/retire a problematic course, correct metadata) — respecting course-edit protection (D-040).
+Global view across ALL entities' courses (admin sees everything; entities see only their own). Intervene (hide/retire a problematic course, correct metadata) — respecting course-edit protection (D-040). Mark a course **«عامة»** (`isGeneral`, D-119) so it reaches every path without memberships.
 
 ### 4C.6 System Settings
-The product knobs: pass threshold (D-007), completion-sync interval (D-042), registration policy + real allowed email domain / employee-ID format (D-017; placeholders today), digits/date default (D-018), notification settings, Moodle connection config (base URL; token server-side only). Changes audited.
+The product knobs: pass threshold (D-007), completion-sync interval (D-042), path membership limits + approval (D-119), registration policy + real allowed email domain / employee-ID format (D-017; placeholders today), digits/date default (D-018), notification settings, Moodle connection config (base URL; token server-side only). Changes audited.
 
 ### 4C.7 Certificate Templates
 Manage the certificate look/template and ministry logo/seal + signature block. Because issued certificates store their rendered bytes (immutable), template edits affect only FUTURE issuances — state this in the UI.
@@ -353,8 +357,7 @@ View the audit log (who/what/when) and system-wide reports: completion rates, po
 - **Auth is email/password only — no AD/LDAP, no external SSO** (LOCKED, D-019). The app is the sole identity owner and provisions Moodle accounts behind the scenes. The optional hardening target is app-as-OAuth2-IdP purely to smooth the Moodle handoff if ever needed; it is NOT a ministry SSO requirement.
 
 ### 5.4 Course delivery model
-- **MVP:** **handoff** to a heavily Arabic/RTL-themed Moodle (strong RTL support), app remains the hub.
-- **Later:** embedding inside Course view once the flow is proven.
+- **Embedded** (D-101 for authors, D-121 for learners): Moodle framed inside the portal, its chrome hidden by `local_tamkeensso`, the app the only hub. The full-page **handoff** to Moodle (D-045) remains as the fallback when the frame cannot establish a session, and as the always-available «افتح في منصة التعلّم».
 
 ### 5.5 Completion → certificate loop
 - **MVP mechanism: scheduled sync job.** Backend polls Moodle completion/grade functions for enrolled users every few minutes. A few minutes' latency is acceptable.

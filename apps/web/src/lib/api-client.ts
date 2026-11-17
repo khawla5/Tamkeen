@@ -16,13 +16,16 @@
  */
 
 import type {
+  AdminAssessmentAssignmentRow,
+  AdminAssessmentGroupRow,
+  AdminAssessmentKeyOption,
   AdminAssessmentDraft,
+  AdminAssignResult,
   AdminAttachableCourse,
   AdminCoursePage,
   AdminCourseRow,
-  AdminPathBounds,
-  AdminAuditPage,
   AdminCertificateTemplateView,
+  AdminImpactView,
   AdminReports,
   AdminSettingsView,
   AdminPathDetail,
@@ -36,9 +39,9 @@ import type {
   AdminUserDetail,
   AdminUserPage,
   AdminUserRow,
-  RiasecLetter,
   UserRole,
   AssessmentResultView,
+  AssignmentScope,
   CertificateSummary,
   CvProfile,
   CvView,
@@ -47,11 +50,12 @@ import type {
   AssessmentView,
   CourseDetail,
   CourseLaunchView,
+  CourseOutlineView,
   CoursePlayerView,
   CourseLanguage,
   CoursePublication,
-  CourseStatus,
   CourseSummary,
+  CourseVisibility,
   DashboardView,
   EntityAuthorLaunchView,
   EntityCourseContentView,
@@ -64,7 +68,10 @@ import type {
   MyPathView,
   NumberFormat,
   PathDetail,
-  PathRecommendations,
+  AssignedPaths,
+  PathStatus,
+  PlacementBand,
+  PublicPathSummary,
   UnreadNotificationsView,
 } from '@tamkeen/types';
 
@@ -274,8 +281,12 @@ export const authApi = {
     api.post<{ status: string }>('/api/auth/forgot-password', { email }),
 
   /** §4.12: change your own password, proving the current one. */
-  changePassword: (currentPassword: string, newPassword: string) =>
-    api.post<void>('/api/auth/change-password', { currentPassword, newPassword }),
+  changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) =>
+    api.post<void>('/api/auth/change-password', {
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    }),
 
   /**
    * §4.12: ask to move the account to a new address.
@@ -311,16 +322,30 @@ export const profileApi = {
  * returns, so a contract change is a compile error on both sides rather than a
  * runtime surprise on one.
  */
+/**
+ * §4.3 — a path's placement assessment (D-134).
+ *
+ * Every route is under the path, because there is no such thing as "the
+ * assessment" any more: an employee may hold two paths and owe two of them.
+ */
 export const assessmentApi = {
-  get: () => api.get<AssessmentView>('/api/assessment'),
-  result: () => api.get<AssessmentResultView | null>('/api/assessment/result'),
-  submit: (submission: AssessmentSubmission) =>
-    api.post<AssessmentResultView>('/api/assessment/submit', submission),
+  get: (pathId: string) => api.get<AssessmentView>(`/api/paths/${pathId}/assessment`),
+  result: (pathId: string) =>
+    api.get<AssessmentResultView | null>(`/api/paths/${pathId}/assessment/result`),
+  submit: (pathId: string, submission: AssessmentSubmission) =>
+    api.post<AssessmentResultView>(`/api/paths/${pathId}/assessment/attempts`, submission),
 };
 
 export const pathsApi = {
-  list: () => api.get<PathRecommendations>('/api/paths'),
+  /** The paths the ministry assigned. Never a catalogue (D-130). */
+  list: () => api.get<AssignedPaths>('/api/paths'),
   detail: (pathId: string) => api.get<PathDetail>(`/api/paths/${pathId}`),
+};
+
+/** The landing explorer's one unauthenticated read (TAM-150) — no session, no
+ *  CSRF, so it is deliberately not folded into `pathsApi`. */
+export const publicApi = {
+  paths: () => api.get<PublicPathSummary[]>('/api/public/paths'),
 };
 
 export interface CourseFilters {
@@ -352,16 +377,27 @@ export const coursesApi = {
    * must not be prefetched or cached, and as a POST it carries the CSRF token
    * every mutating request does (D-044).
    */
-  launch: (courseId: string) => api.post<CourseLaunchView>(`/api/courses/${courseId}/launch`),
+  launch: (courseId: string, options: { embed?: boolean } = {}) =>
+    api.post<CourseLaunchView>(`/api/courses/${courseId}/launch`, {
+      embed: options.embed === true,
+    }),
+  /** The framed player's previous / next (D-122). */
+  outline: (courseId: string) => api.get<CourseOutlineView>(`/api/courses/${courseId}/outline`),
+  /** On-demand completion sync after the framed quiz reports itself (D-121). */
+  sync: (courseId: string) => api.post<{ synced: boolean }>(`/api/courses/${courseId}/sync`),
 };
 
+/**
+ * §4.9 — read-only, all of it (D-134).
+ *
+ * Selecting a path, setting its courses and confirming were the four writes
+ * here, and the decisions they carried are gone: the ministry assigns the path
+ * and the assessment decides where in it a learner starts.
+ */
 export const myPathApi = {
-  get: () => api.get<MyPathView | null>('/api/my-path'),
-  selectPath: (pathId: string) => api.post<void>('/api/my-path/select', { pathId }),
-  setCourses: (courseIds: string[]) =>
-    api.put<{ selectedCourseIds: string[] }>('/api/my-path/courses', { courseIds }),
-  addCourse: (courseId: string) => api.post<void>('/api/my-path/courses', { courseId }),
-  confirm: () => api.post<MyPathView>('/api/my-path/confirm'),
+  get: (pathId?: string) =>
+    api.get<MyPathView | null>(`/api/my-path${pathId ? `?pathId=${pathId}` : ''}`),
+  all: () => api.get<MyPathView[]>('/api/my-path/all'),
 };
 
 export const cvApi = {
@@ -428,6 +464,9 @@ export const certificatesApi = {
  */
 export const entityApi = {
   profile: () => api.get<EntityProfileView | null>('/api/entity/me'),
+  /** §4B.6 — the account's own name and the organisation's contact, one save. */
+  updateProfile: (input: { fullName: string; contactName: string; contactEmail: string }) =>
+    api.patch<EntityProfileView>('/api/entity/me', input),
   dashboard: () => api.get<EntityDashboardView>('/api/entity/dashboard'),
 
   listCourses: (filters: { q?: string; publication?: CoursePublication } = {}) => {
@@ -461,6 +500,15 @@ export const entityApi = {
 
   content: (courseId: string) =>
     api.get<EntityCourseContentView | null>(`/api/entity/courses/${courseId}/content`),
+
+  /**
+   * Re-reads this one course from the LMS right now (§4B.4, TAM-133) —
+   * called on the frame's own edit signal and on the manual «تحديث», never on
+   * a plain page load. Returns the full detail in one response, so title,
+   * status, the read-back and the publish blockers all refresh together.
+   */
+  resync: (courseId: string) =>
+    api.post<EntityCourseDetail>(`/api/entity/courses/${courseId}/resync`),
 
   publish: (courseId: string) =>
     api.post<EntityCourseDetail>(`/api/entity/courses/${courseId}/publish`),
@@ -542,8 +590,10 @@ export const adminApi = {
   setUserStatus: (userId: string, status: 'ACTIVE' | 'SUSPENDED') =>
     api.patch<AdminUserRow>(`/api/admin/users/${userId}/status`, { status }),
 
-  setUserRole: (userId: string, role: UserRole, entityId?: string) =>
-    api.patch<AdminUserRow>(`/api/admin/users/${userId}/role`, { role, entityId }),
+  deleteUser: (userId: string) => api.delete<void>(`/api/admin/users/${userId}`),
+
+  setUserDepartment: (userId: string, department: string) =>
+    api.patch<AdminUserRow>(`/api/admin/users/${userId}/department`, { department }),
 
   registrationPolicy: () => api.get<AdminRegistrationPolicyView>('/api/admin/registration-policy'),
 
@@ -567,54 +617,106 @@ export const adminApi = {
     },
   ) => api.patch<AdminEntityRow>(`/api/admin/entities/${entityId}`, patch),
 
-  // §4C.3 — the assessment
-  assessmentOverview: () => api.get<AdminAssessmentOverview>('/api/admin/assessment'),
+  // §4C.3 — a path's placement assessment (D-134)
+  assessmentOverview: (pathId: string) =>
+    api.get<AdminAssessmentOverview>(`/api/admin/paths/${pathId}/assessment`),
 
   /**
-   * The draft bank, weights included.
+   * The draft bank, answer key included.
    *
-   * The one call in this client that receives RIASEC weightings. It answers only
-   * to a SUPER_ADMIN session; the learner's `assessmentApi.getActive()` returns
-   * the same questions with the weights stripped (D-034), and an integration
-   * test greps that response to keep it that way.
+   * The one call in this client that receives `isCorrect`, `marks` and the level
+   * an item targets. It answers only to a SUPER_ADMIN session; the learner's
+   * `assessmentApi.get()` returns the same questions with all three stripped
+   * (D-034), and an integration test greps that response to keep it that way.
    */
-  assessmentDraft: () => api.get<AdminAssessmentDraft>('/api/admin/assessment/draft'),
+  assessmentDraft: (pathId: string) =>
+    api.get<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft`),
 
-  createAssessmentDraft: () => api.post<AdminAssessmentDraft>('/api/admin/assessment/draft', {}),
+  createAssessmentDraft: (pathId: string) =>
+    api.post<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft`, {}),
 
-  discardAssessmentDraft: () => api.delete<void>('/api/admin/assessment/draft'),
+  discardAssessmentDraft: (pathId: string) =>
+    api.delete<void>(`/api/admin/paths/${pathId}/assessment/draft`),
 
-  updateAssessmentDraft: (patch: { title?: string; description?: string }) =>
-    api.patch<AdminAssessmentDraft>('/api/admin/assessment/draft', patch),
+  updateAssessmentDraft: (pathId: string, patch: { title?: string; description?: string }) =>
+    api.patch<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft`, patch),
 
-  addDraftQuestion: (input: { text: string; letter: RiasecLetter }) =>
-    api.post<AdminAssessmentDraft>('/api/admin/assessment/draft/questions', input),
+  /** The placement rule. An empty list returns the path to the even split. */
+  setAssessmentBands: (pathId: string, bands: PlacementBand[]) =>
+    api.patch<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft/bands`, { bands }),
 
-  updateDraftQuestion: (questionId: string, patch: { text?: string }) =>
-    api.patch<AdminAssessmentDraft>(`/api/admin/assessment/draft/questions/${questionId}`, patch),
+  addDraftQuestion: (
+    pathId: string,
+    input: { text: string; marks?: number; levelId?: string | null; topic?: string | null },
+  ) =>
+    api.post<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft/questions`, input),
 
-  removeDraftQuestion: (questionId: string) =>
-    api.delete<AdminAssessmentDraft>(`/api/admin/assessment/draft/questions/${questionId}`),
+  updateDraftQuestion: (
+    pathId: string,
+    questionId: string,
+    patch: { text?: string; marks?: number; levelId?: string | null; topic?: string | null },
+  ) =>
+    api.patch<AdminAssessmentDraft>(
+      `/api/admin/paths/${pathId}/assessment/draft/questions/${questionId}`,
+      patch,
+    ),
 
-  reorderDraft: (questionIds: string[]) =>
-    api.patch<AdminAssessmentDraft>('/api/admin/assessment/draft/order', { questionIds }),
+  removeDraftQuestion: (pathId: string, questionId: string) =>
+    api.delete<AdminAssessmentDraft>(
+      `/api/admin/paths/${pathId}/assessment/draft/questions/${questionId}`,
+    ),
+
+  reorderDraft: (pathId: string, questionIds: string[]) =>
+    api.patch<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/draft/questions/order`, {
+      questionIds,
+    }),
 
   updateDraftOption: (
+    pathId: string,
     optionId: string,
-    patch: { label?: string; weights?: Partial<Record<RiasecLetter, number>> },
-  ) => api.patch<AdminAssessmentDraft>(`/api/admin/assessment/draft/options/${optionId}`, patch),
+    patch: { label?: string; isCorrect?: boolean },
+  ) =>
+    api.patch<AdminAssessmentDraft>(
+      `/api/admin/paths/${pathId}/assessment/draft/options/${optionId}`,
+      patch,
+    ),
 
-  publishAssessment: () =>
-    api.post<AdminAssessmentVersion>('/api/admin/assessment/draft/publish', {}),
+  publishAssessment: (pathId: string) =>
+    api.post<AdminAssessmentVersion>(`/api/admin/paths/${pathId}/assessment/publish`, {}),
 
-  assessmentVersion: (assessmentId: string) =>
-    api.get<AdminAssessmentDraft>(`/api/admin/assessment/versions/${assessmentId}`),
+  assessmentVersion: (pathId: string, assessmentId: string) =>
+    api.get<AdminAssessmentDraft>(`/api/admin/paths/${pathId}/assessment/versions/${assessmentId}`),
 
-  // §4C.4 — study paths
+  // §4C.3 — assignment (TAM-147): who is handed which instrument or group
+  assessmentKeys: () => api.get<AdminAssessmentKeyOption[]>('/api/admin/assessment-keys'),
+
+  listAssignments: () =>
+    api.get<AdminAssessmentAssignmentRow[]>('/api/admin/assessment-assignments'),
+
+  createAssignment: (input: {
+    assessmentKey: string;
+    scope: AssignmentScope;
+    target?: string;
+    required: boolean;
+    displayOrder: number;
+  }) => api.post<AdminAssessmentAssignmentRow[]>('/api/admin/assessment-assignments', input),
+
+  updateAssignment: (id: string, patch: { required?: boolean; displayOrder?: number }) =>
+    api.patch<AdminAssessmentAssignmentRow[]>(`/api/admin/assessment-assignments/${id}`, patch),
+
+  removeAssignment: (id: string) =>
+    api.delete<AdminAssessmentAssignmentRow[]>(`/api/admin/assessment-assignments/${id}`),
+
+  listAssessmentGroups: () => api.get<AdminAssessmentGroupRow[]>('/api/admin/assessment-groups'),
+
+  saveAssessmentGroup: (input: { key: string; name: string; memberKeys: string[] }) =>
+    api.put<AdminAssessmentGroupRow[]>('/api/admin/assessment-groups', input),
+
+  removeAssessmentGroup: (id: string) =>
+    api.delete<AdminAssessmentGroupRow[]>(`/api/admin/assessment-groups/${id}`),
+
+  // §4C.4 — study paths, their ladders, and what is placed on them
   listPaths: () => api.get<AdminPathRow[]>('/api/admin/paths'),
-
-  /** The 5-10 rule. Read-only: there is no endpoint that writes it (D-074). */
-  pathBounds: () => api.get<AdminPathBounds>('/api/admin/paths/bounds'),
 
   getPath: (pathId: string) => api.get<AdminPathDetail>(`/api/admin/paths/${pathId}`),
 
@@ -628,7 +730,6 @@ export const adminApi = {
     key: string;
     name: string;
     description: string;
-    riasecLetter: RiasecLetter;
     typicalDurationMinutes?: number;
   }) => api.post<AdminPathDetail>('/api/admin/paths', input),
 
@@ -637,31 +738,71 @@ export const adminApi = {
     patch: {
       name?: string;
       description?: string;
-      riasecLetter?: RiasecLetter;
+      skillOutcomes?: string[];
       typicalDurationMinutes?: number;
       displayOrder?: number;
-      isActive?: boolean;
+      status?: PathStatus;
     },
   ) => api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}`, patch),
 
-  /** Permanent removal, refused for any path somebody ever chose (§4C.4). */
+  /** Permanent removal, refused for any path somebody was ever assigned. */
   deletePath: (pathId: string) => api.delete<void>(`/api/admin/paths/${pathId}`),
 
+  /** Adds a course to the path. It lands unassigned, always (D-134). */
   attachPathCourse: (pathId: string, courseId: string) =>
     api.post<AdminPathDetail>(`/api/admin/paths/${pathId}/courses`, { courseId }),
 
-  detachPathCourse: (pathId: string, courseId: string) =>
-    api.delete<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/${courseId}`),
+  detachPathCourse: (pathId: string, pathCourseId: string) =>
+    api.delete<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/${pathCourseId}`),
 
-  reorderPathCourses: (pathId: string, courseIds: string[]) =>
-    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/courses/order`, { courseIds }),
+  // The ladder
+  createLevel: (pathId: string, name: string) =>
+    api.post<AdminPathDetail>(`/api/admin/paths/${pathId}/levels`, { name }),
+
+  renameLevel: (pathId: string, levelId: string, name: string) =>
+    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/levels/${levelId}`, { name }),
+
+  /** Its courses revert to unassigned; none is deleted. */
+  deleteLevel: (pathId: string, levelId: string) =>
+    api.delete<AdminPathDetail>(`/api/admin/paths/${pathId}/levels/${levelId}`),
+
+  reorderLevels: (pathId: string, levelIds: string[]) =>
+    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/levels/order`, { levelIds }),
+
+  /**
+   * Places a course on a rung, moves it, or takes it off (`levelId: null`).
+   *
+   * The one call in the product that writes a placement, and it is admin-only —
+   * an entity has no vocabulary for it (D-134).
+   */
+  placeCourse: (
+    pathId: string,
+    pathCourseId: string,
+    placement: { levelId: string | null; position?: number },
+  ) =>
+    api.patch<AdminPathDetail>(
+      `/api/admin/paths/${pathId}/courses/${pathCourseId}/placement`,
+      placement,
+    ),
+
+  reorderLevelCourses: (pathId: string, levelId: string, pathCourseIds: string[]) =>
+    api.patch<AdminPathDetail>(`/api/admin/paths/${pathId}/levels/${levelId}/order`, {
+      pathCourseIds,
+    }),
+
+  // §4C.2 — which paths an employee is on (D-130/D-133)
+  assignPath: (pathId: string, userIds: string[]) =>
+    api.post<AdminAssignResult>('/api/admin/path-assignments', { pathId, userIds }),
+
+  revokePath: (userId: string, pathId: string) =>
+    api.delete<void>(`/api/admin/path-assignments/${userId}/${pathId}`),
 
   // §4C.5 — course oversight
   listCourses: (
     filters: {
       q?: string;
       publication?: CoursePublication;
-      status?: CourseStatus;
+      visibility?: CourseVisibility;
       entityId?: string;
       unowned?: boolean;
       page?: number;
@@ -671,7 +812,7 @@ export const adminApi = {
 
     if (filters.q) query.set('q', filters.q);
     if (filters.publication) query.set('publication', filters.publication);
-    if (filters.status) query.set('status', filters.status);
+    if (filters.visibility) query.set('visibility', filters.visibility);
     if (filters.entityId) query.set('entityId', filters.entityId);
     if (filters.unowned) query.set('unowned', 'true');
     if (filters.page && filters.page > 1) query.set('page', String(filters.page));
@@ -681,11 +822,30 @@ export const adminApi = {
     return api.get<AdminCoursePage>(`/api/admin/courses${suffix ? `?${suffix}` : ''}`);
   },
 
-  /** Hide, restore, or place a course with an organisation. Never sets status. */
+  /**
+   * Hide, restore, place a course with an organisation, or set its availability
+   * window. Never sets status — that is derived (D-059).
+   *
+   * The window bounds are `YYYY-MM-DD` or `null` to clear; omitting one leaves
+   * it as it was, which is why they are optional *and* nullable.
+   */
   interveneCourse: (
     courseId: string,
-    patch: { publication?: CoursePublication; ownerEntityId?: string | null },
+    patch: {
+      publication?: CoursePublication;
+      ownerEntityId?: string | null;
+      availableFrom?: string | null;
+      availableUntil?: string | null;
+    },
   ) => api.patch<AdminCourseRow>(`/api/admin/courses/${courseId}`, patch),
+
+  /**
+   * Permanent removal — from the LMS and from the catalogue (§4C.5, TAM-134).
+   *
+   * Refused for any course a learner holds, a certificate names, or a completion
+   * records; the row's `canDelete` says so in advance.
+   */
+  deleteCourse: (courseId: string) => api.delete<void>(`/api/admin/courses/${courseId}`),
 
   // §4C.6 — system settings
   settings: () => api.get<AdminSettingsView>('/api/admin/settings'),
@@ -702,44 +862,55 @@ export const adminApi = {
    * Read-only: the signature block is three settings, and `updateSetting` above
    * is the one writer for those rows (D-072).
    */
-  certificateTemplate: () =>
-    api.get<AdminCertificateTemplateView>('/api/admin/certificate-template'),
-
-  // §4C.8 — audit and reports
-  auditLog: (
-    filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE'; before?: string } = {},
-  ) => {
+  /**
+   * With `userId` / `pathId` the preview is drawn for that real employee and path;
+   * left out, it stays the sample. Only what is set goes in the query — the API
+   * rejects malformed parameters, so an empty one would be a 400.
+   */
+  certificateTemplate: (subject: { userId?: string; pathId?: string } = {}) => {
     const query = new URLSearchParams();
 
-    if (filters.action) query.set('action', filters.action);
-    if (filters.outcome) query.set('outcome', filters.outcome);
-    if (filters.before) query.set('before', filters.before);
+    if (subject.userId) query.set('userId', subject.userId);
+    if (subject.pathId) query.set('pathId', subject.pathId);
 
     const suffix = query.toString();
 
-    return api.get<AdminAuditPage>(`/api/admin/audit${suffix ? `?${suffix}` : ''}`);
+    return api.get<AdminCertificateTemplateView>(
+      `/api/admin/certificate-template${suffix ? `?${suffix}` : ''}`,
+    );
   },
 
+  // §4C.8 — the impact figures. (The audit trail has no screen any more; the API still
+  // records and serves it.)
   reports: () => api.get<AdminReports>('/api/admin/reports'),
 
   /**
-   * Where the CSV exports live.
+   * §4C.8's «الأثر» — participation and learning by period and department
+   * (TAM-149).
    *
-   * Plain URLs rather than a fetch-and-blob: the session is an httpOnly cookie
-   * on the API's origin, so an ordinary link carries it and the browser handles
-   * the download — while a fetched blob would need the bytes in memory and a
-   * synthetic anchor to save them.
+   * The two ends are sent the way the trail's filter sends them: a day, not an
+   * instant, so `to=2026-08-31` covers the whole of the day the administrator
+   * asked for rather than stopping at its first millisecond.
    */
-  reportsCsvUrl: () => `${API_URL}/api/admin/reports.csv`,
-
-  auditCsvUrl: (filters: { action?: string; outcome?: 'SUCCESS' | 'FAILURE' } = {}) => {
+  impact: (filters: { from?: string; to?: string; department?: string } = {}) => {
     const query = new URLSearchParams();
 
-    if (filters.action) query.set('action', filters.action);
-    if (filters.outcome) query.set('outcome', filters.outcome);
+    if (filters.from) query.set('from', `${filters.from}T00:00:00.000`);
+    if (filters.to) query.set('to', `${filters.to}T23:59:59.999`);
+    if (filters.department) query.set('department', filters.department);
 
     const suffix = query.toString();
 
-    return `${API_URL}/api/admin/audit.csv${suffix ? `?${suffix}` : ''}`;
+    return api.get<AdminImpactView>(`/api/admin/impact${suffix ? `?${suffix}` : ''}`);
   },
+
+  /**
+   * Where the reports export lives.
+   *
+   * A plain URL rather than a fetch-and-blob: the session is an httpOnly cookie
+   * on the API's origin, so an ordinary link carries it and the browser handles
+   * the download. The *audit* export is built in the browser instead (TAM-138) —
+   * its every column is Arabic copy, and that lives in the message catalogue.
+   */
+  reportsCsvUrl: () => `${API_URL}/api/admin/reports.csv`,
 };

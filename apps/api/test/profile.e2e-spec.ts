@@ -11,6 +11,7 @@ import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
 import { MockLmsService } from '../src/moodle/mock/mock-lms.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * §4.12's profile surface, over real HTTP against a real database (§2B).
@@ -146,7 +147,7 @@ describe('Profile (e2e)', () => {
         email,
         passwordHash: await hashPassword(PASSWORD),
         fullName: 'موظف الملف الشخصي',
-        employeeId: `P-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'قسم',
         role: 'EMPLOYEE',
         emailVerifiedAt: new Date(),
@@ -178,7 +179,7 @@ describe('Profile (e2e)', () => {
       expect(response.body).toMatchObject({
         fullName: 'موظف الملف الشخصي',
         department: 'قسم',
-        employeeId: expect.stringContaining(`P-${RUN_ID}`) as string,
+        employeeId: numericEmployeeId(RUN_ID, 'me-fields'),
         role: 'EMPLOYEE',
       });
     });
@@ -378,6 +379,7 @@ describe('Profile (e2e)', () => {
       await send('post', '/api/auth/change-password', {
         currentPassword: PASSWORD,
         newPassword: 'another-long-password',
+        confirmPassword: 'another-long-password',
       }).expect(401);
     });
 
@@ -388,7 +390,11 @@ describe('Profile (e2e)', () => {
       await send(
         'post',
         '/api/auth/change-password',
-        { currentPassword: 'not-the-password', newPassword: 'another-long-password' },
+        {
+          currentPassword: 'not-the-password',
+          newPassword: 'another-long-password',
+          confirmPassword: 'another-long-password',
+        },
         session,
       ).expect(401);
 
@@ -412,7 +418,7 @@ describe('Profile (e2e)', () => {
       const response = await send(
         'post',
         '/api/auth/change-password',
-        { currentPassword: PASSWORD, newPassword: PASSWORD },
+        { currentPassword: PASSWORD, newPassword: PASSWORD, confirmPassword: PASSWORD },
         session,
       ).expect(400);
 
@@ -429,7 +435,7 @@ describe('Profile (e2e)', () => {
       await send(
         'post',
         '/api/auth/change-password',
-        { currentPassword: PASSWORD, newPassword: 'short' },
+        { currentPassword: PASSWORD, newPassword: 'short', confirmPassword: 'short' },
         session,
       ).expect(400);
     });
@@ -442,7 +448,7 @@ describe('Profile (e2e)', () => {
       await send(
         'post',
         '/api/auth/change-password',
-        { currentPassword: PASSWORD, newPassword: next },
+        { currentPassword: PASSWORD, newPassword: next, confirmPassword: next },
         session,
       ).expect(204);
 
@@ -460,7 +466,11 @@ describe('Profile (e2e)', () => {
       await send(
         'post',
         '/api/auth/change-password',
-        { currentPassword: PASSWORD, newPassword: 'yet-another-long-password' },
+        {
+          currentPassword: PASSWORD,
+          newPassword: 'yet-another-long-password',
+          confirmPassword: 'yet-another-long-password',
+        },
         here,
       ).expect(204);
 
@@ -469,6 +479,105 @@ describe('Profile (e2e)', () => {
       /* And the person who just did it is not — being logged out of the page you
          are standing on reads as a failure, and invites a second change. */
       await get('/api/auth/me', here).expect(200);
+    });
+
+    it('refuses a confirmation that does not match, before touching anything', async () => {
+      const email = await account('mismatch');
+      const session = await signIn(email);
+
+      const response = await send(
+        'post',
+        '/api/auth/change-password',
+        {
+          currentPassword: PASSWORD,
+          newPassword: 'a-new-long-password',
+          confirmPassword: 'a-new-long-passw0rd',
+        },
+        session,
+      ).expect(400);
+
+      /* The client checks this too, but the server is the last line: a form
+         that skipped the check would otherwise store a password the person
+         typed once and cannot repeat. */
+      expect((response.body as { message: string }).message).toBe('PASSWORDS_DO_NOT_MATCH');
+
+      /* Nothing moved: the old password still signs in, and the failure counter
+         is untouched — a typo in the confirmation is not a guess at anything. */
+      await signIn(email);
+      expect((await prisma.user.findUnique({ where: { email } }))?.failedLoginAttempts).toBe(0);
+    });
+
+    it('counts a wrong current password toward the same lockout as sign-in', async () => {
+      const email = await account('lockout');
+      const session = await signIn(email);
+      const guess = {
+        currentPassword: 'not-the-password',
+        newPassword: 'another-long-password',
+        confirmPassword: 'another-long-password',
+      };
+
+      /* AUTH_MAX_FAILED_ATTEMPTS defaults to 5 — the same threshold sign-in
+         uses. A stolen session must not buy an attacker an unlimited number of
+         guesses at the one thing that would let them keep the account. */
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await send('post', '/api/auth/change-password', guess, session).expect(401);
+      }
+
+      const locked = await prisma.user.findUnique({ where: { email } });
+      expect(locked?.failedLoginAttempts).toBe(5);
+      expect(locked?.lockedUntil).not.toBeNull();
+
+      /* Locked is locked: the RIGHT current password is refused here, with the
+         same code sign-in gives, so the page can say why waiting will help. */
+      const refused = await send(
+        'post',
+        '/api/auth/change-password',
+        {
+          currentPassword: PASSWORD,
+          newPassword: 'a-new-long-password',
+          confirmPassword: 'a-new-long-password',
+        },
+        session,
+      ).expect(401);
+      expect((refused.body as { message: string }).message).toBe('ACCOUNT_LOCKED');
+
+      /* And sign-in itself is locked — one counter, one lockout. */
+      const login = await send('post', '/api/auth/login', { email, password: PASSWORD }).expect(
+        401,
+      );
+      expect((login.body as { message: string }).message).toBe('ACCOUNT_LOCKED');
+    }, 120_000);
+
+    it('clears the failure counter once the current password is proven', async () => {
+      const email = await account('counter');
+      const session = await signIn(email);
+
+      await send(
+        'post',
+        '/api/auth/change-password',
+        {
+          currentPassword: 'not-the-password',
+          newPassword: 'another-long-password',
+          confirmPassword: 'another-long-password',
+        },
+        session,
+      ).expect(401);
+      expect((await prisma.user.findUnique({ where: { email } }))?.failedLoginAttempts).toBe(1);
+
+      await send(
+        'post',
+        '/api/auth/change-password',
+        {
+          currentPassword: PASSWORD,
+          newPassword: 'another-long-password',
+          confirmPassword: 'another-long-password',
+        },
+        session,
+      ).expect(204);
+
+      /* Proving the password is what a successful sign-in proves; the counter
+         resets for the same reason. */
+      expect((await prisma.user.findUnique({ where: { email } }))?.failedLoginAttempts).toBe(0);
     });
   });
 
@@ -782,7 +891,7 @@ describe('Profile (e2e)', () => {
           email: target,
           passwordHash: await hashPassword(PASSWORD),
           fullName: 'موظف آخر',
-          employeeId: `PR-${RUN_ID}-race`.slice(0, 20),
+          employeeId: numericEmployeeId(RUN_ID, 'race'),
           department: 'قسم',
           role: 'EMPLOYEE',
           emailVerifiedAt: new Date(),

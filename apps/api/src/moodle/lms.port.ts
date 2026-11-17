@@ -3,6 +3,7 @@ import type {
   EnrolInput,
   LmsCourse,
   LmsCourseContentSummary,
+  LmsCourseOutlineItem,
   LmsCourseId,
   LmsCourseProgress,
   LmsHealth,
@@ -105,12 +106,41 @@ export interface LmsPort {
   createCourse(input: CreateCourseInput): Promise<LmsCourse>;
 
   /**
+   * Permanently removes a course from the LMS (§4C.5, TAM-134).
+   *
+   * **Why this is on the port at all**, when nothing else in the product deletes
+   * anything: our `courses` row is a mirror, and the LMS is the source of truth
+   * for a course *existing* (§1). Deleting only our side would have the very next
+   * catalogue sync rediscover the course and re-enter it as an unowned draft —
+   * so a "permanent delete" that stopped at our database would put the course
+   * back in the administrator's own list minutes later. Either the deletion
+   * reaches the LMS or it is not a deletion, and calling it one would be worse
+   * than not offering it.
+   *
+   * **Idempotent**, like `provisionUser` and `enrol`: deleting a course the LMS
+   * no longer has is a successful no-op. The caller deletes there first and
+   * here second, so a half-failed delete must be safe to retry.
+   *
+   * The product refuses to call this for any course a learner holds or a
+   * certificate names — that rule is ours and lives in the admin service, not
+   * here (this port carries no product logic).
+   */
+  deleteCourse(lmsCourseId: LmsCourseId): Promise<void>;
+
+  /**
    * What the LMS holds inside a course (§4B.4, D-061).
    *
    * Read back so an entity can see, **before publishing**, whether the course is
    * actually completable. Returns null when the course does not exist.
    */
   getCourseContentSummary(lmsCourseId: LmsCourseId): Promise<LmsCourseContentSummary | null>;
+
+  /**
+   * The course's activities in order (D-122) — the framed player's previous /
+   * next. Labels and anything without a page of its own are omitted. Empty for
+   * a course the LMS does not know.
+   */
+  getCourseOutline(lmsCourseId: LmsCourseId): Promise<LmsCourseOutlineItem[]>;
 
   /**
    * Enrols a user in a course. Idempotent — enrolling an already-enrolled user
@@ -175,8 +205,12 @@ export interface LmsPort {
 
 /** How the launched course should present itself (TAM-129). */
 export interface LaunchOptions {
-  /** `'author'`: framed by the entity portal, chrome hidden, editing on. */
-  embed?: 'author';
+  /**
+   * `'author'`: framed by the entity portal, chrome hidden, editing on.
+   * `'learner'`: framed by the learner portal, chrome hidden, no editing,
+   * the quiz review page announces itself (D-121).
+   */
+  embed?: 'author' | 'learner';
 }
 
 /**

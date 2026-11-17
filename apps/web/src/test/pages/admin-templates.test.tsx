@@ -23,6 +23,8 @@ import { renderWithProviders } from '@/test/render';
 const api = vi.hoisted(() => ({
   certificateTemplate: vi.fn(),
   updateSetting: vi.fn(),
+  listUsers: vi.fn(),
+  listPaths: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', async () => {
@@ -56,6 +58,19 @@ describe('Admin certificate template (§4C.7)', () => {
     vi.clearAllMocks();
     api.certificateTemplate.mockResolvedValue(view());
     api.updateSetting.mockResolvedValue({ settings: [], readOnly: [] });
+    api.listUsers.mockResolvedValue({
+      rows: [
+        { id: 'u1', fullName: 'سارة العتيبي', employeeId: 'E-1', email: 's@x.gov' },
+        { id: 'u2', fullName: 'خالد الشهري', employeeId: 'E-2', email: 'k@x.gov' },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 25,
+    });
+    api.listPaths.mockResolvedValue([
+      { id: 'p1', name: 'مسار اللغة الإنجليزية' },
+      { id: 'p2', name: 'مسار القيادة' },
+    ]);
   });
 
   it('shows the loading state before the template arrives', () => {
@@ -97,7 +112,7 @@ describe('Admin certificate template (§4C.7)', () => {
     api.certificateTemplate.mockResolvedValue(view({ hasLogo: true }));
     renderWithProviders(<AdminTemplatesPage />);
 
-    await screen.findByText('كتلة التوقيع');
+    await screen.findByText('بيانات التوقيع');
     expect(screen.queryByText(/لم يُزوَّد النظام بشعار الوزارة/)).not.toBeInTheDocument();
   });
 
@@ -112,10 +127,104 @@ describe('Admin certificate template (§4C.7)', () => {
     expect(frame).toHaveAttribute('srcdoc', expect.stringContaining('معاينة'));
   });
 
-  it('says the preview uses sample data, not a real employee', async () => {
+  it('says the preview is sample data unless somebody is picked, and is never kept', async () => {
     renderWithProviders(<AdminTemplatesPage />);
 
-    expect(await screen.findByText(/ليسا لموظف حقيقي/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/ببيانات تجريبية ما لم تختر موظفًا أو مسارًا/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ولا تُحفظ المعاينة ولا تُصدر ولا تُرسل/)).toBeInTheDocument();
+  });
+
+  it('starts on the sample: no employee or path asked for', async () => {
+    renderWithProviders(<AdminTemplatesPage />);
+
+    await screen.findByLabelText('الموظف');
+    expect(api.certificateTemplate).toHaveBeenCalledWith({ userId: undefined, pathId: undefined });
+  });
+
+  it('searches employees only, and only after a pause in typing', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminTemplatesPage />);
+
+    await user.type(await screen.findByLabelText('الموظف'), 'سارة');
+
+    await waitFor(() =>
+      expect(api.listUsers).toHaveBeenLastCalledWith({ q: 'سارة', role: 'EMPLOYEE' }),
+    );
+    /* One request for the finished word, not one per letter. */
+    expect(api.listUsers.mock.calls.filter(([filters]) => filters.q !== undefined)).toHaveLength(1);
+  });
+
+  it('is one field: the suggestions are the matches, not a second control', async () => {
+    renderWithProviders(<AdminTemplatesPage />);
+
+    const field = await screen.findByLabelText('الموظف');
+
+    expect(field).toHaveAttribute('list', 'preview-employee-options');
+    await waitFor(() =>
+      expect(
+        document.querySelector('#preview-employee-options option[value="سارة العتيبي — E-1"]'),
+      ).not.toBeNull(),
+    );
+    /* The earlier search box beside a list is gone. */
+    expect(screen.queryByLabelText('البحث عن موظف للمعاينة')).not.toBeInTheDocument();
+  });
+
+  it('draws the preview for the employee that was picked, and back to the sample when cleared', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminTemplatesPage />);
+
+    const field = await screen.findByLabelText('الموظف');
+    /* The suggestions arrive after the page does. */
+    await waitFor(() =>
+      expect(
+        document.querySelector('#preview-employee-options option[value="سارة العتيبي — E-1"]'),
+      ).not.toBeNull(),
+    );
+
+    await user.type(field, 'سارة العتيبي — E-1');
+
+    await waitFor(() =>
+      expect(api.certificateTemplate).toHaveBeenLastCalledWith({
+        userId: 'u1',
+        pathId: undefined,
+      }),
+    );
+
+    await user.clear(field);
+
+    await waitFor(() =>
+      expect(api.certificateTemplate).toHaveBeenLastCalledWith({
+        userId: undefined,
+        pathId: undefined,
+      }),
+    );
+  });
+
+  it('draws the preview for the path that was picked, and back to the sample', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminTemplatesPage />);
+
+    const path = await screen.findByLabelText('المسار');
+    await screen.findByRole('option', { name: 'مسار القيادة' });
+    await user.selectOptions(path, 'p2');
+
+    await waitFor(() =>
+      expect(api.certificateTemplate).toHaveBeenLastCalledWith({
+        userId: undefined,
+        pathId: 'p2',
+      }),
+    );
+
+    await user.selectOptions(path, '');
+
+    await waitFor(() =>
+      expect(api.certificateTemplate).toHaveBeenLastCalledWith({
+        userId: undefined,
+        pathId: undefined,
+      }),
+    );
   });
 
   it('offers save only once something has changed', async () => {

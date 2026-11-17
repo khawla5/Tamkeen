@@ -9,7 +9,7 @@
  *   1. Enables web services + the REST protocol (+ completion tracking).
  *   2. Creates the integration user (never logs in interactively).
  *   3. Creates the least-privilege "Tamkeen Integration" role, assigns the
- *      capability set the adapter's eleven WS functions need — including the
+ *      capability set the adapter's twelve WS functions need — including the
  *      four fixes Phase 2's original list missed (moodle/role:assign, the
  *      allow-assignments matrix rows for student and editingteacher,
  *      gradereport/user:view, and the manual-enrol welcome message off).
@@ -88,6 +88,7 @@ $capabilities = [
     'moodle/course:view',
     'moodle/course:viewhiddencourses',
     'moodle/course:update',
+    'moodle/course:delete',         // admin course deletion (§4C.5, TAM-134)
     'moodle/course:viewparticipants',
     // enrolment: learners at confirm, entities as editingteacher
     'enrol/manual:enrol',
@@ -97,6 +98,22 @@ $capabilities = [
     'moodle/grade:viewall',
     'report/completion:view',
 ];
+// The content read-back (§4B.4, D-061) must see EVERY activity, published or
+// not. `core_course_get_contents` drops a module the calling user may not
+// view, and a module's own `mod/<name>:view` capability decides that for a
+// user who is not enrolled — so without these the quiz an entity just added is
+// invisible to the read-back and the publish gate keeps refusing for a reason
+// the entity has already fixed (found 2026-08-25, TAM-139 follow-up). Granted
+// for every installed module rather than a hand-kept list, plus hidden
+// activities/sections, which an author may keep hidden until publishing.
+// Bound parameters: a literal ':view' would be read as a named placeholder.
+$viewcaps = $DB->get_fieldset_select('capabilities', 'name',
+    'name LIKE :pattern OR name = :book', ['pattern' => 'mod/%:view', 'book' => 'mod/book:read']);
+$capabilities = array_merge($capabilities, $viewcaps, [
+    'moodle/course:viewhiddenactivities',
+    'moodle/course:viewhiddensections',
+]);
+
 foreach ($capabilities as $capability) {
     assign_capability($capability, CAP_ALLOW, $roleid, $syscontext->id, true);
 }
@@ -122,6 +139,7 @@ $functions = [
     'core_course_get_courses_by_field',
     'core_course_get_contents',
     'core_course_create_courses',
+    'core_course_delete_courses',
     'core_enrol_get_users_courses',
     'enrol_manual_enrol_users',
     'core_completion_get_course_completion_status',

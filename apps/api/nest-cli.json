@@ -9,6 +9,10 @@
       {
         "include": "certificates/assets/**/*",
         "watchAssets": true
+      },
+      {
+        "include": "generated/**/*",
+        "watchAssets": false
       }
     ]
   }

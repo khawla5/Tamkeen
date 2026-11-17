@@ -1,4 +1,4 @@
-import { refuseRoleChange, refuseStatusChange, type AccountChangeFacts } from './account-changes';
+import { refuseDeletion, refuseStatusChange, type AccountChangeFacts } from './account-changes';
 
 /**
  * The changes an administrator may not make (§4C.2).
@@ -15,7 +15,6 @@ function facts(overrides: Partial<AccountChangeFacts> = {}): AccountChangeFacts 
     actorId: 'actor',
     currentRole: 'EMPLOYEE',
     isOnlyActiveAdmin: false,
-    holdsJourneyData: false,
     ...overrides,
   };
 }
@@ -67,90 +66,38 @@ describe('refuseStatusChange', () => {
   });
 });
 
-describe('refuseRoleChange', () => {
-  it('allows promoting an employee who has no journey data', () => {
-    expect(refuseRoleChange(facts(), 'SUPER_ADMIN', null)).toBeNull();
+describe('refuseDeletion', () => {
+  it('allows deleting an ordinary account that holds no certificate', () => {
+    expect(refuseDeletion(facts(), 0)).toBeNull();
   });
 
-  it('refuses an administrator changing their own role, even upward', () => {
-    expect(
-      refuseRoleChange(facts({ targetId: 'same', actorId: 'same' }), 'SUPER_ADMIN', null),
-    ).toMatchObject({ code: 'CANNOT_MODIFY_SELF' });
-  });
-
-  it('refuses demoting the last active administrator', () => {
-    expect(
-      refuseRoleChange(
-        facts({ currentRole: 'SUPER_ADMIN', isOnlyActiveAdmin: true }),
-        'EMPLOYEE',
-        null,
-      ),
-    ).toMatchObject({ code: 'LAST_ACTIVE_ADMIN' });
-  });
-
-  it('refuses an entity account with no organisation to act for', () => {
-    /* EntityScopeService fails closed on this, so the account would sign in and
-       see nothing, with no way to tell a permission bug from a provisioning one. */
-    expect(refuseRoleChange(facts(), 'ENTITY', null)).toMatchObject({ code: 'ENTITY_REQUIRED' });
-  });
-
-  it('refuses an organisation on a role that cannot belong to one', () => {
-    expect(refuseRoleChange(facts(), 'SUPER_ADMIN', 'entity-a')).toMatchObject({
-      code: 'ENTITY_NOT_ALLOWED',
-    });
-  });
-
-  it('allows moving an entity account between organisations', () => {
-    /* Same role, different organisation — a real change, which is why ENTITY is
-       excluded from the no-op refusal below. */
-    expect(refuseRoleChange(facts({ currentRole: 'ENTITY' }), 'ENTITY', 'entity-b')).toBeNull();
-  });
-
-  it('refuses a role change that is not a change', () => {
-    expect(refuseRoleChange(facts({ currentRole: 'EMPLOYEE' }), 'EMPLOYEE', null)).toMatchObject({
-      code: 'ROLE_UNCHANGED',
-    });
-  });
-
-  it('refuses converting a learner who holds a result, a path or a certificate', () => {
-    /*
-     * Their record survives — user_paths.pathId is Restrict and certificates are
-     * immutable — but every screen that reads it is @Roles('EMPLOYEE'), so the
-     * person could no longer reach their own training history while their
-     * certificate stayed publicly verifiable in their name.
-     */
-    expect(refuseRoleChange(facts({ holdsJourneyData: true }), 'ENTITY', 'entity-a')).toMatchObject(
-      { code: 'JOURNEY_WOULD_BE_ORPHANED' },
+  it('refuses an administrator deleting themselves', () => {
+    expect(refuseDeletion(facts({ targetId: 'same', actorId: 'same' }), 0)?.code).toBe(
+      'CANNOT_MODIFY_SELF',
     );
   });
 
-  it('allows converting a learner who never started', () => {
-    expect(refuseRoleChange(facts({ holdsJourneyData: false }), 'ENTITY', 'entity-a')).toBeNull();
+  it('refuses deleting the last active administrator', () => {
+    expect(
+      refuseDeletion(facts({ currentRole: 'SUPER_ADMIN', isOnlyActiveAdmin: true }), 0)?.code,
+    ).toBe('LAST_ACTIVE_ADMIN');
   });
 
-  it('does not apply the journey rule to a non-employee', () => {
-    /* An entity account cannot accumulate journey data — the learner endpoints
-       refuse it — so the rule would only ever fire on stale rows from before a
-       previous conversion, and refusing there would trap the account. */
+  it('allows deleting an administrator while another stays active', () => {
     expect(
-      refuseRoleChange(facts({ currentRole: 'ENTITY', holdsJourneyData: true }), 'EMPLOYEE', null),
+      refuseDeletion(facts({ currentRole: 'SUPER_ADMIN', isOnlyActiveAdmin: false }), 0),
     ).toBeNull();
   });
 
-  it('checks self-modification before the last-admin rule', () => {
-    /* Both apply when the only administrator demotes themselves. The message
-       should name the thing they can actually change about their request. */
-    expect(
-      refuseRoleChange(
-        facts({
-          targetId: 'same',
-          actorId: 'same',
-          currentRole: 'SUPER_ADMIN',
-          isOnlyActiveAdmin: true,
-        }),
-        'EMPLOYEE',
-        null,
-      ),
-    ).toMatchObject({ code: 'CANNOT_MODIFY_SELF' });
+  it('refuses an account that holds certificates — deleting would erase them', () => {
+    /* A certificate cascades with its holder, and a third party can still verify
+       it: suspending is the operation that fits. */
+    expect(refuseDeletion(facts(), 2)?.code).toBe('ACCOUNT_HOLDS_CERTIFICATES');
+  });
+
+  it('puts the lockouts ahead of the certificate rule', () => {
+    expect(refuseDeletion(facts({ targetId: 'same', actorId: 'same' }), 3)?.code).toBe(
+      'CANNOT_MODIFY_SELF',
+    );
   });
 });

@@ -12,6 +12,7 @@ import { AppModule } from '../src/app.module';
 import { hashPassword } from '../src/common/password';
 import { EmailService } from '../src/email/email.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * The portal boundaries, over real HTTP against a real database (§2B, D-062).
@@ -50,6 +51,8 @@ describe('Entity portal scoping (e2e)', () => {
   let entityAId: string;
   let entityBId: string;
   let courseAId: string;
+  /** Any published path, so the per-path learner routes are real ones. */
+  let pathId: string;
   let courseBId: string;
   let courseUnownedId: string;
 
@@ -101,6 +104,12 @@ describe('Entity portal scoping (e2e)', () => {
      * excluded. `courseUnowned` is what proves the filter is an equality on the
      * caller's own id rather than "anything with an owner".
      */
+    const path = await prisma.path.findFirstOrThrow({
+      where: { status: 'PUBLISHED' },
+      select: { id: true },
+    });
+    pathId = path.id;
+
     courseAId = await createCourse(910_001, entityA.id, 'دورة الجهة أ');
     courseBId = await createCourse(910_002, entityB.id, 'دورة الجهة ب');
     courseUnownedId = await createCourse(910_003, null, 'دورة بلا مالك');
@@ -159,6 +168,14 @@ describe('Entity portal scoping (e2e)', () => {
     return request(server()).get(path).set('Cookie', session);
   }
 
+  function patch(path: string, body: Record<string, unknown>, session: string) {
+    return request(server())
+      .patch(path)
+      .set('Cookie', [csrfCookie, session].join('; '))
+      .set('X-CSRF-Token', csrfToken)
+      .send(body);
+  }
+
   async function createCourse(
     moodleCourseId: number,
     ownerEntityId: string | null,
@@ -201,7 +218,7 @@ describe('Entity portal scoping (e2e)', () => {
         email,
         passwordHash: await hashPassword(PASSWORD),
         fullName: 'حساب تجريبي',
-        employeeId: `S-${RUN_ID}-${label}`.slice(0, 20),
+        employeeId: numericEmployeeId(RUN_ID, label),
         department: 'قسم',
         role,
         entityId,
@@ -223,7 +240,7 @@ describe('Entity portal scoping (e2e)', () => {
       email,
       password: PASSWORD,
       fullName: 'موظف تجريبي',
-      employeeId: `S-${RUN_ID}-${label}`.slice(0, 20),
+      employeeId: numericEmployeeId(RUN_ID, label),
       department: 'تقنية المعلومات',
     }).expect(202);
 
@@ -291,6 +308,74 @@ describe('Entity portal scoping (e2e)', () => {
     });
   });
 
+  describe('the entity profile (§4B.6)', () => {
+    const body = {
+      fullName: 'مسؤولة الجهة أ',
+      contactName: 'مكتب التدريب',
+      contactEmail: 'training@authority.example',
+    };
+
+    it('saves the account name and the organisation contact together, and audits which fields', async () => {
+      const response = await patch('/api/entity/me', body, sessionEntityA).expect(200);
+
+      expect(response.body).toMatchObject({
+        id: entityAId,
+        name: 'جهة أ',
+        contactName: 'مكتب التدريب',
+        contactEmail: 'training@authority.example',
+      });
+
+      const entity = await prisma.entity.findUniqueOrThrow({ where: { id: entityAId } });
+      expect(entity.contactName).toBe('مكتب التدريب');
+      /* The organisation's name is not this endpoint's to change (D-063). */
+      expect(entity.name).toBe('جهة أ');
+
+      const me = await get('/api/auth/me', sessionEntityA).expect(200);
+      expect((me.body as { fullName: string }).fullName).toBe('مسؤولة الجهة أ');
+
+      const entry = await prisma.auditLog.findFirst({
+        where: { action: 'ENTITY_PROFILE_UPDATED', targetId: entityAId },
+        orderBy: { id: 'desc' },
+      });
+      expect(entry?.metadata).toMatchObject({ fields: 'contactEmail,contactName,fullName' });
+    });
+
+    it('refuses the organisation name through the body', async () => {
+      await patch('/api/entity/me', { ...body, name: 'جهة مزيّفة' }, sessionEntityA).expect(400);
+    });
+
+    it('refuses an empty account name and a malformed contact address', async () => {
+      await patch('/api/entity/me', { ...body, fullName: '   ' }, sessionEntityA).expect(400);
+      await patch(
+        '/api/entity/me',
+        { ...body, contactEmail: 'not-an-address' },
+        sessionEntityA,
+      ).expect(400);
+      /* An absent contact is allowed — an organisation may not have one yet. */
+      await patch(
+        '/api/entity/me',
+        { ...body, contactName: '', contactEmail: '' },
+        sessionEntityA,
+      ).expect(200);
+    });
+
+    it('cannot reach another organisation: the scope, not the body, chooses the row', async () => {
+      await patch('/api/entity/me', { ...body, contactName: 'من الجهة ب' }, sessionEntityB).expect(
+        200,
+      );
+
+      const a = await prisma.entity.findUniqueOrThrow({ where: { id: entityAId } });
+      const b = await prisma.entity.findUniqueOrThrow({ where: { id: entityBId } });
+      expect(a.contactName).not.toBe('من الجهة ب');
+      expect(b.contactName).toBe('من الجهة ب');
+    });
+
+    it('is refused for an account with no organisation, rather than half-saved', async () => {
+      await patch('/api/entity/me', body, sessionOrphanEntity).expect(403);
+      await patch('/api/entity/me', body, sessionAdmin).expect(403);
+    });
+  });
+
   describe('role boundaries between portals', () => {
     it('refuses an employee at the entity portal', async () => {
       await get('/api/entity/courses', sessionEmployee).expect(403);
@@ -300,12 +385,13 @@ describe('Entity portal scoping (e2e)', () => {
     it('refuses an entity account at the learner endpoints', async () => {
       /*
        * The concrete gap Phase 4 closed. RolesGuard shipped in Phase 0 but no
-       * endpoint declared a role, so until now an ENTITY account could take the
-       * assessment, build a path and confirm it.
+       * endpoint declared a role, so until now an ENTITY account could take a
+       * path's assessment and be placed on its ladder.
        */
-      await get('/api/assessment', sessionEntityA).expect(403);
+      await get(`/api/paths/${pathId}/assessment`, sessionEntityA).expect(403);
       await get('/api/dashboard', sessionEntityA).expect(403);
       await get('/api/my-path', sessionEntityA).expect(403);
+      await get('/api/my-path/all', sessionEntityA).expect(403);
       await get('/api/courses', sessionEntityA).expect(403);
       await get('/api/paths', sessionEntityA).expect(403);
       await get('/api/certificates', sessionEntityA).expect(403);
@@ -313,15 +399,21 @@ describe('Entity portal scoping (e2e)', () => {
     });
 
     it('refuses an entity account the learner write paths too, not merely the reads', async () => {
-      await post('/api/my-path/select', { pathId: courseAId }, sessionEntityA).expect(403);
-      await post('/api/my-path/confirm', {}, sessionEntityA).expect(403);
+      /* The one write a learner has left (D-134): submitting an attempt, which
+         is what places them on a rung. */
+      await post(
+        `/api/paths/${pathId}/assessment/attempts`,
+        { assessmentId: pathId, answers: [] },
+        sessionEntityA,
+      ).expect(403);
+      await post(`/api/courses/${courseAId}/launch`, {}, sessionEntityA).expect(403);
     });
 
     it('does not implicitly grant a super-admin the learner portal', async () => {
       /* D-027: implicit role inheritance is how an admin acquires an employee's
          write path that nobody designed for them. §4C gives them their own. */
       await get('/api/dashboard', sessionAdmin).expect(403);
-      await get('/api/assessment', sessionAdmin).expect(403);
+      await get(`/api/paths/${pathId}/assessment`, sessionAdmin).expect(403);
     });
 
     it('admits a super-admin to the entity portal, unscoped', async () => {
@@ -356,7 +448,7 @@ describe('Entity portal scoping (e2e)', () => {
 
   describe('audit', () => {
     it('records a cross-portal denial', async () => {
-      await get('/api/assessment', sessionEntityB).expect(403);
+      await get(`/api/paths/${pathId}/assessment`, sessionEntityB).expect(403);
 
       const denials = await prisma.auditLog.findMany({
         where: { action: 'AUTHZ_DENIED' },

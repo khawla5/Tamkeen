@@ -1,48 +1,38 @@
 import { Injectable } from '@nestjs/common';
 
-import {
-  buildRiasecProfile,
-  type RiasecLetter,
-  type RiasecProfile,
-  type RiasecScores,
-} from '@tamkeen/types';
+import type { LevelRef } from '@tamkeen/types';
 
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
- * Where a user stands: their latest assessment result and their one path.
+ * Where a learner stands: the paths the ministry assigned them, where each one
+ * placed them, and what they are enrolled in (D-130/D-134).
  *
- * This exists so the rules that depend on *both* live in one place. Four modules
- * need to know whether a path is confirmed — assessment (retake permitted?),
- * paths (may this be selected?), courses (which action applies?), enrollment
- * (may the selection change?) — and if each re-derived it from its own query,
- * they would eventually disagree. Read-only by design: enrollment owns writes.
- *
- * It also breaks what would otherwise be a dependency cycle. Assessment needs
- * the path lock and the dashboard needs the Holland Code, so a direct dependency
- * either way would be circular; both depend on this instead.
+ * This exists so the rules that depend on several of those at once live in one
+ * place. Four modules need the same picture — paths (what may this person
+ * open?), courses (which action applies?), assessment (may they take this, and
+ * have they already been placed?), enrollment (what do they owe?) — and if each
+ * re-derived it from its own query, they would eventually disagree. Read-only by
+ * design: enrollment and the admin services own writes.
  */
 
-export interface LatestResult {
-  id: string;
-  assessmentId: string;
-  assessmentVersion: number;
-  completedAt: Date;
-  profile: RiasecProfile;
-}
-
-export interface CurrentUserPath {
-  id: string;
+export interface AssignedPath {
+  userPathId: string;
   pathId: string;
-  status: 'BUILDING' | 'ACTIVE' | 'COMPLETED';
-  confirmedAt: Date | null;
-  /** Course ids currently selected, in their chosen order. */
-  selectedCourseIds: string[];
+  pathName: string;
+  status: 'ACTIVE' | 'COMPLETED';
+  assignedAt: Date;
+  /** Null until the learner takes this path's assessment. */
+  placedLevel: LevelRef | null;
+  /** The active assessment version standing between them and starting. */
+  pendingAssessmentId: string | null;
 }
 
 export interface JourneyState {
-  latestResult: LatestResult | null;
-  userPath: CurrentUserPath | null;
+  /** In assignment order, oldest first. */
+  paths: AssignedPath[];
+  /** Course ids this learner has an enrolment row for, in any path. */
+  enrolledCourseIds: string[];
 }
 
 @Injectable()
@@ -50,69 +40,77 @@ export class JourneyStateService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getState(userId: string): Promise<JourneyState> {
-    const [result, userPath] = await Promise.all([
-      this.prisma.assessmentResult.findFirst({
-        where: { userId },
-        /* Newest wins: retakes append rather than overwrite (D-033), so "the
-           user's result" is a question about ordering, not about a single row. */
-        orderBy: { completedAt: 'desc' },
-      }),
-      this.prisma.userPath.findUnique({
-        where: { userId },
-        include: {
-          courses: {
-            orderBy: { displayOrder: 'asc' },
-            select: { courseId: true },
+    const [userPaths, placements, enrollments] = await Promise.all([
+      this.prisma.userPath.findMany({
+        /* A REVOKED row is history, not something the learner still holds
+           (D-134's "absence, not a disabled control") — it never surfaces
+           here, only on the admin's own view of the account. */
+        where: { userId, status: { in: ['ACTIVE', 'COMPLETED'] } },
+        orderBy: { assignedAt: 'asc' },
+        select: {
+          id: true,
+          pathId: true,
+          status: true,
+          assignedAt: true,
+          path: {
+            select: {
+              name: true,
+              /* The version a taker would receive. A path whose assessment is
+                 still a draft has none, which is a state the dashboard has to
+                 be able to show rather than crash on. */
+              assessments: {
+                where: { status: 'ACTIVE' },
+                select: { id: true },
+                take: 1,
+              },
+            },
           },
         },
       }),
+      this.prisma.learnerPlacement.findMany({
+        where: { learnerId: userId },
+        select: {
+          pathId: true,
+          level: { select: { id: true, name: true, position: true } },
+        },
+      }),
+      this.prisma.enrollment.findMany({
+        where: { userId },
+        select: { courseId: true },
+      }),
     ]);
 
+    const placedBy = new Map(placements.map((row) => [row.pathId, row.level]));
+
     return {
-      latestResult: result
-        ? {
-            id: result.id,
-            assessmentId: result.assessmentId,
-            assessmentVersion: result.assessmentVersion,
-            completedAt: result.completedAt,
-            profile: buildRiasecProfile(
-              {
-                R: result.scoreR,
-                I: result.scoreI,
-                A: result.scoreA,
-                S: result.scoreS,
-                E: result.scoreE,
-                C: result.scoreC,
-              } satisfies RiasecScores,
-              result.maxScore,
-            ),
-          }
-        : null,
-      userPath: userPath
-        ? {
-            id: userPath.id,
-            pathId: userPath.pathId,
-            status: userPath.status,
-            confirmedAt: userPath.confirmedAt,
-            selectedCourseIds: userPath.courses.map((course) => course.courseId),
-          }
-        : null,
+      paths: userPaths.map((row) => {
+        const level = placedBy.get(row.pathId) ?? null;
+
+        return {
+          userPathId: row.id,
+          pathId: row.pathId,
+          pathName: row.path.name,
+          /* The `where` above already excludes REVOKED; Prisma's return type
+             cannot express that narrowing, so it is asserted here instead. */
+          status: row.status as 'ACTIVE' | 'COMPLETED',
+          assignedAt: row.assignedAt,
+          placedLevel: level,
+          /* Only pending while they have not been placed. An assessment they
+             have already taken is not standing in their way. */
+          pendingAssessmentId: level ? null : (row.path.assessments[0]?.id ?? null),
+        };
+      }),
+      enrolledCourseIds: enrollments.map((row) => row.courseId),
     };
   }
 
-  /**
-   * The commitment gate (D-002, D-015).
-   *
-   * Keyed on `confirmedAt` rather than on `status`, because the timestamp is the
-   * fact — a status could be edited to ACTIVE by an admin screen in a later
-   * phase without the commitment ever having happened.
-   */
-  static isCommitted(state: JourneyState): boolean {
-    return state.userPath?.confirmedAt != null;
+  /** The ids of every path assigned to this learner — the catalogue's scope. */
+  static assignedPathIds(state: JourneyState): string[] {
+    return state.paths.map((path) => path.pathId);
   }
 
-  /** The user's Holland Code, or an empty array before the assessment. */
-  static hollandCode(state: JourneyState): RiasecLetter[] {
-    return state.latestResult?.profile.code ?? [];
+  /** One assigned path, or null when this learner does not hold it. */
+  static findPath(state: JourneyState, pathId: string): AssignedPath | null {
+    return state.paths.find((path) => path.pathId === pathId) ?? null;
   }
 }

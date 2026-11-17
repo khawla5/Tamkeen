@@ -10,6 +10,9 @@ import { renderWithProviders } from '@/test/render';
  * scope: auth/assessment/application functionality"). Tests assert the
  * marketing content and its structure, not product logic, since there is
  * none here.
+ *
+ * "عن المنصة" is the platform's concept in four static tabs (D-129) — no
+ * data fetch, so nothing is mocked and the page renders synchronously.
  */
 describe('LandingPage', () => {
   it('renders one h1 and the required landmarks', () => {
@@ -29,17 +32,17 @@ describe('LandingPage', () => {
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content');
   });
 
-  it('the primary hero action links to registration, not a dead button', () => {
+  it('every "إنشاء حساب" action on the page links to registration, not a dead button', () => {
     renderWithProviders(<LandingPage />);
 
-    const heroLinks = screen.getAllByRole('link', { name: /إنشاء حساب/ });
-    expect(heroLinks.length).toBeGreaterThan(0);
-    for (const link of heroLinks) {
+    const registerLinks = screen.getAllByRole('link', { name: /إنشاء حساب/ });
+    expect(registerLinks.length).toBeGreaterThan(0);
+    for (const link of registerLinks) {
       expect(link).toHaveAttribute('href', '/register');
     }
   });
 
-  it('offers a quiet sign-in link for existing users next to the primary action', () => {
+  it('offers a quiet sign-in link for existing users (header and footer)', () => {
     renderWithProviders(<LandingPage />);
 
     const signInLinks = screen.getAllByRole('link', { name: 'تسجيل الدخول' });
@@ -49,65 +52,51 @@ describe('LandingPage', () => {
     }
   });
 
-  it('renders exactly one h3 — the selected item in the explorer; no card grids', () => {
-    renderWithProviders(<LandingPage />);
-
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1);
-  });
-
-  it('mentions the assessment length and, on the path stage, the 5–10 range using real numerals', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<LandingPage />);
-
-    expect(screen.getByText(/نحو 30 عبارة/)).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'المسار التدريبي' }));
-    await user.click(screen.getByRole('button', { name: 'بناء المسار' }));
-    expect(screen.getByText(/من 5 إلى 10 دورات/)).toBeInTheDocument();
-  });
-
-  it('hero: states who the platform is for, and who may register (BR-101)', () => {
-    renderWithProviders(<LandingPage />);
-
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      'منصة تمكين للتدريب والتطوير المهني',
-    );
-    expect(screen.getByText(/التسجيل مقصور على منسوبي الوزارة/)).toBeInTheDocument();
-    expect(screen.getByText(/الإدارة العامة للتدريب/, { selector: 'span' })).toBeInTheDocument();
-  });
-
-  it('explorer: four stage tabs, the first selected, its first item shown in the detail pane', () => {
+  it('about: the four journey stages as tabs, the assessment first and selected', () => {
     renderWithProviders(<LandingPage />);
 
     const tabs = screen.getAllByRole('tab');
     expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'التقييم المهني',
-      'المسار التدريبي',
-      'الدورات',
-      'الشهادات والسيرة الذاتية',
+      'التقييم',
+      'إسناد المسار',
+      'دورات المسار',
+      'الشهادات',
     ]);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('تقييم الميول المهنية');
-  });
-
-  it('explorer: choosing an item updates the detail pane and marks it current', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<LandingPage />);
-
-    const item = screen.getByRole('button', { name: 'إعادة التقييم' });
-    await user.click(item);
-    expect(item).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('إعادة التقييم');
-    expect(screen.getByText(/لم يؤكّد مساره/)).toBeInTheDocument();
-  });
-
-  it("explorer: switching stage resets to that stage's first item, and the action always leads to registration", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<LandingPage />);
-
-    await user.click(screen.getByRole('tab', { name: 'الشهادات والسيرة الذاتية' }));
-    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('شهادة الدورة');
+    /* Skill-level assessment (D-130) — never interest/matching language. */
     const panel = screen.getByRole('tabpanel');
-    expect(panel.querySelector('a[href="/register"]')).not.toBeNull();
+    expect(panel).toHaveTextContent(/يقيس مستواه/);
+    /* Each stage: the paragraph plus exactly three concrete points. */
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(3);
+  });
+
+  it('about: choosing a stage tab swaps the panel to that stage', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LandingPage />);
+
+    const tab = screen.getByRole('tab', { name: 'الشهادات' });
+    await user.click(tab);
+
+    expect(tab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toHaveTextContent(/رقم تحقق/);
+  });
+
+  it('about: the assignment panel states the ministry assigns the path — no recommendation language (D-130)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LandingPage />);
+
+    await user.click(screen.getByRole('tab', { name: 'إسناد المسار' }));
+
+    expect(screen.getByRole('tabpanel')).toHaveTextContent(/تُسند الوزارة/);
+    expect(screen.getByRole('tabpanel')).not.toHaveTextContent(/موصى به|توصية/);
+  });
+
+  it('hero: states who the platform is for (BR-101), and that it measures what training achieves', () => {
+    renderWithProviders(<LandingPage />);
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'منصة تمكين للتدريب والتطوير المهني وقياس الأثر',
+    );
   });
 
   it('hero: no feature pills — the paragraph carries the message', () => {
@@ -123,16 +112,23 @@ describe('LandingPage', () => {
     const items = faq.querySelectorAll('details');
     expect(items).toHaveLength(6);
     for (const item of items) expect(item.open).toBe(false);
-    expect(within(faq).getByText('هل يمكن تغيير المسار بعد تأكيده؟')).toBeInTheDocument();
-    expect(within(faq).getByText(/مسار واحد لكل موظف/)).toBeInTheDocument();
-    expect(container.querySelectorAll('h3')).toHaveLength(1);
+    /* The assigned-path model (D-130): the path is the ministry's decision. */
+    expect(within(faq).getByText('هل يمكن تغيير المسار بعد إسناده؟')).toBeInTheDocument();
+    expect(within(faq).getByText(/لا يبدّل الموظف مساره بنفسه/)).toBeInTheDocument();
+    /* Who may register (BR-101) — moved here from the hero, which repeated it
+       alongside the header and the explorer's own "إنشاء حساب" action. */
+    expect(within(faq).getByText('من يستطيع التسجيل في المنصة؟')).toBeInTheDocument();
+    /* No h3 anywhere: the about tabs are buttons, their panel is prose. */
+    expect(container.querySelectorAll('h3')).toHaveLength(0);
   });
 
   it('footer: identity, real quick links only, and policy names as text until their pages exist', () => {
     renderWithProviders(<LandingPage />);
 
     const footer = screen.getByRole('contentinfo');
-    expect(within(footer).getByText('الإدارة العامة للتدريب')).toBeInTheDocument();
+    expect(within(footer).getByText('وزارة الداخلية')).toBeInTheDocument();
+    /* The ministry is the identity; the directorate is not named in the footer. */
+    expect(within(footer).queryByText('الإدارة العامة للتدريب')).not.toBeInTheDocument();
     const links = within(footer).getAllByRole('link');
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['#about', '/register', '/login']);
     expect(within(footer).getByText('سياسة الخصوصية').closest('a')).toBeNull();
@@ -145,13 +141,25 @@ describe('LandingPage', () => {
     expect(container.querySelector('section dl')).toBeNull();
   });
 
-  it('hero: carries the ministry emblem as its visual, decoratively (the header already names it)', () => {
+  it('hero: no longer carries its own identifying emblem — the Kingdom map is the whole visual', () => {
+    /* The identifying emblem used to sit above the map inside the hero's own
+       box. It moved out to `BrandCorner`, fixed at the page's true top-right
+       corner and shared by every page of the site, not just this one — so
+       the hero box should carry no *second* `/brand/MOI.svg`. The hero
+       itself carries no decorative watermark either (tried, dropped —
+       a photo backdrop is not where `PageWatermark` belongs); `AboutSection`
+       below it does, distinguished generally by its `aria-hidden="true"`
+       wrapper — the stable trait any such instance shares, exactly because
+       it is never the accessible, identifying mark. */
     const { container } = renderWithProviders(<LandingPage />);
 
     const hero = container.querySelector('section');
-    const figure = hero?.querySelector('img[alt=""]');
-    expect(figure).not.toBeNull();
-    expect(decodeURIComponent(figure?.getAttribute('src') ?? '')).toContain('/brand/MOI.svg');
+    const emblems = Array.from(hero?.querySelectorAll('img') ?? []).filter((img) => {
+      const isMoi = decodeURIComponent(img.getAttribute('src') ?? '').includes('/brand/MOI.svg');
+      const isWatermark = img.closest('[aria-hidden="true"]') !== null;
+      return isMoi && !isWatermark;
+    });
+    expect(emblems).toHaveLength(0);
   });
 
   it('hero: the emblem sits over the Kingdom map, all thirteen regions present', () => {

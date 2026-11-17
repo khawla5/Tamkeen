@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { AdminCertificateTemplateView } from '@tamkeen/types';
 
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { adminApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
 
@@ -33,10 +34,18 @@ import { useApiQuery } from '@/lib/use-api';
  */
 export default function AdminTemplatesPage() {
   const t = useTranslations('admin');
-  const template = useApiQuery(() => adminApi.certificateTemplate(), []);
-  const [current, setCurrent] = useState<AdminCertificateTemplateView | null>(null);
+  /* Whom the preview is drawn for. Both empty is the sample certificate; the
+     choice lives in the query so the screen and the document cannot disagree. */
+  const [userId, setUserId] = useState<string | null>(null);
+  const [pathId, setPathId] = useState<string | null>(null);
 
-  const shown = current ?? template.data;
+  const template = useApiQuery(
+    () =>
+      adminApi.certificateTemplate({ userId: userId ?? undefined, pathId: pathId ?? undefined }),
+    [userId, pathId],
+  );
+
+  const shown = template.data;
 
   return (
     <AdminPage title={t('templatesTitle')}>
@@ -47,7 +56,7 @@ export default function AdminTemplatesPage() {
       >
         {shown ? (
           <div className="space-y-6">
-            <Card className="border-s-4 border-s-info p-5">
+            <Card edge="info" className="p-5">
               <p className="font-medium text-foreground">{t('templatesFutureOnlyTitle')}</p>
               <p className="mt-1 text-sm text-muted-foreground">{t('templatesFutureOnly')}</p>
             </Card>
@@ -58,19 +67,20 @@ export default function AdminTemplatesPage() {
               <Card className="p-5 text-sm text-muted-foreground">{t('templatesNoLogo')}</Card>
             ) : null}
 
-            <SignatureForm
-              view={shown}
-              onSaved={(next) => {
-                setCurrent(next);
-                template.refetch();
-              }}
-            />
+            <SignatureForm view={shown} onSaved={template.refetch} />
 
             <section aria-labelledby="template-preview" className="space-y-3">
               <h2 id="template-preview" className="text-lg font-semibold text-foreground">
                 {t('templatesPreview')}
               </h2>
               <p className="text-sm text-muted-foreground">{t('templatesPreviewHint')}</p>
+
+              <PreviewPicker
+                userId={userId}
+                pathId={pathId}
+                onUser={setUserId}
+                onPath={setPathId}
+              />
 
               <Card className="overflow-hidden p-0">
                 {/*
@@ -96,12 +106,123 @@ export default function AdminTemplatesPage() {
   );
 }
 
+/**
+ * Chooses a real employee and a real path for the preview.
+ *
+ * One field for the employee, not a search box beside a list: the administrator
+ * types part of a name or an employee number, the matches appear as suggestions,
+ * and choosing one draws the certificate for them. Emptied, it is the sample
+ * again. The ministry has thousands of employees, so the suggestions are the
+ * search's results rather than everyone loaded into the page.
+ */
+function PreviewPicker({
+  userId,
+  pathId,
+  onUser,
+  onPath,
+}: {
+  userId: string | null;
+  pathId: string | null;
+  onUser: (id: string | null) => void;
+  onPath: (id: string | null) => void;
+}) {
+  const t = useTranslations('admin');
+
+  const [text, setText] = useState('');
+  const [debounced, setDebounced] = useState('');
+
+  /* Wait for a pause in typing: every keystroke would otherwise be a request. */
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(text.trim()), 300);
+
+    return () => clearTimeout(timer);
+  }, [text]);
+
+  /* Once somebody is chosen the box holds their label, which is not a search —
+     so the suggestions stop changing under the choice. */
+  const people = useApiQuery(
+    () => adminApi.listUsers({ q: userId ? undefined : debounced || undefined, role: 'EMPLOYEE' }),
+    [userId, debounced],
+  );
+  const paths = useApiQuery(() => adminApi.listPaths(), []);
+
+  const rows = people.data?.rows ?? [];
+  /* The employee number tells two people of the same name apart, and is what makes
+     a label unique enough to recognise the choice by. */
+  const labelOf = (row: { fullName: string; employeeId: string }) =>
+    `${row.fullName} — ${row.employeeId}`;
+
+  function onType(value: string) {
+    setText(value);
+
+    const match = rows.find((row) => labelOf(row) === value);
+
+    if (match) {
+      onUser(match.id);
+    } else if (userId) {
+      /* Edited away from the person that was chosen: back to the sample, until
+         another suggestion is picked. */
+      onUser(null);
+    }
+  }
+
+  return (
+    <Card className="grid gap-4 p-5 sm:grid-cols-2">
+      <Field
+        id="preview-employee"
+        label={t('templatesPickEmployee')}
+        hint={t('templatesPickEmployeeHint')}
+        error={people.error ? t('templatesPickError') : undefined}
+      >
+        {(field) => (
+          <>
+            <Input
+              {...field}
+              list="preview-employee-options"
+              autoComplete="off"
+              placeholder={t('templatesPickSample')}
+              value={text}
+              onChange={(event) => onType(event.target.value)}
+            />
+            <datalist id="preview-employee-options">
+              {rows.map((row) => (
+                <option key={row.id} value={labelOf(row)} />
+              ))}
+            </datalist>
+          </>
+        )}
+      </Field>
+
+      <Field
+        id="preview-path"
+        label={t('templatesPickPath')}
+        error={paths.error ? t('templatesPickError') : undefined}
+      >
+        {(field) => (
+          <Select
+            {...field}
+            value={pathId ?? ''}
+            onChange={(event) => onPath(event.target.value === '' ? null : event.target.value)}
+          >
+            <option value="">{t('templatesPickPathSample')}</option>
+            {(paths.data ?? []).map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+    </Card>
+  );
+}
+
 function SignatureForm({
   view,
   onSaved,
 }: {
   view: AdminCertificateTemplateView;
-  onSaved: (next: AdminCertificateTemplateView) => void;
+  onSaved: () => void;
 }) {
   const t = useTranslations('admin');
   const translateError = useErrorMessage();
@@ -134,7 +255,7 @@ function SignatureForm({
       await adminApi.updateSetting('CERT_SIGNATORY_TITLE', title);
       await adminApi.updateSetting('CERT_ISSUING_BODY', issuingBody);
 
-      onSaved(await adminApi.certificateTemplate());
+      onSaved();
       setDone(true);
     } catch (caught) {
       setError(translateError(caught));

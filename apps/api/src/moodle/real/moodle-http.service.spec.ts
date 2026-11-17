@@ -514,6 +514,57 @@ describe('MoodleHttpService', () => {
     });
   });
 
+  describe('deleteCourse', () => {
+    it('asks Moodle to delete exactly the course it was given', async () => {
+      const { service, calls } = serviceWith(() => ({ warnings: [] }));
+
+      await service.deleteCourse(77);
+
+      const call = calls.find((entry) => entry.wsfunction === 'core_course_delete_courses')!;
+      expect(call.params).toMatchObject({ courseids: [77] });
+    });
+
+    it('treats an id Moodle does not have as already deleted', async () => {
+      /*
+       * The port's idempotence, and it is not academic: the caller deletes here
+       * first and its own row second, so a retry after a half-failure lands on
+       * exactly this response. Reporting it as a failure would leave the retry
+       * unable to finish what the first attempt started.
+       */
+      const { service } = serviceWith(() => ({
+        warnings: [{ warningcode: 'unknowncourseidnumber', itemid: 77 }],
+      }));
+
+      await expect(service.deleteCourse(77)).resolves.toBeUndefined();
+    });
+
+    it('refuses when Moodle reports it could not delete the course', async () => {
+      /*
+       * Moodle reports a real refusal — most likely the integration role missing
+       * `moodle/course:delete` — as a *warning* on a 200. Reading only the
+       * status code would report a course as deleted that is still there, and
+       * our row would be removed to match a deletion that never happened.
+       */
+      const { service } = serviceWith(() => ({
+        warnings: [{ warningcode: 'cannotdeletecourse', itemid: 77 }],
+      }));
+
+      await expect(service.deleteCourse(77)).rejects.toBeInstanceOf(LmsOperationError);
+    });
+
+    it('carries no Moodle error code out of the module', async () => {
+      /* D-030: the errorcode is LMS vocabulary and stays in the log. */
+      const { service } = serviceWith((wsfunction) => {
+        if (wsfunction === 'core_course_delete_courses') {
+          throw new MoodleWsError('core_course_delete_courses', 'nopermissions');
+        }
+        return null;
+      });
+
+      await expect(service.deleteCourse(77)).rejects.toThrow('LMS_DELETE_COURSE_REJECTED');
+    });
+  });
+
   describe('getCourseContentSummary', () => {
     const contents =
       (modules: Array<Record<string, unknown>>, enablecompletion = 1): Handler =>

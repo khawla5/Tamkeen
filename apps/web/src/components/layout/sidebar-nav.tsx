@@ -10,6 +10,7 @@ import {
   ScrollText,
   Settings,
   Stamp,
+  TrendingUp,
   User,
   Users,
   type LucideIcon,
@@ -17,8 +18,12 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useMemo } from 'react';
 
 import type { NavIconName, NavItem } from './nav-items';
+import { activeNavHref } from './nav-items';
+import { coursesApi } from '@/lib/api-client';
+import { useApiQuery } from '@/lib/use-api';
 import { cn } from '@/lib/utils';
 
 /** Name -> icon resolution lives on the client, so no function crosses the boundary. */
@@ -34,6 +39,7 @@ const ICONS: Record<NavIconName, LucideIcon> = {
   settings: Settings,
   templates: Stamp,
   audit: ScrollText,
+  impact: TrendingUp,
 };
 
 export interface SidebarNavProps {
@@ -48,6 +54,27 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
   const t = useTranslations('nav');
   const tA11y = useTranslations('a11y');
   const pathname = usePathname();
+  /* Exactly one active item: the longest matching href (TAM-140). */
+  const activeHref = activeNavHref(
+    pathname,
+    items.map((item) => item.href),
+  );
+
+  /* Only fetched when an item actually asks for the flyout — entity and admin
+     nav lists carry no `dropdown` item, so they never pay for this request. */
+  const hasDropdown = items.some((item) => item.dropdown);
+  const courses = useApiQuery(
+    () => (hasDropdown ? coursesApi.list() : Promise.resolve(null)),
+    [hasDropdown],
+  );
+
+  /* English-language courses only (D-047's `language` field) — the shortcut
+     this flyout exists to offer. Capped so a large catalogue does not turn a
+     hover menu into a second scrollable page. */
+  const englishCourses = useMemo(
+    () => (courses.data ?? []).filter((course) => course.language === 'EN').slice(0, 8),
+    [courses.data],
+  );
 
   return (
     <ul
@@ -56,13 +83,14 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
       )}
     >
       {items.map((item) => {
-        /* Exact match for the root so it isn't marked active on every route. */
-        const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+        const isActive = item.href === activeHref;
         const Icon = ICONS[item.icon];
         const hasIndicator = indicators?.includes(item.key) ?? false;
 
+        const showDropdown = item.dropdown && englishCourses.length > 0;
+
         return (
-          <li key={item.key}>
+          <li key={item.key} className={cn(showDropdown && 'group relative')}>
             <Link
               href={item.href}
               /* Announces the current page to assistive tech — WCAG 2.4.8. */
@@ -106,6 +134,36 @@ export function SidebarNav({ items, orientation = 'vertical', indicators }: Side
                 </>
               ) : null}
             </Link>
+
+            {showDropdown ? (
+              /*
+                Mouse-only, by design (the user's own ask): a plain link to
+                `item.href` already sits above and works for every input, so a
+                keyboard or touch user loses only the shortcut, never the
+                destination. Shown on focus-within too, at no extra cost, so a
+                sighted keyboard user tabbing through gets it as well
+                (WCAG 1.4.13 — hoverable content should not be hover-only where
+                it costs nothing to avoid that).
+              */
+              <ul
+                className={cn(
+                  'invisible absolute z-20 min-w-56 rounded-md border border-border bg-card py-1 opacity-0 shadow-lg transition-opacity',
+                  'group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100',
+                  orientation === 'vertical' ? 'start-full top-0 ms-1' : 'start-0 top-full mt-1',
+                )}
+              >
+                {englishCourses.map((course) => (
+                  <li key={course.id}>
+                    <Link
+                      href={`/courses/${course.id}`}
+                      className="block truncate px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900"
+                    >
+                      {course.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </li>
         );
       })}

@@ -7,6 +7,7 @@ import {
   type EnrolInput,
   type LmsCourse,
   type LmsCourseContentSummary,
+  LmsCourseOutlineItem,
   type LmsCourseId,
   type LmsCourseProgress,
   type LmsHealth,
@@ -72,6 +73,19 @@ export class MockLmsService implements LmsPort {
   private readonly created: LmsCourse[] = [];
   /** Moodle rejects a duplicate shortname; so does this. */
   private readonly shortNames = new Set<string>();
+  /** Which shortname each created course took, so deleting can release it. */
+  private readonly createdShortNames = new Map<LmsCourseId, string>();
+  /**
+   * Courses `deleteCourse` has removed (§4C.5, TAM-134).
+   *
+   * A tombstone set rather than a splice, because the seeded catalogue is a
+   * module constant shared by every instance — mutating it would leak one
+   * suite's deletion into the next. Like the rest of the mock's state it dies
+   * with the process, so a deleted seeded course returns on restart; a real
+   * Moodle does not resurrect one, and the difference is the mock's, not the
+   * contract's.
+   */
+  private readonly deleted = new Set<LmsCourseId>();
   /** What `simulateAuthoring` has been told about a course's contents. */
   private readonly authoring = new Map<LmsCourseId, Omit<LmsCourseContentSummary, 'lmsCourseId'>>();
   /** Makes each stand-in handoff URL distinct; see `courseLaunchUrl`. */
@@ -213,9 +227,36 @@ export class MockLmsService implements LmsPort {
     return Promise.resolve(null);
   }
 
-  /** The seeded catalogue plus anything an entity created this process. */
+  /** The seeded catalogue plus anything an entity created this process, less
+   *  anything deleted through the port. */
   private get catalogue(): readonly LmsCourse[] {
-    return [...MOCK_COURSES, ...this.created];
+    return [...MOCK_COURSES, ...this.created].filter(
+      (course) => !this.deleted.has(course.lmsCourseId),
+    );
+  }
+
+  /**
+   * Removes a course, and is a no-op for one that is already gone.
+   *
+   * The idempotence is the part worth mocking honestly: the caller deletes here
+   * first and in our database second, so a retry after a half-failure lands on
+   * this branch and must succeed rather than report a course it cannot find.
+   */
+  deleteCourse(lmsCourseId: LmsCourseId): Promise<void> {
+    this.deleted.add(lmsCourseId);
+
+    /* Frees the shortname the way a real deletion does, so a course can be
+       recreated under the name it used to hold. */
+    const shortName = this.createdShortNames.get(lmsCourseId);
+
+    if (shortName !== undefined) {
+      this.shortNames.delete(shortName);
+      this.createdShortNames.delete(lmsCourseId);
+    }
+
+    this.authoring.delete(lmsCourseId);
+
+    return Promise.resolve();
   }
 
   listCourses(): Promise<LmsCourse[]> {
@@ -271,8 +312,34 @@ export class MockLmsService implements LmsPort {
     };
 
     this.created.push(course);
+    this.createdShortNames.set(course.lmsCourseId, input.shortName);
 
     return { ...course };
+  }
+
+  /** As many stand-in activities as the simulated authoring says, quiz last. */
+  getCourseOutline(lmsCourseId: LmsCourseId): Promise<LmsCourseOutlineItem[]> {
+    if (!this.catalogue.some((course) => course.lmsCourseId === lmsCourseId)) {
+      return Promise.resolve([]);
+    }
+
+    const authored = this.authoring.get(lmsCourseId);
+    const count = authored?.activityCount ?? 3;
+    const hasQuiz = authored?.hasQuiz ?? true;
+
+    return Promise.resolve(
+      Array.from({ length: count }, (_, index) => {
+        const last = index === count - 1;
+        const kind = last && hasQuiz ? 'quiz' : 'page';
+        const lmsModuleId = lmsCourseId * 100 + index + 1;
+        return {
+          lmsModuleId,
+          name: kind === 'quiz' ? 'اختبار الدورة' : `النشاط ${index + 1}`,
+          kind,
+          url: `${MOCK_LMS_BASE_URL}/mod/${kind}/view.php?id=${lmsModuleId}`,
+        };
+      }),
+    );
   }
 
   getCourseContentSummary(lmsCourseId: LmsCourseId): Promise<LmsCourseContentSummary | null> {
@@ -448,6 +515,29 @@ export class MockLmsService implements LmsPort {
       hasQuiz: summary.hasQuiz ?? true,
       completionConfigured: summary.completionConfigured ?? true,
     });
+  }
+
+  /**
+   * Stands in for an entity editing a course's name, summary or visibility
+   * from Moodle's own Settings tab (§4B.4, TAM-133). Mock-only, like
+   * `simulateAuthoring` — the real adapter cannot drive Moodle's UI, so this
+   * must never reach `LmsPort`.
+   *
+   * Only ever touches a course this process created: the seeded catalogue is
+   * a shared module constant, and mutating it would leak one suite's edit
+   * into every other test that reads `MOCK_COURSES`.
+   */
+  simulateSettingsEdit(
+    lmsCourseId: LmsCourseId,
+    patch: Partial<Pick<LmsCourse, 'title' | 'summary' | 'visible'>>,
+  ): void {
+    const course = this.created.find((entry) => entry.lmsCourseId === lmsCourseId);
+
+    if (!course) {
+      throw new Error(`simulateSettingsEdit: ${lmsCourseId} was not created by this mock instance`);
+    }
+
+    Object.assign(course, patch);
   }
 
   /** Whether an enrolment carries editing capabilities. Mock-only. */

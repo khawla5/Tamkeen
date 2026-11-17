@@ -1,19 +1,57 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
   ValidateIf,
 } from 'class-validator';
+
+import { FULL_NAME_NO_DIGITS } from '../auth/auth.dto';
+
+const trim = () =>
+  Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value));
+
+/**
+ * §4B.6 — the entity's own profile, saved as one action like the employee's
+ * (§4.12): the account holder's name, and the organisation's contact. The
+ * organisation's *name* is not here — it is what the ministry contracted with
+ * (D-063) and §4C.2 is where it changes. Sending it trips the global
+ * `forbidNonWhitelisted` rather than being silently dropped.
+ */
+export class UpdateEntityProfileDto {
+  @IsString()
+  @IsNotEmpty({ message: 'FULL_NAME_REQUIRED' })
+  @MaxLength(120)
+  @Matches(FULL_NAME_NO_DIGITS, { message: 'FULL_NAME_HAS_DIGITS' })
+  @trim()
+  fullName!: string;
+
+  /* Both contact fields may be empty — an organisation can have no named
+     contact yet — but an address that is present must be one. */
+  @IsString()
+  @MaxLength(120)
+  @trim()
+  contactName!: string;
+
+  @IsString()
+  @MaxLength(254)
+  @trim()
+  @ValidateIf((_object, value) => typeof value === 'string' && value.length > 0)
+  @IsEmail({}, { message: 'CONTACT_EMAIL_INVALID' })
+  contactEmail!: string;
+}
 
 /**
  * Validation for the entity portal.

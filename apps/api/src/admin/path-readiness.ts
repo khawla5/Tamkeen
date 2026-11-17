@@ -1,46 +1,56 @@
-import { PATH_MAX_COURSES, PATH_MIN_COURSES } from '@tamkeen/types';
-
 /**
- * Whether a path may be offered to learners (§4C.4).
+ * Whether a path may be published (§4C.4, D-134).
  *
- * **The rule this file exists for: an active path always offers at least
- * `PATH_MIN_COURSES` selectable courses.** §2 requires a learner to choose
- * between five and ten before they can confirm, so a path with four available
- * courses is one nobody can ever complete — they reach the build screen, select
- * everything there is, and the confirm button stays disabled with no explanation
- * they can act on. Nothing downstream detects that; the path simply sits in the
- * catalogue looking like a choice.
+ * **A path is publishable when a learner assigned to it could actually get
+ * somewhere.** That takes three things, and each of them fails silently without
+ * this check:
  *
- * So the check runs where the path becomes offerable — on activation, and on any
- * change that could drop an active path below the floor — rather than being left
- * for a learner to discover. Same shape as `publishBlockers` (D-061) and
+ *  - **Rungs.** With no levels there is nothing to place anybody on.
+ *  - **A published assessment.** Without one, every learner assigned to the path
+ *    sits at «بانتظار تحديد المستوى» forever, and nothing in the product says
+ *    why. This is the blocker that matters most, because assigning is an
+ *    administrative act that happens elsewhere — by the time somebody notices,
+ *    a directorate has been assigned a path nobody can start.
+ *  - **A placed course.** Membership alone reaches nobody: a course sitting in
+ *    the path on no rung is invisible to every learner (D-134), so a path whose
+ *    courses are all unassigned is an empty path wearing a full one's clothes.
+ *
+ * The check runs where the path becomes offerable — on publication, and on any
+ * change that could drop a published path below it — rather than being left for
+ * a learner to discover. Same shape as `publishBlockers` (D-061) and
  * `assessBank` (D-071): pure, over facts the service gathers, and the same
  * function answers both "may I do this" and "why is this path flagged".
  *
- * **The ceiling is not checked, deliberately.** Ten is the most a learner may
- * *select*, not the most a path may *offer* — a path of thirty courses from
- * which five are chosen is exactly what §4.5 describes.
+ * **Nothing checks how *many* courses a path offers.** The 5-10 rule went with
+ * the build flow (D-134); a path's size is now curriculum design, not a
+ * constraint the product enforces.
  */
 
 export const PATH_BLOCKER = {
-  /** Fewer selectable courses than a learner needs to confirm. */
-  TOO_FEW_COURSES: 'PATH_TOO_FEW_COURSES',
+  /** No levels, so nobody can be placed. */
+  NO_LEVELS: 'PATH_NO_LEVELS',
+  /** No ACTIVE assessment version, so nobody can be placed. */
+  NO_ASSESSMENT: 'PATH_NO_ASSESSMENT',
+  /** Memberships exist but none is on a rung, so learners see nothing. */
+  NO_PLACED_COURSES: 'PATH_NO_PLACED_COURSES',
 } as const;
 
 export type PathBlockerCode = (typeof PATH_BLOCKER)[keyof typeof PATH_BLOCKER];
 
 export interface PathFacts {
-  /** Courses attached to the path that a learner could actually select now. */
+  levelCount: number;
+  hasActiveAssessment: boolean;
+  /** Courses placed on a rung that a learner could actually reach now. */
   selectableCourses: number;
 }
 
-/** Empty when the path may be active. */
+/** Empty when the path may be published. */
 export function pathBlockers(facts: PathFacts): PathBlockerCode[] {
-  return facts.selectableCourses < PATH_MIN_COURSES ? [PATH_BLOCKER.TOO_FEW_COURSES] : [];
-}
+  const blockers: PathBlockerCode[] = [];
 
-/**
- * The bounds, re-exported so §4C.6 can display them without importing the
- * learner-facing catalogue types (D-074: they are shown, never edited).
- */
-export const PATH_COURSE_BOUNDS = { min: PATH_MIN_COURSES, max: PATH_MAX_COURSES } as const;
+  if (facts.levelCount === 0) blockers.push(PATH_BLOCKER.NO_LEVELS);
+  if (!facts.hasActiveAssessment) blockers.push(PATH_BLOCKER.NO_ASSESSMENT);
+  if (facts.selectableCourses === 0) blockers.push(PATH_BLOCKER.NO_PLACED_COURSES);
+
+  return blockers;
+}

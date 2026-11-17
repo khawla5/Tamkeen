@@ -56,7 +56,11 @@ export class EntityCoursesService {
         status: true,
         pathCourses: {
           orderBy: { path: { displayOrder: 'asc' } },
-          select: { path: { select: { id: true, name: true, riasecLetter: true } } },
+          select: {
+            levelId: true,
+            path: { select: { id: true, name: true } },
+            level: { select: { id: true, name: true, position: true } },
+          },
         },
       },
     });
@@ -79,7 +83,12 @@ export class EntityCoursesService {
         language: course.language,
         publication: course.publication,
         status: course.status,
-        paths: course.pathCourses.map((entry) => entry.path),
+        paths: course.pathCourses.map((entry) => ({
+          id: entry.path.id,
+          name: entry.path.name,
+          placement: entry.levelId === null ? ('UNASSIGNED' as const) : ('PLACED' as const),
+          level: entry.level,
+        })),
         enrolledCount: stat.enrolled,
         /* Undefined rather than zero over an empty denominator. "0%" on a course
            nobody has started reads as failure, which is a different claim. */
@@ -92,11 +101,14 @@ export class EntityCoursesService {
   /**
    * How many learners hold each course, and how many have passed it.
    *
-   * **Passing is re-derived from `completions`, not read off
-   * `user_path_courses.status`.** A course can be COMPLETED in the LMS's sense
-   * and still not passed — D-054 corrected exactly that defect in the path
-   * certificate — so counting COMPLETED rows would overstate an entity's
-   * completion rate, and it is the number they will quote to the ministry.
+   * **"Hold" is an enrolment** (D-134): the row written when a placement put the
+   * course among what a learner owes. It replaces the per-learner course
+   * selection, which no longer exists.
+   *
+   * **Passing is re-derived from `completions`.** A course can be complete in
+   * the LMS's sense and still not passed — D-054 corrected exactly that defect
+   * in the path certificate — so counting completions alone would overstate an
+   * entity's rate, and it is the number they will quote to the ministry.
    *
    * Two queries regardless of catalogue size: the holders, then the passes for
    * the learners those holders name. `completions` is keyed on
@@ -106,12 +118,12 @@ export class EntityCoursesService {
   private async enrolmentStats(
     courseIds: string[],
   ): Promise<Map<string, { enrolled: number; passed: number }>> {
-    const holders = await this.prisma.userPathCourse.findMany({
+    const holders = await this.prisma.enrollment.findMany({
       where: { courseId: { in: courseIds } },
       select: {
         courseId: true,
+        userId: true,
         course: { select: { moodleCourseId: true } },
-        userPath: { select: { userId: true } },
       },
     });
 
@@ -124,7 +136,7 @@ export class EntityCoursesService {
     const completions = await this.prisma.completion.findMany({
       where: {
         passed: true,
-        userId: { in: [...new Set(holders.map((row) => row.userPath.userId))] },
+        userId: { in: [...new Set(holders.map((row) => row.userId))] },
         moodleCourseId: { in: [...new Set(holders.map((row) => row.course.moodleCourseId))] },
       },
       select: { userId: true, moodleCourseId: true },
@@ -136,7 +148,7 @@ export class EntityCoursesService {
 
     for (const row of holders) {
       const current = stats.get(row.courseId) ?? { enrolled: 0, passed: 0 };
-      const passed = passedKeys.has(`${row.userPath.userId}:${String(row.course.moodleCourseId)}`);
+      const passed = passedKeys.has(`${row.userId}:${String(row.course.moodleCourseId)}`);
 
       stats.set(row.courseId, {
         enrolled: current.enrolled + 1,

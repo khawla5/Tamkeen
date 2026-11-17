@@ -8,6 +8,14 @@ import type { EntityLearnerRow } from '@tamkeen/types';
 import { EntityPage } from '@/components/layout/entity-page';
 import { DataView } from '@/components/states';
 import { Field } from '@/components/ui/field';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useFormat } from '@/i18n/format-provider';
 import { entityApi } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/use-api';
@@ -74,47 +82,32 @@ function LearnerTable({ rows }: { rows: readonly EntityLearnerRow[] }) {
   return (
     /* Scrolls inside its own container so the page body never scrolls
        horizontally on a narrow viewport. */
-    <div className="overflow-x-auto rounded-card border border-border">
-      <table className="w-full min-w-[42rem] border-collapse text-sm">
-        <caption className="sr-only">{t('learnersTitle')}</caption>
-        <thead className="bg-card">
-          <tr className="text-start">
-            <Th>{t('learnerName')}</Th>
-            <Th>{t('learnerDepartment')}</Th>
-            <Th>{t('learnerCourse')}</Th>
-            <Th>{t('learnerStatus')}</Th>
-            <Th>{t('learnerGrade')}</Th>
-            <Th>{t('learnerResult')}</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={`${row.userId}:${row.courseId}`} className="border-t border-border">
-              <Td>{row.fullName}</Td>
-              <Td>{row.department}</Td>
-              <Td>{row.courseTitle}</Td>
-              <Td>{t(`status${row.status}`)}</Td>
-              {/* Null, not zero: nothing attempted is not a failed attempt. */}
-              <Td>
-                {row.gradePercent === null ? t('learnerNoGrade') : format.percent(row.gradePercent)}
-              </Td>
-              <Td>{row.passed ? t('learnerPassed') : t('learnerNotPassed')}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table caption={t('learnersTitle')} minWidthClassName="min-w-[42rem]">
+      <TableHeader>
+        <TableRow>
+          <TableHead>{t('learnerName')}</TableHead>
+          <TableHead>{t('learnerDepartment')}</TableHead>
+          <TableHead>{t('learnerCourse')}</TableHead>
+          <TableHead>{t('learnerStatus')}</TableHead>
+          <TableHead>{t('learnerGrade')}</TableHead>
+          <TableHead>{t('learnerResult')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={`${row.userId}:${row.courseId}`}>
+            <TableCell>{row.fullName}</TableCell>
+            <TableCell>{row.department}</TableCell>
+            <TableCell>{row.courseTitle}</TableCell>
+            <TableCell>{t(`status${row.status}`)}</TableCell>
+            {/* Null, not zero: nothing attempted is not a failed attempt. */}
+            <TableCell>
+              {row.gradePercent === null ? t('learnerNoGrade') : format.percent(row.gradePercent)}
+            </TableCell>
+            <TableCell>{row.passed ? t('learnerPassed') : t('learnerNotPassed')}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th scope="col" className="px-4 py-3 text-start font-medium text-muted-foreground">
-      {children}
-    </th>
-  );
-}
-
-function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-4 py-3 text-foreground">{children}</td>;
 }

@@ -68,7 +68,8 @@ import { SettingsModule } from './settings/settings.module';
     HealthModule,
     /* Phase 1. JourneyModule is read-only shared state and is imported by the
        four below rather than depended on between them, which is what keeps
-       assessment ↔ dashboard from becoming a cycle. */
+       assessment ↔ dashboard from becoming a cycle. AssignmentsModule is the
+       same shape for the D-132 assignment gate. */
     JourneyModule,
     AssessmentModule,
     PathsModule,

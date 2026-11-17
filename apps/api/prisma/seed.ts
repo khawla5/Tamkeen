@@ -7,7 +7,7 @@ import { hashPassword } from '../src/common/password';
 import { MockLmsService } from '../src/moodle/mock/mock-lms.service';
 import { seedProductData } from '../src/seed-data/seed-runner';
 import type { LmsPort } from '../src/moodle/lms.port';
-import { PrismaClient, UserRole, UserStatus } from '../generated/prisma';
+import { PrismaClient, UserRole, UserStatus } from '../src/generated/prisma';
 
 loadEnv({ path: ['../../.env', '.env'], quiet: true });
 
@@ -318,8 +318,12 @@ async function main(): Promise<void> {
   const counts = await seedProductData(prisma, resolveLms());
 
   console.log(
-    `Seeded ${counts.questions} questions (${counts.options} options), ` +
-      `${counts.courses} courses, ${counts.paths} paths, ${counts.pathCourses} memberships.`,
+    `Seeded ${counts.courses} courses; ${counts.paths} paths with ${counts.levels} levels ` +
+      `(${counts.placed} courses placed, ${counts.unassigned} awaiting placement); ` +
+      `${counts.assessments} placement assessments (${counts.questions} questions, ` +
+      `${counts.options} options); the ministry-wide RIASEC bank (${counts.ministryQuestions} ` +
+      `questions, ${counts.ministryOptions} options); the English placement test ` +
+      `(${counts.englishQuestions} questions).`,
   );
 
   /* After the catalogue, because it claims courses the catalogue seed creates. */

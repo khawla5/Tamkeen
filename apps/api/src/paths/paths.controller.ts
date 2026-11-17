@@ -1,6 +1,6 @@
 import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
 
-import type { PathDetail, PathRecommendations } from '@tamkeen/types';
+import type { AssignedPaths, PathDetail } from '@tamkeen/types';
 
 import { CurrentUser, Roles } from '../auth/auth.decorators';
 import type { AuthenticatedUser } from '../auth/session.service';
@@ -11,8 +11,9 @@ import { PathsService } from './paths.service';
 export class PathsController {
   constructor(private readonly paths: PathsService) {}
 
+  /** The paths assigned to this learner. Never a catalogue (D-130). */
   @Get()
-  list(@CurrentUser() user: AuthenticatedUser): Promise<PathRecommendations> {
+  list(@CurrentUser() user: AuthenticatedUser): Promise<AssignedPaths> {
     return this.paths.listForUser(user.id);
   }
 

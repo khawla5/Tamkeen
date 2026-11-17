@@ -9,7 +9,6 @@ import {
   type CvExternalCertification,
   type CvProfile,
   type CvView,
-  type RiasecLetter,
 } from '@tamkeen/types';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -158,31 +157,32 @@ export class CvService {
    * there is nothing to say yet.
    */
   private async careerProfileFor(userId: string): Promise<CvCareerProfile | null> {
-    const [result, userPath] = await Promise.all([
-      /* Retakes append (D-033), so the newest row is "their result". */
-      this.prisma.assessmentResult.findFirst({
-        where: { userId },
-        select: { code: true },
-        orderBy: { completedAt: 'desc' },
-      }),
-      this.prisma.userPath.findUnique({
-        where: { userId },
-        select: { status: true, confirmedAt: true, path: { select: { name: true } } },
-      }),
-    ]);
+    const assigned = await this.prisma.userPath.findMany({
+      where: { userId },
+      orderBy: { assignedAt: 'asc' },
+      select: { status: true, path: { select: { id: true, name: true } } },
+    });
 
-    if (!result) {
+    if (assigned.length === 0) {
       return null;
     }
 
-    /* A path only counts once committed to — one being built is not yet
-       something to put on a CV (D-002). */
-    const committed = userPath?.confirmedAt != null;
+    /* The rung the assessment put them on, when it has. A path they hold but
+       have not been placed in is still worth naming — the ministry assigned it,
+       which is a fact about their training — but it carries no level yet. */
+    const placements = await this.prisma.learnerPlacement.findMany({
+      where: { learnerId: userId },
+      select: { pathId: true, level: { select: { name: true } } },
+    });
+
+    const levelByPath = new Map(placements.map((row) => [row.pathId, row.level.name]));
 
     return {
-      pathName: committed ? (userPath?.path.name ?? null) : null,
-      pathCompleted: userPath?.status === 'COMPLETED',
-      hollandCode: [...result.code] as RiasecLetter[],
+      paths: assigned.map((row) => ({
+        name: row.path.name,
+        levelName: levelByPath.get(row.path.id) ?? null,
+        completed: row.status === 'COMPLETED',
+      })),
     };
   }
 }

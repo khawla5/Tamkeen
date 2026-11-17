@@ -11,11 +11,13 @@ export interface ProgressProps {
 }
 
 /**
- * A progress bar that is legible without seeing it.
+ * Progress bar on Platforms Code's anatomy (D-069, TAM-118): an 8px track on
+ * neutral-200, the primary fill, and the value written beside it.
  *
- * `aria-valuetext` carries the Arabic phrasing rather than leaving a screen
- * reader to announce a bare percentage, and the same text is rendered visibly —
- * WCAG 1.4.1 forbids conveying the state by the coloured fill alone.
+ * Legible without seeing it: `aria-valuetext` carries the Arabic phrasing
+ * rather than leaving a screen reader to announce a bare percentage, and the
+ * same text is rendered visibly — WCAG 1.4.1 forbids conveying the state by
+ * the coloured fill alone.
  */
 export function Progress({ value, max, label, valueText, className }: ProgressProps) {
   const safeMax = max > 0 ? max : 1;
@@ -30,13 +32,10 @@ export function Progress({ value, max, label, valueText, className }: ProgressPr
         aria-valuemax={max}
         aria-valuenow={value}
         aria-valuetext={valueText}
-        /* The track needs to be visible against a white card even when the fill
-           is zero-width — cream on white is not. A tint of the muted blue reads
-           on both surfaces without introducing a colour outside the palette. */
-        className="h-2 w-full overflow-hidden rounded-full bg-muted/20"
+        className="h-2 w-full overflow-hidden rounded-full bg-neutral-200"
       >
         <div
-          className="h-full rounded-full bg-secondary transition-[width]"
+          className="h-full rounded-full bg-primary-600 transition-[width] motion-reduce:transition-none"
           style={{ width: `${percent}%` }}
         />
       </div>

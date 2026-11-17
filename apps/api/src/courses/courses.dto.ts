@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsInt, IsOptional, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsUUID, Max, MaxLength, Min, IsBoolean } from 'class-validator';
 
 /** Query filters for the catalogue (§4.6): category-by-path, duration, search. */
 export class CourseQueryDto {
@@ -20,4 +20,15 @@ export class CourseQueryDto {
   @Min(1, { message: 'DURATION_INVALID' })
   @Max(100_000, { message: 'DURATION_INVALID' })
   maxDurationMinutes?: number;
+}
+
+/**
+ * The launch's one option (D-121). `embed` asks for a URL the player can
+ * frame — chrome hidden, the quiz announcing itself. Absent or false: the
+ * full-page handoff, unchanged.
+ */
+export class LaunchDto {
+  @IsOptional()
+  @IsBoolean()
+  embed?: boolean;
 }

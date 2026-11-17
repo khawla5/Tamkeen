@@ -5,13 +5,15 @@ import {
   formatNumber,
 } from '@tamkeen/types';
 
+import { ministryEmblemSvg } from './certificate-emblem';
 import { CERTIFICATE_FONT_FAMILY, fontFaceCss } from './certificate-fonts';
 
 /**
  * The certificate face (§3 brand, §4.10).
  *
- * Arabic-first and RTL, navy and gold, and deliberately austere: a credential
- * earns nothing from decoration. Course and path certificates share this one
+ * Arabic-first and RTL, and deliberately austere: a credential earns nothing
+ * from decoration. The one piece of artwork on it is the ministry's own emblem,
+ * which is not decoration but the statement of who is attesting. Course and path certificates share this one
  * template and differ where §4.10 asks them to differ — the path certificate is
  * the larger award and is framed in gold rather than navy, with a filled seal
  * and the count of courses it took.
@@ -29,11 +31,38 @@ import { CERTIFICATE_FONT_FAMILY, fontFaceCss } from './certificate-fonts';
 /* Platforms Code tokens (D-069) — mirrored from apps/web/src/lib/tokens.ts. */
 const PRIMARY = '#1B8354';
 const PRIMARY_DARK = '#14573A';
-const PRIMARY_TINT = '#B8EACB';
 const TEXT = '#1F2A37';
 const MUTED = '#6C727E';
 
 const HIJRI: FormatContext = { ...DEFAULT_FORMAT_CONTEXT, calendar: 'islamic-umalqura' };
+
+/**
+ * The Hijri date with «هـ» exactly once.
+ *
+ * Current ICU ends an Arabic Hijri date with «هـ» itself (`27 ربيع الآخر 1448 هـ`)
+ * and older builds do not, so a template that always appended the mark printed
+ * «هـ هـ» on one runtime and the right thing on the other. The mark is stripped
+ * if present and added back, which is correct on both. The Gregorian side needs
+ * no such care: its formatter never adds an era, and «م» is ours to append.
+ */
+function withHijriEra(formatted: string): string {
+  return `${formatted.replace(/\s*هـ\s*$/u, '')} هـ`;
+}
+
+/**
+ * «دورة واحدة» · «دورتين» · «٣ دورات» … «١٠ دورات» · «١١ دورة».
+ *
+ * The noun follows the number in Arabic: three to ten take the plural, and from
+ * eleven it returns to the singular. A path used to be five to ten courses, so
+ * «دورات» was always right; assigned paths are fixed sets of any size, and
+ * «٢٦ دورات» on a credential is an error a reader will see.
+ */
+function coursesPhrase(count: number): string {
+  if (count === 1) return 'دورة واحدة';
+  if (count === 2) return 'دورتين';
+
+  return count >= 3 && count <= 10 ? `${formatNumber(count)} دورات` : `${formatNumber(count)} دورة`;
+}
 
 export interface CertificateTemplateInput {
   type: 'COURSE' | 'PATH';
@@ -97,7 +126,7 @@ export function renderCertificateHtml(input: CertificateTemplateInput): string {
 
   const context = isPath
     ? input.courseCount !== null
-      ? `باجتياز ${formatNumber(input.courseCount)} دورات ضمن المسار`
+      ? `باجتياز ${coursesPhrase(input.courseCount)} ضمن المسار`
       : ''
     : input.pathName !== null
       ? `ضمن ${escapeHtml(input.pathName)}`
@@ -139,16 +168,10 @@ html, body {
   padding: 20mm 30mm 16mm;
 }
 
-.mark {
-  width: 20mm; height: 20mm; border-radius: 50%;
-  border: 0.6mm solid ${PRIMARY_DARK};
-  background: ${isPath ? PRIMARY_DARK : 'transparent'};
-  display: flex; align-items: center; justify-content: center;
-}
-.mark-inner {
-  width: 10mm; height: 10mm; transform: rotate(45deg);
-  border: 0.6mm solid ${isPath ? '#ffffff' : PRIMARY_TINT};
-}
+/* The ministry's own artwork, at the size the placeholder mark held (TAM-136).
+   Sized here rather than on the SVG so the file stays exactly as supplied. */
+.emblem { width: ${isPath ? '26mm' : '22mm'}; height: ${isPath ? '26mm' : '22mm'}; }
+.emblem svg { width: 100%; height: 100%; display: block; }
 
 .platform { font-size: 10pt; color: ${MUTED}; margin-top: 4mm; }
 
@@ -181,7 +204,10 @@ html, body {
 .date-label { font-size: 9pt; color: ${MUTED}; }
 .date-value { font-size: 11pt; margin-top: 1.5mm; }
 
-.sign-line { border-top: 0.3mm solid ${PRIMARY_DARK}; padding-top: 2mm; }
+/* No rule above the name (TAM-136, ministry direction). A signature line is
+   drawn for someone to sign *on*; this block prints a name the ministry has
+   already given, so the rule was furniture pretending to be a place to sign. */
+.sign-line { padding-top: 2mm; }
 .sign-name { font-size: 10.5pt; font-weight: 600; }
 .sign-title { font-size: 8.5pt; color: ${MUTED}; margin-top: 1mm; }
 </style>
@@ -192,9 +218,9 @@ html, body {
   <div class="frame-inner"></div>
 
   <div class="content">
-    <!-- Logo slot. A neutral placeholder mark until the ministry supplies its
-         seal; the slot's size and position are what the real mark inherits. -->
-    <div class="mark"><div class="mark-inner"></div></div>
+    <!-- The ministry emblem, in the slot the placeholder mark held (TAM-136).
+         The seal and the signatory's signature are still owed (D-051). -->
+    <div class="emblem">${ministryEmblemSvg()}</div>
     <div class="platform">منصة التدريب والتطوير المهني</div>
 
     <div class="body">
@@ -218,7 +244,7 @@ html, body {
       <div>
         <div class="date-label">تاريخ الإصدار</div>
         <!-- Both calendars on the face (Q3), both from format.ts. -->
-        <div class="date-value">${formatDate(input.issuedAt, HIJRI)} هـ</div>
+        <div class="date-value">${withHijriEra(formatDate(input.issuedAt, HIJRI))}</div>
         <div class="date-value">${formatDate(input.issuedAt)} م</div>
       </div>
 

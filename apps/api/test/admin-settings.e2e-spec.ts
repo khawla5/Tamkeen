@@ -163,24 +163,37 @@ describe('Admin system settings (e2e)', () => {
   describe('reading', () => {
     it('reports the environment value while nothing is overridden', async () => {
       const body = await view();
-      const threshold = body.settings.find((row) => row.key === 'PASS_THRESHOLD');
+      const interval = body.settings.find((row) => row.key === 'COMPLETION_SYNC_INTERVAL_MINUTES');
 
-      expect(threshold).toMatchObject({ value: '70', isOverridden: false });
+      expect(interval).toMatchObject({ value: '5', isOverridden: false });
+    });
+
+    it('tells the screen how to edit each knob, from the schema that validates it', async () => {
+      const body = await view();
+      const editor = (key: string) => body.settings.find((row) => row.key === key);
+
+      /* An enum is a dropdown and its options are the enum's members, so the
+         screen cannot offer a value the server would refuse (TAM-135). */
+      expect(editor('REGISTRATION_MODE')).toMatchObject({
+        editor: 'select',
+        options: ['restricted', 'admin-only'],
+      });
+      expect(editor('NUMBER_FORMAT')?.editor).toBe('select');
+      expect(editor('COMPLETION_SYNC_INTERVAL_MINUTES')?.editor).toBe('number');
+      expect(editor('CERT_SIGNATORY_NAME')).toMatchObject({ editor: 'text', options: [] });
     });
 
     it('shows the floors that cannot be changed', async () => {
       const body = await view();
 
-      /* An administrator explaining a rejected path build needs these; nobody
-         needs a control that lowers them (D-074, §2). */
+      /* §2 makes the auth rate limits a security floor rather than a knob an
+         operator may loosen; an administrator investigating a lockout needs the
+         numbers, and nobody needs a control that lowers them. The 5-10 course
+         bounds are gone with the build flow — nobody chooses a path (D-134). */
       expect(body.readOnly.map((row) => row.key)).toEqual(
-        expect.arrayContaining([
-          'PATH_MIN_COURSES',
-          'PATH_MAX_COURSES',
-          'API_RATE_LIMIT_MAX_REQUESTS',
-        ]),
+        expect.arrayContaining(['API_RATE_LIMIT_MAX_REQUESTS', 'API_RATE_LIMIT_WINDOW_SECONDS']),
       );
-      expect(body.readOnly.find((row) => row.key === 'PATH_MIN_COURSES')?.value).toBe('5');
+      expect(body.readOnly.map((row) => row.key)).not.toContain('PATH_MIN_COURSES');
     });
 
     it('carries no secret at all', async () => {
@@ -225,60 +238,27 @@ describe('Admin system settings (e2e)', () => {
     });
   });
 
-  describe('changing the pass threshold', () => {
-    it('validates the value the way the environment would', async () => {
-      /* 0-100, the same Zod field `PASS_THRESHOLD=…` goes through. */
-      const response = await send(
-        'patch',
-        '/api/admin/settings/PASS_THRESHOLD',
-        { value: '150' },
-        sessionAdmin,
-      ).expect(400);
+  describe('the pass threshold, which is no longer a setting (D-102)', () => {
+    it('is absent from the view and has no route in either direction', async () => {
+      const body = await view();
 
-      expect((response.body as { message: string }).message).toBe('SETTING_INVALID_PASS_THRESHOLD');
+      expect(body.settings.map((row) => row.key)).not.toContain('PASS_THRESHOLD');
+      expect(body.readOnly.map((row) => row.key)).not.toContain('PASS_THRESHOLD');
 
       await send(
         'patch',
         '/api/admin/settings/PASS_THRESHOLD',
-        { value: 'seventy' },
+        { value: '85' },
         sessionAdmin,
-      ).expect(400);
+      ).expect(404);
+      await send('delete', '/api/admin/settings/PASS_THRESHOLD', {}, sessionAdmin).expect(404);
     });
 
-    it('stores it and marks it overridden', async () => {
-      const body = (
-        await send(
-          'patch',
-          '/api/admin/settings/PASS_THRESHOLD',
-          { value: '85' },
-          sessionAdmin,
-        ).expect(200)
-      ).body as AdminSettingsView;
-
-      expect(body.settings.find((row) => row.key === 'PASS_THRESHOLD')).toMatchObject({
-        value: '85',
-        isOverridden: true,
-      });
-    });
-
-    it('reaches the consumers, because there is one source of truth', async () => {
-      /*
-       * Read through `SettingsService` — the same object completion sync, the
-       * course player and the verdict evaluator inject. Reading the row instead
-       * would prove the write and say nothing about whether anybody sees it,
-       * which is the whole reason D-072 exists.
-       */
-      settings.invalidate();
-
-      expect(await settings.get('PASS_THRESHOLD')).toBe(85);
-    });
-
-    it('does not change a verdict that was already recorded', async () => {
+    it('still decides verdicts, and every recorded one still says under which', async () => {
       /*
        * D-042 stores `passThresholdUsed` on every completion, so a verdict
-       * remains explicable under the threshold it was actually decided by. This
-       * asserts the column is still populated per row rather than derived at
-       * read time — the property that makes lowering the threshold safe.
+       * remains explicable under the threshold it was actually decided by —
+       * which is what makes moving the deployment's number safe.
        */
       const completion = await prisma.completion.findFirst({
         select: { passThresholdUsed: true },
@@ -288,32 +268,72 @@ describe('Admin system settings (e2e)', () => {
         expect(completion.passThresholdUsed).not.toBeNull();
       }
     });
+  });
+
+  describe('changing a setting', () => {
+    it('validates the value the way the environment would', async () => {
+      const response = await send(
+        'patch',
+        '/api/admin/settings/NUMBER_FORMAT',
+        { value: 'roman' },
+        sessionAdmin,
+      ).expect(400);
+
+      expect((response.body as { message: string }).message).toBe('SETTING_INVALID_NUMBER_FORMAT');
+    });
+
+    it('stores it and marks it overridden', async () => {
+      const body = (
+        await send(
+          'patch',
+          '/api/admin/settings/NUMBER_FORMAT',
+          { value: 'arabic-indic' },
+          sessionAdmin,
+        ).expect(200)
+      ).body as AdminSettingsView;
+
+      expect(body.settings.find((row) => row.key === 'NUMBER_FORMAT')).toMatchObject({
+        value: 'arabic-indic',
+        isOverridden: true,
+      });
+    });
+
+    it('reaches the consumers, because there is one source of truth', async () => {
+      /*
+       * Read through `SettingsService` — the same object every consumer injects.
+       * Reading the row instead would prove the write and say nothing about
+       * whether anybody sees it, which is the whole reason D-072 exists.
+       */
+      settings.invalidate();
+
+      expect(await settings.get('NUMBER_FORMAT')).toBe('arabic-indic');
+    });
 
     it('records the key and the new value, which is the point of this trail', async () => {
       const entry = await prisma.auditLog.findFirst({
-        where: { action: 'ADMIN_SETTING_CHANGED', targetId: 'PASS_THRESHOLD' },
+        where: { action: 'ADMIN_SETTING_CHANGED', targetId: 'NUMBER_FORMAT' },
         orderBy: { occurredAt: 'desc' },
         select: { metadata: true },
       });
 
-      /* The one audit payload that carries a value, because "who lowered the
-         pass threshold, to what, and when" is where an audit of a disputed
-         certificate starts. Safe because no secret is settable. */
-      expect(entry?.metadata).toMatchObject({ setting: 'PASS_THRESHOLD', value: '85' });
+      /* The one audit payload that carries a value, because "who changed this,
+         to what, and when" is where an audit of a disputed document starts.
+         Safe because no secret is settable. */
+      expect(entry?.metadata).toMatchObject({ setting: 'NUMBER_FORMAT', value: 'arabic-indic' });
     });
 
     it('resets to the environment value', async () => {
       const body = (
-        await send('delete', '/api/admin/settings/PASS_THRESHOLD', {}, sessionAdmin).expect(200)
+        await send('delete', '/api/admin/settings/NUMBER_FORMAT', {}, sessionAdmin).expect(200)
       ).body as AdminSettingsView;
 
-      expect(body.settings.find((row) => row.key === 'PASS_THRESHOLD')).toMatchObject({
-        value: '70',
+      expect(body.settings.find((row) => row.key === 'NUMBER_FORMAT')).toMatchObject({
+        value: 'western',
         isOverridden: false,
       });
 
       settings.invalidate();
-      expect(await settings.get('PASS_THRESHOLD')).toBe(70);
+      expect(await settings.get('NUMBER_FORMAT')).toBe('western');
     });
   });
 

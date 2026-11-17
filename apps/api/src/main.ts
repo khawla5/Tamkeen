@@ -39,12 +39,20 @@ async function bootstrap(): Promise<void> {
   );
 
   /*
-   * Credentialed CORS against exactly one origin. A wildcard is not merely
-   * discouraged with credentials — browsers reject it — and echoing back the
-   * request's Origin would defeat the point entirely.
+   * Credentialed CORS against exactly one origin in production. A wildcard is
+   * not merely discouraged with credentials — browsers reject it — and echoing
+   * back the request's Origin would defeat the point entirely.
+   *
+   * Outside production, a second fixed origin is allowed alongside APP_URL —
+   * a developer running a throwaway preview server on another local port
+   * (e.g. `next dev --port 3001`) still needs to reach the API. Still an
+   * explicit allowlist, never a reflected/wildcard origin, so the security
+   * property above holds; it just admits one more known local address.
    */
   app.enableCors({
-    origin: config.get('APP_URL'),
+    origin: config.isProduction
+      ? config.get('APP_URL')
+      : [config.get('APP_URL'), 'http://localhost:3001'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'X-CSRF-Token'],
   });

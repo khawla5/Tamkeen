@@ -1,14 +1,22 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 
-import type { AdminCoursePage, AdminCourseRow } from '@tamkeen/types';
+import { courseStatusesFor, type AdminCoursePage, type AdminCourseRow } from '@tamkeen/types';
 
 import { AuditAction, AuditReason } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import {
+  availabilityDay,
+  availabilityWindowFrom,
+  availabilityWindowUntil,
   effectiveCourseStatus,
+  isCalendarDay,
+  isWithinAvailabilityWindow,
   type CoursePublicationValue,
 } from '../catalog-sync/catalog-mapping';
+import { LmsUnavailableError } from '../moodle/lms.types';
+import { LMS_PORT, type LmsPort } from '../moodle/lms.port';
 import { PrismaService } from '../prisma/prisma.service';
+import { isForeignKeyViolation } from './prisma-errors';
 import type { AdminCourseQueryDto, InterveneCourseDto } from './admin.dto';
 
 /**
@@ -36,6 +44,7 @@ export class AdminCoursesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Inject(LMS_PORT) private readonly lms: LmsPort,
   ) {}
 
   async list(query: AdminCourseQueryDto): Promise<AdminCoursePage> {
@@ -44,7 +53,13 @@ export class AdminCoursesService {
 
     const where = {
       ...(query.publication ? { publication: query.publication } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      /*
+       * The administrator's two words, resolved to the statuses they cover
+       * (§4C.5). `courseStatusesFor` is the same mapping the badge renders
+       * with — filtering on a second, hand-written list here is how a query
+       * comes to return rows the badge contradicts.
+       */
+      ...(query.visibility ? { status: { in: courseStatusesFor(query.visibility) } } : {}),
       ...(query.pathId ? { pathCourses: { some: { pathId: query.pathId } } } : {}),
       /*
        * `unowned` and `entityId` are separate filters rather than one field with
@@ -61,7 +76,17 @@ export class AdminCoursesService {
     const [rows, total, unownedTotal] = await Promise.all([
       this.prisma.course.findMany({
         where,
-        orderBy: [{ title: 'asc' }],
+        /* The screen sets the courses out by supplier and, inside each, those in a
+           path before those in none — so the order the page needs is the order it
+           is paged in, and a supplier's block does not split across pages out of
+           turn. Courses nobody supplies sort last (a missing relation sorts after
+           every name), and the count of paths puts "in some path" ahead of "in
+           none" without having to know how many. */
+        orderBy: [
+          { ownerEntity: { name: 'asc' } },
+          { pathCourses: { _count: 'desc' } },
+          { title: 'asc' },
+        ],
         skip: (page - 1) * pageSize,
         take: pageSize,
         select: COURSE_SELECT,
@@ -72,10 +97,10 @@ export class AdminCoursesService {
       this.prisma.course.count({ where: { ownerEntityId: null } }),
     ]);
 
-    const held = await this.heldCounts(rows.map((row) => row.id));
+    const facts = await this.courseFacts(rows);
 
     return {
-      rows: rows.map((row) => toRow(row, held.get(row.id) ?? 0)),
+      rows: rows.map((row) => toRow(row, facts.get(row.id) ?? EMPTY_FACTS)),
       total,
       page,
       pageSize,
@@ -93,9 +118,9 @@ export class AdminCoursesService {
       throw new NotFoundException('COURSE_NOT_FOUND');
     }
 
-    const held = await this.heldCounts([courseId]);
+    const facts = await this.courseFacts([course]);
 
-    return toRow(course, held.get(courseId) ?? 0);
+    return toRow(course, facts.get(courseId) ?? EMPTY_FACTS);
   }
 
   /**
@@ -118,7 +143,15 @@ export class AdminCoursesService {
   ): Promise<AdminCourseRow> {
     const course = await this.prisma.course.findUnique({
       where: { id: courseId },
-      select: { id: true, publication: true, lmsPresent: true, lmsVisible: true },
+      select: {
+        id: true,
+        moodleCourseId: true,
+        publication: true,
+        lmsPresent: true,
+        lmsVisible: true,
+        availableFrom: true,
+        availableUntil: true,
+      },
     });
 
     if (!course) {
@@ -158,13 +191,50 @@ export class AdminCoursesService {
     }
 
     const publication = (dto.publication ?? course.publication) as CoursePublicationValue;
-    const held = await this.heldCounts([courseId]);
+    const facts = await this.courseFacts([course]);
+
+    /*
+     * The window as it will be *after* this write, not as it was before it.
+     *
+     * `undefined` means the administrator did not touch that bound and `null`
+     * means they cleared it, so the two cannot be collapsed — and the status
+     * below has to be derived from the new window or a course closed by today's
+     * date would stay AVAILABLE until the next sync run, which is exactly the
+     * lag the immediate recompute exists to remove.
+     */
+    for (const day of [dto.availableFrom, dto.availableUntil]) {
+      if (typeof day === 'string' && !isCalendarDay(day)) {
+        /* Shape passed the DTO; the calendar decides the rest. Refused here
+           rather than turned into an Invalid Date the database reports in its
+           own words. */
+        throw new ConflictException('COURSE_AVAILABILITY_WINDOW_INVALID');
+      }
+    }
+
+    const availableFrom =
+      dto.availableFrom === undefined
+        ? course.availableFrom
+        : availabilityWindowFrom(dto.availableFrom);
+    const availableUntil =
+      dto.availableUntil === undefined
+        ? course.availableUntil
+        : availabilityWindowUntil(dto.availableUntil);
+
+    if (availableFrom !== null && availableUntil !== null && availableFrom > availableUntil) {
+      /* A window that ends before it starts is never open, so a course given one
+         would vanish with no visible reason. Refused rather than stored. */
+      throw new ConflictException('COURSE_AVAILABILITY_WINDOW_INVALID');
+    }
 
     const status = effectiveCourseStatus({
       publication,
       lmsPresent: course.lmsPresent,
       lmsVisible: course.lmsVisible,
-      heldByAnyLearner: (held.get(courseId) ?? 0) > 0,
+      heldByAnyLearner: (facts.get(courseId)?.heldByLearners ?? 0) > 0,
+      withinAvailabilityWindow: isWithinAvailabilityWindow(
+        { availableFrom, availableUntil },
+        new Date(),
+      ),
     });
 
     await this.prisma.course.update({
@@ -172,6 +242,8 @@ export class AdminCoursesService {
       data: {
         ...(dto.publication === undefined ? {} : { publication: dto.publication }),
         ...(dto.ownerEntityId === undefined ? {} : { ownerEntityId: dto.ownerEntityId }),
+        ...(dto.availableFrom === undefined ? {} : { availableFrom }),
+        ...(dto.availableUntil === undefined ? {} : { availableUntil }),
         status,
       },
     });
@@ -214,19 +286,198 @@ export class AdminCoursesService {
     return this.get(courseId);
   }
 
-  /** How many learners hold each course, across every path. */
-  private async heldCounts(courseIds: readonly string[]): Promise<Map<string, number>> {
-    if (courseIds.length === 0) {
+  /**
+   * Deletes a course permanently — from the LMS and from the catalogue (§4C.5).
+   *
+   * **Hiding and deleting are different decisions, and this is the one that
+   * cannot be undone.** Hiding is `intervene({ publication: 'UNPUBLISHED' })`:
+   * reversible, and it leaves anybody mid-course able to finish. This removes
+   * the course from Moodle and then removes our row, and what it refuses is what
+   * makes it safe to offer — anything a learner has ever selected, anything a
+   * certificate names, anything with a completion behind it. A course a learner
+   * holds is protected by §2/D-015; a course a certificate names would falsify a
+   * credential somebody is holding; and a completion outliving its course would
+   * leave a learner's own history pointing at something the catalogue can no
+   * longer name.
+   *
+   * What remains deletable is the case hiding handles badly: the course created
+   * by mistake, the duplicate, the test course nobody ever took. Hidden, it sits
+   * in the oversight list forever as a permanent invitation to wonder what it
+   * was for.
+   *
+   * **The LMS first, our row second, and the order is load-bearing.** Our
+   * `courses` row is a mirror of what the LMS holds (§1), so deleting only our
+   * side would have the next catalogue sync rediscover the course and re-enter
+   * it as an unowned draft. If the LMS refuses — most likely because the
+   * integration role has not been granted `moodle/course:delete` (D-135) — nothing is
+   * deleted here either, and the administrator gets a refusal rather than a
+   * catalogue and an LMS that disagree.
+   */
+  async remove(courseId: string, actorId: string, ipAddress: string | null): Promise<void> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, moodleCourseId: true, title: true },
+    });
+
+    if (!course) {
+      throw new NotFoundException('COURSE_NOT_FOUND');
+    }
+
+    const facts = (await this.courseFacts([course])).get(courseId) ?? EMPTY_FACTS;
+
+    if (!canDelete(facts)) {
+      await this.audit.record({
+        action: AuditAction.ADMIN_COURSE_DELETED,
+        outcome: 'FAILURE',
+        actorUserId: actorId,
+        ipAddress,
+        targetType: 'course',
+        targetId: courseId,
+        reason: AuditReason.COURSE_HELD_BY_LEARNERS,
+        detail: {
+          learners: facts.heldByLearners,
+          certificates: facts.certificatesIssued,
+          completions: facts.completions,
+        },
+      });
+
+      throw new ConflictException('COURSE_IN_USE');
+    }
+
+    try {
+      await this.lms.deleteCourse(course.moodleCourseId);
+    } catch (error) {
+      await this.audit.record({
+        action: AuditAction.ADMIN_COURSE_DELETED,
+        outcome: 'FAILURE',
+        actorUserId: actorId,
+        ipAddress,
+        targetType: 'course',
+        targetId: courseId,
+        reason: AuditReason.LMS_COURSE_DELETE_FAILED,
+        detail: { moodleCourseId: course.moodleCourseId },
+      });
+
+      /* Told apart deliberately: an LMS that is down is a "try again shortly",
+         while a rejection is a capability the integration role does not have and
+         retrying will never fix.
+
+         The transport reports Moodle's refusal (`accessexception`, `nopermissions`,
+         an invalid token) as `LmsUnavailableError('UNAUTHORISED')`, because to every
+         other caller "the integration may not do this" and "the LMS is down" are
+         the same dead end. Here they are not: telling an administrator the platform
+         is *unreachable* when Moodle answered "not allowed" sends them to wait for
+         an outage that is not happening, and the missing grant never gets fixed. */
+      const outage = error instanceof LmsUnavailableError && error.failureCode !== 'UNAUTHORISED';
+
+      throw new ConflictException(outage ? 'LMS_UNAVAILABLE' : 'COURSE_LMS_DELETE_FAILED');
+    }
+
+    try {
+      await this.prisma.course.delete({ where: { id: courseId } });
+    } catch (error) {
+      /*
+       * The checks above and this delete are separate statements, and a learner
+       * can select the course in between. `Restrict` on `user_path_courses` and
+       * on `certificates` is what actually stops it; this turns the foreign-key
+       * violation into the same refusal the check would have given, so the race
+       * reads as a sentence rather than as a 500.
+       *
+       * The LMS course is gone by this point, which the next sync run reports as
+       * `lmsPresent: false` — the course becomes HIDDEN_BUT_COMPLETABLE for the
+       * learner who won the race, which is the outcome §2/D-015 asks for.
+       */
+      if (isForeignKeyViolation(error)) {
+        await this.audit.record({
+          action: AuditAction.ADMIN_COURSE_DELETED,
+          outcome: 'FAILURE',
+          actorUserId: actorId,
+          ipAddress,
+          targetType: 'course',
+          targetId: courseId,
+          reason: AuditReason.COURSE_HELD_BY_LEARNERS,
+          detail: { race: 'true', moodleCourseId: course.moodleCourseId },
+        });
+
+        throw new ConflictException('COURSE_IN_USE');
+      }
+
+      throw error;
+    }
+
+    await this.audit.record({
+      action: AuditAction.ADMIN_COURSE_DELETED,
+      outcome: 'SUCCESS',
+      actorUserId: actorId,
+      ipAddress,
+      targetType: 'course',
+      targetId: courseId,
+      /* Named, not merely identified: after this returns there is no row left
+         for the id to resolve against. */
+      detail: { title: course.title, moodleCourseId: course.moodleCourseId },
+    });
+  }
+
+  /**
+   * What each course is *held by* — the three facts that decide both the held
+   * count on the row and whether the course may be deleted at all.
+   *
+   * Gathered in one place for the whole page rather than per row: three grouped
+   * queries for twenty-five courses, instead of seventy-five.
+   *
+   * **Completions are counted by `moodle_course_id`, not by our row id**, and
+   * that is not an inconsistency. `completions` is keyed on the LMS course (§6)
+   * precisely so a shared course is never re-taken, and it has no foreign key to
+   * `courses` — so deleting the row would leave a learner's completion history
+   * pointing at a course the catalogue can no longer name. The database will not
+   * stop that; this count is what does.
+   */
+  private async courseFacts(
+    rows: ReadonlyArray<{ id: string; moodleCourseId: number }>,
+  ): Promise<Map<string, CourseFacts>> {
+    if (rows.length === 0) {
       return new Map();
     }
 
-    const rows = await this.prisma.userPathCourse.groupBy({
-      by: ['courseId'],
-      where: { courseId: { in: [...courseIds] } },
-      _count: { _all: true },
-    });
+    const courseIds = rows.map((row) => row.id);
+    const moodleCourseIds = rows.map((row) => row.moodleCourseId);
 
-    return new Map(rows.map((row) => [row.courseId, row._count._all]));
+    const [held, certificates, completions] = await Promise.all([
+      this.prisma.enrollment.groupBy({
+        by: ['courseId'],
+        where: { courseId: { in: courseIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.certificate.groupBy({
+        by: ['courseId'],
+        where: { courseId: { in: courseIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.completion.groupBy({
+        by: ['moodleCourseId'],
+        where: { moodleCourseId: { in: moodleCourseIds } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const heldBy = new Map(held.map((row) => [row.courseId, row._count._all]));
+    const certificatesBy = new Map(
+      certificates
+        .filter((row): row is typeof row & { courseId: string } => row.courseId !== null)
+        .map((row) => [row.courseId, row._count._all]),
+    );
+    const completionsBy = new Map(completions.map((row) => [row.moodleCourseId, row._count._all]));
+
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        {
+          heldByLearners: heldBy.get(row.id) ?? 0,
+          certificatesIssued: certificatesBy.get(row.id) ?? 0,
+          completions: completionsBy.get(row.moodleCourseId) ?? 0,
+        },
+      ]),
+    );
   }
 }
 
@@ -241,11 +492,34 @@ const COURSE_SELECT = {
   language: true,
   durationMinutes: true,
   ownerEntityId: true,
+  availableFrom: true,
+  availableUntil: true,
   publishedAt: true,
   lastSyncedAt: true,
   ownerEntity: { select: { name: true } },
   pathCourses: { select: { path: { select: { id: true, name: true } } } },
 } as const;
+
+/** The three facts that decide whether a course may be deleted (§4C.5). */
+interface CourseFacts {
+  heldByLearners: number;
+  certificatesIssued: number;
+  completions: number;
+}
+
+const EMPTY_FACTS: CourseFacts = { heldByLearners: 0, certificatesIssued: 0, completions: 0 };
+
+/**
+ * One rule for deletability, read by the row the screen renders and by the
+ * endpoint that acts on it.
+ *
+ * Written once so the button and the refusal cannot disagree — the failure mode
+ * being a delete offered by the screen and refused by the server, which reads to
+ * an administrator as a broken product rather than as a protected course.
+ */
+function canDelete(facts: CourseFacts): boolean {
+  return facts.heldByLearners === 0 && facts.certificatesIssued === 0 && facts.completions === 0;
+}
 
 function toRow(
   course: {
@@ -259,12 +533,14 @@ function toRow(
     language: 'AR' | 'EN' | null;
     durationMinutes: number | null;
     ownerEntityId: string | null;
+    availableFrom: Date | null;
+    availableUntil: Date | null;
     publishedAt: Date | null;
     lastSyncedAt: Date | null;
     ownerEntity: { name: string } | null;
     pathCourses: Array<{ path: { id: string; name: string } }>;
   },
-  heldByLearners: number,
+  facts: CourseFacts,
 ): AdminCourseRow {
   return {
     id: course.id,
@@ -279,7 +555,11 @@ function toRow(
     ownerEntityId: course.ownerEntityId,
     ownerEntityName: course.ownerEntity?.name ?? null,
     paths: course.pathCourses.map((row) => row.path),
-    heldByLearners,
+    heldByLearners: facts.heldByLearners,
+    certificatesIssued: facts.certificatesIssued,
+    canDelete: canDelete(facts),
+    availableFrom: availabilityDay(course.availableFrom),
+    availableUntil: availabilityDay(course.availableUntil),
     publishedAt: course.publishedAt?.toISOString() ?? null,
     lastSyncedAt: course.lastSyncedAt?.toISOString() ?? null,
   };

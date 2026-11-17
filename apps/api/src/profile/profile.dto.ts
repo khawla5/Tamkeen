@@ -1,5 +1,7 @@
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+
+import { FULL_NAME_NO_DIGITS } from '../auth/auth.dto';
 
 const trim = () =>
   Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value));
@@ -15,6 +17,7 @@ export class UpdateProfileDto {
   @IsString()
   @IsNotEmpty({ message: 'FULL_NAME_REQUIRED' })
   @MaxLength(120)
+  @Matches(FULL_NAME_NO_DIGITS, { message: 'FULL_NAME_HAS_DIGITS' })
   @trim()
   fullName!: string;
 

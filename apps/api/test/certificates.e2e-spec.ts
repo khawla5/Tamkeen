@@ -10,6 +10,7 @@ import type { CertificateVerificationView } from '@tamkeen/types';
 
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { numericEmployeeId } from './employee-id';
 
 /**
  * The public certificate check, over HTTP (§2, D-016).
@@ -71,7 +72,7 @@ describe('Certificate verification (e2e)', () => {
         email: `verify-${RUN_ID}@ministry.gov.example`,
         passwordHash: 'not-a-real-hash',
         fullName: 'سارة بنت أحمد القحطاني',
-        employeeId: `VER${RUN_ID.toUpperCase()}`,
+        employeeId: numericEmployeeId(RUN_ID, 'ver'),
         department: 'إدارة الموارد البشرية',
         emailVerifiedAt: new Date(),
       },
@@ -93,9 +94,9 @@ describe('Certificate verification (e2e)', () => {
         key: `verify-path-${RUN_ID}`,
         name: 'مسار القيادة الإدارية',
         description: 'مسار اختبار.',
-        riasecLetter: 'E',
         displayOrder: 998,
-        isActive: false,
+        riasecLetter: 'R',
+        status: 'DRAFT',
       },
     });
     pathId = path.id;

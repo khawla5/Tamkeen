@@ -5,23 +5,39 @@ import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 /**
- * Where the learner is in the programme, at a glance (TAM-123): four stages —
- * assessment, path, courses, certificate — each done, current or upcoming.
- * Derived entirely from the dashboard state the server already decided, so it
- * can never disagree with the cards below it.
+ * Where the learner is in the programme, at a glance (TAM-123, D-134): four
+ * stages — assigned, placed, courses, certificate — each done, current or
+ * upcoming.
+ *
+ * The stages follow the ministry's sequence rather than a choice the learner
+ * makes: a path is assigned to them, an assessment places them on it, they work
+ * what they owe, and the path certificate closes it. Derived entirely from the
+ * dashboard state the server already decided, so it can never disagree with the
+ * cards below it.
+ *
+ * **The first stage is never "current".** Being assigned is not something a
+ * learner does, so an employee with no path has nothing in progress — every node
+ * is upcoming, which is the honest picture of somebody waiting on the ministry.
  */
 type Stage = 'done' | 'current' | 'upcoming';
 
-const STAGE_KEYS = ['assessment', 'path', 'courses', 'certificate'] as const;
+const STAGE_KEYS = ['assigned', 'placed', 'courses', 'certificate'] as const;
 
 export function stagesFor(dashboard: DashboardView): Stage[] {
-  if (dashboard.state === 'PRE_ASSESSMENT') return ['current', 'upcoming', 'upcoming', 'upcoming'];
-  if (dashboard.state === 'ASSESSED_NO_PATH') return ['done', 'current', 'upcoming', 'upcoming'];
-  const path = dashboard.path;
-  const allDone = path !== null && path.completedCount === path.totalCount;
+  if (dashboard.state === 'NO_PATH') return ['upcoming', 'upcoming', 'upcoming', 'upcoming'];
+  if (dashboard.state === 'AWAITING_PLACEMENT') {
+    return ['done', 'current', 'upcoming', 'upcoming'];
+  }
+
+  /* Across every assigned path: somebody who finished one and is mid-way
+     through a second is still working, and the tracker should say so. */
+  const owed = dashboard.paths.filter((path) => path.placedLevel !== null);
+  const allDone = owed.length > 0 && owed.every((path) => path.completedCount === path.totalCount);
   const pathCertificate = dashboard.latestCertificate?.type === 'PATH';
+
   if (pathCertificate) return ['done', 'done', 'done', 'done'];
   if (allDone) return ['done', 'done', 'done', 'current'];
+
   return ['done', 'done', 'current', 'upcoming'];
 }
 

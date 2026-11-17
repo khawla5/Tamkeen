@@ -48,13 +48,11 @@ test.describe('Phase 5 — the administered surface', () => {
 
   const stamp = Date.now().toString(36);
   const pathName = `مسار الاختبار ${stamp}`;
-  let pathKey: string;
 
   test.beforeAll(async ({ browser }) => {
     test.setTimeout(120_000);
 
     admin = await seedAdmin();
-    pathKey = `${admin.prefix}-path`;
 
     page = await browser.newPage();
 
@@ -98,120 +96,109 @@ test.describe('Phase 5 — the administered surface', () => {
       .last();
   }
 
-  test('the navigation is the eight destinations §4C names', async () => {
+  test('the navigation is the eight destinations the ministry keeps, «قياس الأثر» right under الرئيسية', async () => {
     const nav = page.getByRole('navigation', { name: 'التنقل الرئيسي' }).first();
 
     for (const label of [
       'الرئيسية',
+      'قياس الأثر',
       'الحسابات',
       'التقييم',
       'المسارات',
       'الدورات',
       'الإعدادات',
       'الشهادات',
-      'السجل والتقارير',
     ]) {
       await expect(nav.getByRole('link', { name: label })).toBeVisible();
     }
+
+    /* Order, not just presence: the new item sits directly after the dashboard. */
+    const labels = await nav.getByRole('link').allInnerTexts();
+    expect(labels.map((label) => label.trim()).slice(0, 2)).toEqual(['الرئيسية', 'قياس الأثر']);
+
+    /* The audit-and-reports screen is not a destination any more. */
+    await expect(nav.getByRole('link', { name: 'السجل والتقارير' })).toHaveCount(0);
 
     /* No learner or entity destinations leaked into the admin rail. */
     await expect(nav.getByRole('link', { name: 'مساري' })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'المتدربون' })).toHaveCount(0);
   });
 
-  test('§4C.4 — a path is created empty, and is not offered to anyone yet', async () => {
+  test('§4C.4 — a path is created empty from one button, and is not offered to anyone yet', async () => {
     await page.getByRole('link', { name: 'المسارات' }).click();
     await expect(page.getByRole('heading', { name: 'إدارة المسارات' })).toBeVisible();
 
+    /* One click, no form: the path is made as a placeholder and the administrator
+       lands on its own screen, where the name, the levels and the courses are
+       filled in (D-134). */
     await page.getByRole('button', { name: 'إنشاء مسار' }).click();
+    await expect(page).toHaveURL(/\/admin\/paths\/[^/]+$/, { timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'إدارة المسار' })).toBeVisible();
 
-    const dialog = page.getByRole('dialog');
-    /* Labels, not CSS selectors: a label `getByLabel` cannot find is a field no
-       screen reader can announce, so these locators double as an accessibility
-       assertion. */
-    await dialog.getByLabel('اسم المسار').fill(pathName);
-    await dialog.getByLabel('المعرّف').fill(pathKey);
-    await dialog.getByLabel('وصف المسار').fill('مسار أُنشئ من اختبار المتصفح.');
-    await dialog.getByLabel('النمط المهني').selectOption('S');
-    await dialog.getByRole('button', { name: 'إنشاء', exact: true }).click();
-
-    /* Straight into the detail panel, because a path created empty cannot be
-       offered until it has courses and the next step is always the same one. */
-    const panel = page.getByRole('dialog');
-    await expect(panel.getByRole('heading', { name: 'إدارة المسار' })).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(panel.getByLabel('اسم المسار')).toHaveValue(pathName);
-
-    /* And the panel says why it cannot be offered yet, rather than only
-       refusing: an empty path is below the five-course floor a learner needs to
-       confirm anything at all (D-081). */
-    await expect(panel.getByText(/أقل من الحد الأدنى/)).toBeVisible();
-
-    await page.keyboard.press('Escape');
+    await page.getByLabel('اسم المسار').fill(pathName);
+    await page.getByRole('button', { name: 'حفظ التعديلات' }).first().click();
+    await expect(page.getByText('حُفظت تعديلات المسار.')).toBeVisible({ timeout: 15_000 });
 
     /*
      * And it arrives *not offered*. Publishing a path the moment it exists
      * would put a dead end in front of a learner making the one irreversible
      * choice the product asks of them (D-081).
      */
-    const card = page.getByRole('listitem').filter({ hasText: pathName });
-    await expect(card).toBeVisible({ timeout: 15_000 });
-    await expect(card).toContainText('غير معروض');
+    await expect(page.getByText(/المسار غير معروض/)).toBeVisible();
   });
 
   test('§4C.4 — hiding and deleting are different words, and the empty path can be deleted', async () => {
-    const card = page.getByRole('listitem').filter({ hasText: pathName });
-    await card.getByRole('button', { name: 'إدارة' }).click();
-
-    const panel = page.getByRole('dialog');
-    await expect(panel.getByRole('heading', { name: 'إدارة المسار' })).toBeVisible({
-      timeout: 15_000,
-    });
-
-    /* Two removals, two sections, two words — and the estimate field and the
-       add-course button are gone from the form (TAM-133). */
-    await expect(panel.getByRole('heading', { name: 'عرض المسار على الموظفين' })).toBeVisible();
-    await expect(panel.getByRole('heading', { name: 'حذف المسار' })).toBeVisible();
-    await expect(panel.getByLabel(/المدة/)).toHaveCount(0);
-    await expect(panel.getByRole('button', { name: 'إضافة دورة' })).toHaveCount(0);
+    /* Still on the path's own screen from the step above. */
+    await expect(page.getByRole('heading', { name: 'عرض المسار على الموظفين' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'حذف المسار' })).toBeVisible();
 
     /* Nobody has ever chosen this one, so the irreversible option is available
        — and it asks once more, naming the path and offering the reversible
        alternative, before it goes. */
-    await panel.getByRole('button', { name: 'حذف نهائي' }).click();
+    await page.getByRole('button', { name: 'حذف نهائي' }).click();
 
     const confirm = page.getByRole('dialog').last();
     await expect(confirm.getByText(new RegExp(pathName))).toBeVisible();
     await expect(confirm.getByText(/إن أردت إخفاءه مع الاحتفاظ به/)).toBeVisible();
     await confirm.getByRole('button', { name: 'حذف نهائي' }).click();
 
-    await expect(page.getByText('حُذف المسار نهائيًا.')).toBeVisible({ timeout: 15_000 });
-    await expect(card).toHaveCount(0);
-  });
-
-  test('§4C.4 — the 5-10 bounds are stated on the screen that builds paths', async () => {
-    /* Shown where the rule bites, not only in Settings: somebody adding a sixth
-       course needs the bound in front of them (D-074). */
-    await expect(page.getByText(/5[^0-9]{0,3}10|٥[^٠-٩]{0,3}١٠/)).toBeVisible();
+    /* The path has no subject any more, so the list is where the administrator
+       is sent — and it is no longer on it. */
+    await expect(page).toHaveURL(/\/admin\/paths$/, { timeout: 15_000 });
+    await expect(page.getByRole('listitem').filter({ hasText: pathName })).toHaveCount(0);
   });
 
   test('§4C.5 — oversight names why nobody can see a course, not only that they cannot', async () => {
     await page.getByRole('link', { name: 'الدورات' }).click();
     await expect(page.getByRole('heading', { name: 'الإشراف على الدورات' })).toBeVisible();
 
-    const table = page.getByRole('table');
-    await expect(table).toBeVisible({ timeout: 15_000 });
+    /* One card for each course, grouped under a band naming its supplier. */
+    const cards = page
+      .getByRole('main')
+      .locator('ul > li')
+      .filter({
+        has: page.getByRole('button', { name: 'إدارة' }),
+      });
+    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
 
     /*
-     * The publication decision and the LMS's own state are separate columns.
-     * Collapsing them into a single verdict is exactly what makes "it is not
-     * published" unanswerable — the two disagree often, and which of them is
-     * wrong is the entire question.
+     * One column and two words since TAM-134: the screen asks whether an
+     * employee can choose this course, and «قرار النشر» beside «الحالة»
+     * answered a question nobody was asking. Collapsing the vocabulary must not
+     * collapse the *explanation*, so the reason a course is hidden still prints
+     * under the badge — that is what makes "nobody can see it" answerable, and
+     * it is what this test now guards.
      */
-    await expect(table.getByRole('columnheader', { name: 'قرار النشر' })).toBeVisible();
-    await expect(table.getByRole('columnheader', { name: 'الحالة' })).toBeVisible();
-    await expect(table.getByRole('columnheader', { name: 'الجهة' })).toBeVisible();
+    await expect(cards.first().getByText('فترة الإتاحة')).toBeVisible();
+    await expect(cards.first().getByText('الجهة:')).toBeVisible();
+    await expect(page.getByText('قرار النشر')).toHaveCount(0);
+
+    /* Exactly two words across every card, whatever the four underlying states
+       are doing. */
+    const texts = await cards.allInnerTexts();
+    for (const text of texts) {
+      expect(/متاحة|مخفية/.test(text)).toBe(true);
+    }
   });
 
   test('§4C.5 — the unowned seeded catalogue is reachable here and nowhere else', async () => {
@@ -220,68 +207,81 @@ test.describe('Phase 5 — the administered surface', () => {
        nobody in the ministry can ever place them. */
     await page.getByLabel('الجهة الموردة').selectOption('unowned');
 
-    const table = page.getByRole('table');
-    await expect(table.locator('tbody tr').first()).toBeVisible({ timeout: 15_000 });
+    const cards = page
+      .getByRole('main')
+      .locator('ul > li')
+      .filter({
+        has: page.getByRole('button', { name: 'إدارة' }),
+      });
+    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/دورة بلا جهة موردة/)).toBeVisible();
   });
 
-  test('§4C.6 — the 5-10 bounds and the rate limits are shown, and cannot be written', async () => {
+  test('§4C.6 — the rate limits are shown, and cannot be written', async () => {
     await page.getByRole('link', { name: 'الإعدادات' }).click();
     await expect(page.getByRole('heading', { name: 'إعدادات النظام' })).toBeVisible();
 
     const fixed = page.getByRole('region', { name: 'قواعد ثابتة' });
     await expect(fixed).toBeVisible({ timeout: 15_000 });
 
-    for (const label of [
-      'الحد الأدنى لعدد دورات المسار',
-      'الحد الأقصى لعدد دورات المسار',
-      'الحد الأقصى للطلبات',
-    ]) {
+    /* The 5-10 course bounds are gone from this list: a learner no longer builds a
+       course set of their own (D-134), so there is no bound left to explain. */
+    for (const label of ['الحد الأقصى للطلبات', 'نافذة احتساب الطلبات (بالثواني)']) {
       await expect(fixed.getByText(label)).toBeVisible();
     }
 
     /*
      * The assertion is the *absence* of a control, because that is what the
-     * rule actually is. §2 makes 5-10 non-negotiable and the rate limits are a
-     * security floor; both are shown because an administrator asked to explain
-     * either needs the number, and neither is editable here or anywhere.
+     * rule actually is. The rate limits are a security floor, shown because an
+     * administrator asked to explain one needs the number, and not editable here
+     * or anywhere.
      */
     await expect(fixed.getByRole('textbox')).toHaveCount(0);
     await expect(fixed.getByRole('button')).toHaveCount(0);
   });
 
   test('§4C.6 — a setting saved here is the one the API serves back', async () => {
-    const threshold = settingRow('PASS_THRESHOLD', 'درجة الاجتياز');
+    const interval = settingRow(
+      'COMPLETION_SYNC_INTERVAL_MINUTES',
+      'فترة المزامنة مع منصة التعلم (بالدقائق)',
+    );
 
-    await threshold.getByLabel('القيمة').fill('72');
-    await threshold.getByRole('button', { name: 'حفظ' }).click();
-    await expect(threshold.getByRole('status')).toContainText('حُفظ', { timeout: 15_000 });
+    await interval.getByLabel('القيمة').fill('12');
+    await interval.getByRole('button', { name: 'حفظ' }).click();
+    await expect(interval.getByRole('status')).toContainText('حُفظ', { timeout: 15_000 });
 
     /*
      * Read back through the API rather than off the screen. 5.6 exists because
-     * the pass threshold had four independent readers; a page showing what it
-     * just typed proves nothing about what the sync job will use.
+     * one knob had four independent readers; a page showing what it just typed
+     * proves nothing about what the sync job will use.
      */
     const response = await page.request.get('http://localhost:4000/api/admin/settings');
     expect(response.ok()).toBe(true);
 
     const body = (await response.json()) as { settings: { key: string; value: string }[] };
-    expect(body.settings.find((row) => row.key === 'PASS_THRESHOLD')?.value).toBe('72');
+    expect(body.settings.find((row) => row.key === 'COMPLETION_SYNC_INTERVAL_MINUTES')?.value).toBe(
+      '12',
+    );
   });
 
   test('§4C.6 — and reset puts the deployment default back', async () => {
-    const threshold = settingRow('PASS_THRESHOLD', 'درجة الاجتياز');
+    const interval = settingRow(
+      'COMPLETION_SYNC_INTERVAL_MINUTES',
+      'فترة المزامنة مع منصة التعلم (بالدقائق)',
+    );
 
     /* "Reset" is only an honest offer if the row says which value it is
        holding, so the badge is part of the assertion. */
-    await expect(threshold.getByText('قيمة الوزارة')).toBeVisible();
+    await expect(interval.getByText('قيمة الوزارة')).toBeVisible();
 
-    await threshold.getByRole('button', { name: 'إرجاع إلى الافتراضي' }).click();
-    await expect(threshold.getByText('القيمة الافتراضية')).toBeVisible({ timeout: 15_000 });
+    await interval.getByRole('button', { name: 'إرجاع إلى الافتراضي' }).click();
+    await expect(interval.getByText('القيمة الافتراضية')).toBeVisible({ timeout: 15_000 });
 
     const response = await page.request.get('http://localhost:4000/api/admin/settings');
     const body = (await response.json()) as { settings: { key: string; isOverridden: boolean }[] };
-    expect(body.settings.find((row) => row.key === 'PASS_THRESHOLD')?.isOverridden).toBe(false);
+    expect(
+      body.settings.find((row) => row.key === 'COMPLETION_SYNC_INTERVAL_MINUTES')?.isOverridden,
+    ).toBe(false);
   });
 
   test('§4C.6 — no secret is a setting, and the screen says so', async () => {
@@ -340,61 +340,46 @@ test.describe('Phase 5 — the administered surface', () => {
     await expect(page.frameLocator('iframe[title="معاينة"]').locator('body')).not.toBeEmpty();
   });
 
-  test('§4C.7 — the missing ministry seal is named where it can be supplied', async () => {
-    /* Open since Phase 3 and tracked until now only in progress.md, which is
-       not a document the person holding the artwork has open. */
-    await expect(page.getByText(/لم يُزوَّد النظام بشعار الوزارة وختمها بعد/)).toBeVisible();
+  test('§4C.7 — the preview carries the ministry emblem, and says nothing is missing', async () => {
+    /* TAM-136 supplied the emblem, so the notice that named it as missing is
+       gone — asserted, because a blocker notice that outlives its blocker is
+       how a screen starts lying. The seal and the signature are still owed
+       (D-051) and are not what this notice was about. */
+    await expect(page.getByText(/لم يُزوَّد النظام بشعار الوزارة/)).toHaveCount(0);
+
+    /* And it is really on the face rather than merely not disclaimed. */
+    await expect(page.frameLocator('iframe[title="معاينة"]').locator('.emblem svg')).toBeVisible();
   });
 
-  test('§4C.8 — the reports answer §4C.8 questions, worst-first where it matters', async () => {
-    await page.getByRole('link', { name: 'السجل والتقارير' }).click();
+  test('§4C.8 — «قياس الأثر» answers by period and department', async () => {
+    await page.getByRole('link', { name: 'قياس الأثر' }).click();
 
-    await expect(page.getByRole('heading', { name: 'مسار الموظفين' })).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByRole('heading', { name: 'المسارات الأكثر اختيارًا' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'نتائج الدورات' })).toBeVisible();
-
-    /* Sorted from the least-passed, because those are the courses somebody has
-       to do something about. Said on the screen, so the order is not mistaken
-       for an arbitrary one. */
-    await expect(page.getByText(/مرتّبة من الأقل اجتيازًا/)).toBeVisible();
-  });
-
-  test('§4C.8 — the trail lists this run’s own actions, and filters', async () => {
-    await page.getByRole('button', { name: 'سجل العمليات' }).click();
-
-    /* Scoped to the trail's own list. `getByRole('listitem')` unscoped also
-       matches the navigation rail, which would make every assertion below pass
-       without the trail rendering at all. */
-    const entries = page.getByRole('list', { name: 'سجل العمليات' }).getByRole('listitem');
-
-    /* This run has written entries of its own — a sign-in, a path creation, two
-       settings changes — so an empty trail here is a failure, not a quiet
-       environment. */
-    await expect(entries.first()).toBeVisible({ timeout: 15_000 });
-
-    await page.getByLabel('النتيجة').selectOption('SUCCESS');
-    await expect(entries.first()).toBeVisible({ timeout: 15_000 });
-    await expect(entries.filter({ hasText: 'أخفق' })).toHaveCount(0);
-  });
-
-  test('§4C.8 — every action renders as Arabic, never as a raw code', async () => {
     /*
-     * The regression that hid for a whole sub-phase: `auditAction` was added as
-     * a column label and overwrote the *namespace* of the same name, so every
-     * ADMIN_* action fell through to its raw code, and next-intl's fallback made
-     * it look deliberate (D-084). A screen assertion, because that is where it
-     * was visible and where nobody noticed.
-     *
-     * The action line only — the detail line beside it carries enumerated
-     * reason codes on purpose, and those are Latin by design.
+     * TAM-149. Its own page, answering the question the ministry arrives with —
+     * how many of our people took part, and is it growing — rather than the
+     * system-health reports. Every tile carries its comparison, and the one
+     * rate on the tab says what its denominator is, because it is accounts and
+     * not the ministry's headcount.
      */
-    const entries = page.getByRole('list', { name: 'سجل العمليات' }).getByRole('listitem');
+    await expect(page.getByRole('heading', { name: 'المشاركة' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('كل رقم مقارن بالفترة السابقة المماثلة في الطول.')).toBeVisible();
+    await expect(page.getByText(/لا من عدد موظفي الوزارة/)).toBeVisible();
+    await expect(page.getByRole('table', { name: 'المشاركة حسب الإدارة' })).toBeVisible();
 
-    for (const entry of await entries.all()) {
-      await expect(entry.locator('p').first()).toHaveText(/[؀-ۿ]/);
-    }
+    /* Narrowing to one directorate reaches the API rather than filtering a
+       page's worth of rows in the browser. */
+    await page.getByLabel('الإدارة').selectOption('المديرية العامة للجوازات');
+    await expect(page.getByRole('heading', { name: 'المشاركة' })).toBeVisible();
+  });
+
+  test('§4C.8 — the impact export carries every table on the tab', async () => {
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'تصدير البيانات' }).click();
+    const download = await downloading;
+
+    /* The period is in the name: two exports of the same tab are different
+       reports (D-112's pattern). */
+    expect(download.suggestedFilename()).toMatch(/^tamkeen-impact-\d{4}-\d{2}-\d{2}_/);
   });
 
   test('§4C.8 — there is no way to write, edit or delete an audit entry', async () => {
@@ -409,20 +394,6 @@ test.describe('Phase 5 — the administered surface', () => {
         failOnStatusCode: false,
       });
       expect(response.status()).toBe(404);
-    }
-  });
-
-  test('§4C.8 — the exports open as Arabic, not as mojibake', async () => {
-    for (const path of ['reports.csv', 'audit.csv']) {
-      const response = await page.request.get(`http://localhost:4000/api/admin/${path}`);
-
-      expect(response.ok()).toBe(true);
-      expect(response.headers()['content-type']).toContain('text/csv');
-
-      /* The three bytes between a report the ministry can use and a column of
-         question marks in Excel (D-076). */
-      const body = await response.body();
-      expect([body[0], body[1], body[2]]).toEqual([0xef, 0xbb, 0xbf]);
     }
   });
 

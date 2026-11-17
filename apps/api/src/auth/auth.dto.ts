@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
   ValidateIf,
@@ -29,6 +30,14 @@ const normaliseEmail = () =>
  *  password is a cheap way to make the server do expensive work. */
 const MAX_PASSWORD = 128;
 
+/**
+ * A person's name never contains a digit — Western (0-9), Arabic-Indic (٠-٩)
+ * or Extended Arabic-Indic (۰-۹). Applied wherever a name is written: here,
+ * the learner profile, and the entity profile. The register form mirrors it
+ * client-side (`FULL_NAME_DIGITS` in `auth-constants.ts`).
+ */
+export const FULL_NAME_NO_DIGITS = /^[^0-9٠-٩۰-۹]*$/;
+
 export class RegisterDto {
   @IsEmail({}, { message: 'EMAIL_INVALID' })
   @MaxLength(254)
@@ -45,6 +54,7 @@ export class RegisterDto {
   @IsString()
   @IsNotEmpty({ message: 'FULL_NAME_REQUIRED' })
   @MaxLength(120)
+  @Matches(FULL_NAME_NO_DIGITS, { message: 'FULL_NAME_HAS_DIGITS' })
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   fullName!: string;
 
@@ -124,6 +134,15 @@ export class ChangePasswordDto {
   @MinLength(8, { message: 'PASSWORD_TOO_SHORT' })
   @MaxLength(MAX_PASSWORD, { message: 'PASSWORD_TOO_LONG' })
   newPassword!: string;
+
+  /* The retyped new password. Compared in the service, beside the other
+     password rules (TAM-110): the client checks it first, but a form that
+     skipped the check would otherwise store a password typed once and never
+     repeatable. Not length-validated — it either equals newPassword or it is
+     refused, and a second length message would only say the same thing twice. */
+  @IsString()
+  @MaxLength(MAX_PASSWORD)
+  confirmPassword!: string;
 }
 
 /** Asking to move the account to a new address (§4.12). */

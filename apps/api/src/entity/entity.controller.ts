@@ -11,6 +11,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 
 import type {
@@ -38,6 +39,7 @@ import {
   EntityCourseQueryDto,
   EntityLearnerQueryDto,
   UpdateEntityCourseDto,
+  UpdateEntityProfileDto,
 } from './entity.dto';
 
 /**
@@ -74,6 +76,16 @@ export class EntityController {
   @Get('me')
   async me(@CurrentUser() user: AuthenticatedUser): Promise<EntityProfileView | null> {
     return this.profile.get(await this.scope.resolve(user));
+  }
+
+  /** §4B.6 — the account's own name and the organisation's contact, one save. */
+  @Patch('me')
+  async updateMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateEntityProfileDto,
+    @Req() request: Request,
+  ): Promise<EntityProfileView> {
+    return this.profile.update(await this.scope.resolve(user), user.id, dto, request.ip ?? null);
   }
 
   /** §4B.1 — counts for context, and the one list that is actionable. */
@@ -131,6 +143,30 @@ export class EntityController {
     const detail = await this.management.get(await this.scope.resolve(user), courseId);
 
     return detail.content;
+  }
+
+  /**
+   * §4B.4 — the immediate path back from a live edit in the frame (TAM-133).
+   *
+   * The frame can post its edit signal several times in a burst — the
+   * handler itself coalesces those (`CatalogSyncService.syncOne`), but the
+   * limit is a second, cheaper backstop against a caller retrying faster
+   * than the LMS can answer.
+   */
+  @Post('courses/:id/resync')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async resyncCourse(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) courseId: string,
+    @Req() request: Request,
+  ): Promise<EntityCourseDetail> {
+    return this.management.resync(
+      await this.scope.resolve(user),
+      courseId,
+      user.id,
+      request.ip ?? null,
+    );
   }
 
   /** §4B.3 — the product metadata our app owns (D-035, D-039). */

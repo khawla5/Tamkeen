@@ -192,11 +192,12 @@
   - `LmsPort` is `apps/api/src/moodle/lms.port.ts`, executable contract in `lms.contract.ts`; the mock must implement the new operation with the same semantics so the contract suite remains the swap guarantee. Real adapter: `core_user_update_users` must be added to the Moodle external service's function list on the ministry instance (add it to the Moodle setup checklist).
   - Page: `src/app/(portal)/profile/page.tsx`; copy under `profile.*` in `messages/ar.json`; use the shared `Field`/`Input` components.
 
-## TAM-110 — Profile: change password
+## TAM-110 — Profile: change password — **DONE** (`feature/tam-110-change-password`, D-107)
 
 - **Labels:** `profile`, `frontend`, `api`, `security`
 - **Priority:** High
 - **Pre-requisite:** TAM-109 (page sections + `me` module)
+- **What shipped (2026-08-26):** most of this ticket had landed with the profile epic (PR #22): `POST /api/auth/change-password`, `revokeAllForUserExcept`, the profile card, the audit entry. This branch closes the acceptance gaps: **a wrong current password now feeds the same failure counter and lockout as sign-in** (`countFailedAttempt`, shared by both paths; a locked account is refused with `ACCOUNT_LOCKED`; proving the password resets the counter), and **the confirmation is checked on the server** (`confirmPassword` in the DTO, refused as `PASSWORDS_DO_NOT_MATCH` before any attempt is counted). **The card is shared with the entity portal:** `components/profile/password-card.tsx` renders on §4B.6 too (below the read-only organisation record; also for a super-admin visiting without an organisation) — the credential belongs to the account, not the role, and the endpoint asks no more of an entity than of an employee. The email question is recorded as D-107. Tests: profile e2e +3 (lockout parity, server confirm, counter reset) with the existing five updated; page tests +1 (the lockout message). Proven live: mismatch → 400, one guess → 401 and counter 1, correct change → 204 and counter 0, audit `FAILURE:BAD_PASSWORD` then `SUCCESS`.
 - **Description:**
   A "تغيير كلمة المرور" section: current password, new password, confirm. Same password policy as registration (`PASSWORD_MIN_LENGTH`; length over composition, NIST 800-63B). On success: **revoke every other session of the user, keep the current one**, write an audit entry, show a success status in place.
   A wrong current password returns the generic credentials error and counts toward the per-account lockout — changing a password must not be a cheaper brute-force surface than login.
@@ -210,6 +211,14 @@
   - `SessionService.revokeAllForUser(userId)` exists but revokes **all** sessions including the current — add a `revokeOthersForUser(userId, keepSessionId)` variant rather than logging the user out of the device they just used.
   - Argon2 verification and the lockout counters live in `auth.service.ts` — reuse the login path's helpers (including the dummy-verify timing equalisation) instead of re-implementing the comparison.
   - Endpoint belongs under `auth` (credential management), not `me`.
+
+## TAM-138 — Entity profile: the employee's editable surface, and a two-column profile on both portals — **DONE** (`feature/tam-110-change-password`, D-108)
+
+- **Labels:** `profile`, `entity`, `frontend`, `api`
+- **Priority:** High (at the user's direction, 2026-08-26, alongside TAM-110)
+- **What shipped:** §4B.6 now carries what §4.12 carries — an account card (the account holder's name editable; email and role read-only; the organisation's **name** read-only with a line saying the ministry manages it, D-063; the organisation's **contact name and contact email** editable), the digits preference, and the password change — through `PATCH /api/entity/me` (`UpdateEntityProfileDto`; refused with 403 for an account with no organisation rather than half-saved; the organisation name is not accepted in the body; audited as `ENTITY_PROFILE_UPDATED` with the field names, never the values; a name change reaches the LMS best-effort as the employee's does). `DigitsCard` and `PasswordCard` are shared components under `components/profile/`. **No email-change card for the entity:** its address is outside the ministry domain that `change-email` enforces (D-017), so the card could only refuse. **Layout:** both profile pages leave the narrow single column for the standard width with two columns from `lg` — the account card leads the start column with the digits beneath it, the credential cards fill the end column; one column in that order below `lg`.
+- **Supersedes** the embed branch's open TAM-135 (entity contact details) once that branch renumbers.
+- **Acceptance met:** 5 new integration tests in `entity-scoping.e2e-spec` (one save + audit fields, the organisation name refused in the body, validation incl. empty contact allowed, scope not body picks the row, orphan/admin refused); 8 page tests in `entity-profile.test.tsx`; web 528, API e2e scoping 19/19, typecheck/lint clean; both pages screenshotted at 1440px. Also carries TAM-131's nav fix (`activeNavHref`) from the embed branch, so the entity rail marks one item.
 
 ## TAM-111 — Profile: change email with re-verification
 
@@ -244,7 +253,9 @@
 
 > **Epic label: `results`** — the Results & Path Selection page (§4.4). Two tickets: TAM-113 restructures the path list (do this first — it reshapes the cards), TAM-114 adds behaviour on top. Approved mockup: the "Tamkeen Results Page" artifact (shared from Claude Code). The result card itself stays exactly as built.
 
-## TAM-113 — Results page: ranked letter groups, compact cards, other paths collapsed
+## TAM-113 — Results page: ranked letter groups, compact cards, other paths collapsed — **DONE** (`feature/tam-113-results-groups`, D-113)
+
+**What shipped (2026-08-26):** one `<section>` per letter of the user's code, in rank order — «الأقرب إلى ميلك الأول — {type}» for #1, «مناسب أيضًا — {type}» plus a quiet «ميلك الثاني» / «ميلك الثالث» `neutral` tag for #2 and #3; a letter with no paths produces no heading (asserted). `PathCard` is compact — the description paragraph is gone (asserted absent from the whole list), everything else unchanged. The non-matching paths sit behind one native `<details>`/`<summary>`, «عرض المسارات الأخرى (6)» with the live count, collapsed on every visit, default marker hidden for a caret mirrored with `rtl:-scale-x-100`, its own `focus-visible` ring. Grouping is `recommendationRank` off the existing `PathSummary` — **no API change**, and the anti-re-sort test is kept. CLAUDE.md §4.4 rewritten, §3A amended ("shown normally below" → "available one click below"). jsdom does not implement summary activation, so the component test asserts the toggle _is_ the native element and `journey-happy-path` asserts 6 links collapsed → 12 after Enter, in Chromium.
 
 - **Labels:** `results`, `frontend`, `spec-change`
 - **Priority:** High
@@ -269,7 +280,9 @@
   - Heading levels: page `h1` → group headings `h2` → card names `h3`; the collapsed section's summary is not a heading.
   - The seed guarantees two paths per letter, but real data (Phase 7) won't — handle 0..n paths per group.
 
-## TAM-114 — Results page: post-commitment state + shared Holland chips
+## TAM-114 — Results page: post-commitment state + shared Holland chips — **DONE** (`feature/tam-113-results-groups`, D-114)
+
+**What shipped (2026-08-26):** `PathCard` takes a `committedPathId` prop (read once on the page from `usePortal().dashboard.path?.id`, non-null exactly in `ACTIVE_PATH`), so the card stays presentational. Committed: the chosen card carries «مسارك» in the **neutral** tag — not the primary accent, which means _recommended_ — and its one action links to `/my-path`; every other card in every group and behind the toggle has **no button at all**, not a disabled one. Uncommitted, and mid-build, nothing changes. **Part 2 was already closed by TAM-108**, which created `src/components/riasec/holland-code-chips.tsx` with the `ordinals` prop; Results consumes it and a test now asserts the dashboard and Results render through the same component, so a second copy fails rather than drifts. `noResult`, `canRetake`, the API's order and `chrome="bare"` asserted unchanged.
 
 - **Labels:** `results`, `frontend`
 - **Priority:** Medium
@@ -355,11 +368,13 @@
   - axe clean on the dashboard in all three states (the e2e gate arrives fully in TAM-121, but this ticket runs it on the shell).
     **Implementation notes (verified):** shell is `src/components/layout/app-shell.tsx` (`<aside class="bg-neutral-900 md:w-64">`, brand lockup on a white tile — the tile exists _because_ the rail is dark; it goes when the rail is light); nav rendering is `sidebar-nav.tsx` (active state at its `cn(...)` around line 62, indicator dot line 91); the page frame is `portal-page.tsx` (`PortalPage`, with `chrome="bare"` for flow pages — keep that prop, TAM-107 changes which pages use it); the entity frame is `entity-page.tsx` + `entity-nav-items.ts`. The user's name comes from `usePortal().user` / `EntityProvider`. The landing header (`components/landing/site-header.tsx`) already has the exact lockup markup to reuse.
 
-## TAM-118 — Shared portal components on Platforms Code: Card, Badge/Tag, Progress, Table, Skeleton, states, Textarea, Tabs, toasts
+## TAM-118 — Shared portal components on Platforms Code: Card, Badge/Tag, Progress, Table, Skeleton, states, Textarea, Tabs, toasts — **DONE** (`feature/tam-118-shared-components`, D-109)
 
 - **Labels:** `portal-dga`, `frontend`, `design-system`
 - **Priority:** High
 - **Pre-requisite:** TAM-117
+- **What shipped (2026-08-26):** every primitive the ticket names, each with a semantics test — **Card** on radius 8 (`--radius-card` changed, not the call sites) with `variant="selected"` (the primary edge; the four hand-rolled `border-2 border-primary-600` cards on My Path, Certificates and the verification page now use it) and `edge` for the status start-edge notice (the admin's five hand-rolled ones migrated); **Badge/Tag** on the tag anatomy — `neutral | primary | success | warning | danger | info` (`-50` fill, status text and hairline), the old names kept as aliases, `Tag` exported; **Progress** on the neutral-200 track with the primary fill; **Table** (new: `Table/TableHeader/TableBody/TableRow/TableHead/TableCell`, header row on neutral-50, semibold, hairline rows, hover, a required caption, scrolls in its own frame) — the entity learners list is the first consumer; **Skeleton** on neutral-200 / radius 4; **EmptyState** a quiet hairline block, **ErrorState** on the Alert error tone; **Textarea** on the Input anatomy; **Tabs** (new, extracted from the landing explorer which now uses it: WAI-ARIA tabs, one tab in the tab order, direction-aware arrows from the nearest `dir`, Home/End). **No toasts** — no page needed a confirmation the Alert could not serve, exactly as the ticket allowed. Contrast test extended with the five pairings the tag, table and error-state anatomies introduce; `states.test.tsx` green. Admin tables (users, courses) are left for their own sweep — the admin portal is outside `portal-dga`.
+- **Acceptance met:** 34 component tests across `card / badge / progress / table / tabs / textarea`; web 710 green, contrast 178/178 incl. the new pairs; typecheck/lint clean; landing explorer, entity learners and the learner dashboard screenshotted at 1440px.
 - **Description:**
   Bring the remaining shared primitives to the Platforms Code anatomy, the way `Input`/`Field`/`Select`/`Alert`/`Button` already are, so the page sweep (TAM-119/120) is mostly composition rather than styling:
   - `Card` — DGA card: white, neutral-300 hairline, radius 8 (the system's card radius, replacing the 16 the landing uses for its hero panels), header/content spacing per the system; a `variant` for the "selected/recommended" treatment (primary edge) so `PathCard` and the path-build course cards stop hand-rolling it.
@@ -373,11 +388,13 @@
     **Acceptance:** every primitive has a component test for its semantics (not its classes); `states.test.tsx` green; contrast test extended with any new pairing a primitive introduces; no page in the portal imports a one-off card/badge/progress implementation after TAM-119/120.
     **Implementation notes (verified):** `src/components/ui/{card,badge,progress,skeleton,textarea}.tsx` and `src/components/states/*` are the whole inventory — there is no table or tabs primitive yet (`entity/learners` and `entity/courses` lay out rows by hand; the landing `about-section.tsx` owns a bespoke tablist worth extracting). `--radius-card` in `globals.css` is 1rem today; the system's card radius is 8 — change the token, not the call sites.
 
-## TAM-119 — Learner portal page sweep on the new shell and components
+## TAM-119 — Learner portal page sweep on the new shell and components — **DONE** (`feature/tam-119-learner-sweep`, stacked on TAM-118)
 
 - **Labels:** `portal-dga`, `frontend`
 - **Priority:** High
 - **Pre-requisite:** TAM-117, TAM-118
+- **What shipped (2026-08-26):** every learner page composes the TAM-118 primitives and nothing hand-rolls what they cover. **Dashboard:** the recommended-path tiles, the status strip, the latest-certificate panel, the four tiles and the activity list all sit on `cardVariants` (the tiles on `selected`). **Assessment:** option rows on `cardVariants` with the chosen one `selected`; the retired `accent-navy` radio accent is gone (`accent-primary-600`). **Results:** the Holland code is the shared `HollandCodeChips` (itself now the primary `Tag`), and the six ranking bars are on `neutral-200` / `primary-600` instead of the retired `bg-secondary` / `bg-muted`. **PathCard:** `selected` variant plus the primary `Tag` for «موصى به». **Path build:** the selectable course rows on `cardVariants`. **Catalogue:** course cards on `cardVariants`. **Course detail:** paths and status as `neutral` tags, «مكتمل» as the `success` tag. **Player:** the pass / fail outcome as `Card edge="success|danger"`. **My Path:** rows on `cardVariants` (next-up `selected`), «التالي» the primary tag, and **the course state as a status tag** (`success | info | neutral`) beside the grade. **CV:** the language notice as the info `Alert`, skills as `neutral` tags, the preview sheet on the card token. Certificates, course detail's frame, the profile and the player's header were already on the primitives. Every page still renders inside `PortalPage` with its single action and keeps `DataView`'s three states — untouched by this sweep.
+- **Acceptance met:** re-audit of `app/(portal)` + the learner components finds no hex, no physical class, no retired token, no `bg-accent` chip and no hand-rolled card; all 13 page test files green (one chips assertion updated from `bg-accent` to the primary tag); typecheck/lint clean; **axe:** `portal-a11y` (the dashboard in all three states) and `profile-a11y` pass against the running app — the latter's fifth and sixth sign-in in one file trip the dev throttle (`/login` 5/min) and are green run singly; CI runs with `RATE_LIMIT_ENABLED=false`. Results, path build, catalogue and dashboard screenshotted at 1440px.
 - **Description:**
   Walk the eleven learner pages and compose each on the new shell/components, removing any bespoke styling the primitives now cover, and applying the DGA page patterns: page header with the single action, cards for units of content, the status Tag for course/path states, the progress bar for progress, `Table` where rows are tabular. Pages: dashboard (three states — TAM-108's chips and status strip land on these components), assessment (with TAM-107's sidebar), results (TAM-113/114's structure), path build, courses catalogue, course detail, course player, My Path, certificates gallery, CV builder, profile (TAM-109–111's sections).
   **Acceptance:** every page renders inside the shell with a DGA page header; every data view keeps explicit loading/empty/error states; context-dependent single actions unchanged (§3); all page tests green; no new hex, no physical classes; every page passes axe (TAM-121 gate run per page as it lands).
@@ -442,7 +459,10 @@
   - The fixed footer in `paths/[pathId]` is outside the flow, so it cannot inherit the wrapper — it keeps its own inner container; give both the same width via one exported constant/class rather than two literals.
   - TAM-119/120 (the portal-dga sweeps) restyle these pages later — they build on this standard, not around it.
 
-## TAM-125 — Path build page: header card with meta + selectable-card course grid
+## TAM-125 — Path build page: header card with meta + selectable-card course grid — **DONE** (`feature/tam-125-127-build-catalogue`, D-115)
+
+- **What shipped:** the header card (description · RIASEC type tag · «موصى به» when the path is in the user's code · "11 دورة متاحة" · a live "إجمالي المدة المختارة" that moves on every toggle) and the 1/2/3-column grid where **the whole card is the toggle** — one `<button>` per course, `aria-pressed`, a decorative tick glyph plus the primary border, the state word on the card, and an accessible name pairing the state with the title. Unavailable and at-max cards stay disabled with their reason printed. The counter bar, the 5–10 rule, the dialog and the locked state are untouched. **No API change was needed** — `PathDetail extends PathSummary`, so the ticket's "verify `riasecLetter` / `recommendationRank`" note was checked and already satisfied.
+- **Acceptance met:** 9 new page tests (both badge states, the offered-course count, the hours total growing across two toggles, exactly twelve controls with no nested interactive element in any of them, the state+title name, and Enter/Space toggling with the pressed state); the eleven existing tests kept, their selectors moved onto the new name. Verified in a browser against the running app.
 
 - **Labels:** `paths`, `frontend`
 - **Priority:** High
@@ -495,7 +515,10 @@
   - The add link's destination is the catalogue (`/courses`): the course detail page already calls `myPathApi.addCourse` (`api-client.ts:305`) with all server rules enforced (`enrollment.service.ts` `addCourse` — add-only, never remove). No new endpoint.
   - Rail styling: logical properties only (the rail sits on the inline-start side); glyphs `aria-hidden` with the state as text; the timeline is presentation — heading levels stay `h1` page → `h2` courses section → `h3` course titles.
 
-## TAM-127 — Courses catalogue: state-aware default, personal status on cards, DGA filter row
+## TAM-127 — Courses catalogue: state-aware default, personal status on cards, DGA filter row — **DONE** (`feature/tam-125-127-build-catalogue`, D-116)
+
+- **What shipped:** a committed learner lands with their own path preselected (their later choice wins, and «كل المسارات» is one selection away); everyone else lands on the whole catalogue **grouped by path** — one section per path in the API's order, heading + «موصى به» + course count, recommended groups first in the user's letter rank — collapsing to today's flat grid the moment any search or filter is active. Courses in the learner's path carry exactly one status chip, courses outside it none; path membership became quiet tags instead of a comma list; the three filters were rebuilt on the shared `Field`/`Input`/`Select` (no raw `<select>` remains). The chip is **one shared component** with the course page (TAM-128) over a new `courseStatus` namespace. **No API change** — the chips come from `myPathApi.get()` (fetched only when committed, and its failure never blocks the page), the grouping from `pathsApi.list()`'s existing `recommendationRank`. Courses belonging to no listed path get a final «دورات خارج المسارات» section rather than disappearing from a view whose count line still counts them. The stale "browsable before the assessment" comment is corrected.
+- **Acceptance met:** 17 new page tests (both defaults and the one-selection escape, group order, badge on headings only, no heading for an empty path, a shared course appearing in each group, the leftover section, collapse-and-return under a filter, heading levels, one chip per own course and none for others, the catalogue surviving a failed progress lookup, every card linking to `/courses/[id]`, tags-not-comma-list, all three filters labelled, the polite count, clear-filters); the journey e2e's build and catalogue steps updated. Verified in a browser in both states.
 
 - **Labels:** `courses`, `frontend`
 - **Priority:** Medium
@@ -557,10 +580,10 @@
 
 ## TAM-129 — Embed foundation: `local_tamkeensso` author-embed mode, frame-ancestors, and the launch flag — **DONE** (`feature/tam-129-embed-foundation`, D-101)
 
-- **What shipped (2026-08-25):** everything in the five points below, proven against the local Moodle 4.5.4: `curl -I` shows `Content-Security-Policy: frame-ancestors 'self' http://localhost:3000` and no `X-Frame-Options`; a Playwright probe framing a fresh `embed=author` URL from `localhost:3000` lands on `course/view.php` with `body.editing`, navbar/footer/breadcrumb hidden, secondary nav + course index visible, and receives `tamkeen:ready`; adding a URL resource inside the frame delivers `tamkeen:content-changed`; the same probe from `127.0.0.1:3000` gets a blank frame and no message. Contract suite + entity e2e (43, incl. two new) green; the plugin is at 0.2.0. Also fixed on the way: the setup script's re-run crash (`role_allow_assign` duplicate), `docker cp` nesting, and CLI-as-root cache permissions (`-u daemon`). Moodle's first-visit **user tour** still pops up inside the frame — Moodle's own onboarding, once per user; hide it in TAM-134 if it reads as noise (`usetours` or the plugin's CSS).
+- **What shipped (2026-08-25):** everything in the five points below, proven against the local Moodle 4.5.4: `curl -I` shows `Content-Security-Policy: frame-ancestors 'self' http://localhost:3000` and no `X-Frame-Options`; a Playwright probe framing a fresh `embed=author` URL from `localhost:3000` lands on `course/view.php` with `body.editing`, navbar/footer/breadcrumb hidden, secondary nav + course index visible, and receives `tamkeen:ready`; adding a URL resource inside the frame delivers `tamkeen:content-changed`; the same probe from `127.0.0.1:3000` gets a blank frame and no message. Contract suite + entity e2e (43, incl. two new) green; the plugin is at 0.2.0. Also fixed on the way: the setup script's re-run crash (`role_allow_assign` duplicate), `docker cp` nesting, and CLI-as-root cache permissions (`-u daemon`). Moodle's first-visit **user tour** still pops up inside the frame — Moodle's own onboarding, once per user; hide it in TAM-139 if it reads as noise (`usetours` or the plugin's CSS).
 
 - **Labels:** `moodle-embed`, `moodle-plugin`, `backend`
-- **Priority:** High (TAM-134 cannot start without it)
+- **Priority:** High (TAM-139 cannot start without it)
 - **Pre-requisite:** Moodle hostname confirmed as a subdomain of the app's site (epic note).
 - **Description:**
   Everything on the Moodle and API side that lets a portal page frame Moodle's editor safely. No UI in this ticket; it is proven with `curl`, a throwaway HTML page that frames the login URL, and the contract suite.
@@ -589,7 +612,9 @@
   - Production needs **HTTPS on both hosts**, or Chrome refuses the framed session cookie.
   - Rejected: putting `embed` inside the signed token (no security value, one more claim); a Moodle theme for chrome hiding (a second custom artefact to approve; the plugin is already hook-capable); a `before_footer` inline script instead of the head hook (renders after the page, delays `ready`).
 
-## TAM-134 — Entity Course Content page: Moodle's editor inside the page, read-back beside it, publish from the same place
+## TAM-139 — Entity Course Content page: Moodle's editor inside the page, read-back beside it, publish from the same place — **DONE** (`feature/tam-139-entity-content-embed`, stacked on TAM-129; D-118)
+
+- **What shipped (2026-08-25):** `MoodleEmbed` (launch on mount with `embed: true`, loading until `tamkeen:ready`, origin-checked messages, 8 s ready timeout → `ErrorState` + «افتح في منصة التعلّم» on a fresh token, the same link quietly under the frame), the shared `PublishAction` (extracted from Manage Course's card; blockers rendered by the page), the Content page (publish gate in the header slot, read-back strip with the D-061 warning and blockers, one `getCourse` query refetched on `content-changed`), Manage Course's author card as a link («افتح محرّر المحتوى»). Plugin CSS hides Moodle's user tour in the frame. 9 new component tests (credential absent-then-only-src, spoofed origin ignored, read-back + gate refresh on change, fallback on a fresh token, page action = publish gate) + Manage test updated; phase-4 browser suite updated for the moved link and the framed page. Proven live: the entity signs in, the page frames course 81 with editing on, no navbar, no tour, `ready` received, publish disabled with its reasons. Open: provisioned Moodle users render Moodle in English (D-118 note).
 
 - **Labels:** `moodle-embed`, `entity`, `frontend`
 - **Priority:** High
@@ -620,7 +645,196 @@
   - `PortalPage` already has the `action` slot (§3's single primary action) — use it; do not add a second button row.
   - Moodle's file picker, TinyMCE and drag-drop upload work inside a same-site iframe; pages that navigate `window.top` (LTI/SCORM players) are out of scope — note it.
   - Rejected: two actions in the header (publish + open in Moodle) — one primary action, the fallback is secondary; auto-publishing when blockers clear (publishing is the entity's decision, D-059); polling the read-back on an interval (the plugin message exists for this; keep only the manual refresh).
-> **Epic label: `admin-polish`** — a pass over the super-admin portal at the ministry's direction (2026-08-25), one ticket per page, worked in that order on `feature/tam-130-admin-polish`. Everything below is **DONE** and shipped in **PR #24** (five commits, awaiting review); the acceptance notes record what was actually asserted. Decisions: D-098 (two removals for a path), D-099 (the dashboard's distribution), D-100 (the dialog).
+
+## TAM-140 — Bug: the entity sidebar marks «الرئيسية» active on every entity page (two active items at once) — **DONE** (on `feature/tam-139-entity-content-embed`, at the user's direction)
+
+- **What shipped (2026-08-25):** `activeNavHref(pathname, hrefs)` in `nav-items.ts` — **longest matching href wins** (segment-aware via `navPathMatches`, trailing slashes normalised, the `/` special case deleted): a dashboard is the root of its portal and matches everything by prefix, so "equal or nested" alone cannot single it out; longest-match does, with no per-portal exception. Used by `SidebarNav`; five unit cases in `nav-items.test.ts`.
+
+- **Labels:** `bug`, `entity`, `app-chrome`, `frontend`, `a11y`
+- **Priority:** High (visible on every entity page; also an accessibility defect — two `aria-current="page"` links)
+- **Pre-requisite:** none
+- **Description:**
+  On any entity page other than the dashboard — e.g. «المتدربون» — the rail shows **two** items in the active treatment: the page's own item _and_ «الرئيسية» (screenshot 2026-08-25, learners page: both carry the tinted ground, primary start-edge bar and primary text). The dashboard item is `href: '/entity'`, and the rail decides "active" by `pathname.startsWith(item.href)`, so `/entity` matches `/entity/learners`, `/entity/courses/…`, `/entity/profile` — everything. The learner rail does not show this only because its dashboard is `/`, which has an explicit exact-match special case (`sidebar-nav.tsx:60`: "Exact match for the root so it isn't marked active on every route"). The entity portal (D-065) has its own root, and the special case never learned about it.
+  **Fix:** make the rule structural rather than a list of exceptions — an item is active when the pathname **equals** its href **or starts with `href + '/'`** (segment-aware prefix). That keeps `/entity/courses` active on `/entity/courses/abc/content` (correct: a nested page belongs to its section) while `/entity` is active only on `/entity` itself, and `/` only on `/`. Delete the `item.href === '/'` special case; the general rule covers it. A trailing slash in the pathname, if Next ever hands one, should not defeat the equality — normalise once.
+  **Acceptance:**
+  - On every entity route exactly **one** rail item is active and carries `aria-current="page"` — asserted for `/entity`, `/entity/courses`, `/entity/courses/[id]`, `/entity/courses/[id]/content`, `/entity/learners`, `/entity/profile`.
+  - The learner rail's behaviour is unchanged and asserted the same way (`/`, `/courses/[id]/player`, `/my-path`, `/profile`).
+  - A unit test on the active-match helper (extract it: `isNavItemActive(pathname, href)`) covering: exact, nested segment, sibling prefix (`/entity` vs `/entityx` → not active), root.
+  - No visual change to the active treatment itself (D-097); the screenshot at 360/768/1280 shows one highlighted item.
+    **Implementation notes (verified):**
+  - `apps/web/src/components/layout/sidebar-nav.tsx:60` — the one line: `const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);`. Items: `entity-nav-items.ts:16` (`/entity`), `nav-items.ts:47` (`/`).
+  - Both rails render through the same `SidebarNav` (`AppShell`, D-097), so one fix covers both portals; the horizontal (mobile) orientation uses the same `isActive`.
+  - Rejected: adding `'/entity'` to the exact-match exception list — the admin portal (Phase 5, `/admin`) would need the next exception, and the next; the segment-aware rule needs none.
+
+## TAM-141 — Path membership rules for a course: cap of 3, RIASEC coherence, admin approval, and «عامة» courses — **entity half DONE** (on `feature/tam-139-entity-content-embed`, D-119)
+
+- **What shipped (2026-08-25):** `path-membership-rules.ts` (pure: cap → coherence → grandfather remove-only → general exemption; 9 unit cases) used by `replacePathMembership`; `PathCourse.status/decidedById/decidedAt` + `Course.isGeneral` (migration `20260825140000`); settings `COURSE_MAX_PATHS=3`, `COURSE_MAX_RIASEC_LETTERS=2`, `PATH_MEMBERSHIP_APPROVAL=off` (env, `SETTING_KEYS`, admin labels/hints/validation strings); learner-facing readers filter APPROVED; `EntityCourseDetail.pathRules` + `isGeneral`, `paths[].status`; the metadata form disables checkboxes at the cap / on a third letter / when frozen with the reason in the accessible name, shows «بانتظار موافقة الإدارة» and the «عامة» note, live letters preview; `blockerNO_PATH` names the cap. Errors `PATH_LIMIT_EXCEEDED` / `PATH_MIX_INCOHERENT` / `PATH_MEMBERSHIP_FROZEN` in the catalogue. Tests: 4 e2e cases (47 green), 5 component cases, API 610 / web 511 green. **Left for Phase 5, schema-ready:** the approval queue in Path Management, setting «عامة» in Course Oversight, and turning `PATH_MEMBERSHIP_APPROVAL` on.
+
+- **Labels:** `entity`, `paths`, `product-rule`, `backend`, `frontend`, `phase-5`
+- **Priority:** High (a product-rule hole: today an entity can put one course into all 12 paths)
+- **Pre-requisite:** none for the entity half; the approval queue and the «عامة» flag land with Phase 5's Path Management / Course Oversight (§4C.4, §4C.5) and System Settings (§4C.6)
+- **Decisions taken 2026-08-25 (record in decisions.md when built):** cap **3**; membership chosen by an entity is a **proposal that an admin approves**; cross-cutting courses exist, as an admin-only **«عامة»** flag; existing courses over the cap are **grandfathered**.
+- **Description:**
+  A course may belong to more than one path (§2 — a modelling fact so a shared course is not duplicated), and today the only rule is "at least one" (`NO_PATH`). Ticking every path is therefore legal, and it breaks three things at once: the course's RIASEC letters are derived from its paths (D-066), so twelve paths make it all six letters — no signal; every path's 5–10 build list then carries the same generic course, so paths stop being curated tracks; and path membership is _path_ content the admin owns (§4C.4), yet an entity has just edited all twelve paths. Four rules:
+
+  **1. Cap (entity + server).** A course may be a member of at most **3** paths. The metadata form disables the remaining checkboxes at the cap with a hint («الحد الأقصى 3 مسارات»); the server rejects an over-cap `pathIds` with `PATH_LIMIT_EXCEEDED` (400, in the shared `errors` catalogue → Arabic via `useErrorMessage`). The number comes from a new setting `COURSE_MAX_PATHS` (default 3; editable in Phase 5 §4C.6, read through `SettingsService` like `PASS_THRESHOLD`).
+
+  **2. Coherence (entity + server).** The chosen paths must not give the course more than **2** distinct RIASEC letters — the cap alone does not protect the Holland signal (three paths from R, S and C still smear it). Server: `PATH_MIX_INCOHERENT`; form: the letters preview already on the page (`riasecLetters`) turns into the live check — as soon as a third letter would appear, the offending checkboxes are disabled with «لا يمكن الجمع بين أكثر من نمطين مهنيين».
+
+  **3. Approval.** What an entity saves is a **proposal**: `path_courses` gains `status: PENDING | APPROVED` (+ `decidedById`, `decidedAt`). Only APPROVED rows count for the learner catalogue, path build, `riasecLetters` and the `NO_PATH` blocker; PENDING rows show on Manage Course as «بانتظار موافقة الإدارة» and on the entity dashboard's pending list. Removing a membership needs no approval (an entity may always withdraw its own course from a path — course-edit protection D-040 still applies if learners hold it). The admin decides in **Path Management** (§4C.4) — a per-path queue with approve/reject and an optional reason returned to the entity; every decision audited. **Until Phase 5 ships**, proposals are **auto-approved** behind a setting `PATH_MEMBERSHIP_APPROVAL=off` so the entity flow keeps working; switching it on is the Phase 5 launch step. This is the one place the ticket depends on Phase 5, and it degrades cleanly.
+
+  **4. «عامة» — cross-cutting courses (admin only).** A course the admin marks `isGeneral` appears in **every** path's build list and catalogue path-filter without any `path_courses` rows, carries no derived RIASEC letters (it is shown with «عامة» instead of a type), and is exempt from rules 1–2. Entities cannot set or clear it; Manage Course shows it read-only. Set from Course Oversight (§4C.5). Recommendation ranking is untouched (it reads path letters, not course letters).
+
+  **Grandfathering.** Courses already over the cap or incoherent keep their current memberships (learners may hold them in confirmed paths — D-002/D-040 forbid pulling them). They may **remove** memberships but not add until they are within the rules; the form says so («هذه الدورة تتجاوز الحد الحالي؛ يمكنك إزالة مسارات فقط»). No migration rewrites `path_courses`.
+
+  **Copy:** `blockerNO_PATH` → «أضف الدورة إلى مسار واحد على الأقل (بحد أقصى 3).»; new strings for the cap hint, the coherence hint, the pending state, the grandfather note, «عامة».
+
+  **Acceptance:**
+  - Server: `PATCH /api/entity/courses/:id` with 4 paths → 400 `PATH_LIMIT_EXCEEDED`; with 3 paths spanning 3 letters → 400 `PATH_MIX_INCOHERENT`; with 3 paths in 2 letters → 200 (e2e). A grandfathered course: removing a path → 200, adding one → 400 with the grandfather error.
+  - Form: 4th checkbox disabled at the cap; a checkbox that would add a third letter disabled, with the hint; the letters preview reflects only approved memberships (component tests).
+  - Approval off (default now): saving creates APPROVED rows and behaviour is as today — the existing phase-4 browser suite stays green unchanged. Approval on (Phase 5): rows are PENDING, the course is absent from the learner catalogue/path build until approved, and `NO_PATH` blocks publishing; approving in Path Management flips it, audited.
+  - `isGeneral` course: present in every path's build list and in the catalogue's every path filter; no letters; entity cannot change it (403); counts toward a learner's 5–10 like any course.
+  - Docs: decision entry (the four rules and why each); CLAUDE.md §2 (add the cap + coherence beside the "one course, multiple paths" rule), §4B.3, §4C.4/§4C.5/§4C.6; progress.md.
+
+  **Implementation notes (verified):**
+  - Rule today: `apps/api/src/entity/publish-readiness.ts:37` pushes `NO_PATH`; `UpdateEntityCourseDto.pathIds` (`entity.dto.ts:80`, UUID array, no length rule — add `@ArrayMaxSize` from the setting, or check in the service so the number is not baked into a decorator); `replacePathMembership` (`entity-course-management.service.ts:320`) rewrites `path_courses` wholesale — the natural place for cap, coherence and grandfather checks, with the old set in hand for the "remove only" rule.
+  - `PathCourse` (`schema.prisma:700`, unique `[pathId, courseId]`) — add `status`, `decidedById`, `decidedAt`; every reader of `path_courses` (catalogue, path build, `riasecLetters` in `entity-courses.service.ts`, recommendation/path detail, publish readiness) must filter `status = APPROVED` — grep `pathCourses`/`path_courses` and list them in the PR; a missed reader is how a pending course leaks into a learner's build list.
+  - Blocker strings live under `entity.blocker*` in `messages/ar.json:736`; error codes in the shared `errors` catalogue (D-024).
+  - Settings: follow `PASS_THRESHOLD`'s path through `SettingsService` and `env.schema.ts` for `COURSE_MAX_PATHS` and `PATH_MEMBERSHIP_APPROVAL`.
+  - Rejected: letting the entity mark «عامة» (it is exactly the "all paths" hole with a nicer name); cap without coherence (does not protect the Holland signal); approval without an auto-approve setting (would block entities until Phase 5 exists); a migration that trims existing memberships (touches confirmed learner paths).
+
+## TAM-142 — What changes in the framed editor shows in the portal at once: per-course resync on the frame's signal
+
+- **Labels:** `moodle-embed`, `entity`, `backend`, `frontend`, `moodle-plugin`
+- **Priority:** High (the framed editor makes the five-minute lag visible: an entity renames the course in the frame and the portal header keeps the old name)
+- **Pre-requisite:** TAM-129 + TAM-139 (the frame and its `tamkeen:content-changed` message)
+- **Description:**
+  Two kinds of course data reach the portal by two routes, and only one of them is immediate. The **structure** read-back (activities, quiz, completion criteria) is read live from Moodle (`readContent`, `core_course_get_contents`) and the Content page refetches it when the frame posts `tamkeen:content-changed`. The **title, description and visibility** are a cached copy in `courses`, refreshed only by the full catalogue sync every `COMPLETION_SYNC_INTERVAL_MINUTES` (5 min) — so a rename made in the frame at 13:31 appears at 13:35, and until then the Content page header, Manage Course, «دوراتي» and the learner catalogue all show the old name. Observed 2026-08-25.
+  Close the gap in three parts:
+
+  **1. Plugin — the frame also signals course-level edits.** `db/events.php` observes only course-module / section / completion events; add `\core\event\course_updated` (name, summary, visibility, format changed via the Settings tab) so the same `tamkeen:content-changed` message fires. One message type is enough — the portal reacts the same way to both.
+
+  **2. API — a per-course resync, not a full catalogue run.** `POST /api/entity/courses/:id/resync` (entity-scoped like every other course route; audited as `ENTITY_COURSE_RESYNCED`) reads that one course from the LMS (`core_course_get_courses_by_field` by id — already on the external service) and applies the **same mapping and the same upsert the catalogue sync uses** (`catalog-mapping.ts`, the `course.upsert` in `catalog-sync.service.ts:145`) — extract `syncOne(moodleCourseId)` from `sync()` rather than writing a second path, so the two can never map a field differently; `status` still derives through the one function D-059 names. Returns the refreshed `EntityCourseDetail` (with `content`) so the page needs no second request. Rate-limited per user (e.g. 30/min) — the frame can emit several messages in a burst; the handler should also **coalesce** (a resync already in flight for the course answers the second caller with the same result).
+
+  **3. Web — the Content page and Manage Course call it.** On `tamkeen:content-changed` and on «تحديث», the Content page calls `resync` instead of `getCourse`, so title, description, status, read-back and publish blockers all refresh together from one response; Manage Course's «تحديث» (add one, quiet, beside the status line) does the same. The learner-facing copies («دوراتي» list, catalogue) simply read the updated row. The scheduled catalogue sync stays as the safety net for edits made outside the frame.
+
+  **Courses created directly in Moodle.** An entity in the framed editor cannot reach "create course" (the primary nav is hidden), and D-060 makes the portal the only place a course shell is created — a course born in Moodle has no owner and is a Phase 5 admin matter (Course Oversight shows it as unclaimed). This ticket does **not** auto-claim such courses for an entity; note it in the decision so nobody adds it later as a convenience.
+
+  **Acceptance:**
+  - Rename the course in the frame's Settings tab → the Content page header shows the new name within ~2 s, no reload; Manage Course and «دوراتي» show it on their next load; the learner catalogue shows it (if published).
+  - Adding an activity still refreshes the read-back; both signals arrive through the one message (plugin test: `course_updated` sets the session flag).
+  - `POST …/resync` on another entity's course → the same refusal as every scoped route; rate limit returns 429 past the ceiling; two concurrent calls produce one LMS read (coalescing asserted in a unit test); the response equals `GET …/courses/:id` afterwards (e2e).
+  - `syncOne` and `sync()` share the mapping — a unit test feeds both the same LMS course and asserts identical rows; the scheduled sync's own tests stay green unchanged.
+  - Audit entry per resync; no new PII in it.
+  - Docs: decision entry (per-course resync as the immediate path, scheduled sync as the net; Moodle-born courses stay unclaimed); CLAUDE.md §4B.4 sentence; progress.md.
+
+  **Implementation notes (verified):**
+  - `catalog-sync.service.ts:82` `sync()` does the LMS read + mapping + upsert inline (`withdrawVanished` at 198 is the full-run-only part — a per-course sync must **not** withdraw anything). `readContent` is in `entity-course-management.service.ts:230`; the content route at `entity.controller.ts:126`.
+  - The Content page (`…/content/page.tsx`) already funnels both the message and «تحديث» through one `refresh` callback — swap its target from `getCourse` to `resync`; `MoodleEmbed` needs no change.
+  - Plugin observers: `moodle-plugin/local_tamkeensso/db/events.php`; the flag→message path in `hook_callbacks.php` is already generic.
+  - Rejected: shortening the scheduled interval (a full 78-course sync every minute to serve one editor); polling from the page (the frame already knows when something changed); webhooks from Moodle to the API (a new inbound surface to secure for a problem the existing message solves).
+
+## TAM-143 — Entity authoring guide: how to create a course and add its content (videos, documents, images, quiz, completion), in the portal and in the repo — **DONE, screenshots owed** (on `feature/tam-139-entity-content-embed`, D-120)
+
+- **Merge note (2026-08-27):** the guide landed on `main` independently at `/entity/guide` rendered by `lib/markdown.ts`; this branch’s duplicate route (`/entity/courses/guide`) and `lib/simple-markdown.ts` were dropped in the merge. See D-120’s amendment.
+
+- **What shipped (2026-08-25):** `docs/entity-authoring-guide.md` (Arabic; create → بيانات → editor → content by kind: video/documents/images/text → quiz → completion, both halves the read-back checks → publish → limits & faults); `lib/simple-markdown.ts` (zero-dep subset converter, escaped, 4 unit cases) and `/entity/courses/guide` (server-rendered from the file, TOC from the `##` headings, error state if the file is missing); «دليل إنشاء الدورة» links on the create card and the Content page; «كيف؟» on each blocker whose fix is in the guide (completion → `#completion`, the metadata four → `#metadata`; `LMS_UNREACHABLE` has none). The course **description** now shows under the title on the Content page and Manage Course. Web suite 517 green. **Owed:** screenshots (needs the Arabic pack on Moodle), the PR-template line, and the timed 30-minute acceptance run with a fresh entity.
+
+- **Labels:** `entity`, `docs`, `moodle-embed`, `frontend`
+- **Priority:** Medium (nothing is broken; but every entity will hit the same four questions we hit on 2026-08-25, and the framed editor hides the Moodle help that used to answer them)
+- **Pre-requisite:** TAM-139 (the framed editor is what the guide describes); the Arabic language pack installed on the target Moodle (otherwise the guide's Moodle labels are English)
+- **Description:**
+  An entity's whole job is "create a course, put content in it, publish". Today the path is discoverable only by trial: which Moodle activity carries a video, where a PDF goes, how an image reaches a page, how to add a quiz with questions, and — the one that blocks publishing — where completion criteria are set (D-042/D-061). Write the guide **once, in Arabic, for the framed editor**, and put it where the entity is when the question arises.
+
+  **1. The guide (`docs/entity-authoring-guide.md`, Arabic, with screenshots of the framed editor).** Sections, each one screen long:
+  - **إنشاء الدورة** — «إضافة دورة» in the portal (name, description, language), not in Moodle (D-060); what happens (a shell in Moodle, a draft in the catalogue).
+  - **بيانات الدورة** — paths (at most 3, within two RIASEC letters — D-119), duration, objectives, language; why these live in the portal and not in Moodle.
+  - **فتح محرّر المحتوى** — the framed editor; what is hidden and why; the course navigation and course index; «افتح في منصة التعلّم» if the frame does not load.
+  - **إضافة المحتوى**, one recipe per kind:
+    - **فيديو** — three routes and when to use each: **URL** to a hosted video (recommended for anything over a few minutes — the LMS is not a video host); **File** upload (`.mp4`, plays inline; note the upload ceiling below); **Page** with the video embedded through the editor's media button (video with text around it).
+    - **مستندات** — **File** (`.pdf`, `.docx`, `.pptx`); "display: open / embed"; one file per resource, or a **Folder** for a set.
+    - **صور** — inside a **Page** (or a Book chapter) through the editor's image button — with **alt text**, which the WCAG obligation (§2B DoD 5) makes mandatory; a bare image file as a resource is the exception, not the rule.
+    - **نص** — Page (one screen) or Book (chapters).
+  - **الاختبار** — Quiz → Add question → Multiple choice (and true/false, matching); marks; the grade to pass; attempts; shuffle. What "شروط الإكمال" on the quiz means (receive a grade / passing grade).
+  - **شروط الإكمال** — the two halves the read-back checks (course completion tracking on; at least one activity with a condition), then **Course completion** → activity completion → the quiz, so the learner's course actually completes and the certificate can be issued (D-042). This is the section the blocker «اضبط شروط إكمال الدورة» links to.
+  - **النشر** — the read-back strip, the blockers and what each means, «نشر الدورة»; what learners see, and what «أوقف النشر» does to learners who hold the course (D-059).
+  - **الحدود والأعطال** — upload ceiling (Moodle's `maxbytes` / PHP `upload_max_filesize` — state the real numbers per environment; the local compose sets nothing, so PHP's default 2 MB applies until Phase 7 fixes it — record that as a Phase 7 item), supported video formats, "the frame shows a blank page / the read-back does not change" → «تحديث» and the fallback.
+
+  **2. In the portal, at the point of need.** A quiet «دليل إنشاء الدورة» link (Platforms Code link style, no icon soup) in three places: the create-course card, the Content page's read-back strip, and each publish blocker whose fix is in Moodle links straight to its section (the completion blocker → «شروط الإكمال»). Served as a portal page `/entity/guide` rendered from the markdown (one source; no second copy in `ar.json`), with the headings as anchors.
+
+  **3. Keep it true.** The guide is checked by the same eyes that change the editor: any PR touching `moodle-plugin/`, the Content page, or publish readiness must re-read the affected section — add a line to the PR body template. Screenshots are regenerated when Moodle is upgraded (Phase 7's pinned 4.5.x).
+
+  **Acceptance:**
+  - A new entity account, following only the guide, creates a course with a video (URL), a PDF, a page with an image (with alt text), a five-question quiz, completion criteria, sets the metadata and publishes — no help from us. Timed; under 30 minutes.
+  - Every publish blocker with a Moodle-side fix links to the section that fixes it; the link opens the guide at that heading.
+  - The guide reads correctly RTL, in the Arabic Moodle UI labels (language pack installed), screenshots included.
+  - The upload ceiling stated matches what the environment enforces (verified by uploading a file just over it and reading Moodle's message).
+  - Docs: progress.md; Phase 7 note for `maxbytes`/PHP upload limits and the language pack in the deployment setup.
+
+  **Implementation notes (verified):**
+  - What the read-back actually checks (`moodle-http.service.ts:439–447`): `enablecompletion` on the course **and** any module with `completion > 0`. The guide must say both, in that order — the 2026-08-25 session lost time because the quiz was configured and the read-back still said no (that turned out to be a capability bug, fixed in `moodle-setup.php`; the guide should still include «اضغط تحديث» as the first thing to try).
+  - Blocker strings live under `entity.blocker*` in `messages/ar.json`; `BlockerList` renders them — the link per blocker goes there.
+  - Moodle activity names in the Arabic pack (for the screenshots): ملف، صفحة، رابط، مجلد، كتاب، اختبار. Confirm after the pack is installed; do not translate them by hand.
+  - Rejected: writing the guide as Moodle-side help (the frame hides Moodle's chrome, and the ministry may not accept custom PHP for it — D-044); a video walkthrough as the only form (not searchable, not RTL-checkable, goes stale on the first Moodle upgrade); copying the guide text into `ar.json` (two sources).
+
+## TAM-144 — Entity profile: edit the contact details (and the account name), the same form pattern as the learner profile — **SUPERSEDED** by TAM-138 (entity profile shipped on `feature/tam-110-change-password`, D-108)
+
+- **Labels:** `entity`, `profile`, `frontend`, `api`
+- **Priority:** Medium
+- **Pre-requisite:** none. **Pairs with TAM-109's edit half** (learner name + department) — build the two on one shared "بياناتك" card pattern; whichever lands first sets it.
+- **Description:**
+  §4B.6 says "Organization info and contacts. Minimal." Today `/entity/profile` is a read-only `<dl>` of three rows (اسم الجهة، اسم جهة الاتصال، بريد جهة الاتصال) and a line saying it is read-only. There is no `PATCH`; `EntityProfileService` has only `get`. An entity that changes its contact person has to ask us. Make the page the same shape as the learner profile (TAM-109): a card of labelled fields, the editable ones in the DGA form primitives (`Input`, `Field`, TAM-101), one **حفظ**, a polite saved confirmation, field errors from the server.
+
+  **What is editable, and what is not — decided here, record in decisions.md:**
+  - **Editable by the entity:** `contactName`, `contactEmail` (the organisation's own contact person), and **the signed-in account's own display name** (`users.fullName` for the entity user — the name in the header's identity line).
+  - **Not editable by the entity:** `Entity.name` (the organisation's official name — it appears as the course owner in the catalogue and, from Phase 5, in reports; renaming a government body is the admin's act, §4C.2), `key`, `status`, and the account email (TAM-111's re-verification flow applies to entity accounts too — reuse it, do not add a second one).
+  - Shown read-only beside the editable fields: اسم الجهة, the account email, الصلاحية («جهة»).
+
+  **API.** `PATCH /api/entity/profile` (`@Roles('ENTITY')` only — a super-admin edits entities in §4C.2, not here) with `{ contactName?, contactEmail?, fullName? }`: trimmed, `contactName` ≤ 120, `contactEmail` a valid address ≤ 254, `fullName` ≥ 3 (same rule as registration); a patch, so an omitted field is untouched. Writes `contactName/contactEmail` on `entities`, `fullName` on `users`; audits `ENTITY_PROFILE_UPDATED` with **which fields changed, never the values** (§6 PII discipline, as `ENTITY_COURSE_METADATA_UPDATED` does). Returns the refreshed `EntityProfileView` (add `accountFullName` and `accountEmail` to it).
+
+  **Name to Moodle.** An entity user is provisioned in Moodle as `editingteacher` (D-060) and Moodle shows that name to nobody but the entity itself inside the framed editor — still, keep it consistent: propagate `fullName` through the same `LmsPort.updateUser` TAM-109 introduces (do not add a second path; if TAM-109 has not landed, this ticket adds `updateUser` and TAM-109 reuses it).
+
+  **Acceptance:**
+  - Page shows اسم الجهة (read-only), اسم جهة الاتصال + بريد جهة الاتصال + اسمك (editable), بريدك (read-only, with the "change email" entry point once TAM-111 exists), الصلاحية; one حفظ; saved confirmation survives the refetch (the `course.data === undefined` guard pattern from Manage Course).
+  - `PATCH` validates (empty contact name, malformed email, 2-char full name → 400 with field codes); audit entry has fields, not values; a learner or admin session → 403 (e2e).
+  - After saving, the header identity line shows the new account name without a full reload (refresh the session user the way TAM-109 does).
+  - Moodle's record for the entity user carries the new name (contract test against the mock).
+  - Loading / error states; labelled inputs; keyboard-complete; RTL at 360 px; `entity-profile` component test + the phase-4 browser suite's "profile is read-only" step rewritten to "edits the contact and sees it saved".
+  - Docs: decision entry (what an entity may edit and why the organisation name is not on the list); CLAUDE.md §4B.6 one sentence; progress.md.
+
+  **Implementation notes (verified):**
+  - Page: `apps/web/src/app/(entity)/entity/profile/page.tsx` — `Row` + `profileReadOnly` string; replace with the form. Service: `apps/api/src/entity/entity-profile.service.ts` has `get(scope)` only; controller routes carry `@Roles('ENTITY', 'SUPER_ADMIN')` at class level (`entity.controller.ts:62`) — the PATCH needs a **method-level** `@Roles('ENTITY')` override, and a test that the admin is refused.
+  - Model: `Entity { name, key, contactName @default(""), contactEmail @default(""), status }` (`schema.prisma:678`); no migration needed.
+  - Types: `EntityProfileView { id, name, contactName, contactEmail }` (`packages/types/src/entity.ts:13`) — add the account fields.
+  - Strings: `entity.profile*` in `messages/ar.json`; error codes go through the shared catalogue (D-024) → `useErrorMessage`.
+  - Rejected: letting the entity rename the organisation (admin's act; it is the name on the catalogue and, later, on reports); a separate "contact" sub-page (§4B.6 says minimal — one card); free-text role/title fields for the contact (not asked for; PII minimisation).
+
+## TAM-145 — Learner course player: the course inside the page, the handoff as fallback — **DONE** (at the user's direction, on `feature/tam-139-entity-content-embed`, D-121)
+
+- **Labels:** `moodle-embed`, `frontend`, `backend`, `moodle-plugin`
+- **What shipped (2026-08-25):** plugin 0.3.0 — `embed=learner` (no editing; navbar, footer, breadcrumb **and course tabs** hidden; course index kept) and `tamkeen:quiz-finished` from the quiz review page; `LaunchOptions.embed: 'author' | 'learner'`; `POST /api/courses/:id/launch { embed }` → `{ url, mode }`; `POST /api/courses/:id/sync` (per-learner on-demand completion sync, 10 s cooldown, same `syncUser` as the schedule); `components/moodle-embed.tsx` shared by the entity Content page and the player (labels + launches injected); the player keeps its header (path context, description, outcome) and frames the course beneath, fallback under it. Tests: player suite rewritten (URL absent before launch / only as frame src after; frames nothing before commitment; quiz message → sync + refetch; foreign origin ignored; failed launch → fallback), web 519, API 209 + e2e 105. Proven live as `demo-student` on course 85.
+
+## TAM-146 — Player: previous / next between activities, and "where am I" in the panel — **DONE** (at the user's direction, on `feature/tam-139-entity-content-embed`, D-122)
+
+- **Labels:** `moodle-embed`, `frontend`, `backend`, `moodle-plugin`
+- **What shipped (2026-08-25):** `LmsPort.getCourseOutline` (real + mock, contract case), `GET /api/courses/:id/outline` (same gate as launch), plugin 0.3.1 (`tamkeen:ready` carries `cmid`), `MoodleEmbed` exposes `navigate(url)` through a ref and reports `onReady({ moduleId })`, the player panel shows «النشاط n من N · name» (or «صفحة الدورة · N أنشطة») with «السابق / التالي» that move the frame without a new launch and stay in step with in-frame navigation. Tests: player +2, web 521, API 164; proven live.
+
+> **Epic label: `admin-polish`** — a pass over the super-admin portal at the ministry's direction (2026-08-25), one ticket per page, worked in that order on `feature/tam-130-admin-polish`. Everything below is **DONE** and shipped in **PR #24** (five commits, merged 2026-08-26); the acceptance notes record what was actually asserted. Decisions: D-098 (two removals for a path), D-099 (the dashboard's distribution), D-100 (the dialog).
+
+## TAM-149 — «الأثر»: the ministry's view of what employees enrolled in, completed and learnt, by period and department — **DONE** (D-123)
+
+- **Labels:** `impact`, `admin`, `backend`, `frontend`
+- **Priority:** High — a management ask
+- **What shipped:**
+  1. **A tab, not a page.** §4C.8 is three views on the shared tablist (TAM-118) — «الأثر» · «التقارير» · «سجل العمليات» — opening on the first. The reports are unchanged behind it and the admin nav stays at eight items.
+  2. **The period and the slice.** This month / this quarter / this year / a chosen range, plus the `DEPARTMENTS` filter and «كل الإدارات». Every figure is for the period, with the previous window of **equal length** beside it as a delta — a calendar quarter against a calendar quarter would report a per cent of growth that is only the length of the months (D-123).
+  3. **Participation.** Verified registrations, assessed, committed, active — people, de-duplicated, employees only — plus the participation rate, which is **cumulative** and says its denominator is accounts and not the ministry's headcount, which the platform does not know. The same four counts per department as a sortable table, tallied from the rows the tiles are counted from so the columns cannot disagree with them.
+  4. **Learning delivered.** Courses passed, hours from `duration_minutes` (with the count of passes that carry none stated beside it — D-035), course certificates, paths completed (read from the path certificate, the only durable record of _when_). A twelve-month trend as token bars, each row printing both numbers.
+  5. **What they learnt.** Top courses with their average grade, top paths, the six career types of the people assessed in the period — and the language-level block rendering «لم يُفعَّل اختبار المستوى بعد» rather than an empty card, because `cefr` is null until TAM-148.
+  6. **Export and print.** One CSV of every table on the tab, rendered in the browser over the shared `toCsv` (D-112's reason: the columns are Arabic copy), the period in its filename; printing is a stylesheet — A4, the frame's chrome dropped, the owner's lockup and classification kept — not a second renderer.
+- **API:** `GET /api/admin/impact?from&to&department` → `AdminImpactView`; `admin-impact.service.ts` + the pure `impact-period.ts`; aggregation only, every column already existed. SUPER_ADMIN by the class-level guard; read-only, so nothing audited beyond the existing `AUTHZ_DENIED`.
+- **Acceptance met:** 32 new API unit tests (17 service, 15 period arithmetic), 5 new integration tests against real PostgreSQL, 22 new web tests, 3 new browser cases. Suites run: API unit 696 / 44 suites · 21 admin-audit + 182 admin-rbac integration · web 832 / 60 files · typecheck / lint / format clean. The Playwright suite was **not** run this session (it needs the built apps; the dev servers hold the ports).
+- **Owed, deliberately:** `MINISTRY_HEADCOUNT` as the rate's denominator; the CEFR block's content once TAM-148 ships.
 
 ## TAM-130 — Admin home: a distribution that means something, and nothing on it that cannot be acted on — **DONE**
 
@@ -654,3 +868,62 @@
   3. **Hide vs delete** — `DELETE /api/admin/paths/:id`, refused for any path someone ever chose or that a certificate names, reported in advance as `canDelete`, audited both ways, with the P2003 race returned as the same refusal. Two sections, two words, a confirmation that names the path and offers the reversible alternative.
 - **Acceptance met:** 5 new integration tests against real PostgreSQL (the refusal + its audit, a successful delete with cascading membership and the course untouched, the named audit entry, 404 when already gone); 5 new page tests; 7 tests on `AdminDialog` including the centring class and the absent form; a browser test that deletes the path the suite creates. RBAC coverage is automatic — the suite reflects routes off the controller.
 - **Owed, recorded in progress.md:** the learner path card still shows `typicalDurationMinutes`, which now has no editor — deriving it from the path's courses is the fix, and it belongs with the learner-facing screens.
+
+---
+
+> **Epic label: `admin-courses-settings-certs`** — a second pass over the super-admin portal at the ministry's direction (2026-08-26), on `feature/tam-134-admin-courses-settings-certs`. Four tickets, one per area. Everything below is **DONE**. Decisions: D-101 (course states, availability period, delete), D-102 (the pass threshold leaves §4C.6), D-103 (setting editors from the schema), D-104 (the certificate emblem), D-105 (the audit trail).
+
+## TAM-134 — Courses: two states, an availability period that hides by itself, and a real delete — **DONE**
+
+- **Labels:** `admin-courses-settings-certs`, `frontend`, `backend`
+- **Priority:** High
+- **What shipped:** the oversight screen's four status words collapsed to **«متاحة» / «مخفية»**, with the _reason_ a course is hidden printed under the badge; the filter resolves through the same mapping, so it cannot return a row the badge contradicts. `courses.available_from` / `available_until` are set as calendar days in ministry time and stored as the first and last instant of those days; the window feeds `effectiveCourseStatus` and an ended period yields `HIDDEN_BUT_COMPLETABLE`, never `RETIRED` — a learner mid-course keeps it (§2, D-015). A new sync-cycle stage restates anything whose period opened or closed, and saving the dates recomputes immediately. `DELETE /api/admin/courses/:id` removes the course from Moodle and then from the catalogue, refused for anything a learner holds, a certificate names or a completion records, reported in advance as `canDelete` and audited both ways; `LmsPort` gained `deleteCourse` because our row is a mirror and deleting only our side would have the next sync re-enter the course as an unowned draft.
+- **Modal positioning** was already fixed by TAM-133's `AdminDialog` change (D-100) — the manage panel now opens centred, and that was verified in a browser rather than re-fixed.
+- **Acceptance met:** 12 unit tests on the derivation and the day helpers, 7 on the refresh service, 4 on the real adapter's warning handling, 3 in the shared LMS contract, 11 integration tests against real PostgreSQL, 16 page tests. Verified in a browser: a period set in the past flipped the course to «مخفية · خارج فترة الإتاحة» on save.
+
+## TAM-135 — Settings: a dropdown, a digits-only field, readable names, no pass threshold, and Settings last — **DONE**
+
+- **Labels:** `admin-courses-settings-certs`, `frontend`, `backend`
+- **Priority:** High
+- **What shipped:**
+  1. **Each field's shape comes from the server**, derived from the Zod field that validates the value (D-103). `REGISTRATION_MODE` and `NUMBER_FORMAT` are enums, so they render as dropdowns whose options are exactly what a save would accept — with Arabic labels, replacing free-text boxes the ministry had to type `restricted` / `admin-only` into from memory. `COMPLETION_SYNC_INTERVAL_MINUTES` is numeric, so its field takes digits and nothing else (stripped per keystroke: `type="number"` accepts `e`, `+` and `-` and then reports the field empty).
+  2. **The three certificate keys have Arabic names.** They had been reaching the ministry as the raw `admin.setting.CERT_SIGNATORY_NAME`; `SETTING_KEYS` moved into `packages/types` so the catalogue is asserted against it and the next such key fails CI instead of shipping.
+  3. **The pass threshold is gone from §4C.6** (D-102) — no field, no endpoint, and a migration deletes any stored override so the deployment's value is the only answer. Completion sync and the course player read it from the validated environment.
+  4. **Settings is the last item in the admin sidebar.**
+- **Acceptance met:** 14 page tests (dropdown options and their labels, the value saved is the option not the label, digits-only per keystroke, the three readable names, no `admin.setting` anywhere in the DOM, the absent pass threshold); a catalogue test asserting every `SETTING_KEY` has a label and a hint, and that no label names a key that is not one; the settings integration suite reworked onto keys that still exist, plus a new case proving `PASS_THRESHOLD` is absent from the view and 404s in both directions; the Playwright settings flow moved onto the sync interval.
+
+## TAM-136 — Certificates: the ministry emblem, and no rule above the signatory — **DONE**
+
+- **Labels:** `admin-courses-settings-certs`, `backend`
+- **Priority:** High
+- **What shipped:** the ministry's own `MOI.svg` is committed under `apps/api/src/certificates/assets/` and inlined into the certificate face in the slot the placeholder mark held — vector, no network, on both the course and the path certificate (D-104). The loader strips the XML prolog and dissolves the exported `.st0` class into per-path `fill` attributes, because an inline `<svg>` shares the document's stylesheet. The rule above the signatory's name is removed; the block keeps its position and spacing. §4C.7's "no logo supplied" notice is driven by `hasMinistryEmblem()` now, so it disappears with the blocker it named.
+- **Acceptance met:** 6 tests on the loader (single element, viewBox kept, stylesheet dissolved, no prolog, cached, reports the artwork), 5 on the face (inline not linked, no `.st0`, no prolog, both certificate types, no placeholder left beside it) and 1 asserting the signature block survives without its border; the templates e2e now asserts the notice is gone and the emblem is really in the preview.
+- **Still owed:** the ministry **seal** and the signatory's actual signature (D-051). This closes half that blocker.
+
+## TAM-138 — Records and reports: entries that name real things, and a page that reads as one — **DONE**
+
+- **Labels:** `admin-records-reports`, `frontend`, `backend`
+- **Priority:** High
+- **What shipped:**
+  1. **Two entries that named the wrong thing, or nothing.** `LMS_COURSE_PASSED` stored the _Moodle_ course id under `targetType: 'course'`, so §4C.8's label resolution never resolved and every pass read «دورة: 12»; it now records our course id, and no target at all when the catalogue has since lost the course. `EnrollmentService.auditFailure` took a `targetId` with no `targetType`, and the screen renders a target only when it knows the kind — so every refused path-building attempt appeared with no subject. `targetType` is now required there, which forced each call site to say honestly whether the id it holds is a path or one learner's journey through one (D-106).
+  2. **Actions have a category.** `AUDIT_ACTION_CATEGORY` maps all fifty-three to five areas, exhaustive by type. The filter is grouped by it — fifty-three options in one flat list is not a filter anybody uses.
+  3. **Values in words, not codes.** The detail keys were translated and the values were not: rows read «الحالة: HIDDEN_BUT_COMPLETABLE», «الدور: SUPER_ADMIN», «الحقول المعدَّلة: department,fullName». Now a coded value is Arabic, a comma-joined list is split and each part translated, a boolean is «نعم»/«لا», and a Holland code is spelled out in the six type names. A route on an `AUTHZ_DENIED` entry still falls through as itself — that is the entry's point.
+  4. **A period.** The API has accepted `from`/`to` since §4C.8 was built and nothing offered them; the screen now has both, and every filter clears the cursor.
+  5. **The export says what the screen says.** It is built in the browser now — every column of it is Arabic copy — over the shared `toCsv`, which moved to `packages/types` so the browser and the reports export use one implementation of the BOM, the quoting and the formula guard. `/api/admin/audit.csv` is gone (D-107).
+  6. **The report that was computed, exported and never shown.** §4C.8 asks for the Holland-code distribution; the API has always returned it and the CSV has always carried it. It is on the page now, spelled out in Arabic type names — and the journey stats show all six stages the export reports rather than four of them, so the file and the page stop disagreeing.
+- **Acceptance met:** 3 new unit tests on the category map (exhaustive both ways, and that no constant's name has drifted from its code); 1 on the completion-sync target; 2 new integration tests (an export-sized page honours its filter, and the bound is enforced); 7 new page tests (translated values, the grouped filter, the date filter clearing the cursor, the browser-built export and its failure state, the distribution, the six stages); a new browser test that really downloads the file and reads its bytes. **Full suites run this session:** 648 API unit · 670 web component · 554 API integration against real PostgreSQL · 114 browser tests in Chromium against the built apps, 113 passing — the one failure is a pre-existing flake in `phase-5-profile` that passes on re-run and is in a file this work never touched.
+- **Note on the totals:** the API unit count fell by nine and the integration count by three against TAM-137's figures because `csv.spec.ts` moved into `packages/types` (where it now runs among 51) and the trail-CSV endpoint test was replaced by two narrower ones.
+
+## TAM-137 — Records and reports: one action vocabulary, and a trail an administrator can read — **DONE**
+
+- **Labels:** `admin-courses-settings-certs`, `frontend`, `backend`
+- **Priority:** High
+- **What shipped:**
+  1. **One target vocabulary.** `AUDIT_TARGET_TYPES` (nine kinds, snake_case) lives in `packages/types` and `AuditEntry.targetType` is typed against it, so a wrong spelling is a compile error. Thirteen call sites wrote `User`/`Entity` beside the snake_case everything else used — one concept in two buckets, which made a filter over that column return a fraction of the rows. A migration normalises the 850-odd rows already written.
+  2. **Every entry names what it was about.** `AdminAuditRow.targetLabel` is resolved server-side per page — one query per kind, six for the page — so a retirement reads «مسار: البحوث وتقييم السياسات» instead of showing nothing. A setting resolves on the screen instead, since its id _is_ its key and §4C.6's Arabic name for it is already in the catalogue. A target that has since been deleted resolves to nothing and keeps its id, because those are the entries an investigation wants.
+  3. **No technical exposure.** `reason` became its own field and renders as an Arabic sentence; the remaining detail is stripped of every opaque identifier server-side (named ids, anything uuid-shaped, the LMS ids, and any value that merely restates the target) and then rendered through an Arabic label map. An `AUTHZ_DENIED` entry keeps its route — that is the entry's whole point — and both it and the setting value render `dir="auto"`, which fixed a real misreading: `/api/admin/settings` was displaying as `api/admin/settings/`.
+  4. **Nothing renders as a raw code.** Three action codes and **all thirty-seven reason codes** had no Arabic copy, so the deliberate fallback was the normal rendering of every failed entry. `AuditAction`/`AuditReason` moved to `packages/types`, all copy written, and the catalogue is now asserted against the constants in both directions.
+  5. **The filter row is on the shared `Select`** (it carried dead pre-token classes), the action list sorts by its Arabic label, and a failed outcome wears a new `danger` badge rather than the neutral `dark` one.
+- **Acceptance met:** 8 unit tests on the detail presenter; 3 new integration tests (the resolved label, no id anywhere in a page's details, one spelling per kind) against real PostgreSQL; 6 new page tests (the named target, the danger badge, Arabic labelled detail, the setting's own name, the shared `Select`, `dir="auto"` on a route); an exhaustive catalogue test — every action, every reason, every target type — that fails CI on the next untranslated code. **Full suites run for real this session:** 657 API unit · 663 web component · 557 API integration against real PostgreSQL · 114 browser tests in Chromium against the built apps, 113 passing (the one failure is a pre-existing path-build flake that passes on re-run).
+- **Also fixed, found by running the browser suite:** TAM-134 removed the «قرار النشر» column from §4C.5 but left the e2e asserting it. The previous session had no Docker and could not have caught it; the assertion now guards what TAM-134 actually built — two words in «الحالة», the reason beneath, and the availability column.
+- **Known, not caused here:** the API integration suite passes in full serially (`--runInBand`) and collides when Jest runs its fifteen suites in parallel against one database. Pre-existing test isolation, and very likely the "transient failure never reproduced" recorded on 2026-08-24.

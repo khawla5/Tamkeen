@@ -1,5 +1,6 @@
 'use client';
 
+import { Building2, ShieldCheck, Users, type LucideIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -34,6 +35,23 @@ import { useApiQuery } from '@/lib/use-api';
  * the accounts it explains. Onboarding still reads in its natural order:
  * organisation first, then the accounts that act for it.
  */
+/**
+ * The three kinds of account, set apart inside ONE table: the organisations'
+ * accounts, then administrators, then employees. A green band across the table
+ * names each kind and counts it, and the rows under it are that kind's — so the
+ * list reads as one list with its sections marked, and the columns, the filters
+ * and the paging stay exactly as they were.
+ */
+const GROUPS: Array<{
+  role: UserRole;
+  label: 'groupEmployees' | 'groupEntities' | 'groupAdmins';
+  icon: LucideIcon;
+}> = [
+  { role: 'ENTITY', label: 'groupEntities', icon: Building2 },
+  { role: 'SUPER_ADMIN', label: 'groupAdmins', icon: ShieldCheck },
+  { role: 'EMPLOYEE', label: 'groupEmployees', icon: Users },
+];
+
 export default function AdminUsersPage() {
   const t = useTranslations('admin');
   const [creating, setCreating] = useState(false);
@@ -149,7 +167,15 @@ function AccountsView() {
       >
         {users.data ? (
           <>
-            <UserTable rows={users.data.rows} onSelect={setSelected} />
+            <UserTable
+              groups={GROUPS.map((group) => ({
+                role: group.role,
+                title: t(group.label),
+                icon: group.icon,
+                rows: (users.data?.rows ?? []).filter((row) => row.role === group.role),
+              })).filter((group) => group.rows.length > 0)}
+              onSelect={setSelected}
+            />
 
             <Pagination
               page={users.data.page}
@@ -172,7 +198,20 @@ function AccountsView() {
   );
 }
 
-function UserTable({ rows, onSelect }: { rows: AdminUserRow[]; onSelect: (id: string) => void }) {
+interface AccountGroup {
+  role: UserRole;
+  title: string;
+  icon: LucideIcon;
+  rows: AdminUserRow[];
+}
+
+function UserTable({
+  groups,
+  onSelect,
+}: {
+  groups: AccountGroup[];
+  onSelect: (id: string) => void;
+}) {
   const t = useTranslations('admin');
   const format = useFormat();
 
@@ -195,43 +234,66 @@ function UserTable({ rows, onSelect }: { rows: AdminUserRow[]; onSelect: (id: st
             </Th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td className="px-4 py-3 font-medium text-foreground">
-                {row.fullName}
-                <span className="block text-xs font-normal text-muted-foreground">
-                  {row.department}
-                </span>
-              </td>
-              {/* Latin script inside an RTL page reorders without dir="ltr". */}
-              <td className="px-4 py-3" dir="ltr">
-                {row.email}
-              </td>
-              <td className="px-4 py-3">
-                {row.role === 'ENTITY' && row.entity ? (
-                  <span>
-                    {t('roleEntity')}
-                    <span className="block text-xs text-muted-foreground">{row.entity.name}</span>
+
+        {groups.map((group) => (
+          <tbody key={group.role} className="divide-y divide-border">
+            {/* The band that names the kind: one cell across the whole table, green
+                with white text (#067647, white on it is 5.9:1), the kind's own
+                icon and a count of its rows on this page. A row-group header, so a
+                screen reader announces which kind the rows under it belong to. */}
+            <tr>
+              <th
+                scope="rowgroup"
+                colSpan={6}
+                className="bg-success px-4 py-1 text-start text-sm font-semibold leading-6 text-white"
+              >
+                <span className="flex items-center gap-2">
+                  <group.icon aria-hidden="true" className="size-4 shrink-0" />
+                  {group.title}
+                  <span className="rounded-full bg-white/20 px-2 text-xs font-medium">
+                    {format.number(group.rows.length)}
                   </span>
-                ) : (
-                  t(row.role === 'SUPER_ADMIN' ? 'roleAdmin' : 'roleEmployee')
-                )}
-              </td>
-              <td className="px-4 py-3">
-                <StatusBadge row={row} />
-              </td>
-              <td className="px-4 py-3 text-muted-foreground">
-                {row.lastLoginAt ? format.date(new Date(row.lastLoginAt)) : '—'}
-              </td>
-              <td className="px-4 py-3 text-end">
-                <Button variant="outline" size="sm" onClick={() => onSelect(row.id)}>
-                  {t('manage')}
-                </Button>
-              </td>
+                </span>
+              </th>
             </tr>
-          ))}
-        </tbody>
+
+            {group.rows.map((row) => (
+              <tr key={row.id}>
+                <td className="px-4 py-3 font-medium text-foreground">
+                  {row.fullName}
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {row.department}
+                  </span>
+                </td>
+                {/* Latin script inside an RTL page reorders without dir="ltr". */}
+                <td className="px-4 py-3" dir="ltr">
+                  {row.email}
+                </td>
+                <td className="px-4 py-3">
+                  {row.role === 'ENTITY' && row.entity ? (
+                    <span>
+                      {t('roleEntity')}
+                      <span className="block text-xs text-muted-foreground">{row.entity.name}</span>
+                    </span>
+                  ) : (
+                    t(row.role === 'SUPER_ADMIN' ? 'roleAdmin' : 'roleEmployee')
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <StatusBadge row={row} />
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {row.lastLoginAt ? format.date(new Date(row.lastLoginAt)) : '—'}
+                </td>
+                <td className="px-4 py-3 text-end">
+                  <Button variant="outline" size="sm" onClick={() => onSelect(row.id)}>
+                    {t('manage')}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        ))}
       </table>
     </Card>
   );
